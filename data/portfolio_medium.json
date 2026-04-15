@@ -1,0 +1,911 @@
+{
+  "id": "medium",
+  "name": "Medium Portf\u00f6lj",
+  "initial_cash": 1000000,
+  "cash": 947897.6982886097,
+  "positions": {
+    "ATT.ST": {
+      "shares": 198,
+      "avg_price": 100.80000305175781,
+      "current_price": 100.80000305175781,
+      "currency": "SEK",
+      "market": "SE",
+      "name": "Attendo AB",
+      "entry_date": "2026-03-02 10:40",
+      "fx_rate_at_entry": 1.0
+    },
+    "USB": {
+      "shares": 40,
+      "avg_price": 53.849998474121094,
+      "current_price": 53.849998474121094,
+      "currency": "USD",
+      "market": "US",
+      "name": "U.S. Bancorp",
+      "entry_date": "2026-03-02 15:41",
+      "fx_rate_at_entry": 9.127269744873047
+    }
+  },
+  "trade_history": [
+    {
+      "date": "2026-02-18 11:39",
+      "ticker": "SLP-B.ST",
+      "name": "Swedish Logistic Property AB se",
+      "action": "K\u00d6P",
+      "shares": 248,
+      "price": 40.3,
+      "currency": "SEK",
+      "cost_sek": 9994.0,
+      "reason": "Watchlist target n\u00e5dd: MACD bullish crossover | Ovanf\u00f6r EMA200 | Positiv makro (SE)"
+    },
+    {
+      "date": "2026-02-18 15:47",
+      "ticker": "QTTB",
+      "name": "Q32 Bio Inc.",
+      "action": "K\u00d6P",
+      "shares": 542,
+      "price": 4.1,
+      "currency": "USD",
+      "cost_sek": 19986.0,
+      "reason": "Watchlist target n\u00e5dd: MACD bullish crossover | \u00d6ver MA-st\u00f6d"
+    },
+    {
+      "date": "2026-02-19 14:44",
+      "ticker": "BIMAS.IS",
+      "name": "BIM MAGAZALAR",
+      "action": "K\u00d6P",
+      "shares": 69,
+      "price": 690.0,
+      "currency": "TRY",
+      "cost_sek": 9883.0,
+      "reason": "Watchlist target n\u00e5dd: MACD bullish crossover | Ovanf\u00f6r EMA200 | Positiv makro (TR)"
+    },
+    {
+      "date": "2026-02-19 14:59",
+      "ticker": "SAHOL.IS",
+      "name": "SABANCI HOLDING",
+      "action": "K\u00d6P",
+      "shares": 926,
+      "price": 104.1,
+      "currency": "TRY",
+      "cost_sek": 19996.0,
+      "reason": "Watchlist target n\u00e5dd: RSI 59 | MACD bullish (0.60) | Ovanf\u00f6r EMA200 | Positiv makro (TR)"
+    },
+    {
+      "date": "2026-02-19 16:29",
+      "ticker": "TXN",
+      "name": "Texas Instruments Incorporated",
+      "action": "K\u00d6P",
+      "shares": 10,
+      "price": 218.4,
+      "currency": "USD",
+      "cost_sek": 19829.0,
+      "reason": "Watchlist target n\u00e5dd: MACD bullish crossover | \u00d6ver MA-st\u00f6d"
+    },
+    {
+      "date": "2026-02-20 08:47",
+      "ticker": "AKBNK.IS",
+      "name": "AKBANK",
+      "action": "K\u00d6P",
+      "shares": 1104,
+      "price": 87.7,
+      "currency": "TRY",
+      "cost_sek": 20018.0,
+      "reason": "Watchlist target n\u00e5dd: RSI 65 | MACD bullish (0.60) | Ovanf\u00f6r EMA200 | Positiv makro (TR)"
+    },
+    {
+      "date": "2026-02-20 09:02",
+      "ticker": "RATO-B.ST",
+      "name": "Ratos AB ser. B",
+      "action": "K\u00d6P",
+      "shares": 552,
+      "price": 36.26,
+      "currency": "SEK",
+      "cost_sek": 20016.0,
+      "reason": "Watchlist target n\u00e5dd: RSI 43 | MACD bullish (0.60) | Ovanf\u00f6r EMA200 | Positiv makro (SE)"
+    },
+    {
+      "date": "2026-02-20 09:17",
+      "ticker": "PETKM.IS",
+      "name": "PETKIM",
+      "action": "K\u00d6P",
+      "shares": 5565,
+      "price": 17.37,
+      "currency": "TRY",
+      "cost_sek": 20018.0,
+      "reason": "Watchlist target n\u00e5dd: RSI 42 | MACD bullish (1.00) | Ovanf\u00f6r EMA200 | Positiv makro (TR)"
+    },
+    {
+      "date": "2026-02-23 09:39",
+      "ticker": "MTRS.ST",
+      "name": "Munters Group AB",
+      "action": "K\u00d6P",
+      "shares": 111,
+      "price": 180.9,
+      "currency": "SEK",
+      "cost_sek": 20080.0,
+      "reason": "Watchlist target n\u00e5dd: MACD bullish crossover | Ovanf\u00f6r EMA200 | Positiv makro (SE)"
+    },
+    {
+      "date": "2026-02-23 09:39",
+      "ticker": "TITA-B.ST",
+      "name": "Titania Holding AB ser. B",
+      "action": "K\u00d6P",
+      "shares": 2294,
+      "price": 8.76,
+      "currency": "SEK",
+      "cost_sek": 20095.0,
+      "reason": "Watchlist target n\u00e5dd: MACD bullish crossover | \u00d6ver MA-st\u00f6d | Positiv makro (SE)"
+    },
+    {
+      "date": "2026-02-23 09:54",
+      "ticker": "VISC.ST",
+      "name": "Gruvaktiebolaget Viscaria",
+      "action": "K\u00d6P",
+      "shares": 1144,
+      "price": 17.56,
+      "currency": "SEK",
+      "cost_sek": 20089.0,
+      "reason": "Watchlist target n\u00e5dd: RSI 44 | MACD bullish (0.60) | Ovanf\u00f6r EMA200 | Positiv makro (SE)"
+    },
+    {
+      "date": "2026-02-24 09:10",
+      "ticker": "TAVHL.IS",
+      "name": "TAV HAVALIMANLARI",
+      "action": "K\u00d6P",
+      "shares": 298,
+      "price": 325.0,
+      "currency": "TRY",
+      "cost_sek": 20047.0,
+      "reason": "Watchlist target n\u00e5dd: RSI 43 | MACD bullish (0.60) | Ovanf\u00f6r EMA200 | Positiv makro (TR) | earnings: +0.55 | trend: +0.39"
+    },
+    {
+      "date": "2026-02-24 09:10",
+      "ticker": "OVZON.ST",
+      "name": "Ovzon AB",
+      "action": "K\u00d6P",
+      "shares": 375,
+      "price": 53.5,
+      "currency": "SEK",
+      "cost_sek": 20062.0,
+      "reason": "Watchlist target n\u00e5dd: RSI 62 | MACD bullish (0.60) | Ovanf\u00f6r EMA200 | H\u00f6g volym (2.2x) | Positiv makro (SE) | breakout: +0.80 | trend: +0.51"
+    },
+    {
+      "date": "2026-02-24 09:39",
+      "ticker": "HOFI.ST",
+      "name": "Hoist Finance AB",
+      "action": "K\u00d6P",
+      "shares": 145,
+      "price": 137.8,
+      "currency": "SEK",
+      "cost_sek": 19981.0,
+      "reason": "Watchlist target n\u00e5dd: RSI 61 | MACD bullish (0.60) | Ovanf\u00f6r EMA200 | Positiv makro (SE) | breakout: +0.40 | earnings: +0.40"
+    },
+    {
+      "date": "2026-02-25 15:43",
+      "ticker": "PNC",
+      "name": "PNC Financial Services Group, I",
+      "action": "K\u00d6P",
+      "shares": 10,
+      "price": 219.3,
+      "currency": "USD",
+      "cost_sek": 19881.0,
+      "reason": "Watchlist target n\u00e5dd: RSI 58 | MACD bullish (0.60) | Ovanf\u00f6r EMA200 | Positiv makro (US) | breakout: +0.48 | earnings: +0.45"
+    },
+    {
+      "date": "2026-02-25 15:43",
+      "ticker": "PANW",
+      "name": "Palo Alto Networks, Inc.",
+      "action": "K\u00d6P",
+      "shares": 15,
+      "price": 140.5,
+      "currency": "USD",
+      "cost_sek": 19106.0,
+      "reason": "Watchlist target n\u00e5dd: RSI 37 | MACD bullish (0.60) | Ovanf\u00f6r EMA200 | Positiv makro (US) | mean_reversion: +0.45 | earnings: +0.45"
+    },
+    {
+      "date": "2026-02-25 15:43",
+      "ticker": "SMFG",
+      "name": "Sumitomo Mitsui Financial Group",
+      "action": "K\u00d6P",
+      "shares": 99,
+      "price": 22.22,
+      "currency": "USD",
+      "cost_sek": 19942.0,
+      "reason": "Watchlist target n\u00e5dd: RSI 64 | MACD bullish (1.00) | Ovanf\u00f6r EMA200 | Positiv makro (US) | breakout: +0.55 | trend: +0.53"
+    },
+    {
+      "date": "2026-02-26 15:41",
+      "ticker": "VRRM",
+      "name": "Verra Mobility Corporation",
+      "action": "K\u00d6P",
+      "shares": 131,
+      "price": 16.91,
+      "currency": "USD",
+      "cost_sek": 20038.0,
+      "reason": "Watchlist target n\u00e5dd: RSI oversold (30) | MACD bullish (0.60) | Ovanf\u00f6r EMA200 | Positiv makro (US) | mean_reversion: +0.95 | breakout: +0.15"
+    },
+    {
+      "date": "2026-02-26 15:41",
+      "ticker": "SHC",
+      "name": "Sotera Health Company",
+      "action": "K\u00d6P",
+      "shares": 137,
+      "price": 16.22,
+      "currency": "USD",
+      "cost_sek": 20095.0,
+      "reason": "Watchlist target n\u00e5dd: RSI 30 | MACD bullish (0.60) | Ovanf\u00f6r EMA200 | Positiv makro (US) | mean_reversion: +0.75 | earnings: +0.40"
+    },
+    {
+      "date": "2026-02-26 15:41",
+      "ticker": "VNET",
+      "name": "VNET Group, Inc.",
+      "action": "K\u00d6P",
+      "shares": 196,
+      "price": 11.37,
+      "currency": "USD",
+      "cost_sek": 20153.0,
+      "reason": "Watchlist target n\u00e5dd: RSI 52 | MACD bullish (0.60) | Ovanf\u00f6r EMA200 | Positiv makro (US) | trend: +0.39 | breakout: +0.18"
+    },
+    {
+      "date": "2026-02-27 15:41",
+      "ticker": "VNET",
+      "name": "VNET Group, Inc.",
+      "action": "S\u00c4LJ",
+      "shares": 196,
+      "price": 10.49,
+      "currency": "USD",
+      "proceeds_sek": 18613.0,
+      "pnl_pct": -7.74,
+      "pnl_local": -172.48,
+      "reason": "Stop-Loss (-7.7% < -7%)"
+    },
+    {
+      "date": "2026-03-02 08:10",
+      "ticker": "TTKOM.IS",
+      "name": "TURK TELEKOM",
+      "action": "K\u00d6P",
+      "shares": 1425,
+      "price": 67.95,
+      "currency": "TRY",
+      "cost_sek": 20114.0,
+      "reason": "Watchlist target n\u00e5dd: RSI 60 | MACD bullish (0.60) | Ovanf\u00f6r EMA200 | Positiv makro (TR) | breakout: +0.48 | earnings: +0.45"
+    },
+    {
+      "date": "2026-03-02 08:25",
+      "ticker": "TAVHL.IS",
+      "name": "TAV HAVALIMANLARI",
+      "action": "S\u00c4LJ",
+      "shares": 298,
+      "price": 297.25,
+      "currency": "TRY",
+      "proceeds_sek": 18406.0,
+      "pnl_pct": -8.54,
+      "pnl_local": -8269.5,
+      "reason": "Stop-Loss (-8.5% < -7%)"
+    },
+    {
+      "date": "2026-03-02 08:40",
+      "ticker": "SAHOL.IS",
+      "name": "SABANCI HOLDING",
+      "action": "S\u00c4LJ",
+      "shares": 926,
+      "price": 96.7,
+      "currency": "TRY",
+      "proceeds_sek": 18627.0,
+      "pnl_pct": -7.11,
+      "pnl_local": -6852.4,
+      "reason": "Stop-Loss (-7.1% < -7%)"
+    },
+    {
+      "date": "2026-03-02 10:40",
+      "ticker": "ATT.ST",
+      "name": "Attendo AB",
+      "action": "K\u00d6P",
+      "shares": 198,
+      "price": 100.8,
+      "currency": "SEK",
+      "cost_sek": 19958.0,
+      "reason": "Watchlist target n\u00e5dd: RSI 69 | MACD bullish (0.60) | Ovanf\u00f6r EMA200 | Positiv makro (SE) | breakout: +0.80 | trend: +0.43"
+    },
+    {
+      "date": "2026-03-02 15:26",
+      "ticker": "AKBNK.IS",
+      "name": "AKBANK",
+      "action": "S\u00c4LJ",
+      "shares": 1104,
+      "price": 83.45,
+      "currency": "TRY",
+      "proceeds_sek": 19157.0,
+      "pnl_pct": -4.85,
+      "pnl_local": -4692.0,
+      "reason": "Trailing Stop (83.45 < 83.92 | Topp: 93.25 | Vinst: -4.8%)"
+    },
+    {
+      "date": "2026-03-02 15:41",
+      "ticker": "USB",
+      "name": "U.S. Bancorp",
+      "action": "K\u00d6P",
+      "shares": 40,
+      "price": 53.85,
+      "currency": "USD",
+      "cost_sek": 19660.0,
+      "reason": "Watchlist target n\u00e5dd: RSI 51 | MACD bullish (0.60) | Ovanf\u00f6r EMA200 | Positiv makro (US) | earnings: +0.45 | trend: +0.39"
+    },
+    {
+      "date": "2026-03-03 08:10",
+      "ticker": "ISCTR.IS",
+      "name": "IS BANKASI (C)",
+      "action": "K\u00d6P",
+      "shares": 6093,
+      "price": 15.77,
+      "currency": "TRY",
+      "cost_sek": 20091.0,
+      "reason": "Watchlist target n\u00e5dd: RSI 42 | MACD bullish (0.60) | Ovanf\u00f6r EMA200 | Positiv makro (TR) | earnings: +0.55 | trend: +0.39 | Billigt + rimlig regime \u2192 K\u00d6P normalstorlek"
+    },
+    {
+      "date": "2026-03-03 09:54",
+      "ticker": "MTRS.ST",
+      "name": "Munters Group AB",
+      "action": "S\u00c4LJ",
+      "shares": 111,
+      "price": 173.3,
+      "currency": "SEK",
+      "proceeds_sek": 19236.0,
+      "pnl_pct": -4.2,
+      "pnl_local": -843.6,
+      "reason": "Trailing Stop (173.30 < 173.52 | Topp: 192.80 | Vinst: -4.2%)"
+    },
+    {
+      "date": "2026-03-03 12:39",
+      "ticker": "TITA-B.ST",
+      "name": "Titania Holding AB ser. B",
+      "action": "S\u00c4LJ",
+      "shares": 2294,
+      "price": 8.12,
+      "currency": "SEK",
+      "proceeds_sek": 18627.0,
+      "pnl_pct": -7.31,
+      "pnl_local": -1468.16,
+      "reason": "Stop-Loss (-7.3% < -7%)"
+    },
+    {
+      "date": "2026-03-03 15:40",
+      "ticker": "SMFG",
+      "name": "Sumitomo Mitsui Financial Group",
+      "action": "S\u00c4LJ",
+      "shares": 99,
+      "price": 20.28,
+      "currency": "USD",
+      "proceeds_sek": 18619.0,
+      "pnl_pct": -8.73,
+      "pnl_local": -192.06,
+      "reason": "Stop-Loss (-8.7% < -7%)"
+    },
+    {
+      "date": "2026-03-04 13:09",
+      "ticker": "TTKOM.IS",
+      "name": "TURK TELEKOM",
+      "action": "S\u00c4LJ",
+      "shares": 1425,
+      "price": 62.95,
+      "currency": "TRY",
+      "proceeds_sek": 18724.0,
+      "pnl_pct": -7.36,
+      "pnl_local": -7124.99,
+      "reason": "Stop-Loss (-7.4% < -7%)"
+    },
+    {
+      "date": "2026-03-04 20:25",
+      "ticker": "TXN",
+      "name": "Texas Instruments Incorporated",
+      "action": "S\u00c4LJ",
+      "shares": 10,
+      "price": 203.01,
+      "currency": "USD",
+      "proceeds_sek": 18611.0,
+      "pnl_pct": -7.04,
+      "pnl_local": -153.8,
+      "reason": "Stop-Loss (-7.0% < -7%)"
+    },
+    {
+      "date": "2026-03-05 18:55",
+      "ticker": "QTTB",
+      "name": "Q32 Bio Inc.",
+      "action": "S\u00c4LJ",
+      "shares": 542,
+      "price": 4.5,
+      "currency": "USD",
+      "proceeds_sek": 22567.0,
+      "pnl_pct": 9.76,
+      "pnl_local": 216.8,
+      "reason": "Trailing Stop (4.50 < 4.50 | Topp: 5.01 | Vinst: 9.8%)"
+    },
+    {
+      "date": "2026-03-05 19:55",
+      "ticker": "SHC",
+      "name": "Sotera Health Company",
+      "action": "S\u00c4LJ",
+      "shares": 137,
+      "price": 15.06,
+      "currency": "USD",
+      "proceeds_sek": 19110.0,
+      "pnl_pct": -7.12,
+      "pnl_local": -158.23,
+      "reason": "Stop-Loss (-7.1% < -7%)"
+    },
+    {
+      "date": "2026-03-06 08:54",
+      "ticker": "BIMAS.IS",
+      "name": "BIM MAGAZALAR",
+      "action": "S\u00c4LJ",
+      "shares": 69,
+      "price": 641.0,
+      "currency": "TRY",
+      "proceeds_sek": 9244.0,
+      "pnl_pct": -7.1,
+      "pnl_local": -3381.0,
+      "reason": "Stop-Loss (-7.1% < -7%)"
+    },
+    {
+      "date": "2026-03-06 09:54",
+      "ticker": "ISCTR.IS",
+      "name": "IS BANKASI (C)",
+      "action": "S\u00c4LJ",
+      "shares": 6093,
+      "price": 14.63,
+      "currency": "TRY",
+      "proceeds_sek": 18590.0,
+      "pnl_pct": -7.23,
+      "pnl_local": -6946.02,
+      "reason": "Stop-Loss (-7.2% < -7%)"
+    },
+    {
+      "date": "2026-03-06 15:41",
+      "ticker": "PNC",
+      "name": "PNC Financial Services Group, I",
+      "action": "S\u00c4LJ",
+      "shares": 10,
+      "price": 203.53,
+      "currency": "USD",
+      "proceeds_sek": 18818.0,
+      "pnl_pct": -7.19,
+      "pnl_local": -157.7,
+      "reason": "Stop-Loss (-7.2% < -7%)"
+    },
+    {
+      "date": "2026-03-06 15:41",
+      "ticker": "PETKM.IS",
+      "name": "PETKIM",
+      "action": "S\u00c4LJ",
+      "shares": 5565,
+      "price": 18.37,
+      "currency": "TRY",
+      "proceeds_sek": 21448.0,
+      "pnl_pct": 5.76,
+      "pnl_local": 5565.0,
+      "reason": "RSI 51 | MACD bearish (-0.60) | Ovanf\u00f6r EMA200 | breakout: +0.13"
+    },
+    {
+      "date": "2026-03-09 09:15",
+      "ticker": "RATO-B.ST",
+      "name": "Ratos AB ser. B",
+      "action": "S\u00c4LJ",
+      "shares": 552,
+      "price": 34.76,
+      "currency": "SEK",
+      "proceeds_sek": 19188.0,
+      "pnl_pct": -4.14,
+      "pnl_local": -828.0,
+      "reason": "RSI 36 | MACD bullish (0.60) | Ovanf\u00f6r EMA200 | mean_reversion: +0.30 | breakout: -0.15"
+    },
+    {
+      "date": "2026-03-09 09:41",
+      "ticker": "VISC.ST",
+      "name": "Gruvaktiebolaget Viscaria",
+      "action": "S\u00c4LJ",
+      "shares": 1144,
+      "price": 16.56,
+      "currency": "SEK",
+      "proceeds_sek": 18945.0,
+      "pnl_pct": -5.69,
+      "pnl_local": -1144.0,
+      "reason": "Trailing Stop (16.56 < 16.70 | Topp: 18.56 | Vinst: -5.7%)"
+    },
+    {
+      "date": "2026-03-09 09:41",
+      "ticker": "OVZON.ST",
+      "name": "Ovzon AB",
+      "action": "S\u00c4LJ",
+      "shares": 375,
+      "price": 55.4,
+      "currency": "SEK",
+      "proceeds_sek": 20775.0,
+      "pnl_pct": 3.55,
+      "pnl_local": 712.5,
+      "reason": "Trailing Stop (55.40 < 56.61 | Topp: 62.90 | Vinst: 3.6%)"
+    },
+    {
+      "date": "2026-03-12 14:39",
+      "ticker": "VRRM",
+      "name": "Verra Mobility Corporation",
+      "action": "S\u00c4LJ",
+      "shares": 131,
+      "price": 15.61,
+      "currency": "USD",
+      "proceeds_sek": 19005.0,
+      "pnl_pct": -7.71,
+      "pnl_local": -170.86,
+      "reason": "Stop-Loss (-7.7% < -7%)"
+    },
+    {
+      "date": "2026-03-19 10:09",
+      "ticker": "SLP-B.ST",
+      "name": "Swedish Logistic Property AB se",
+      "action": "S\u00c4LJ",
+      "shares": 248,
+      "price": 37.45,
+      "currency": "SEK",
+      "proceeds_sek": 9288.0,
+      "pnl_pct": -7.07,
+      "pnl_local": -706.8,
+      "reason": "Stop-Loss (-7.1% < -7%)"
+    },
+    {
+      "date": "2026-03-23 09:54",
+      "ticker": "HOFI.ST",
+      "name": "Hoist Finance AB",
+      "action": "S\u00c4LJ",
+      "shares": 145,
+      "price": 137.4,
+      "currency": "SEK",
+      "proceeds_sek": 19923.0,
+      "pnl_pct": -0.29,
+      "pnl_local": -58.0,
+      "reason": "Trailing Stop (137.40 < 137.88 | Topp: 153.20 | Vinst: -0.3%)"
+    },
+    {
+      "date": "2026-03-25 19:55",
+      "ticker": "PANW",
+      "name": "Palo Alto Networks, Inc.",
+      "action": "S\u00c4LJ",
+      "shares": 15,
+      "price": 153.54,
+      "currency": "USD",
+      "proceeds_sek": 21510.0,
+      "pnl_pct": 9.28,
+      "pnl_local": 195.53,
+      "reason": "Trailing Stop (153.54 < 154.70 | Topp: 171.89 | Vinst: 9.3%)"
+    }
+  ],
+  "daily_values": [
+    {
+      "date": "2026-02-18",
+      "total_value": 999717.0,
+      "cash": 970020.0,
+      "positions_value": 29697.0,
+      "return_pct": -0.03,
+      "num_positions": 2
+    },
+    {
+      "date": "2026-02-19",
+      "total_value": 1000668.0,
+      "cash": 920313.0,
+      "positions_value": 80355.0,
+      "return_pct": 0.07,
+      "num_positions": 5
+    },
+    {
+      "date": "2026-02-20",
+      "total_value": 1003187.0,
+      "cash": 860261.0,
+      "positions_value": 142926.0,
+      "return_pct": 0.32,
+      "num_positions": 8
+    },
+    {
+      "date": "2026-02-23",
+      "total_value": 1004587.0,
+      "cash": 799997.0,
+      "positions_value": 204590.0,
+      "return_pct": 0.46,
+      "num_positions": 11
+    },
+    {
+      "date": "2026-02-24",
+      "total_value": 1005122.0,
+      "cash": 739906.0,
+      "positions_value": 265215.0,
+      "return_pct": 0.51,
+      "num_positions": 14
+    },
+    {
+      "date": "2026-02-25",
+      "total_value": 1005364.0,
+      "cash": 680978.0,
+      "positions_value": 324386.0,
+      "return_pct": 0.54,
+      "num_positions": 17
+    },
+    {
+      "date": "2026-02-26",
+      "total_value": 1009272.0,
+      "cash": 620692.0,
+      "positions_value": 388580.0,
+      "return_pct": 0.93,
+      "num_positions": 20
+    },
+    {
+      "date": "2026-02-27",
+      "total_value": 1002971.0,
+      "cash": 639305.0,
+      "positions_value": 363666.0,
+      "return_pct": 0.3,
+      "num_positions": 19
+    },
+    {
+      "date": "2026-03-02",
+      "total_value": 1003486.0,
+      "cash": 635763.0,
+      "positions_value": 367723.0,
+      "return_pct": 0.35,
+      "num_positions": 19
+    },
+    {
+      "date": "2026-03-03",
+      "total_value": 1000452.0,
+      "cash": 672155.0,
+      "positions_value": 328298.0,
+      "return_pct": 0.05,
+      "num_positions": 17
+    },
+    {
+      "date": "2026-03-04",
+      "total_value": 998932.0,
+      "cash": 709489.0,
+      "positions_value": 289443.0,
+      "return_pct": -0.11,
+      "num_positions": 15
+    },
+    {
+      "date": "2026-03-05",
+      "total_value": 998510.0,
+      "cash": 751166.0,
+      "positions_value": 247344.0,
+      "return_pct": -0.15,
+      "num_positions": 13
+    },
+    {
+      "date": "2026-03-06",
+      "total_value": 993393.0,
+      "cash": 819265.0,
+      "positions_value": 174128.0,
+      "return_pct": -0.66,
+      "num_positions": 9
+    },
+    {
+      "date": "2026-03-09",
+      "total_value": 991102.0,
+      "cash": 878172.0,
+      "positions_value": 112930.0,
+      "return_pct": -0.89,
+      "num_positions": 6
+    },
+    {
+      "date": "2026-03-10",
+      "total_value": 990658.0,
+      "cash": 878172.0,
+      "positions_value": 112485.0,
+      "return_pct": -0.93,
+      "num_positions": 6
+    },
+    {
+      "date": "2026-03-11",
+      "total_value": 990442.0,
+      "cash": 878172.0,
+      "positions_value": 112270.0,
+      "return_pct": -0.96,
+      "num_positions": 6
+    },
+    {
+      "date": "2026-03-12",
+      "total_value": 991857.0,
+      "cash": 897177.0,
+      "positions_value": 94680.0,
+      "return_pct": -0.81,
+      "num_positions": 5
+    },
+    {
+      "date": "2026-03-13",
+      "total_value": 990752.0,
+      "cash": 897177.0,
+      "positions_value": 93575.0,
+      "return_pct": -0.92,
+      "num_positions": 5
+    },
+    {
+      "date": "2026-03-16",
+      "total_value": 991450.0,
+      "cash": 897177.0,
+      "positions_value": 94272.0,
+      "return_pct": -0.86,
+      "num_positions": 5
+    },
+    {
+      "date": "2026-03-17",
+      "total_value": 991241.0,
+      "cash": 897177.0,
+      "positions_value": 94064.0,
+      "return_pct": -0.88,
+      "num_positions": 5
+    },
+    {
+      "date": "2026-03-18",
+      "total_value": 992072.0,
+      "cash": 897177.0,
+      "positions_value": 94895.0,
+      "return_pct": -0.79,
+      "num_positions": 5
+    },
+    {
+      "date": "2026-03-19",
+      "total_value": 991150.0,
+      "cash": 906465.0,
+      "positions_value": 84685.0,
+      "return_pct": -0.88,
+      "num_positions": 4
+    },
+    {
+      "date": "2026-03-20",
+      "total_value": 989299.0,
+      "cash": 906465.0,
+      "positions_value": 82834.0,
+      "return_pct": -1.07,
+      "num_positions": 4
+    },
+    {
+      "date": "2026-03-23",
+      "total_value": 988042.0,
+      "cash": 926388.0,
+      "positions_value": 61654.0,
+      "return_pct": -1.2,
+      "num_positions": 3
+    },
+    {
+      "date": "2026-03-24",
+      "total_value": 987603.0,
+      "cash": 926388.0,
+      "positions_value": 61214.0,
+      "return_pct": -1.24,
+      "num_positions": 3
+    },
+    {
+      "date": "2026-03-25",
+      "total_value": 986920.0,
+      "cash": 947898.0,
+      "positions_value": 39022.0,
+      "return_pct": -1.31,
+      "num_positions": 2
+    },
+    {
+      "date": "2026-03-26",
+      "total_value": 987335.0,
+      "cash": 947898.0,
+      "positions_value": 39437.0,
+      "return_pct": -1.27,
+      "num_positions": 2
+    },
+    {
+      "date": "2026-03-27",
+      "total_value": 986926.0,
+      "cash": 947898.0,
+      "positions_value": 39028.0,
+      "return_pct": -1.31,
+      "num_positions": 2
+    },
+    {
+      "date": "2026-03-30",
+      "total_value": 987270.0,
+      "cash": 947898.0,
+      "positions_value": 39372.0,
+      "return_pct": -1.27,
+      "num_positions": 2
+    },
+    {
+      "date": "2026-03-31",
+      "total_value": 987453.0,
+      "cash": 947898.0,
+      "positions_value": 39555.0,
+      "return_pct": -1.25,
+      "num_positions": 2
+    },
+    {
+      "date": "2026-04-01",
+      "total_value": 988286.0,
+      "cash": 947898.0,
+      "positions_value": 40389.0,
+      "return_pct": -1.17,
+      "num_positions": 2
+    },
+    {
+      "date": "2026-04-02",
+      "total_value": 988576.0,
+      "cash": 947898.0,
+      "positions_value": 40679.0,
+      "return_pct": -1.14,
+      "num_positions": 2
+    },
+    {
+      "date": "2026-04-03",
+      "total_value": 988710.0,
+      "cash": 947898.0,
+      "positions_value": 40812.0,
+      "return_pct": -1.13,
+      "num_positions": 2
+    },
+    {
+      "date": "2026-04-06",
+      "total_value": 988863.0,
+      "cash": 947898.0,
+      "positions_value": 40966.0,
+      "return_pct": -1.11,
+      "num_positions": 2
+    },
+    {
+      "date": "2026-04-07",
+      "total_value": 989042.0,
+      "cash": 947898.0,
+      "positions_value": 41144.0,
+      "return_pct": -1.1,
+      "num_positions": 2
+    },
+    {
+      "date": "2026-04-08",
+      "total_value": 989174.0,
+      "cash": 947898.0,
+      "positions_value": 41277.0,
+      "return_pct": -1.08,
+      "num_positions": 2
+    },
+    {
+      "date": "2026-04-09",
+      "total_value": 989740.0,
+      "cash": 947898.0,
+      "positions_value": 41842.0,
+      "return_pct": -1.03,
+      "num_positions": 2
+    },
+    {
+      "date": "2026-04-10",
+      "total_value": 989622.0,
+      "cash": 947898.0,
+      "positions_value": 41724.0,
+      "return_pct": -1.04,
+      "num_positions": 2
+    },
+    {
+      "date": "2026-04-13",
+      "total_value": 990473.0,
+      "cash": 947898.0,
+      "positions_value": 42575.0,
+      "return_pct": -0.95,
+      "num_positions": 2
+    },
+    {
+      "date": "2026-04-14",
+      "total_value": 989669.0,
+      "cash": 947898.0,
+      "positions_value": 41771.0,
+      "return_pct": -1.03,
+      "num_positions": 2
+    },
+    {
+      "date": "2026-04-15",
+      "total_value": 989816.0,
+      "cash": 947898.0,
+      "positions_value": 41919.0,
+      "return_pct": -1.02,
+      "num_positions": 2
+    }
+  ],
+  "created_at": "2026-02-18T08:22:46.494746"
+}

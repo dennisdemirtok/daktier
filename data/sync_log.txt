@@ -1,0 +1,95 @@
+[2026-02-27 06:17:15] ============================================================
+[2026-02-27 06:17:15] DAGLIG SYNC STARTAR
+[2026-02-27 06:17:15] ============================================================
+[2026-02-27 06:17:15] Steg 1: Hämtar aktier från Avanza...
+[2026-02-27 06:17:32]   10894 aktier hämtade
+[2026-02-27 06:17:32] Steg 2: Synkar snapshots till Supabase...
+[2026-02-27 06:17:32]   Supabase ej konfigurerad — hoppar trav_daily_snapshots
+[2026-02-27 06:17:32]   Snapshots: 0/992 SE-aktier synkade till Supabase
+[2026-02-27 06:17:32] Steg 3: Beräknar edge-signaler...
+[2026-02-27 06:17:32]   Supabase ej konfigurerad — hoppar trav_edge_signals
+[2026-02-27 06:17:32]   Signaler: 0/219 aktiva signaler synkade
+[2026-02-27 06:17:32]     ENTRY: 17
+[2026-02-27 06:17:32]     EXIT_DECEL: 55
+[2026-02-27 06:17:32]     EXIT_INSIDER: 5
+[2026-02-27 06:17:32]     HOLD: 111
+[2026-02-27 06:17:32]     WARNING: 31
+[2026-02-27 06:17:32] 
+[2026-02-27 06:17:32] KLAR!
+[2026-02-27 06:17:32]   Aktier hämtade:    10894
+[2026-02-27 06:17:32]   Snapshots synkade: 0
+[2026-02-27 06:17:32]   Signaler synkade:  0
+[2026-02-27 06:17:32]   Supabase:          EJ KONFIGURERAD
+[2026-02-27 06:17:32] ============================================================
+[2026-02-27 06:20:00] ============================================================
+[2026-02-27 06:20:00] DAGLIG SYNC STARTAR
+[2026-02-27 06:20:00] ============================================================
+[2026-02-27 06:20:00] Steg 1: Hämtar aktier från Avanza...
+[2026-02-27 06:20:17]   10894 aktier hämtade
+[2026-02-27 06:20:17] Steg 2: Synkar snapshots till Supabase...
+[2026-02-27 06:20:18]   trav_daily_snapshots: batch 1 FEL 400: {"code":"PGRST204","details":null,"hint":null,"message":"Could not find the 'eps' column of 'trav_daily_snapshots' in the schema cache"}
+[2026-02-27 06:20:18]   trav_daily_snapshots: batch 2 FEL 400: {"code":"PGRST204","details":null,"hint":null,"message":"Could not find the 'eps' column of 'trav_daily_snapshots' in the schema cache"}
+[2026-02-27 06:20:19]   Snapshots: 0/992 SE-aktier synkade till Supabase
+[2026-02-27 06:20:19] Steg 3: Beräknar edge-signaler...
+[2026-02-27 06:20:19]   trav_edge_signals: batch 1 FEL 400: {"code":"PGRST204","details":null,"hint":null,"message":"Could not find the 'components' column of 'trav_edge_signals' in the schema cache"}
+[2026-02-27 06:20:19]   Signaler: 0/219 aktiva signaler synkade
+[2026-02-27 06:20:19]     ENTRY: 17
+[2026-02-27 06:20:19]     EXIT_DECEL: 55
+[2026-02-27 06:20:19]     EXIT_INSIDER: 5
+[2026-02-27 06:20:19]     HOLD: 111
+[2026-02-27 06:20:19]     WARNING: 31
+[2026-02-27 06:20:19] 
+[2026-02-27 06:20:19] KLAR!
+[2026-02-27 06:20:19]   Aktier hämtade:    10894
+[2026-02-27 06:20:19]   Snapshots synkade: 0
+[2026-02-27 06:20:19]   Signaler synkade:  0
+[2026-02-27 06:20:19]   Supabase:          Aktiv
+[2026-02-27 06:20:19] ============================================================
+[2026-02-27 06:21:13] ============================================================
+[2026-02-27 06:21:13] DAGLIG SYNC STARTAR
+[2026-02-27 06:21:13] ============================================================
+[2026-02-27 06:21:13] Steg 1: Hämtar aktier från Avanza...
+[2026-02-27 06:21:30]   10894 aktier hämtade
+[2026-02-27 06:21:30] Steg 2: Synkar snapshots till Supabase...
+[2026-02-27 06:21:31]   trav_daily_snapshots: batch 1 FEL 400: {"code":"22P02","details":null,"hint":null,"message":"invalid input syntax for type bigint: \"917898390381.0\""}
+[2026-02-27 06:21:32]   trav_daily_snapshots: batch 2 FEL 400: {"code":"22P02","details":null,"hint":null,"message":"invalid input syntax for type bigint: \"67731749348.0\""}
+[2026-02-27 06:21:32]   Snapshots: 0/992 SE-aktier synkade till Supabase
+[2026-02-27 06:21:32] Steg 3: Beräknar edge-signaler...
+[2026-02-27 06:21:32]   Signaler: 219/219 aktiva signaler synkade
+[2026-02-27 06:21:32]     ENTRY: 17
+[2026-02-27 06:21:32]     EXIT_DECEL: 55
+[2026-02-27 06:21:32]     EXIT_INSIDER: 5
+[2026-02-27 06:21:32]     HOLD: 111
+[2026-02-27 06:21:32]     WARNING: 31
+[2026-02-27 06:21:32] 
+[2026-02-27 06:21:32] KLAR!
+[2026-02-27 06:21:32]   Aktier hämtade:    10894
+[2026-02-27 06:21:32]   Snapshots synkade: 0
+[2026-02-27 06:21:32]   Signaler synkade:  219
+[2026-02-27 06:21:32]   Supabase:          Aktiv
+[2026-02-27 06:21:32] ============================================================
+[2026-02-27 06:21:47] ============================================================
+[2026-02-27 06:21:47] DAGLIG SYNC STARTAR
+[2026-02-27 06:21:47] ============================================================
+[2026-02-27 06:21:47] Steg 1: Hämtar aktier från Avanza...
+[2026-02-27 06:22:04]   10894 aktier hämtade
+[2026-02-27 06:22:04] Steg 2: Synkar snapshots till Supabase...
+[2026-02-27 06:22:06]   Snapshots: 992/992 SE-aktier synkade till Supabase
+[2026-02-27 06:22:06] Steg 3: Beräknar edge-signaler...
+[2026-02-27 06:22:06]   trav_edge_signals: batch 1 redan finns (409)
+[2026-02-27 06:22:06]   Signaler: 219/219 aktiva signaler synkade
+[2026-02-27 06:22:06]     ENTRY: 17
+[2026-02-27 06:22:06]     EXIT_DECEL: 55
+[2026-02-27 06:22:06]     EXIT_INSIDER: 5
+[2026-02-27 06:22:06]     HOLD: 111
+[2026-02-27 06:22:06]     WARNING: 31
+[2026-02-27 06:22:06] 
+[2026-02-27 06:22:06] KLAR!
+[2026-02-27 06:22:06]   Aktier hämtade:    10894
+[2026-02-27 06:22:06]   Snapshots synkade: 992
+[2026-02-27 06:22:06]   Signaler synkade:  219
+[2026-02-27 06:22:06]   Supabase:          Aktiv
+[2026-02-27 06:22:06] ============================================================
+[2026-02-27 06:38:45]   trav_portfolio_snapshots: batch 1 FEL 400: {"code":"PGRST102","details":null,"hint":null,"message":"All object keys must match"}
+[2026-02-27 06:38:45]   Portfölj: 0/37 rader synkade (trav: 17, magic: 20)
+[2026-02-27 06:39:00]   Portfölj: 37/37 rader synkade (trav: 17, magic: 20)

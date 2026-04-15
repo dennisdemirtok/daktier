@@ -1,0 +1,14 @@
+{
+    "ERIC-B.ST": {"avanza_id": "5240", "isin": "SE0000108656", "name": "Ericsson B"},
+    "VOLV-B.ST": {"avanza_id": "5269", "isin": "SE0000115446", "name": "Volvo B"},
+    "SEB-A.ST": {"avanza_id": "5255", "isin": "SE0000148884", "name": "SEB A"},
+    "SWED-A.ST": {"avanza_id": "5241", "isin": "SE0000242455", "name": "Swedbank A"},
+    "HM-B.ST": {"avanza_id": "5364", "isin": "SE0000106270", "name": "H&M B"},
+    "ABB.ST": {"avanza_id": "5447", "isin": "CH0012221716", "name": "ABB"},
+    "ASSA-B.ST": {"avanza_id": "5271", "isin": "SE0007100581", "name": "Assa Abloy B"},
+    "ATCO-A.ST": {"avanza_id": "5234", "isin": "SE0017486889", "name": "Atlas Copco A"},
+    "INVE-B.ST": {"avanza_id": "5247", "isin": "SE0015811963", "name": "Investor B"},
+    "SHB-A.ST": {"avanza_id": "5264", "isin": "SE0007100599", "name": "Handelsbanken A"},
+    "SAND.ST": {"avanza_id": "5471", "isin": "SE0000667891", "name": "Sandvik"},
+    "HEXA-B.ST": {"avanza_id": "5286", "isin": "SE0015961909", "name": "Hexagon B"}
+}

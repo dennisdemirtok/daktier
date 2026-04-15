@@ -1,0 +1,3581 @@
+{
+  "insider": {
+    "all": [
+      {
+        "publication_date": "2026-02-26",
+        "issuer": "Vidhance AB",
+        "pdmr": "Johan Qviberg",
+        "role": "Styrelseordförande",
+        "related": "",
+        "transaction_type": "Förvärv",
+        "instrument_name": "Vidhance AB",
+        "instrument_type": "Aktie",
+        "isin": "SE0021309937",
+        "transaction_date": "2026-02-26",
+        "volume": 5553.0,
+        "unit": "Antal",
+        "price": 8.17,
+        "currency": "SEK",
+        "status": "",
+        "total_value_sek": 45368.01
+      },
+      {
+        "publication_date": "2026-02-26",
+        "issuer": "Arla Plast AB",
+        "pdmr": "Tomas Jon",
+        "role": "Annan medlem i bolagets administrations-, lednings- eller kontrollorgan",
+        "related": "",
+        "transaction_type": "Avyttring",
+        "instrument_name": "Arla Plast AB",
+        "instrument_type": "Aktie",
+        "isin": "SE0015810817",
+        "transaction_date": "2026-02-23",
+        "volume": 117.0,
+        "unit": "Antal",
+        "price": 45.5,
+        "currency": "SEK",
+        "status": "",
+        "total_value_sek": 5323.5
+      },
+      {
+        "publication_date": "2026-02-26",
+        "issuer": "Arla Plast AB",
+        "pdmr": "Tomas Jon",
+        "role": "Annan medlem i bolagets administrations-, lednings- eller kontrollorgan",
+        "related": "",
+        "transaction_type": "Avyttring",
+        "instrument_name": "Arla Plast AB",
+        "instrument_type": "Aktie",
+        "isin": "SE0015810817",
+        "transaction_date": "2026-02-24",
+        "volume": 900.0,
+        "unit": "Antal",
+        "price": 45.96067,
+        "currency": "SEK",
+        "status": "",
+        "total_value_sek": 41364.603
+      },
+      {
+        "publication_date": "2026-02-26",
+        "issuer": "Arla Plast AB",
+        "pdmr": "Tomas Jon",
+        "role": "Annan medlem i bolagets administrations-, lednings- eller kontrollorgan",
+        "related": "",
+        "transaction_type": "Avyttring",
+        "instrument_name": "Arla Plast AB",
+        "instrument_type": "Aktie",
+        "isin": "SE0015810817",
+        "transaction_date": "2026-02-24",
+        "volume": 2450.0,
+        "unit": "Antal",
+        "price": 45.9,
+        "currency": "SEK",
+        "status": "",
+        "total_value_sek": 112455.0
+      },
+      {
+        "publication_date": "2026-02-26",
+        "issuer": "Arla Plast AB",
+        "pdmr": "Tomas Jon",
+        "role": "Annan medlem i bolagets administrations-, lednings- eller kontrollorgan",
+        "related": "",
+        "transaction_type": "Avyttring",
+        "instrument_name": "Arla Plast AB",
+        "instrument_type": "Aktie",
+        "isin": "SE0015810817",
+        "transaction_date": "2026-02-24",
+        "volume": 5000.0,
+        "unit": "Antal",
+        "price": 45.9,
+        "currency": "SEK",
+        "status": "",
+        "total_value_sek": 229500.0
+      },
+      {
+        "publication_date": "2026-02-26",
+        "issuer": "Arla Plast AB",
+        "pdmr": "Tomas Jon",
+        "role": "Annan medlem i bolagets administrations-, lednings- eller kontrollorgan",
+        "related": "",
+        "transaction_type": "Avyttring",
+        "instrument_name": "Arla Plast AB",
+        "instrument_type": "Aktie",
+        "isin": "SE0015810817",
+        "transaction_date": "2026-02-24",
+        "volume": 1109.0,
+        "unit": "Antal",
+        "price": 46.1,
+        "currency": "SEK",
+        "status": "",
+        "total_value_sek": 51124.9
+      },
+      {
+        "publication_date": "2026-02-26",
+        "issuer": "Arla Plast AB",
+        "pdmr": "Tomas Jon",
+        "role": "Annan medlem i bolagets administrations-, lednings- eller kontrollorgan",
+        "related": "",
+        "transaction_type": "Avyttring",
+        "instrument_name": "Arla Plast AB",
+        "instrument_type": "Aktie",
+        "isin": "SE0015810817",
+        "transaction_date": "2026-02-25",
+        "volume": 2500.0,
+        "unit": "Antal",
+        "price": 46.3,
+        "currency": "SEK",
+        "status": "",
+        "total_value_sek": 115750.0
+      },
+      {
+        "publication_date": "2026-02-26",
+        "issuer": "SinterCast AB",
+        "pdmr": "Steve Dawson",
+        "role": "Verkställande direktör (VD)",
+        "related": "",
+        "transaction_type": "Avyttring",
+        "instrument_name": "SinterCast AB",
+        "instrument_type": "Aktie",
+        "isin": "SE0000950982",
+        "transaction_date": "2026-02-26",
+        "volume": 500.0,
+        "unit": "Antal",
+        "price": 88.0,
+        "currency": "SEK",
+        "status": "",
+        "total_value_sek": 44000.0
+      },
+      {
+        "publication_date": "2026-02-26",
+        "issuer": "Catena Media P.L.C",
+        "pdmr": "Michael Gerrow",
+        "role": "Ekonomichef/finanschef/finansdirektör",
+        "related": "",
+        "transaction_type": "Förvärv",
+        "instrument_name": "Catena Media P.L.C",
+        "instrument_type": "Aktie",
+        "isin": "MT0001000109",
+        "transaction_date": "2026-02-25",
+        "volume": 36991.0,
+        "unit": "Antal",
+        "price": 2.2709,
+        "currency": "SEK",
+        "status": "",
+        "total_value_sek": 84002.8619
+      },
+      {
+        "publication_date": "2026-02-26",
+        "issuer": "Intea Fastigheter AB (publ)",
+        "pdmr": "Jörgen Anders Krister Eriksson",
+        "role": "Styrelseledamot",
+        "related": "",
+        "transaction_type": "Förvärv",
+        "instrument_name": "Intea B",
+        "instrument_type": "Aktie",
+        "isin": "SE0017072259",
+        "transaction_date": "2026-02-26",
+        "volume": 3000.0,
+        "unit": "Antal",
+        "price": 76.45,
+        "currency": "SEK",
+        "status": "",
+        "total_value_sek": 229350.0
+      }
+    ]
+  },
+  "short": {
+    "vitec software group ab (publ)": {
+      "issuer": "Vitec Software Group AB (publ)",
+      "lei": "5493005EB5RV1QHE6H94",
+      "isin": "",
+      "total_short_pct": 7.33,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-26"
+    },
+    "kambi group plc": {
+      "issuer": "KAMBI GROUP PLC",
+      "lei": "2138003TN71ZS4RHIJ87",
+      "isin": "",
+      "total_short_pct": 4.33,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-25"
+    },
+    "clavister ab": {
+      "issuer": "Clavister AB",
+      "lei": "549300WTKDTN285YJC32",
+      "isin": "",
+      "total_short_pct": 1.25,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-25"
+    },
+    "sinch ab (publ)": {
+      "issuer": "Sinch AB (publ)",
+      "lei": "549300UXY7QM6IDCGI12",
+      "isin": "",
+      "total_short_pct": 7.5,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-25"
+    },
+    "alfa laval ab": {
+      "issuer": "Alfa Laval AB",
+      "lei": "549300UCKT2UK88AG251",
+      "isin": "",
+      "total_short_pct": 1.62,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-25"
+    },
+    "nelly group ab (publ)": {
+      "issuer": "Nelly Group AB (publ)",
+      "lei": "549300TY1ZF7FQEF0552",
+      "isin": "",
+      "total_short_pct": 2.4,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-25"
+    },
+    "clinical laserthermia systems ab": {
+      "issuer": "Clinical Laserthermia Systems AB",
+      "lei": "549300TH4O6D9205O691",
+      "isin": "",
+      "total_short_pct": 0.32,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-25"
+    },
+    "evolution ab (publ)": {
+      "issuer": "Evolution AB (publ)",
+      "lei": "549300SUH6ZR1RF6TA88",
+      "isin": "",
+      "total_short_pct": 6.07,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-25"
+    },
+    "sectra aktiebolag": {
+      "issuer": "SECTRA Aktiebolag",
+      "lei": "549300R9ZBT8YSFFK266",
+      "isin": "",
+      "total_short_pct": 1.0,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-25"
+    },
+    "beijer ref ab (publ)": {
+      "issuer": "Beijer Ref AB (publ)",
+      "lei": "549300PZZEUVH08H4G75",
+      "isin": "",
+      "total_short_pct": 2.65,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-25"
+    },
+    "mips ab": {
+      "issuer": "Mips AB",
+      "lei": "549300LZSA4S0L54VQ25",
+      "isin": "",
+      "total_short_pct": 5.71,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-25"
+    },
+    "hansa biopharma ab": {
+      "issuer": "Hansa Biopharma AB",
+      "lei": "549300LLEO25ZJJ3NT91",
+      "isin": "",
+      "total_short_pct": 4.5,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-25"
+    },
+    "g5 entertainment ab (publ)": {
+      "issuer": "G5 Entertainment AB (publ)",
+      "lei": "549300K7QJ1N1FEG2X81",
+      "isin": "",
+      "total_short_pct": 2.34,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-25"
+    },
+    "fabege ab": {
+      "issuer": "Fabege AB",
+      "lei": "549300JNPI46XNH0PM97",
+      "isin": "",
+      "total_short_pct": 2.84,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-25"
+    },
+    "orrön energy ab": {
+      "issuer": "Orrön Energy AB",
+      "lei": "549300IULC8F8IGXKI15",
+      "isin": "",
+      "total_short_pct": 3.07,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-25"
+    },
+    "storytel ab (publ)": {
+      "issuer": "Storytel AB (publ)",
+      "lei": "549300I1FSPPI9HHU419",
+      "isin": "",
+      "total_short_pct": 5.91,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-25"
+    },
+    "samhällsbyggnadsbolaget i norden ab": {
+      "issuer": "Samhällsbyggnadsbolaget i Norden AB",
+      "lei": "549300HX9MRFY47AH564",
+      "isin": "",
+      "total_short_pct": 13.26,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-25"
+    },
+    "boozt ab": {
+      "issuer": "Boozt AB",
+      "lei": "549300HOEUKTVLRKQQ57",
+      "isin": "",
+      "total_short_pct": 4.65,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-25"
+    },
+    "actic group ab": {
+      "issuer": "Actic Group AB",
+      "lei": "549300HI1JEY110HXM08",
+      "isin": "",
+      "total_short_pct": 1.17,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-25"
+    },
+    "aktiebolaget volvo": {
+      "issuer": "Aktiebolaget Volvo",
+      "lei": "549300HGV012CNC8JD22",
+      "isin": "",
+      "total_short_pct": 1.48,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-25"
+    },
+    "episurf medical ab": {
+      "issuer": "Episurf Medical AB",
+      "lei": "549300GORBCSMHZB2J75",
+      "isin": "",
+      "total_short_pct": 1.75,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-25"
+    },
+    "cantargia ab": {
+      "issuer": "CANTARGIA AB",
+      "lei": "549300GKWRT7RXI4VS85",
+      "isin": "",
+      "total_short_pct": 1.2,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-25"
+    },
+    "aak ab (publ)": {
+      "issuer": "AAK AB (publ)",
+      "lei": "549300GK4LGIDDWJWL07",
+      "isin": "",
+      "total_short_pct": 4.36,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-25"
+    },
+    "essity aktiebolag (publ)": {
+      "issuer": "Essity Aktiebolag (publ)",
+      "lei": "549300G8E6YUVJ1DA153",
+      "isin": "",
+      "total_short_pct": 2.39,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-25"
+    },
+    "svenska cellulosa aktiebolaget sca": {
+      "issuer": "Svenska Cellulosa Aktiebolaget SCA",
+      "lei": "549300FW5JDRV1IJ0M67",
+      "isin": "",
+      "total_short_pct": 5.1,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-25"
+    },
+    "bico group ab": {
+      "issuer": "BICO Group AB",
+      "lei": "549300FE4PT8NDXXNK85",
+      "isin": "",
+      "total_short_pct": 1.11,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-25"
+    },
+    "catena ab": {
+      "issuer": "Catena AB",
+      "lei": "549300EMLM7AH5LDLY65",
+      "isin": "",
+      "total_short_pct": 3.5,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-25"
+    },
+    "modern times group mtg ab": {
+      "issuer": "Modern Times Group MTG AB",
+      "lei": "549300E8NDODRSX29339",
+      "isin": "",
+      "total_short_pct": 1.64,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-25"
+    },
+    "bonesupport holding ab": {
+      "issuer": "BONESUPPORT HOLDING AB",
+      "lei": "549300COLY053IGTLD63",
+      "isin": "",
+      "total_short_pct": 11.17,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-25"
+    },
+    "thule group ab": {
+      "issuer": "Thule Group AB",
+      "lei": "549300XHHOGBOERKU333",
+      "isin": "",
+      "total_short_pct": 3.28,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-25"
+    },
+    "aktiebolaget electrolux": {
+      "issuer": "Aktiebolaget Electrolux",
+      "lei": "549300Y3HHZB1ZGFPJ93",
+      "isin": "",
+      "total_short_pct": 12.85,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-25"
+    },
+    "billerud aktiebolag (publ)": {
+      "issuer": "Billerud Aktiebolag (publ)",
+      "lei": "549300YJUYJ9A24RXL71",
+      "isin": "",
+      "total_short_pct": 4.33,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-25"
+    },
+    "nibe industrier ab": {
+      "issuer": "NIBE Industrier AB",
+      "lei": "549300ZQH0FIF1P0MX67",
+      "isin": "",
+      "total_short_pct": 7.17,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-25"
+    },
+    "mahvie minerals ab (publ)": {
+      "issuer": "Mahvie Minerals AB (publ)",
+      "lei": "636700PWJH5T0BF28W24",
+      "isin": "",
+      "total_short_pct": 0.16,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-25"
+    },
+    "coffee stain group ab": {
+      "issuer": "Coffee Stain Group AB",
+      "lei": "636700R8GB3NJ2J6DG90",
+      "isin": "",
+      "total_short_pct": 4.28,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-25"
+    },
+    "verisure plc": {
+      "issuer": "Verisure plc",
+      "lei": "636700ZY9PP0NGXTA943",
+      "isin": "",
+      "total_short_pct": 1.08,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-25"
+    },
+    "enity holding ab (publ)": {
+      "issuer": "Enity Holding AB (publ)",
+      "lei": "636700S7UMLTDQ0BKU55",
+      "isin": "",
+      "total_short_pct": 1.44,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-25"
+    },
+    "apotea sverige ab": {
+      "issuer": "Apotea Sverige AB",
+      "lei": "6367005D3D7BO6FIEV09",
+      "isin": "",
+      "total_short_pct": 0.72,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2025-06-04"
+    },
+    "paxman ab (publ)": {
+      "issuer": "Paxman AB (publ)",
+      "lei": "549300OT2V7Q4IDX8X68",
+      "isin": "",
+      "total_short_pct": 0.5,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-25"
+    },
+    "aq group ab": {
+      "issuer": "AQ Group AB",
+      "lei": "549300CN568MD1JD3E40",
+      "isin": "",
+      "total_short_pct": 0.1,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-25"
+    },
+    "neobo fastigheter ab (publ)": {
+      "issuer": "Neobo Fastigheter AB (publ)",
+      "lei": "213800QBPS3L89U9TZ44",
+      "isin": "",
+      "total_short_pct": 0.73,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-25"
+    },
+    "mildef group ab": {
+      "issuer": "MilDef Group AB",
+      "lei": "9845009F7Q0D56B38270",
+      "isin": "",
+      "total_short_pct": 11.27,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-25"
+    },
+    "alleima ab": {
+      "issuer": "Alleima AB",
+      "lei": "529900EBHTYGLA6PGP77",
+      "isin": "",
+      "total_short_pct": 7.02,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-25"
+    },
+    "lagercrantz group aktiebolag": {
+      "issuer": "Lagercrantz Group Aktiebolag",
+      "lei": "5493002L6I4YHANEYR87",
+      "isin": "",
+      "total_short_pct": 0.69,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-25"
+    },
+    "karnov ab": {
+      "issuer": "Karnov AB",
+      "lei": "549300P7312749LJS754",
+      "isin": "",
+      "total_short_pct": 1.62,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-25"
+    },
+    "ncab group ab (publ)": {
+      "issuer": "NCAB Group AB (publ)",
+      "lei": "549300RUPCK2N43ES354",
+      "isin": "",
+      "total_short_pct": 2.21,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-25"
+    },
+    "volvo car ab": {
+      "issuer": "Volvo Car AB",
+      "lei": "5299000EAMGGBEYP7J33",
+      "isin": "",
+      "total_short_pct": 4.59,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-25"
+    },
+    "vnv global ab (publ)": {
+      "issuer": "VNV Global AB (publ)",
+      "lei": "549300ONMNSTOBAU0S14",
+      "isin": "",
+      "total_short_pct": 0.57,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-25"
+    },
+    "kjell group ab (publ)": {
+      "issuer": "Kjell Group AB (publ)",
+      "lei": "549300NRNTB6O4IKO841",
+      "isin": "",
+      "total_short_pct": 1.36,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-25"
+    },
+    "dynavox group ab": {
+      "issuer": "Dynavox Group AB",
+      "lei": "5493008X1XZR4R5R0P66",
+      "isin": "",
+      "total_short_pct": 2.85,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-25"
+    },
+    "addnode group aktiebolag (publ)": {
+      "issuer": "Addnode Group Aktiebolag (publ)",
+      "lei": "213800CQXEA3W1YWXZ31",
+      "isin": "",
+      "total_short_pct": 1.33,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-25"
+    },
+    "truecaller ab": {
+      "issuer": "Truecaller AB",
+      "lei": "549300TEYF1FA5G5GK26",
+      "isin": "",
+      "total_short_pct": 12.66,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-25"
+    },
+    "hemnet group ab (publ)": {
+      "issuer": "Hemnet Group AB (publ)",
+      "lei": "5493008VIU67J3HUAR07",
+      "isin": "",
+      "total_short_pct": 13.71,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-25"
+    },
+    "cint group ab (publ)": {
+      "issuer": "Cint Group AB (publ)",
+      "lei": "549300KSY3P5G8XC0A34",
+      "isin": "",
+      "total_short_pct": 5.54,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-25"
+    },
+    "surgical science sweden ab": {
+      "issuer": "Surgical Science Sweden AB",
+      "lei": "549300YROAI18G6JL885",
+      "isin": "",
+      "total_short_pct": 3.32,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-25"
+    },
+    "scandinavian enviro systems ab": {
+      "issuer": "Scandinavian Enviro Systems AB",
+      "lei": "549300Y61O5J9OHX6M22",
+      "isin": "",
+      "total_short_pct": 0.44,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-25"
+    },
+    "hexatronic group ab": {
+      "issuer": "Hexatronic Group AB",
+      "lei": "2138001VSY1B4U9JLM82",
+      "isin": "",
+      "total_short_pct": 6.95,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-25"
+    },
+    "nobia ab": {
+      "issuer": "Nobia AB",
+      "lei": "529900MZ8Y3QGPDF6815",
+      "isin": "",
+      "total_short_pct": 2.37,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-25"
+    },
+    "zinzino holding ab": {
+      "issuer": "ZinZino Holding AB",
+      "lei": "549300Z20D1BP4MA0040",
+      "isin": "",
+      "total_short_pct": 1.74,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-25"
+    },
+    "soltech energy sweden ab (publ)": {
+      "issuer": "Soltech Energy Sweden AB (publ)",
+      "lei": "549300RFE1X384DWQW10",
+      "isin": "",
+      "total_short_pct": 0.14,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-25"
+    },
+    "isofol medical ab (publ)": {
+      "issuer": "Isofol Medical AB (publ)",
+      "lei": "549300MCXYAHG7VBHX75",
+      "isin": "",
+      "total_short_pct": 0.24,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-25"
+    },
+    "svenska handelsbanken ab": {
+      "issuer": "Svenska Handelsbanken AB",
+      "lei": "NHBDILHZTYCNBV5UYZ31",
+      "isin": "",
+      "total_short_pct": 4.15,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-25"
+    },
+    "lindab international ab": {
+      "issuer": "Lindab International AB",
+      "lei": "54930085MH6IRQ1JP227",
+      "isin": "",
+      "total_short_pct": 2.22,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-25"
+    },
+    "powercell sweden ab (publ)": {
+      "issuer": "Powercell Sweden AB (publ)",
+      "lei": "54930075IJ7TGOK3VC02",
+      "isin": "",
+      "total_short_pct": 3.81,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-25"
+    },
+    "betsson ab": {
+      "issuer": "Betsson AB",
+      "lei": "549300W61XW8OFGBG077",
+      "isin": "",
+      "total_short_pct": 2.73,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-25"
+    },
+    "vitrolife ab": {
+      "issuer": "Vitrolife AB",
+      "lei": "5493001WDZMONMSPPR49",
+      "isin": "",
+      "total_short_pct": 2.08,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-25"
+    },
+    "inwido ab (publ)": {
+      "issuer": "Inwido AB (publ)",
+      "lei": "529900A9NKQW5UTHBG13",
+      "isin": "",
+      "total_short_pct": 3.16,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-25"
+    },
+    "h & m hennes & mauritz ab": {
+      "issuer": "H & M Hennes & Mauritz AB",
+      "lei": "529900O5RR7R39FRDM42",
+      "isin": "",
+      "total_short_pct": 4.54,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-25"
+    },
+    "tobii ab": {
+      "issuer": "Tobii AB",
+      "lei": "54930045LD4XTJCBGS35",
+      "isin": "",
+      "total_short_pct": 5.98,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-25"
+    },
+    "jm ab": {
+      "issuer": "JM AB",
+      "lei": "529900X0UEM9DOM6FK12",
+      "isin": "",
+      "total_short_pct": 5.36,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-25"
+    },
+    "better collective a/s": {
+      "issuer": "Better Collective A/S",
+      "lei": "2549001EPXH6NK7I2R78",
+      "isin": "",
+      "total_short_pct": 5.73,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-25"
+    },
+    "scandic hotels group ab": {
+      "issuer": "Scandic Hotels Group AB",
+      "lei": "529900JY9ZBGUXGRKQ86",
+      "isin": "",
+      "total_short_pct": 1.81,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-25"
+    },
+    "troax group ab (publ)": {
+      "issuer": "Troax Group AB (publ)",
+      "lei": "5493003TBEWGBIEG1X97",
+      "isin": "",
+      "total_short_pct": 2.09,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-25"
+    },
+    "elekta ab (publ)": {
+      "issuer": "Elekta AB (publ)",
+      "lei": "54930044O54BK617EP80",
+      "isin": "",
+      "total_short_pct": 11.01,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-25"
+    },
+    "karolinska development ab": {
+      "issuer": "Karolinska Development AB",
+      "lei": "54930011ZA52NKO5W681",
+      "isin": "",
+      "total_short_pct": 0.1,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-25"
+    },
+    "kinnevik ab": {
+      "issuer": "Kinnevik AB",
+      "lei": "2138006PZH76JOS6MN27",
+      "isin": "",
+      "total_short_pct": 3.73,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-25"
+    },
+    "bure equity ab": {
+      "issuer": "Bure Equity AB",
+      "lei": "5493000EHCBQ7QQBGX32",
+      "isin": "",
+      "total_short_pct": 1.0,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-24"
+    },
+    "wihlborgs fastigheter ab": {
+      "issuer": "Wihlborgs Fastigheter AB",
+      "lei": "549300RC1YDJPITF8X06",
+      "isin": "",
+      "total_short_pct": 2.02,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-24"
+    },
+    "sweco ab (publ)": {
+      "issuer": "SWECO AB (publ)",
+      "lei": "549300Q4Y55VICYV6U90",
+      "isin": "",
+      "total_short_pct": 0.52,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-24"
+    },
+    "embracer group ab": {
+      "issuer": "Embracer Group AB",
+      "lei": "549300RFXXKT652HB549",
+      "isin": "",
+      "total_short_pct": 9.68,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-24"
+    },
+    "avanza bank holding ab": {
+      "issuer": "Avanza Bank Holding AB",
+      "lei": "549300MBWR5H8SIJLE03",
+      "isin": "",
+      "total_short_pct": 5.41,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-24"
+    },
+    "dometic group ab (publ)": {
+      "issuer": "Dometic Group AB (publ)",
+      "lei": "549300STIPMK5VSA7Y59",
+      "isin": "",
+      "total_short_pct": 2.2,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-24"
+    },
+    "ab sagax": {
+      "issuer": "AB Sagax",
+      "lei": "549300LJX28T6OM8DT95",
+      "isin": "",
+      "total_short_pct": 3.1,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-24"
+    },
+    "intrum ab": {
+      "issuer": "Intrum AB",
+      "lei": "549300UNCO2FCUWXX470",
+      "isin": "",
+      "total_short_pct": 5.13,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-24"
+    },
+    "ework group ab": {
+      "issuer": "Ework Group AB",
+      "lei": "549300WF2ILKHMGV9I45",
+      "isin": "",
+      "total_short_pct": 0.41,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-24"
+    },
+    "bioarctic ab": {
+      "issuer": "BioArctic AB",
+      "lei": "549300Y0OI2WVUNHLC33",
+      "isin": "",
+      "total_short_pct": 2.86,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-24"
+    },
+    "munters group ab": {
+      "issuer": "Munters Group AB",
+      "lei": "549300KYCB37YAVUV523",
+      "isin": "",
+      "total_short_pct": 4.16,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-24"
+    },
+    "afry ab": {
+      "issuer": "AFRY AB",
+      "lei": "549300Q87LKPPD4X9R30",
+      "isin": "",
+      "total_short_pct": 0.96,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-24"
+    },
+    "securitas ab": {
+      "issuer": "Securitas AB",
+      "lei": "635400TTYKE8EIWDS617",
+      "isin": "",
+      "total_short_pct": 4.18,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-24"
+    },
+    "skandinaviska enskilda banken ab": {
+      "issuer": "Skandinaviska Enskilda Banken AB",
+      "lei": "F3JS33DEI6XQ4ZBPTN86",
+      "isin": "",
+      "total_short_pct": 1.21,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-24"
+    },
+    "immunovia ab (publ)": {
+      "issuer": "Immunovia AB (publ)",
+      "lei": "549300KHWL6KK1XGUO81",
+      "isin": "",
+      "total_short_pct": 0.9,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-24"
+    },
+    "guldbrev holding ab": {
+      "issuer": "Guldbrev Holding AB",
+      "lei": "64889UO4P1E89XSM9619",
+      "isin": "",
+      "total_short_pct": 0.21,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-24"
+    },
+    "asker healthcare group ab": {
+      "issuer": "Asker Healthcare Group AB",
+      "lei": "636700RZEYK9TOWV8F05",
+      "isin": "",
+      "total_short_pct": 3.2,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-24"
+    },
+    "röko ab (publ)": {
+      "issuer": "Röko AB (publ)",
+      "lei": "549300X76X1DK285JB13",
+      "isin": "",
+      "total_short_pct": 1.8,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-24"
+    },
+    "asmodee group ab": {
+      "issuer": "Asmodee Group AB",
+      "lei": "636700G5993BBAFDYD02",
+      "isin": "",
+      "total_short_pct": 0.81,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-24"
+    },
+    "fractal gaming group ab": {
+      "issuer": "Fractal Gaming Group AB",
+      "lei": "549300ED9KCK1I6B7870",
+      "isin": "",
+      "total_short_pct": 0.1,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-24"
+    },
+    "tele2 ab": {
+      "issuer": "Tele2 AB",
+      "lei": "213800EKD193RVI9HL76",
+      "isin": "",
+      "total_short_pct": 0.8,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-24"
+    },
+    "engcon ab": {
+      "issuer": "engcon AB",
+      "lei": "549300EMZ2B768S85S50",
+      "isin": "",
+      "total_short_pct": 2.11,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-24"
+    },
+    "studsvik ab": {
+      "issuer": "Studsvik AB",
+      "lei": "549300MLJ046XFQNVH42",
+      "isin": "",
+      "total_short_pct": 0.94,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-24"
+    },
+    "storskogen group ab (publ)": {
+      "issuer": "Storskogen Group AB (publ)",
+      "lei": "549300DL3K4HLJ41KD24",
+      "isin": "",
+      "total_short_pct": 1.98,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-24"
+    },
+    "eqt ab": {
+      "issuer": "EQT AB",
+      "lei": "213800U7P9GOIRKCTB34",
+      "isin": "",
+      "total_short_pct": 2.6,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-24"
+    },
+    "rvrc holding ab": {
+      "issuer": "RVRC Holding AB",
+      "lei": "549300YU7003VHQV3J57",
+      "isin": "",
+      "total_short_pct": 2.07,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-24"
+    },
+    "nordnet ab (publ)": {
+      "issuer": "Nordnet AB (publ)",
+      "lei": "549300D6WW5ZTWLZ4C08",
+      "isin": "",
+      "total_short_pct": 1.26,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-24"
+    },
+    "plejd ab": {
+      "issuer": "Plejd AB",
+      "lei": "549300AOUXS7RTR3OV14",
+      "isin": "",
+      "total_short_pct": 0.2,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-24"
+    },
+    "enea aktiebolag": {
+      "issuer": "Enea Aktiebolag",
+      "lei": "549300UNMLWLG6B2R803",
+      "isin": "",
+      "total_short_pct": 0.44,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-24"
+    },
+    "ssab ab": {
+      "issuer": "SSAB AB",
+      "lei": "529900329VS14ZIML164",
+      "isin": "",
+      "total_short_pct": 2.73,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-24"
+    },
+    "proact it group ab": {
+      "issuer": "Proact IT Group AB",
+      "lei": "549300HMPIC1B86ZHC96",
+      "isin": "",
+      "total_short_pct": 1.92,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-24"
+    },
+    "dicot pharma ab": {
+      "issuer": "Dicot Pharma AB",
+      "lei": "549300GX132RSE4OV407",
+      "isin": "",
+      "total_short_pct": 1.82,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-24"
+    },
+    "biogaia ab": {
+      "issuer": "BioGaia AB",
+      "lei": "549300UBUJOY2L7TT361",
+      "isin": "",
+      "total_short_pct": 1.01,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-24"
+    },
+    "sdiptech ab (publ)": {
+      "issuer": "Sdiptech AB (publ)",
+      "lei": "549300JBO7VTEGMRW310",
+      "isin": "",
+      "total_short_pct": 1.86,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-24"
+    },
+    "autoliv, inc.": {
+      "issuer": "AUTOLIV, INC.",
+      "lei": "A23RUXWKASG834LTMK28",
+      "isin": "",
+      "total_short_pct": 0.21,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-24"
+    },
+    "viaplay group ab (publ)": {
+      "issuer": "Viaplay Group AB (publ)",
+      "lei": "5493006E0IJD0DHJSR89",
+      "isin": "",
+      "total_short_pct": 1.82,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-24"
+    },
+    "lappland guldprospektering ab (publ)": {
+      "issuer": "Lappland Guldprospektering AB (publ)",
+      "lei": "894500DOE76FQ390FN40",
+      "isin": "",
+      "total_short_pct": 0.59,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-24"
+    },
+    "invisio ab": {
+      "issuer": "INVISIO AB",
+      "lei": "54930054EB7KX3MY2Q11",
+      "isin": "",
+      "total_short_pct": 5.44,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-24"
+    },
+    "smart eye aktiebolag (publ)": {
+      "issuer": "Smart Eye Aktiebolag (publ)",
+      "lei": "549300BUD7ZPFPKM6856",
+      "isin": "",
+      "total_short_pct": 3.81,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-24"
+    },
+    "diös fastigheter ab": {
+      "issuer": "Diös Fastigheter AB",
+      "lei": "549300G3VF7LZQ9IW435",
+      "isin": "",
+      "total_short_pct": 1.52,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-24"
+    },
+    "xvivo perfusion aktiebolag": {
+      "issuer": "Xvivo Perfusion Aktiebolag",
+      "lei": "549300G2464FYLS14B41",
+      "isin": "",
+      "total_short_pct": 11.83,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-24"
+    },
+    "aktiebolaget skf": {
+      "issuer": "Aktiebolaget SKF",
+      "lei": "549300B6HWYEE57O8J84",
+      "isin": "",
+      "total_short_pct": 4.77,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-24"
+    },
+    "bravida holding ab": {
+      "issuer": "Bravida Holding AB",
+      "lei": "549300H88IJGPNNL3T61",
+      "isin": "",
+      "total_short_pct": 1.37,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-24"
+    },
+    "castellum aktiebolag": {
+      "issuer": "Castellum Aktiebolag",
+      "lei": "549300GU5OHTR1T5IY68",
+      "isin": "",
+      "total_short_pct": 4.07,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-24"
+    },
+    "ambea ab ( publ )": {
+      "issuer": "Ambea AB ( publ )",
+      "lei": "549300AEVNZRHYI5HV24",
+      "isin": "",
+      "total_short_pct": 0.62,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-24"
+    },
+    "epiroc aktiebolag": {
+      "issuer": "Epiroc Aktiebolag",
+      "lei": "5493004Q73OEYW1SPE91",
+      "isin": "",
+      "total_short_pct": 0.72,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-23"
+    },
+    "ascelia pharma ab": {
+      "issuer": "Ascelia Pharma AB",
+      "lei": "5493002YR9VCJJPWYN08",
+      "isin": "",
+      "total_short_pct": 0.2,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-23"
+    },
+    "camurus ab": {
+      "issuer": "Camurus AB",
+      "lei": "5493003S6Z6VI7WYFQ06",
+      "isin": "",
+      "total_short_pct": 4.7,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-23"
+    },
+    "addlife ab": {
+      "issuer": "AddLife AB",
+      "lei": "5493005T3M7CD7XWE013",
+      "isin": "",
+      "total_short_pct": 0.51,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-23"
+    },
+    "raysearch laboratories ab (publ)": {
+      "issuer": "RaySearch Laboratories AB (publ)",
+      "lei": "549300TYFVYGS0JFWM28",
+      "isin": "",
+      "total_short_pct": 3.66,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-23"
+    },
+    "xbrane biopharma ab": {
+      "issuer": "Xbrane Biopharma AB",
+      "lei": "5493008DKD05APTKQO39",
+      "isin": "",
+      "total_short_pct": 1.38,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-23"
+    },
+    "skanska ab": {
+      "issuer": "Skanska AB",
+      "lei": "549300UINV5RINHGMG07",
+      "isin": "",
+      "total_short_pct": 0.97,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-23"
+    },
+    "sht smart high-tech aktiebolag": {
+      "issuer": "SHT Smart High-Tech Aktiebolag",
+      "lei": "549300VHABJXKXJ26474",
+      "isin": "",
+      "total_short_pct": 0.24,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-23"
+    },
+    "bulten ab": {
+      "issuer": "Bulten AB",
+      "lei": "549300HUR75YN61F4108",
+      "isin": "",
+      "total_short_pct": 0.8,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-23"
+    },
+    "synsam ab (publ)": {
+      "issuer": "Synsam AB (publ)",
+      "lei": "5493000TMEGW9DHNOQ70",
+      "isin": "",
+      "total_short_pct": 0.29,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-23"
+    },
+    "getinge ab (publ)": {
+      "issuer": "Getinge AB (publ)",
+      "lei": "5493003PZ4F570G3W735",
+      "isin": "",
+      "total_short_pct": 3.07,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-23"
+    },
+    "vimian group ab": {
+      "issuer": "Vimian Group AB",
+      "lei": "549300OQ8R5TCAP0BS18",
+      "isin": "",
+      "total_short_pct": 2.62,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-23"
+    },
+    "ncc aktiebolag": {
+      "issuer": "NCC Aktiebolag",
+      "lei": "213800WRGLW3CY4MHW53",
+      "isin": "",
+      "total_short_pct": 0.53,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-23"
+    },
+    "pierce group ab (publ)": {
+      "issuer": "Pierce Group AB (publ)",
+      "lei": "54930082SM8KO7LCER77",
+      "isin": "",
+      "total_short_pct": 0.37,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-23"
+    },
+    "cibus nordic real estate ab (publ)": {
+      "issuer": "Cibus Nordic Real Estate AB (publ)",
+      "lei": "549300PW36MFK96GCR23",
+      "isin": "",
+      "total_short_pct": 5.6,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-23"
+    },
+    "vicore pharma holding ab": {
+      "issuer": "Vicore Pharma Holding AB",
+      "lei": "549300KTNBPTZLF01130",
+      "isin": "",
+      "total_short_pct": 0.39,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-23"
+    },
+    "sandvik aktiebolag": {
+      "issuer": "Sandvik Aktiebolag",
+      "lei": "5299008ZUAXN43LVZF54",
+      "isin": "",
+      "total_short_pct": 1.42,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-23"
+    },
+    "creades ab (publ)": {
+      "issuer": "Creades AB (publ)",
+      "lei": "549300MYLGD0VKNGTJ47",
+      "isin": "",
+      "total_short_pct": 0.3,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-23"
+    },
+    "flat capital ab (publ)": {
+      "issuer": "Flat Capital AB (publ)",
+      "lei": "549300LHOWJ5TLK68326",
+      "isin": "",
+      "total_short_pct": 0.45,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-23"
+    },
+    "arjo ab (publ)": {
+      "issuer": "Arjo AB (publ)",
+      "lei": "549300OWGJPYKC6JF790",
+      "isin": "",
+      "total_short_pct": 1.55,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-23"
+    },
+    "stillfront group ab (publ)": {
+      "issuer": "Stillfront Group AB (publ)",
+      "lei": "529900SYKCO4GYBTIJ54",
+      "isin": "",
+      "total_short_pct": 5.73,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-23"
+    },
+    "bufab ab (publ)": {
+      "issuer": "Bufab AB (publ)",
+      "lei": "5493002TF62S16D67T17",
+      "isin": "",
+      "total_short_pct": 1.32,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-23"
+    },
+    "academedia ab": {
+      "issuer": "AcadeMedia AB",
+      "lei": "549300H47PGHY4JNKO68",
+      "isin": "",
+      "total_short_pct": 1.19,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-23"
+    },
+    "hms networks ab": {
+      "issuer": "HMS Networks AB",
+      "lei": "549300MOY2FDUUDIQ179",
+      "isin": "",
+      "total_short_pct": 2.41,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-23"
+    },
+    "international petroleum corporation": {
+      "issuer": "INTERNATIONAL PETROLEUM CORPORATION",
+      "lei": "54930025D80LU0SMR645",
+      "isin": "",
+      "total_short_pct": 1.49,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-23"
+    },
+    "eolus vind ab": {
+      "issuer": "EOLUS VIND AB",
+      "lei": "549300NNUPH6DE8DVO06",
+      "isin": "",
+      "total_short_pct": 1.54,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-23"
+    },
+    "nyfosa ab": {
+      "issuer": "Nyfosa AB",
+      "lei": "5493000YR2B83SILCJ50",
+      "isin": "",
+      "total_short_pct": 1.28,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-23"
+    },
+    "done.ai group ab": {
+      "issuer": "Done.ai Group AB",
+      "lei": "549300HN4ITSR6ZSAO17",
+      "isin": "",
+      "total_short_pct": 0.5,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-23"
+    },
+    "maha energy ab": {
+      "issuer": "MAHA ENERGY AB",
+      "lei": "213800USNX47LQFQQN20",
+      "isin": "",
+      "total_short_pct": 1.0,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-20"
+    },
+    "swedish orphan biovitrum ab (publ)": {
+      "issuer": "Swedish Orphan Biovitrum AB (publ)",
+      "lei": "549300124Y3MQI87PT35",
+      "isin": "",
+      "total_short_pct": 1.23,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-20"
+    },
+    "telia company ab": {
+      "issuer": "Telia Company AB",
+      "lei": "213800FSR9RNDUOTXO25",
+      "isin": "",
+      "total_short_pct": 1.34,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-20"
+    },
+    "oncopeptides ab": {
+      "issuer": "Oncopeptides AB",
+      "lei": "549300J9WWQ5CBYQ1M77",
+      "isin": "",
+      "total_short_pct": 1.08,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-20"
+    },
+    "holmen aktiebolag": {
+      "issuer": "Holmen Aktiebolag",
+      "lei": "52990080SH3454F0QE68",
+      "isin": "",
+      "total_short_pct": 4.66,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-20"
+    },
+    "assa abloy ab": {
+      "issuer": "ASSA ABLOY AB",
+      "lei": "549300YECS8HKCIMMB67",
+      "isin": "",
+      "total_short_pct": 1.6,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-20"
+    },
+    "hufvudstaden ab": {
+      "issuer": "Hufvudstaden AB",
+      "lei": "213800UEV5ZAFFVQ4J85",
+      "isin": "",
+      "total_short_pct": 2.94,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-20"
+    },
+    "atrium ljungberg ab": {
+      "issuer": "Atrium Ljungberg AB",
+      "lei": "5493001NNP6HM67OVU09",
+      "isin": "",
+      "total_short_pct": 1.46,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-20"
+    },
+    "paradox interactive ab (publ)": {
+      "issuer": "Paradox Interactive AB (publ)",
+      "lei": "529900QNSZUY53R5WW95",
+      "isin": "",
+      "total_short_pct": 2.07,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-20"
+    },
+    "saniona ab": {
+      "issuer": "Saniona AB",
+      "lei": "549300XO4L9XNOCFCZ84",
+      "isin": "",
+      "total_short_pct": 0.1,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-20"
+    },
+    "gränges ab": {
+      "issuer": "Gränges AB",
+      "lei": "5493006UG44TYSIXOB13",
+      "isin": "",
+      "total_short_pct": 0.21,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-20"
+    },
+    "meko ab": {
+      "issuer": "MEKO AB",
+      "lei": "529900R809HC1RFRQA91",
+      "isin": "",
+      "total_short_pct": 1.98,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-20"
+    },
+    "wallenstam ab": {
+      "issuer": "Wallenstam AB",
+      "lei": "21380081R2P9MKFQBD25",
+      "isin": "",
+      "total_short_pct": 4.09,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-20"
+    },
+    "instalco ab": {
+      "issuer": "Instalco AB",
+      "lei": "549300DZ9ONT2AXY4029",
+      "isin": "",
+      "total_short_pct": 3.02,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-20"
+    },
+    "dustin group ab": {
+      "issuer": "Dustin Group AB",
+      "lei": "549300C3IRYAOWOT0783",
+      "isin": "",
+      "total_short_pct": 1.32,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-20"
+    },
+    "sivers semiconductors ab": {
+      "issuer": "Sivers Semiconductors AB",
+      "lei": "254900UBKNY2EJ588J53",
+      "isin": "",
+      "total_short_pct": 1.01,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-20"
+    },
+    "klarabo sverige ab": {
+      "issuer": "KlaraBo Sverige AB",
+      "lei": "5493001FIOIXOKMHG857",
+      "isin": "",
+      "total_short_pct": 1.42,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-20"
+    },
+    "ovzon ab (publ)": {
+      "issuer": "Ovzon AB (publ)",
+      "lei": "549300U82F1HQRSTYZ66",
+      "isin": "",
+      "total_short_pct": 0.11,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-20"
+    },
+    "boule diagnostics ab": {
+      "issuer": "Boule Diagnostics AB",
+      "lei": "213800IK1TGY858TKZ45",
+      "isin": "",
+      "total_short_pct": 0.2,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-20"
+    },
+    "bts group ab": {
+      "issuer": "BTS Group AB",
+      "lei": "549300GBTPZH31MU7R34",
+      "isin": "",
+      "total_short_pct": 0.2,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-20"
+    },
+    "coor service management holding ab": {
+      "issuer": "Coor Service Management Holding AB",
+      "lei": "529900TMO6717OKBSU69",
+      "isin": "",
+      "total_short_pct": 1.84,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-20"
+    },
+    "aktiebolaget industrivärden": {
+      "issuer": "Aktiebolaget Industrivärden",
+      "lei": "549300TM1DLIQI3B3T37",
+      "isin": "",
+      "total_short_pct": 0.77,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-20"
+    },
+    "hexpol ab": {
+      "issuer": "HEXPOL AB",
+      "lei": "549300MN30TBRLYN3465",
+      "isin": "",
+      "total_short_pct": 0.49,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-20"
+    },
+    "xspray pharma ab (publ)": {
+      "issuer": "Xspray Pharma AB (publ)",
+      "lei": "549300NGRQCNZ3X4L157",
+      "isin": "",
+      "total_short_pct": 0.3,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-20"
+    },
+    "cell impact ab (publ)": {
+      "issuer": "Cell Impact AB (publ)",
+      "lei": "549300PS6XPVP3MP2W76",
+      "isin": "",
+      "total_short_pct": 1.08,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-20"
+    },
+    "alzinova ab": {
+      "issuer": "Alzinova AB",
+      "lei": "549300K3IMVT20EK2S13",
+      "isin": "",
+      "total_short_pct": 4.27,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-20"
+    },
+    "verve group se": {
+      "issuer": "Verve Group SE",
+      "lei": "391200UIIWMXRLGARB95",
+      "isin": "",
+      "total_short_pct": 1.53,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-19"
+    },
+    "diamyd medical aktiebolag": {
+      "issuer": "Diamyd Medical Aktiebolag",
+      "lei": "5493003NP2HNQDEKB804",
+      "isin": "",
+      "total_short_pct": 0.31,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-19"
+    },
+    "net insight ab": {
+      "issuer": "Net Insight AB",
+      "lei": "549300BMCT8IT2CFDH63",
+      "isin": "",
+      "total_short_pct": 1.29,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-19"
+    },
+    "np3 fastigheter ab": {
+      "issuer": "NP3 Fastigheter AB",
+      "lei": "549300MGVITW8GYJHZ50",
+      "isin": "",
+      "total_short_pct": 1.26,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-19"
+    },
+    "linc ab": {
+      "issuer": "Linc AB",
+      "lei": "549300UFJU04UGB49K16",
+      "isin": "",
+      "total_short_pct": 0.78,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-19"
+    },
+    "husqvarna ab": {
+      "issuer": "Husqvarna AB",
+      "lei": "549300GYQIIJ3UXB7655",
+      "isin": "",
+      "total_short_pct": 3.21,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-19"
+    },
+    "lifco ab (publ)": {
+      "issuer": "Lifco AB (publ)",
+      "lei": "549300RTLL4VDQRCTW41",
+      "isin": "",
+      "total_short_pct": 2.61,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-19"
+    },
+    "opticept technologies ab": {
+      "issuer": "OptiCept Technologies AB",
+      "lei": "549300NRD3YRN5X6RL95",
+      "isin": "",
+      "total_short_pct": 1.38,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-19"
+    },
+    "aac clyde space ab": {
+      "issuer": "AAC Clyde Space AB",
+      "lei": "549300XQ7MZYAEFJLX90",
+      "isin": "",
+      "total_short_pct": 0.42,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-19"
+    },
+    "new wave group ab": {
+      "issuer": "New Wave Group AB",
+      "lei": "5493006EIYZZYQILKS31",
+      "isin": "",
+      "total_short_pct": 4.02,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-19"
+    },
+    "itab shop concept ab": {
+      "issuer": "ITAB Shop Concept AB",
+      "lei": "2138001H6FCSZBP26351",
+      "isin": "",
+      "total_short_pct": 1.66,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-19"
+    },
+    "nanexa ab": {
+      "issuer": "Nanexa AB",
+      "lei": "549300J5L2ECZTLID491",
+      "isin": "",
+      "total_short_pct": 0.36,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-19"
+    },
+    "arctic minerals ab (publ)": {
+      "issuer": "Arctic Minerals AB (publ)",
+      "lei": "549300R5JEKFS6LHK553",
+      "isin": "",
+      "total_short_pct": 0.3,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-19"
+    },
+    "telefonaktiebolaget lm ericsson": {
+      "issuer": "Telefonaktiebolaget LM Ericsson",
+      "lei": "549300W9JLPW15XIFM52",
+      "isin": "",
+      "total_short_pct": 2.33,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-19"
+    },
+    "swedish logistic property ab": {
+      "issuer": "Swedish Logistic Property AB",
+      "lei": "254900AWRHP1QNE6OQ19",
+      "isin": "",
+      "total_short_pct": 0.31,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-19"
+    },
+    "oem international aktiebolag": {
+      "issuer": "OEM International Aktiebolag",
+      "lei": "549300Z7DLN54J8M4J79",
+      "isin": "",
+      "total_short_pct": 0.33,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-18"
+    },
+    "ratos ab": {
+      "issuer": "Ratos AB",
+      "lei": "2138008KECUUB9VR4798",
+      "isin": "",
+      "total_short_pct": 0.56,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-18"
+    },
+    "momentum group ab": {
+      "issuer": "Momentum Group AB",
+      "lei": "549300QOHUWQMD9G3757",
+      "isin": "",
+      "total_short_pct": 0.48,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-18"
+    },
+    "pricer aktiebolag": {
+      "issuer": "Pricer Aktiebolag",
+      "lei": "5493000MATG2DYK19F35",
+      "isin": "",
+      "total_short_pct": 0.3,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-18"
+    },
+    "addtech ab": {
+      "issuer": "Addtech AB",
+      "lei": "549300QZ5U2IDRHPWL60",
+      "isin": "",
+      "total_short_pct": 2.07,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-18"
+    },
+    "sedana medical ab (publ)": {
+      "issuer": "Sedana Medical AB (publ)",
+      "lei": "549300FQ3NJRI56LCX32",
+      "isin": "",
+      "total_short_pct": 2.5,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-18"
+    },
+    "loomis ab": {
+      "issuer": "Loomis AB",
+      "lei": "213800NS2XXVRYS7WP40",
+      "isin": "",
+      "total_short_pct": 0.62,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-18"
+    },
+    "yubico ab": {
+      "issuer": "Yubico AB",
+      "lei": "549300I9RBIU9DW59H39",
+      "isin": "",
+      "total_short_pct": 4.18,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-18"
+    },
+    "4c group ab": {
+      "issuer": "4C Group AB",
+      "lei": "8945002E2CEXZODDOT51",
+      "isin": "",
+      "total_short_pct": 0.5,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-18"
+    },
+    "k-fast holding ab": {
+      "issuer": "K-Fast Holding AB",
+      "lei": "549300VT0UXKWES37P59",
+      "isin": "",
+      "total_short_pct": 0.93,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-18"
+    },
+    "haypp group ab (publ)": {
+      "issuer": "Haypp Group AB (publ)",
+      "lei": "549300NDGL14NS31UP49",
+      "isin": "",
+      "total_short_pct": 2.2,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-18"
+    },
+    "boliden ab": {
+      "issuer": "Boliden AB",
+      "lei": "21380059QU7IM1ONDJ56",
+      "isin": "",
+      "total_short_pct": 1.6,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-18"
+    },
+    "swedencare ab (publ)": {
+      "issuer": "Swedencare AB (publ)",
+      "lei": "549300FZT7YIF6SWX789",
+      "isin": "",
+      "total_short_pct": 3.04,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-18"
+    },
+    "elicera therapeutics ab": {
+      "issuer": "Elicera Therapeutics AB",
+      "lei": "549300I35L0R4INBFG27",
+      "isin": "",
+      "total_short_pct": 0.13,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-18"
+    },
+    "green landscaping group ab (publ)": {
+      "issuer": "Green Landscaping Group AB (publ)",
+      "lei": "54930070F55O6PDFDF97",
+      "isin": "",
+      "total_short_pct": 0.6,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-17"
+    },
+    "wästbygg gruppen ab (publ)": {
+      "issuer": "Wästbygg Gruppen AB (publ)",
+      "lei": "5493005C147NU3KD0M89",
+      "isin": "",
+      "total_short_pct": 0.55,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-17"
+    },
+    "lime technologies ab (publ)": {
+      "issuer": "Lime Technologies AB (publ)",
+      "lei": "5493008UUFYDF3ZTHC65",
+      "isin": "",
+      "total_short_pct": 0.91,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-17"
+    },
+    "hilbert group ab (publ)": {
+      "issuer": "Hilbert Group AB (publ)",
+      "lei": "5493009PL18HHU5PKF66",
+      "isin": "",
+      "total_short_pct": 0.3,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-17"
+    },
+    "enad global 7 ab (publ)": {
+      "issuer": "Enad Global 7 AB (publ)",
+      "lei": "549300OBCTAOBEEVN513",
+      "isin": "",
+      "total_short_pct": 0.57,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-17"
+    },
+    "klaria pharma holding ab (publ)": {
+      "issuer": "Klaria Pharma Holding AB (publ)",
+      "lei": "529900YLMSNHNP7HOD11",
+      "isin": "",
+      "total_short_pct": 0.32,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-17"
+    },
+    "catella ab": {
+      "issuer": "Catella AB",
+      "lei": "213800WNI4X4LCFHV831",
+      "isin": "",
+      "total_short_pct": 0.24,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-17"
+    },
+    "hacksaw ab": {
+      "issuer": "Hacksaw AB",
+      "lei": "636700SMLZDCBPNPMJ36",
+      "isin": "",
+      "total_short_pct": 2.83,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-17"
+    },
+    "atlas copco aktiebolag": {
+      "issuer": "Atlas Copco Aktiebolag",
+      "lei": "213800T8PC8Q4FYJZR07",
+      "isin": "",
+      "total_short_pct": 0.91,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-17"
+    },
+    "saab aktiebolag": {
+      "issuer": "SAAB Aktiebolag",
+      "lei": "549300ZHO4JCQQI13M69",
+      "isin": "",
+      "total_short_pct": 1.66,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-17"
+    },
+    "sveafastigheter ab (publ)": {
+      "issuer": "Sveafastigheter AB (publ)",
+      "lei": "636700W1VM86O2G2AA36",
+      "isin": "",
+      "total_short_pct": 1.75,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-17"
+    },
+    "indutrade aktiebolag": {
+      "issuer": "Indutrade Aktiebolag",
+      "lei": "549300FISLQ6CEFP1867",
+      "isin": "",
+      "total_short_pct": 1.6,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-17"
+    },
+    "vbg group ab (publ)": {
+      "issuer": "VBG GROUP AB (publ)",
+      "lei": "549300O1V2ZWY6W9GZ14",
+      "isin": "",
+      "total_short_pct": 1.68,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-17"
+    },
+    "fastighets ab balder": {
+      "issuer": "Fastighets AB Balder",
+      "lei": "549300GHKJCEZOAEUU82",
+      "isin": "",
+      "total_short_pct": 3.31,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-17"
+    },
+    "axichem ab (publ)": {
+      "issuer": "aXichem AB (publ)",
+      "lei": "549300REE3038LIBWS21",
+      "isin": "",
+      "total_short_pct": 0.65,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-17"
+    },
+    "hexagon aktiebolag": {
+      "issuer": "Hexagon Aktiebolag",
+      "lei": "549300WJFW6ILNI4TA80",
+      "isin": "",
+      "total_short_pct": 1.39,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-17"
+    },
+    "saltx technology holding ab (publ)": {
+      "issuer": "SaltX Technology Holding AB (publ)",
+      "lei": "549300W31010S0FY9U64",
+      "isin": "",
+      "total_short_pct": 0.1,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-16"
+    },
+    "bibbinstruments ab": {
+      "issuer": "BibbInstruments AB",
+      "lei": "549300C13SGZ1PS8E621",
+      "isin": "",
+      "total_short_pct": 0.9,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-16"
+    },
+    "climeon ab (publ)": {
+      "issuer": "Climeon AB (publ)",
+      "lei": "549300JILS52HE40MQ24",
+      "isin": "",
+      "total_short_pct": 0.15,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-16"
+    },
+    "ossdsign ab": {
+      "issuer": "OssDsign AB",
+      "lei": "5493005SNS5NAYE2WL53",
+      "isin": "",
+      "total_short_pct": 1.43,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-16"
+    },
+    "platzer fastigheter holding ab (publ)": {
+      "issuer": "Platzer Fastigheter Holding AB (publ)",
+      "lei": "5493009KPII4BZE70820",
+      "isin": "",
+      "total_short_pct": 0.76,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-13"
+    },
+    "rejlers ab (publ)": {
+      "issuer": "Rejlers AB (publ)",
+      "lei": "549300K5464VN6QLVB64",
+      "isin": "",
+      "total_short_pct": 0.23,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-13"
+    },
+    "ctt systems ab": {
+      "issuer": "CTT Systems AB",
+      "lei": "549300AG5CO2JWUJQ994",
+      "isin": "",
+      "total_short_pct": 0.2,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-13"
+    },
+    "advenica ab (publ)": {
+      "issuer": "Advenica AB (publ)",
+      "lei": "5493000RSYC7Q56WHO76",
+      "isin": "",
+      "total_short_pct": 0.35,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-13"
+    },
+    "sleep cycle ab (publ)": {
+      "issuer": "Sleep Cycle AB (publ)",
+      "lei": "549300I6C77EO26G2U47",
+      "isin": "",
+      "total_short_pct": 0.81,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-13"
+    },
+    "humble group ab": {
+      "issuer": "Humble Group AB",
+      "lei": "54930067DYL82EKQR937",
+      "isin": "",
+      "total_short_pct": 0.84,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-13"
+    },
+    "impact coatings ab (publ)": {
+      "issuer": "Impact Coatings AB (publ)",
+      "lei": "549300FYU5MJQU32ZU47",
+      "isin": "",
+      "total_short_pct": 0.5,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-13"
+    },
+    "unibap space solutions ab (publ)": {
+      "issuer": "Unibap Space Solutions AB (publ)",
+      "lei": "549300PP3RLB9ZEF2K25",
+      "isin": "",
+      "total_short_pct": 0.4,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-13"
+    },
+    "knowit aktiebolag (publ)": {
+      "issuer": "Knowit Aktiebolag (publ)",
+      "lei": "549300CM6KSG2GY3HV62",
+      "isin": "",
+      "total_short_pct": 1.18,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-13"
+    },
+    "genovis aktiebolag": {
+      "issuer": "Genovis Aktiebolag",
+      "lei": "549300T5KGFRYR7ZST20",
+      "isin": "",
+      "total_short_pct": 0.11,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-13"
+    },
+    "logistea ab": {
+      "issuer": "Logistea AB",
+      "lei": "549300ZSB0ZCKM1SL747",
+      "isin": "",
+      "total_short_pct": 1.02,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-13"
+    },
+    "bilia ab": {
+      "issuer": "Bilia AB",
+      "lei": "2138002GW5WN1UYZAO32",
+      "isin": "",
+      "total_short_pct": 0.19,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-13"
+    },
+    "axfood ab": {
+      "issuer": "Axfood AB",
+      "lei": "549300QIXCZWZLHE8L05",
+      "isin": "",
+      "total_short_pct": 1.53,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-12"
+    },
+    "ferroamp ab (publ)": {
+      "issuer": "Ferroamp AB (publ)",
+      "lei": "549300RS7OQHGNOP2H55",
+      "isin": "",
+      "total_short_pct": 0.2,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-12"
+    },
+    "bimobject ab": {
+      "issuer": "BIMobject AB",
+      "lei": "549300H8BEEY6RNQH874",
+      "isin": "",
+      "total_short_pct": 0.11,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-12"
+    },
+    "medicover ab": {
+      "issuer": "Medicover AB",
+      "lei": "5493000E9BUOYMOW2K53",
+      "isin": "",
+      "total_short_pct": 0.31,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-12"
+    },
+    "swedbank ab": {
+      "issuer": "Swedbank AB",
+      "lei": "M312WZV08Y7LYUC71685",
+      "isin": "",
+      "total_short_pct": 1.31,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-12"
+    },
+    "electrolux professional ab (publ)": {
+      "issuer": "Electrolux Professional AB (publ)",
+      "lei": "254900KI62Q46ZWD8084",
+      "isin": "",
+      "total_short_pct": 1.92,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-11"
+    },
+    "acconeer ab": {
+      "issuer": "Acconeer AB",
+      "lei": "549300QTX5BP5V02EK37",
+      "isin": "",
+      "total_short_pct": 0.4,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-11"
+    },
+    "duni ab": {
+      "issuer": "Duni AB",
+      "lei": "549300MWQEN1427O5L53",
+      "isin": "",
+      "total_short_pct": 0.4,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-11"
+    },
+    "corem property group ab": {
+      "issuer": "Corem Property Group AB",
+      "lei": "213800CHXQQD7TSS1T59",
+      "isin": "",
+      "total_short_pct": 2.2,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-10"
+    },
+    "svolder aktiebolag": {
+      "issuer": "Svolder Aktiebolag",
+      "lei": "5493006ZVS6SHCKH6I37",
+      "isin": "",
+      "total_short_pct": 1.12,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-10"
+    },
+    "mycronic ab (publ)": {
+      "issuer": "Mycronic AB (publ)",
+      "lei": "549300S5CCFESE4C6Y07",
+      "isin": "",
+      "total_short_pct": 0.1,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-10"
+    },
+    "synact pharma ab": {
+      "issuer": "SynAct Pharma AB",
+      "lei": "549300RRYIEFEQ72N546",
+      "isin": "",
+      "total_short_pct": 0.41,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-10"
+    },
+    "egetis therapeutics ab (publ)": {
+      "issuer": "Egetis Therapeutics AB (publ)",
+      "lei": "549300RZCKGWRUBPMY22",
+      "isin": "",
+      "total_short_pct": 0.68,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-09"
+    },
+    "k33 ab (publ)": {
+      "issuer": "K33 AB (publ)",
+      "lei": "549300O9UB56DF0JPH61",
+      "isin": "",
+      "total_short_pct": 0.31,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-09"
+    },
+    "senzime ab (publ.)": {
+      "issuer": "Senzime AB (publ.)",
+      "lei": "549300JQF174JP0MM382",
+      "isin": "",
+      "total_short_pct": 0.39,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-09"
+    },
+    "bhg group ab": {
+      "issuer": "BHG Group AB",
+      "lei": "549300ZLCWL2QTO3HR86",
+      "isin": "",
+      "total_short_pct": 0.71,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-09"
+    },
+    "gapwaves ab": {
+      "issuer": "Gapwaves AB",
+      "lei": "549300Z7VEJLHEVAJ835",
+      "isin": "",
+      "total_short_pct": 0.1,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-06"
+    },
+    "nolato aktiebolag": {
+      "issuer": "Nolato Aktiebolag",
+      "lei": "213800T7T7I7WAOX8Y72",
+      "isin": "",
+      "total_short_pct": 0.2,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-06"
+    },
+    "w5 solutions ab (publ)": {
+      "issuer": "W5 Solutions AB (publ)",
+      "lei": "549300JKE3X3UFP08232",
+      "isin": "",
+      "total_short_pct": 0.61,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-06"
+    },
+    "rusta ab (publ)": {
+      "issuer": "Rusta AB (publ)",
+      "lei": "549300V512S3QMRNO618",
+      "isin": "",
+      "total_short_pct": 0.52,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-06"
+    },
+    "bioinvent international aktiebolag": {
+      "issuer": "BioInvent International Aktiebolag",
+      "lei": "549300E7QRHEF2IJUY10",
+      "isin": "",
+      "total_short_pct": 0.2,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-05"
+    },
+    "bergman & beving aktiebolag": {
+      "issuer": "Bergman & Beving Aktiebolag",
+      "lei": "549300RC0HUZSJYJO751",
+      "isin": "",
+      "total_short_pct": 0.61,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-05"
+    },
+    "cloetta ab": {
+      "issuer": "Cloetta AB",
+      "lei": "549300CSLHPO6Y1AZN37",
+      "isin": "",
+      "total_short_pct": 0.27,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-05"
+    },
+    "pandox aktiebolag": {
+      "issuer": "Pandox Aktiebolag",
+      "lei": "549300K4HA8EBLSL3B97",
+      "isin": "",
+      "total_short_pct": 0.99,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-05"
+    },
+    "skistar aktiebolag": {
+      "issuer": "SkiStar Aktiebolag",
+      "lei": "529900CD7HSJ1CZS7089",
+      "isin": "",
+      "total_short_pct": 0.51,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-04"
+    },
+    "botnia gold ab": {
+      "issuer": "Botnia Gold AB",
+      "lei": "549300VQ2FN8R6PVMS43",
+      "isin": "",
+      "total_short_pct": 0.43,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-04"
+    },
+    "hoist finance ab (publ)": {
+      "issuer": "Hoist Finance AB (publ)",
+      "lei": "549300NPK3FB2BEL4D08",
+      "isin": "",
+      "total_short_pct": 0.2,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-03"
+    },
+    "eurobattery minerals ab": {
+      "issuer": "Eurobattery Minerals AB",
+      "lei": "5493006B6J2A44JJYD81",
+      "isin": "",
+      "total_short_pct": 1.38,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-03"
+    },
+    "heba fastighets aktiebolag": {
+      "issuer": "Heba Fastighets Aktiebolag",
+      "lei": "549300B1UZTBDU27UJ88",
+      "isin": "",
+      "total_short_pct": 0.73,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-02"
+    },
+    "gruvaktiebolaget viscaria": {
+      "issuer": "Gruvaktiebolaget Viscaria",
+      "lei": "5299004NWV90GIWSWQ04",
+      "isin": "",
+      "total_short_pct": 0.41,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-02-02"
+    },
+    "q-linea ab": {
+      "issuer": "Q-linea AB",
+      "lei": "549300BXVB4XRM8WSC73",
+      "isin": "",
+      "total_short_pct": 0.1,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-01-30"
+    },
+    "investmentaktiebolaget latour": {
+      "issuer": "Investmentaktiebolaget Latour",
+      "lei": "5493006GFBLNB3Y0Y789",
+      "isin": "",
+      "total_short_pct": 0.2,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-01-30"
+    },
+    "note ab (publ)": {
+      "issuer": "NOTE AB (publ)",
+      "lei": "54930038JVQ3CMTEO084",
+      "isin": "",
+      "total_short_pct": 0.2,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-01-27"
+    },
+    "medcap ab (publ)": {
+      "issuer": "MedCap AB (publ)",
+      "lei": "549300NGO5XAJ6TL8719",
+      "isin": "",
+      "total_short_pct": 0.48,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-01-23"
+    },
+    "norion bank ab": {
+      "issuer": "Norion Bank AB",
+      "lei": "529900AGWAKUTYNETM62",
+      "isin": "",
+      "total_short_pct": 0.1,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-01-22"
+    },
+    "alligator bioscience ab": {
+      "issuer": "Alligator Bioscience AB",
+      "lei": "549300E15VI0MB7LXV19",
+      "isin": "",
+      "total_short_pct": 0.21,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-01-22"
+    },
+    "investment ab öresund": {
+      "issuer": "Investment AB Öresund",
+      "lei": "549300ZNNKE1UFGNNE47",
+      "isin": "",
+      "total_short_pct": 0.1,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-01-20"
+    },
+    "stendörren fastigheter ab": {
+      "issuer": "Stendörren Fastigheter AB",
+      "lei": "5493003YS3NSPZJ5WU39",
+      "isin": "",
+      "total_short_pct": 0.29,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-01-19"
+    },
+    "clas ohlson aktiebolag": {
+      "issuer": "Clas Ohlson Aktiebolag",
+      "lei": "549300MH8OETHBBKJU80",
+      "isin": "",
+      "total_short_pct": 1.16,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-01-14"
+    },
+    "white pearl technology group ab": {
+      "issuer": "White Pearl Technology Group AB",
+      "lei": "549300TBIFK8VYIJEM39",
+      "isin": "",
+      "total_short_pct": 0.4,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-01-13"
+    },
+    "alvotech": {
+      "issuer": "ALVOTECH",
+      "lei": "222100DCZBOWV5DZ8372",
+      "isin": "",
+      "total_short_pct": 2.69,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-01-09"
+    },
+    "spectracure ab (publ)": {
+      "issuer": "SpectraCure AB (publ)",
+      "lei": "549300U3BMSZ5VGYC283",
+      "isin": "",
+      "total_short_pct": 0.48,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-01-09"
+    },
+    "fingerprint cards ab": {
+      "issuer": "Fingerprint Cards AB",
+      "lei": "5493004YF5D7Z612Z822",
+      "isin": "",
+      "total_short_pct": 2.02,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-01-08"
+    },
+    "nexam chemical holding ab": {
+      "issuer": "Nexam Chemical Holding AB",
+      "lei": "213800JKT38J2VSPJV88",
+      "isin": "",
+      "total_short_pct": 0.49,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-01-07"
+    },
+    "alimak group ab (publ)": {
+      "issuer": "Alimak Group AB (publ)",
+      "lei": "549300LC2ER06GDV6565",
+      "isin": "",
+      "total_short_pct": 0.29,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-01-05"
+    },
+    "wesports scandinavia ab": {
+      "issuer": "WeSports Scandinavia AB",
+      "lei": "549300BWNI7ZPOHOHV76",
+      "isin": "",
+      "total_short_pct": 0.18,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-01-02"
+    },
+    "investor aktiebolag": {
+      "issuer": "Investor Aktiebolag",
+      "lei": "549300VEBQPHRZBKUX38",
+      "isin": "",
+      "total_short_pct": 0.35,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2026-01-02"
+    },
+    "volati ab": {
+      "issuer": "Volati AB",
+      "lei": "529900R2YHW43H9B4342",
+      "isin": "",
+      "total_short_pct": 0.1,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2025-12-29"
+    },
+    "garo aktiebolag": {
+      "issuer": "GARO Aktiebolag",
+      "lei": "549300RKWROUEEV6VP74",
+      "isin": "",
+      "total_short_pct": 0.58,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2025-12-12"
+    },
+    "cereno scientific ab": {
+      "issuer": "Cereno Scientific AB",
+      "lei": "549300VX8KTMYDS6NM84",
+      "isin": "",
+      "total_short_pct": 0.1,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2025-12-10"
+    },
+    "balco group ab": {
+      "issuer": "Balco Group AB",
+      "lei": "549300Z8JUDQ3BN8QB79",
+      "isin": "",
+      "total_short_pct": 0.8,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2025-12-01"
+    },
+    "trelleborg ab": {
+      "issuer": "Trelleborg AB",
+      "lei": "213800XY16PAWG2PAD14",
+      "isin": "",
+      "total_short_pct": 0.59,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2025-11-25"
+    },
+    "cellavision ab": {
+      "issuer": "CellaVision AB",
+      "lei": "529900IUBZBZ0HXFJ114",
+      "isin": "",
+      "total_short_pct": 0.76,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2025-11-20"
+    },
+    "metacon ab (publ)": {
+      "issuer": "Metacon AB (publ)",
+      "lei": "549300SDRD0FYQWN2531",
+      "isin": "",
+      "total_short_pct": 0.22,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2025-11-20"
+    },
+    "intellego technologies ab": {
+      "issuer": "Intellego Technologies AB",
+      "lei": "549300KTMO4X275LNL41",
+      "isin": "",
+      "total_short_pct": 6.74,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2025-11-14"
+    },
+    "l e lundbergföretagen aktiebolag (publ)": {
+      "issuer": "L E Lundbergföretagen Aktiebolag (publ)",
+      "lei": "529900BPSFZS6O3A9R04",
+      "isin": "",
+      "total_short_pct": 0.4,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2025-11-11"
+    },
+    "alm equity ab": {
+      "issuer": "ALM EQUITY AB",
+      "lei": "549300FVH6QE042L3J12",
+      "isin": "",
+      "total_short_pct": 0.53,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2025-11-11"
+    },
+    "kebni ab (publ)": {
+      "issuer": "Kebni AB (publ)",
+      "lei": "549300UWE2XN3O7TXX74",
+      "isin": "",
+      "total_short_pct": 0.2,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2025-11-07"
+    },
+    "rottneros ab": {
+      "issuer": "Rottneros AB",
+      "lei": "213800DM8OBVX8QWUR14",
+      "isin": "",
+      "total_short_pct": 0.31,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2025-10-30"
+    },
+    "noba bank group ab (publ)": {
+      "issuer": "NOBA Bank Group AB (publ)",
+      "lei": "21380057HUGFEAF25W84",
+      "isin": "",
+      "total_short_pct": 0.16,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2025-10-17"
+    },
+    "fasadgruppen group ab (publ)": {
+      "issuer": "Fasadgruppen Group AB (publ)",
+      "lei": "549300E24LG2Z7KCFQ23",
+      "isin": "",
+      "total_short_pct": 0.29,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2025-10-14"
+    },
+    "flexqube ab (publ)": {
+      "issuer": "FlexQube AB (publ)",
+      "lei": "549300DRXQ6AX9WU3179",
+      "isin": "",
+      "total_short_pct": 0.12,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2025-10-14"
+    },
+    "intea fastigheter ab (publ)": {
+      "issuer": "Intea Fastigheter AB (publ)",
+      "lei": "549300KD3XGX3754UW61",
+      "isin": "",
+      "total_short_pct": 0.1,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2025-09-29"
+    },
+    "hexicon ab": {
+      "issuer": "HEXICON AB",
+      "lei": "9845007784687FEF7569",
+      "isin": "",
+      "total_short_pct": 0.58,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2025-09-26"
+    },
+    "vestum ab (publ)": {
+      "issuer": "Vestum AB (publ)",
+      "lei": "549300V2QS9QL4C1KQ31",
+      "isin": "",
+      "total_short_pct": 0.1,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2025-09-22"
+    },
+    "orexo ab": {
+      "issuer": "Orexo AB",
+      "lei": "549300LJ5CCWDPTK9Z08",
+      "isin": "",
+      "total_short_pct": 0.24,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2025-09-09"
+    },
+    "b3 consulting group ab (publ)": {
+      "issuer": "B3 Consulting Group AB (publ)",
+      "lei": "549300DY2G2PN6NAI688",
+      "isin": "",
+      "total_short_pct": 0.1,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2025-08-29"
+    },
+    "gomspace group ab": {
+      "issuer": "GomSpace Group AB",
+      "lei": "213800ES6SHKK5QTN734",
+      "isin": "",
+      "total_short_pct": 0.2,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2025-07-28"
+    },
+    "meren energy inc.": {
+      "issuer": "Meren Energy Inc.",
+      "lei": "549300071188HIDJEB11",
+      "isin": "",
+      "total_short_pct": 0.3,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2025-06-30"
+    },
+    "strax ab": {
+      "issuer": "Strax AB",
+      "lei": "5493005LXSKPJXQXI542",
+      "isin": "",
+      "total_short_pct": 0.24,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2025-04-09"
+    },
+    "abb ltd": {
+      "issuer": "ABB Ltd",
+      "lei": "5493000LKVGOO9PELI61",
+      "isin": "",
+      "total_short_pct": 0.11,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2025-03-25"
+    },
+    "attendo ab (publ)": {
+      "issuer": "Attendo AB (publ)",
+      "lei": "549300KEJDL2FNITUW65",
+      "isin": "",
+      "total_short_pct": 0.29,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2025-03-17"
+    },
+    "oscar properties holding ab": {
+      "issuer": "Oscar Properties Holding AB",
+      "lei": "549300NZI620CFL1TR88",
+      "isin": "",
+      "total_short_pct": 0.24,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2024-08-12"
+    },
+    "viking supply ships ab": {
+      "issuer": "Viking Supply Ships AB",
+      "lei": "549300EE66H3WO5AYK71",
+      "isin": "",
+      "total_short_pct": 0.19,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2024-08-01"
+    },
+    "cortus energy ab": {
+      "issuer": "Cortus Energy AB",
+      "lei": "549300VX4JS45IIBBN05",
+      "isin": "",
+      "total_short_pct": 0.1,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2024-06-04"
+    },
+    "enquest plc": {
+      "issuer": "ENQUEST PLC",
+      "lei": "2138008LJU6WFQWOXJ73",
+      "isin": "",
+      "total_short_pct": 0.59,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2024-03-26"
+    },
+    "polyplank aktiebolag (publ)": {
+      "issuer": "PolyPlank Aktiebolag (publ)",
+      "lei": "54930074JF89HQZ5DW64",
+      "isin": "",
+      "total_short_pct": 0.2,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2024-03-18"
+    },
+    "coala-life group ab (publ)": {
+      "issuer": "Coala-Life Group AB (publ)",
+      "lei": "549300MAN4M3OKQPID57",
+      "isin": "",
+      "total_short_pct": 0.2,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2024-03-15"
+    },
+    "re:newcell ab": {
+      "issuer": "Re:NewCell AB",
+      "lei": "549300ODX3D04SRRH667",
+      "isin": "",
+      "total_short_pct": 2.28,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2024-02-13"
+    },
+    "realfiction holding ab": {
+      "issuer": "Realfiction Holding AB",
+      "lei": "549300AZCIZU2QRKEZ19",
+      "isin": "",
+      "total_short_pct": 0.39,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2024-01-30"
+    },
+    "alelion energy systems ab": {
+      "issuer": "ALELION ENERGY SYSTEMS AB",
+      "lei": "213800HJQ519AT4VCK42",
+      "isin": "",
+      "total_short_pct": 0.13,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2023-11-06"
+    },
+    "implantica ag": {
+      "issuer": "IMPLANTICA AG",
+      "lei": "5493007VLX358PSHF006",
+      "isin": "",
+      "total_short_pct": 0.1,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2023-05-10"
+    },
+    "azelio ab": {
+      "issuer": "Azelio AB",
+      "lei": "549300SJ2OCBQN1HH364",
+      "isin": "",
+      "total_short_pct": 0.15,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2023-05-05"
+    },
+    "nordea bank abp": {
+      "issuer": "Nordea Bank Abp",
+      "lei": "529900ODI3047E2LIV03",
+      "isin": "",
+      "total_short_pct": 0.48,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2023-03-16"
+    },
+    "bactiguard holding ab": {
+      "issuer": "Bactiguard Holding AB",
+      "lei": "549300PAEBW7IAMOSO21",
+      "isin": "",
+      "total_short_pct": 0.19,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2022-11-10"
+    },
+    "brighter ab (publ)": {
+      "issuer": "Brighter AB (publ)",
+      "lei": "5299001CH8K0RXSYV047",
+      "isin": "",
+      "total_short_pct": 0.2,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2022-11-09"
+    },
+    "millicom international cellular s.a.": {
+      "issuer": "Millicom International Cellular S.A.",
+      "lei": "549300CTHC1CP86P2G96",
+      "isin": "",
+      "total_short_pct": 1.11,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2022-09-13"
+    },
+    "isr immune system regulation holding ab (publ)": {
+      "issuer": "ISR Immune System Regulation Holding AB (publ)",
+      "lei": "5493007QQ16K1NL2PW55",
+      "isin": "",
+      "total_short_pct": 0.43,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2022-08-29"
+    },
+    "zordix ab (publ)": {
+      "issuer": "Zordix AB (publ)",
+      "lei": "254900IRBEGO53G9R228",
+      "isin": "",
+      "total_short_pct": 0.19,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2022-07-01"
+    },
+    "kindred group plc": {
+      "issuer": "KINDRED GROUP PLC",
+      "lei": "213800D1MJVOT6SNBX11",
+      "isin": "",
+      "total_short_pct": 0.3,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2021-09-24"
+    },
+    "fortnox aktiebolag": {
+      "issuer": "Fortnox Aktiebolag",
+      "lei": "549300MSNMHPC3O60W78",
+      "isin": "",
+      "total_short_pct": 0.2,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2021-05-10"
+    },
+    "sensys gatso group ab": {
+      "issuer": "Sensys Gatso Group AB",
+      "lei": "5493008GYHJL9PWTC395",
+      "isin": "",
+      "total_short_pct": 0.1,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2021-03-19"
+    },
+    "collector ab": {
+      "issuer": "Collector AB",
+      "lei": "529900G9LZILBPCZXA17",
+      "isin": "",
+      "total_short_pct": 0.22,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2021-03-16"
+    },
+    "cdon ab": {
+      "issuer": "CDON AB",
+      "lei": "5493006F7ZGT71653W96",
+      "isin": "",
+      "total_short_pct": 0.19,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2021-03-16"
+    },
+    "prostalund ab": {
+      "issuer": "ProstaLund AB",
+      "lei": "549300E8DQ5IX5LJ5I21",
+      "isin": "",
+      "total_short_pct": 0.12,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2021-03-10"
+    },
+    "index pharmaceuticals holding ab": {
+      "issuer": "InDex Pharmaceuticals Holding AB",
+      "lei": "54930047C4A74IBXR037",
+      "isin": "",
+      "total_short_pct": 0.1,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2021-03-04"
+    },
+    "kancera ab": {
+      "issuer": "Kancera AB",
+      "lei": "5493002P3RCOFW6HI207",
+      "isin": "",
+      "total_short_pct": 0.19,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2021-03-03"
+    },
+    "björn borg ab": {
+      "issuer": "Björn Borg AB",
+      "lei": "549300UIPGM58Z67Z634",
+      "isin": "",
+      "total_short_pct": 0.19,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2021-02-23"
+    },
+    "tethys oil ab": {
+      "issuer": "Tethys Oil AB",
+      "lei": "549300WI3UNWMNQDVQ18",
+      "isin": "",
+      "total_short_pct": 0.12,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2021-02-11"
+    },
+    "ica gruppen aktiebolag": {
+      "issuer": "ICA Gruppen Aktiebolag",
+      "lei": "549300ZEFN8VKPK9I111",
+      "isin": "",
+      "total_short_pct": 0.55,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2021-02-08"
+    },
+    "astrazeneca plc": {
+      "issuer": "ASTRAZENECA PLC",
+      "lei": "PY6ZZQWO2IZFZC3IOL08",
+      "isin": "",
+      "total_short_pct": 0.3,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2021-01-28"
+    },
+    "irisity ab (publ)": {
+      "issuer": "Irisity AB (publ)",
+      "lei": "529900JYCV3JMCOGGU35",
+      "isin": "",
+      "total_short_pct": 0.1,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2021-01-21"
+    },
+    "klövern ab": {
+      "issuer": "Klövern AB",
+      "lei": "549300D4GJAZR1EMIA07",
+      "isin": "",
+      "total_short_pct": 0.18,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2020-12-17"
+    },
+    "veoneer, inc.": {
+      "issuer": "VEONEER, INC.",
+      "lei": "54930082R4LTC7PERT23",
+      "isin": "",
+      "total_short_pct": 0.36,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2020-09-24"
+    },
+    "sas ab": {
+      "issuer": "SAS AB",
+      "lei": "549300ZJTLE5T4SGP021",
+      "isin": "",
+      "total_short_pct": 0.19,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2020-09-16"
+    },
+    "catena media p.l.c": {
+      "issuer": "CATENA MEDIA P.L.C",
+      "lei": "549300609A73DL5C5Z86",
+      "isin": "",
+      "total_short_pct": 0.52,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2020-08-20"
+    },
+    "resurs holding ab (publ)": {
+      "issuer": "Resurs Holding AB (publ)",
+      "lei": "5493006KHWZ6OVF3IO54",
+      "isin": "",
+      "total_short_pct": 0.18,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2020-04-30"
+    },
+    "peab ab": {
+      "issuer": "Peab AB",
+      "lei": "549300FQS4VD3153I854",
+      "isin": "",
+      "total_short_pct": 0.11,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2020-04-13"
+    },
+    "nobina ab": {
+      "issuer": "Nobina AB",
+      "lei": "549300MBXCR8ZQJIFP95",
+      "isin": "",
+      "total_short_pct": 0.21,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2020-04-08"
+    },
+    "swedol ab (publ)": {
+      "issuer": "Swedol AB (publ)",
+      "lei": "549300QTR46SOJY7TE73",
+      "isin": "",
+      "total_short_pct": 0.19,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2020-03-27"
+    },
+    "evolution services sweden ab": {
+      "issuer": "Evolution Services Sweden AB",
+      "lei": "549300KMAL1H1YLMWP02",
+      "isin": "",
+      "total_short_pct": 0.1,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2020-03-24"
+    },
+    "recipharm ab": {
+      "issuer": "Recipharm AB",
+      "lei": "549300FHCTIFJOZ9D484",
+      "isin": "",
+      "total_short_pct": 0.17,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2020-03-18"
+    },
+    "haldex aktiebolag": {
+      "issuer": "Haldex Aktiebolag",
+      "lei": "54930033BTSY61VHUR49",
+      "isin": "",
+      "total_short_pct": 0.2,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2020-01-03"
+    },
+    "moberg pharma ab (publ)": {
+      "issuer": "Moberg Pharma AB (publ)",
+      "lei": "549300XFXK7DVGDRP410",
+      "isin": "",
+      "total_short_pct": 0.83,
+      "positions": [],
+      "fetch_date": "2026-02-26",
+      "position_date": "2019-12-19"
+    }
+  },
+  "avanza": {
+    "ERIC-B.ST": {
+      "current": {
+        "ticker": "ERIC-B.ST",
+        "avanza_id": "5240",
+        "numberOfOwners": 68037,
+        "timestamp": "2026-02-26T15:15:20.361977",
+        "lastPrice": 101.65,
+        "change": 0.9,
+        "changePercent": 0.89,
+        "totalVolumeTraded": 1639917,
+        "name": "Ericsson B",
+        "shortSellingRatio": 0.0233
+      },
+      "history": [
+        {
+          "date": "2026-02-26",
+          "owners": 68037
+        }
+      ]
+    },
+    "HM-B.ST": {
+      "current": {
+        "ticker": "HM-B.ST",
+        "avanza_id": "5364",
+        "numberOfOwners": 80804,
+        "timestamp": "2026-02-26T15:15:24.585482",
+        "lastPrice": 193.2,
+        "change": 0.9,
+        "changePercent": 0.47,
+        "totalVolumeTraded": 461791,
+        "name": "H&M B",
+        "shortSellingRatio": 0.0464
+      },
+      "history": [
+        {
+          "date": "2026-02-26",
+          "owners": 80804
+        }
+      ]
+    },
+    "INVE-B.ST": {
+      "current": {
+        "ticker": "INVE-B.ST",
+        "avanza_id": "5247",
+        "numberOfOwners": 499409,
+        "timestamp": "2026-02-26T15:15:28.753140",
+        "lastPrice": 376.4,
+        "change": 3.95,
+        "changePercent": 1.06,
+        "totalVolumeTraded": 1158482,
+        "name": "Investor B",
+        "shortSellingRatio": 0.0035
+      },
+      "history": [
+        {
+          "date": "2026-02-26",
+          "owners": 499409
+        }
+      ]
+    },
+    "SHB-A.ST": {
+      "current": {
+        "ticker": "SHB-A.ST",
+        "avanza_id": "5264",
+        "numberOfOwners": 126186,
+        "timestamp": "2026-02-26T15:15:29.785081",
+        "lastPrice": 146.3,
+        "change": 0.5,
+        "changePercent": 0.34,
+        "totalVolumeTraded": 2634352,
+        "name": "Handelsbanken A",
+        "shortSellingRatio": 0.0405
+      },
+      "history": [
+        {
+          "date": "2026-02-26",
+          "owners": 126186
+        }
+      ]
+    },
+    "ATCO-A.ST": {
+      "current": {
+        "ticker": "ATCO-A.ST",
+        "avanza_id": "5234",
+        "numberOfOwners": 20930,
+        "timestamp": "2026-02-26T15:15:27.714610",
+        "lastPrice": 197.75,
+        "change": 1.9,
+        "changePercent": 0.97,
+        "totalVolumeTraded": 912204,
+        "name": "Atlas Copco A",
+        "shortSellingRatio": 0.0091
+      },
+      "history": [
+        {
+          "date": "2026-02-26",
+          "owners": 20930
+        }
+      ]
+    },
+    "HEXA-B.ST": {
+      "current": {
+        "ticker": "HEXA-B.ST",
+        "avanza_id": "5286",
+        "numberOfOwners": 34181,
+        "timestamp": "2026-02-26T15:15:31.860907",
+        "lastPrice": 101.75,
+        "change": 2.75,
+        "changePercent": 2.78,
+        "totalVolumeTraded": 1771001,
+        "name": "Hexagon B",
+        "shortSellingRatio": 0.0139
+      },
+      "history": [
+        {
+          "date": "2026-02-26",
+          "owners": 34181
+        }
+      ]
+    },
+    "VOLV-B.ST": {
+      "current": {
+        "ticker": "VOLV-B.ST",
+        "avanza_id": "5269",
+        "numberOfOwners": 203874,
+        "timestamp": "2026-02-26T15:15:21.469851",
+        "lastPrice": 352.3,
+        "change": 2.5,
+        "changePercent": 0.71,
+        "totalVolumeTraded": 847372,
+        "name": "Volvo B",
+        "shortSellingRatio": 0.0138
+      },
+      "history": [
+        {
+          "date": "2026-02-26",
+          "owners": 203874
+        }
+      ]
+    },
+    "SEB-A.ST": {
+      "current": {
+        "ticker": "SEB-A.ST",
+        "avanza_id": "5255",
+        "numberOfOwners": 81756,
+        "timestamp": "2026-02-26T15:15:22.503578",
+        "lastPrice": 196.55,
+        "change": 1.05,
+        "changePercent": 0.54,
+        "totalVolumeTraded": 1026577,
+        "name": "SEB A",
+        "shortSellingRatio": 0.0121
+      },
+      "history": [
+        {
+          "date": "2026-02-26",
+          "owners": 81756
+        }
+      ]
+    },
+    "SWED-A.ST": {
+      "current": {
+        "ticker": "SWED-A.ST",
+        "avanza_id": "5241",
+        "numberOfOwners": 157976,
+        "timestamp": "2026-02-26T15:15:23.548021",
+        "lastPrice": 352.3,
+        "change": 0.6,
+        "changePercent": 0.17,
+        "totalVolumeTraded": 821614,
+        "name": "Swedbank A",
+        "shortSellingRatio": 0.0131
+      },
+      "history": [
+        {
+          "date": "2026-02-26",
+          "owners": 157976
+        }
+      ]
+    },
+    "SAND.ST": {
+      "current": {
+        "ticker": "SAND.ST",
+        "avanza_id": "5471",
+        "numberOfOwners": 52526,
+        "timestamp": "2026-02-26T15:15:30.824082",
+        "lastPrice": 399.1,
+        "change": 1.5,
+        "changePercent": 0.38,
+        "totalVolumeTraded": 654178,
+        "name": "Sandvik",
+        "shortSellingRatio": 0.0142
+      },
+      "history": [
+        {
+          "date": "2026-02-26",
+          "owners": 52526
+        }
+      ]
+    },
+    "ASSA-B.ST": {
+      "current": {
+        "ticker": "ASSA-B.ST",
+        "avanza_id": "5271",
+        "numberOfOwners": 32278,
+        "timestamp": "2026-02-26T15:15:26.674080",
+        "lastPrice": 383.7,
+        "change": 5.3,
+        "changePercent": 1.4,
+        "totalVolumeTraded": 700320,
+        "name": "Assa Abloy B",
+        "shortSellingRatio": 0.016
+      },
+      "history": [
+        {
+          "date": "2026-02-26",
+          "owners": 32278
+        }
+      ]
+    },
+    "ABB.ST": {
+      "current": {
+        "ticker": "ABB.ST",
+        "avanza_id": "5447",
+        "numberOfOwners": 66621,
+        "timestamp": "2026-02-26T15:15:25.629857",
+        "lastPrice": 838.6,
+        "change": 3.2,
+        "changePercent": 0.38,
+        "totalVolumeTraded": 237857,
+        "name": "ABB",
+        "shortSellingRatio": 0.0011
+      },
+      "history": [
+        {
+          "date": "2026-02-26",
+          "owners": 66621
+        }
+      ]
+    }
+  },
+  "timestamp": "2026-02-26T15:15:31.889165"
+}

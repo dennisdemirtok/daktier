@@ -1,0 +1,674 @@
+{
+  "id": "large",
+  "name": "Stor Portf\u00f6lj",
+  "initial_cash": 10000000,
+  "cash": 9607618.545625892,
+  "positions": {
+    "CLA-B.ST": {
+      "shares": 3896,
+      "avg_price": 51.20000076293945,
+      "current_price": 51.20000076293945,
+      "currency": "SEK",
+      "market": "SE",
+      "name": "Cloetta AB ser. B",
+      "entry_date": "2026-03-03 09:24",
+      "fx_rate_at_entry": 1.0
+    }
+  },
+  "trade_history": [
+    {
+      "date": "2026-02-27 11:40",
+      "ticker": "ELUX-B.ST",
+      "name": "Electrolux, AB ser. B",
+      "action": "K\u00d6P",
+      "shares": 2688,
+      "price": 74.38,
+      "currency": "SEK",
+      "cost_sek": 199933.0,
+      "reason": "Watchlist target n\u00e5dd: RSI 52 | MACD bullish (0.60) | Ovanf\u00f6r EMA200 | Positiv makro (SE) | trend: +0.39 | breakout: +0.33"
+    },
+    {
+      "date": "2026-02-27 13:39",
+      "ticker": "TAVHL.IS",
+      "name": "TAV HAVALIMANLARI",
+      "action": "K\u00d6P",
+      "shares": 3140,
+      "price": 310.0,
+      "currency": "TRY",
+      "cost_sek": 200000.0,
+      "reason": "Watchlist target n\u00e5dd: RSI 36 | MACD bullish (0.60) | Ovanf\u00f6r EMA200 | Positiv makro (TR) | earnings: +0.55 | mean_reversion: +0.45"
+    },
+    {
+      "date": "2026-02-27 14:55",
+      "ticker": "AKBNK.IS",
+      "name": "AKBANK",
+      "action": "K\u00d6P",
+      "shares": 10876,
+      "price": 89.25,
+      "currency": "TRY",
+      "cost_sek": 200052.0,
+      "reason": "Watchlist target n\u00e5dd: RSI 64 | MACD bullish (0.60) | Ovanf\u00f6r EMA200 | Positiv makro (TR) | breakout: +0.70 | earnings: +0.55"
+    },
+    {
+      "date": "2026-03-02 15:41",
+      "ticker": "AKBNK.IS",
+      "name": "AKBANK",
+      "action": "S\u00c4LJ",
+      "shares": 10876,
+      "price": 82.3,
+      "currency": "TRY",
+      "proceeds_sek": 185874.0,
+      "pnl_pct": -7.79,
+      "pnl_local": -75588.17,
+      "reason": "Stop-Loss (-7.8% < -7%)"
+    },
+    {
+      "date": "2026-03-03 09:24",
+      "ticker": "CLA-B.ST",
+      "name": "Cloetta AB ser. B",
+      "action": "K\u00d6P",
+      "shares": 3896,
+      "price": 51.2,
+      "currency": "SEK",
+      "cost_sek": 199475.0,
+      "reason": "Watchlist target n\u00e5dd: RSI overbought (87) | MACD bullish (0.60) | Ovanf\u00f6r EMA200 | Positiv makro (SE) | breakout: +0.70 | earnings: +0.40"
+    },
+    {
+      "date": "2026-03-03 09:24",
+      "ticker": "STE-R.ST",
+      "name": "Stora Enso Oyj ser. R",
+      "action": "K\u00d6P",
+      "shares": 1719,
+      "price": 116.0,
+      "currency": "SEK",
+      "cost_sek": 199404.0,
+      "reason": "Watchlist target n\u00e5dd: RSI 57 | MACD bullish (1.00) | Ovanf\u00f6r EMA200 | Positiv makro (SE) | trend: +0.53 | breakout: +0.48"
+    },
+    {
+      "date": "2026-03-03 09:40",
+      "ticker": "ELUX-B.ST",
+      "name": "Electrolux, AB ser. B",
+      "action": "S\u00c4LJ",
+      "shares": 2688,
+      "price": 68.74,
+      "currency": "SEK",
+      "proceeds_sek": 184773.0,
+      "pnl_pct": -7.58,
+      "pnl_local": -15160.32,
+      "reason": "Stop-Loss (-7.6% < -7%)"
+    },
+    {
+      "date": "2026-03-04 09:39",
+      "ticker": "GRNG.ST",
+      "name": "Gr\u00e4nges AB",
+      "action": "K\u00d6P",
+      "shares": 1311,
+      "price": 152.0,
+      "currency": "SEK",
+      "cost_sek": 199272.0,
+      "reason": "Watchlist target n\u00e5dd: RSI 61 | MACD bullish (0.60) | Ovanf\u00f6r EMA200 | Positiv makro (SE) | breakout: +0.70 | earnings: +0.55"
+    },
+    {
+      "date": "2026-03-04 09:39",
+      "ticker": "ASMDEE-B.ST",
+      "name": "Asmodee Group AB ser. B",
+      "action": "K\u00d6P",
+      "shares": 1966,
+      "price": 101.34,
+      "currency": "SEK",
+      "cost_sek": 199234.0,
+      "reason": "Watchlist target n\u00e5dd: RSI 37 | MACD bullish (0.60) | Ovanf\u00f6r EMA200 | Positiv makro (SE) | mean_reversion: +0.65 | earnings: +0.55"
+    },
+    {
+      "date": "2026-03-04 09:39",
+      "ticker": "YKBNK.IS",
+      "name": "YAPI VE KREDI BANK.",
+      "action": "K\u00d6P",
+      "shares": 25482,
+      "price": 37.14,
+      "currency": "TRY",
+      "cost_sek": 199288.0,
+      "reason": "Watchlist target n\u00e5dd: RSI 45 | MACD bullish (1.00) | Ovanf\u00f6r EMA200 | Positiv makro (TR) | earnings: +0.55 | trend: +0.53 | Billigt + rimlig regime \u2192 K\u00d6P normalstorlek"
+    },
+    {
+      "date": "2026-03-05 08:09",
+      "ticker": "ISCTR.IS",
+      "name": "IS BANKASI (C)",
+      "action": "K\u00d6P",
+      "shares": 64396,
+      "price": 14.8,
+      "currency": "TRY",
+      "cost_sek": 199636.0,
+      "reason": "Watchlist target n\u00e5dd: RSI 35 | MACD bullish (0.60) | Ovanf\u00f6r EMA200 | mean_reversion: +0.65 | earnings: +0.55 | Billigt + rimlig regime \u2192 K\u00d6P normalstorlek"
+    },
+    {
+      "date": "2026-03-05 09:09",
+      "ticker": "AXFO.ST",
+      "name": "Axfood AB",
+      "action": "K\u00d6P",
+      "shares": 621,
+      "price": 321.5,
+      "currency": "SEK",
+      "cost_sek": 199652.0,
+      "reason": "Watchlist target n\u00e5dd: RSI 53 | MACD bullish (0.60) | Ovanf\u00f6r EMA200 | Positiv makro (SE) | breakout: +0.48 | earnings: +0.40"
+    },
+    {
+      "date": "2026-03-05 09:09",
+      "ticker": "8TRA.ST",
+      "name": "TRATON SE",
+      "action": "K\u00d6P",
+      "shares": 576,
+      "price": 346.8,
+      "currency": "SEK",
+      "cost_sek": 199757.0,
+      "reason": "Watchlist target n\u00e5dd: RSI 32 | MACD bullish (0.60) | Ovanf\u00f6r EMA200 | H\u00f6g volym (2.9x) | Positiv makro (SE) | mean_reversion: +0.75 | breakout: +0.40"
+    },
+    {
+      "date": "2026-03-06 09:24",
+      "ticker": "ESSITY-B.ST",
+      "name": "Essity AB ser. B",
+      "action": "K\u00d6P",
+      "shares": 753,
+      "price": 264.8,
+      "currency": "SEK",
+      "cost_sek": 199394.0,
+      "reason": "Watchlist target n\u00e5dd: RSI 35 | MACD bullish (0.60) | Ovanf\u00f6r EMA200 | Positiv makro (SE) | mean_reversion: +0.65 | trend: +0.39 | Billigt + rimlig regime \u2192 K\u00d6P normalstorlek"
+    },
+    {
+      "date": "2026-03-06 10:54",
+      "ticker": "BUFAB.ST",
+      "name": "Bufab AB",
+      "action": "K\u00d6P",
+      "shares": 1812,
+      "price": 109.88,
+      "currency": "SEK",
+      "cost_sek": 199103.0,
+      "reason": "Watchlist target n\u00e5dd: RSI 49 | MACD bullish (0.60) | Ovanf\u00f6r EMA200 | Positiv makro (SE) | earnings: +0.40 | trend: +0.39"
+    },
+    {
+      "date": "2026-03-06 12:10",
+      "ticker": "BOL.ST",
+      "name": "Boliden AB",
+      "action": "K\u00d6P",
+      "shares": 310,
+      "price": 641.2,
+      "currency": "SEK",
+      "cost_sek": 198772.0,
+      "reason": "Watchlist target n\u00e5dd: RSI 52 | MACD bullish (0.60) | Ovanf\u00f6r EMA200 | Positiv makro (SE) | earnings: +0.45 | trend: +0.39"
+    },
+    {
+      "date": "2026-03-09 08:25",
+      "ticker": "TAVHL.IS",
+      "name": "TAV HAVALIMANLARI",
+      "action": "S\u00c4LJ",
+      "shares": 3140,
+      "price": 281.5,
+      "currency": "TRY",
+      "proceeds_sek": 185277.0,
+      "pnl_pct": -9.19,
+      "pnl_local": -89490.0,
+      "reason": "Stop-Loss (-9.2% < -7%)"
+    },
+    {
+      "date": "2026-03-09 08:25",
+      "ticker": "YKBNK.IS",
+      "name": "YAPI VE KREDI BANK.",
+      "action": "S\u00c4LJ",
+      "shares": 25482,
+      "price": 33.84,
+      "currency": "TRY",
+      "proceeds_sek": 180750.0,
+      "pnl_pct": -8.89,
+      "pnl_local": -84090.58,
+      "reason": "Stop-Loss (-8.9% < -7%)"
+    },
+    {
+      "date": "2026-03-09 08:25",
+      "ticker": "ISCTR.IS",
+      "name": "IS BANKASI (C)",
+      "action": "S\u00c4LJ",
+      "shares": 64396,
+      "price": 13.68,
+      "currency": "TRY",
+      "proceeds_sek": 184654.0,
+      "pnl_pct": -7.57,
+      "pnl_local": -72123.51,
+      "reason": "Stop-Loss (-7.6% < -7%)"
+    },
+    {
+      "date": "2026-03-09 09:41",
+      "ticker": "8TRA.ST",
+      "name": "TRATON SE",
+      "action": "S\u00c4LJ",
+      "shares": 576,
+      "price": 322.0,
+      "currency": "SEK",
+      "proceeds_sek": 185472.0,
+      "pnl_pct": -7.15,
+      "pnl_local": -14284.79,
+      "reason": "Stop-Loss (-7.2% < -7%)"
+    },
+    {
+      "date": "2026-03-19 09:19",
+      "ticker": "STE-R.ST",
+      "name": "Stora Enso Oyj ser. R",
+      "action": "S\u00c4LJ",
+      "shares": 1719,
+      "price": 106.0,
+      "currency": "SEK",
+      "proceeds_sek": 182214.0,
+      "pnl_pct": -8.62,
+      "pnl_local": -17190.0,
+      "reason": "Stop-Loss (-8.6% < -7%)"
+    },
+    {
+      "date": "2026-03-19 09:19",
+      "ticker": "BOL.ST",
+      "name": "Boliden AB",
+      "action": "S\u00c4LJ",
+      "shares": 310,
+      "price": 580.8,
+      "currency": "SEK",
+      "proceeds_sek": 180048.0,
+      "pnl_pct": -9.42,
+      "pnl_local": -18724.01,
+      "reason": "Stop-Loss (-9.4% < -7%)"
+    },
+    {
+      "date": "2026-03-19 10:28",
+      "ticker": "GRNG.ST",
+      "name": "Gr\u00e4nges AB",
+      "action": "S\u00c4LJ",
+      "shares": 1311,
+      "price": 141.2,
+      "currency": "SEK",
+      "proceeds_sek": 185113.0,
+      "pnl_pct": -7.11,
+      "pnl_local": -14158.8,
+      "reason": "Stop-Loss (-7.1% < -7%)"
+    },
+    {
+      "date": "2026-03-19 10:28",
+      "ticker": "BUFAB.ST",
+      "name": "Bufab AB",
+      "action": "S\u00c4LJ",
+      "shares": 1812,
+      "price": 101.98,
+      "currency": "SEK",
+      "proceeds_sek": 184788.0,
+      "pnl_pct": -7.19,
+      "pnl_local": -14314.79,
+      "reason": "Stop-Loss (-7.2% < -7%)"
+    },
+    {
+      "date": "2026-03-23 09:54",
+      "ticker": "ASMDEE-B.ST",
+      "name": "Asmodee Group AB ser. B",
+      "action": "S\u00c4LJ",
+      "shares": 1966,
+      "price": 92.96,
+      "currency": "SEK",
+      "proceeds_sek": 182759.0,
+      "pnl_pct": -8.27,
+      "pnl_local": -16475.07,
+      "reason": "Stop-Loss (-8.3% < -7%)"
+    },
+    {
+      "date": "2026-03-23 09:54",
+      "ticker": "ESSITY-B.ST",
+      "name": "Essity AB ser. B",
+      "action": "S\u00c4LJ",
+      "shares": 753,
+      "price": 243.2,
+      "currency": "SEK",
+      "proceeds_sek": 183130.0,
+      "pnl_pct": -8.16,
+      "pnl_local": -16264.79,
+      "reason": "Stop-Loss (-8.2% < -7%)"
+    },
+    {
+      "date": "2026-03-30 09:10",
+      "ticker": "AXFO.ST",
+      "name": "Axfood AB",
+      "action": "S\u00c4LJ",
+      "shares": 621,
+      "price": 315.2,
+      "currency": "SEK",
+      "proceeds_sek": 195739.0,
+      "pnl_pct": -1.96,
+      "pnl_local": -3912.29,
+      "reason": "RSI 49 | MACD bullish (0.60) | Ovanf\u00f6r EMA200 | earnings: +0.40"
+    }
+  ],
+  "daily_values": [
+    {
+      "date": "2026-02-18",
+      "total_value": 10000000,
+      "cash": 10000000,
+      "positions_value": 0,
+      "return_pct": 0.0,
+      "num_positions": 0
+    },
+    {
+      "date": "2026-02-19",
+      "total_value": 10000000,
+      "cash": 10000000,
+      "positions_value": 0,
+      "return_pct": 0.0,
+      "num_positions": 0
+    },
+    {
+      "date": "2026-02-20",
+      "total_value": 10000000,
+      "cash": 10000000,
+      "positions_value": 0,
+      "return_pct": 0.0,
+      "num_positions": 0
+    },
+    {
+      "date": "2026-02-23",
+      "total_value": 10000000,
+      "cash": 10000000,
+      "positions_value": 0,
+      "return_pct": 0.0,
+      "num_positions": 0
+    },
+    {
+      "date": "2026-02-24",
+      "total_value": 10000000,
+      "cash": 10000000,
+      "positions_value": 0,
+      "return_pct": 0.0,
+      "num_positions": 0
+    },
+    {
+      "date": "2026-02-25",
+      "total_value": 10000000,
+      "cash": 10000000,
+      "positions_value": 0,
+      "return_pct": 0.0,
+      "num_positions": 0
+    },
+    {
+      "date": "2026-02-26",
+      "total_value": 10000000,
+      "cash": 10000000,
+      "positions_value": 0,
+      "return_pct": 0.0,
+      "num_positions": 0
+    },
+    {
+      "date": "2026-02-27",
+      "total_value": 10005740.0,
+      "cash": 9400014.0,
+      "positions_value": 605726.0,
+      "return_pct": 0.06,
+      "num_positions": 3
+    },
+    {
+      "date": "2026-03-02",
+      "total_value": 9975572.0,
+      "cash": 9585888.0,
+      "positions_value": 389683.0,
+      "return_pct": -0.24,
+      "num_positions": 2
+    },
+    {
+      "date": "2026-03-03",
+      "total_value": 9963651.0,
+      "cash": 9371782.0,
+      "positions_value": 591868.0,
+      "return_pct": -0.36,
+      "num_positions": 3
+    },
+    {
+      "date": "2026-03-04",
+      "total_value": 9979972.0,
+      "cash": 8773987.0,
+      "positions_value": 1205985.0,
+      "return_pct": -0.2,
+      "num_positions": 6
+    },
+    {
+      "date": "2026-03-05",
+      "total_value": 9981846.0,
+      "cash": 8174943.0,
+      "positions_value": 1806903.0,
+      "return_pct": -0.18,
+      "num_positions": 9
+    },
+    {
+      "date": "2026-03-06",
+      "total_value": 9932586.0,
+      "cash": 7577674.0,
+      "positions_value": 2354912.0,
+      "return_pct": -0.67,
+      "num_positions": 12
+    },
+    {
+      "date": "2026-03-09",
+      "total_value": 9876694.0,
+      "cash": 8313827.0,
+      "positions_value": 1562867.0,
+      "return_pct": -1.23,
+      "num_positions": 8
+    },
+    {
+      "date": "2026-03-10",
+      "total_value": 9922973.0,
+      "cash": 8313827.0,
+      "positions_value": 1609146.0,
+      "return_pct": -0.77,
+      "num_positions": 8
+    },
+    {
+      "date": "2026-03-11",
+      "total_value": 9900587.0,
+      "cash": 8313827.0,
+      "positions_value": 1586759.0,
+      "return_pct": -0.99,
+      "num_positions": 8
+    },
+    {
+      "date": "2026-03-12",
+      "total_value": 9908134.0,
+      "cash": 8313827.0,
+      "positions_value": 1594306.0,
+      "return_pct": -0.92,
+      "num_positions": 8
+    },
+    {
+      "date": "2026-03-13",
+      "total_value": 9893799.0,
+      "cash": 8313827.0,
+      "positions_value": 1579972.0,
+      "return_pct": -1.06,
+      "num_positions": 8
+    },
+    {
+      "date": "2026-03-16",
+      "total_value": 9905530.0,
+      "cash": 8313827.0,
+      "positions_value": 1591702.0,
+      "return_pct": -0.94,
+      "num_positions": 8
+    },
+    {
+      "date": "2026-03-17",
+      "total_value": 9900138.0,
+      "cash": 8313827.0,
+      "positions_value": 1586311.0,
+      "return_pct": -1.0,
+      "num_positions": 8
+    },
+    {
+      "date": "2026-03-18",
+      "total_value": 9874189.0,
+      "cash": 8313827.0,
+      "positions_value": 1560362.0,
+      "return_pct": -1.26,
+      "num_positions": 8
+    },
+    {
+      "date": "2026-03-19",
+      "total_value": 9843746.0,
+      "cash": 9045990.0,
+      "positions_value": 797756.0,
+      "return_pct": -1.56,
+      "num_positions": 4
+    },
+    {
+      "date": "2026-03-20",
+      "total_value": 9811729.0,
+      "cash": 9045990.0,
+      "positions_value": 765738.0,
+      "return_pct": -1.88,
+      "num_positions": 4
+    },
+    {
+      "date": "2026-03-23",
+      "total_value": 9796835.0,
+      "cash": 9411879.0,
+      "positions_value": 384956.0,
+      "return_pct": -2.03,
+      "num_positions": 2
+    },
+    {
+      "date": "2026-03-24",
+      "total_value": 9800994.0,
+      "cash": 9411879.0,
+      "positions_value": 389114.0,
+      "return_pct": -1.99,
+      "num_positions": 2
+    },
+    {
+      "date": "2026-03-25",
+      "total_value": 9803599.0,
+      "cash": 9411879.0,
+      "positions_value": 391720.0,
+      "return_pct": -1.96,
+      "num_positions": 2
+    },
+    {
+      "date": "2026-03-26",
+      "total_value": 9806820.0,
+      "cash": 9411879.0,
+      "positions_value": 394941.0,
+      "return_pct": -1.93,
+      "num_positions": 2
+    },
+    {
+      "date": "2026-03-27",
+      "total_value": 9804640.0,
+      "cash": 9411879.0,
+      "positions_value": 392761.0,
+      "return_pct": -1.95,
+      "num_positions": 2
+    },
+    {
+      "date": "2026-03-30",
+      "total_value": 9810211.0,
+      "cash": 9607619.0,
+      "positions_value": 202592.0,
+      "return_pct": -1.9,
+      "num_positions": 1
+    },
+    {
+      "date": "2026-03-31",
+      "total_value": 9814301.0,
+      "cash": 9607619.0,
+      "positions_value": 206683.0,
+      "return_pct": -1.86,
+      "num_positions": 1
+    },
+    {
+      "date": "2026-04-01",
+      "total_value": 9815470.0,
+      "cash": 9607619.0,
+      "positions_value": 207852.0,
+      "return_pct": -1.85,
+      "num_positions": 1
+    },
+    {
+      "date": "2026-04-02",
+      "total_value": 9815275.0,
+      "cash": 9607619.0,
+      "positions_value": 207657.0,
+      "return_pct": -1.85,
+      "num_positions": 1
+    },
+    {
+      "date": "2026-04-03",
+      "total_value": 9815275.0,
+      "cash": 9607619.0,
+      "positions_value": 207657.0,
+      "return_pct": -1.85,
+      "num_positions": 1
+    },
+    {
+      "date": "2026-04-06",
+      "total_value": 9815275.0,
+      "cash": 9607619.0,
+      "positions_value": 207657.0,
+      "return_pct": -1.85,
+      "num_positions": 1
+    },
+    {
+      "date": "2026-04-07",
+      "total_value": 9816055.0,
+      "cash": 9607619.0,
+      "positions_value": 208436.0,
+      "return_pct": -1.84,
+      "num_positions": 1
+    },
+    {
+      "date": "2026-04-08",
+      "total_value": 9817029.0,
+      "cash": 9607619.0,
+      "positions_value": 209410.0,
+      "return_pct": -1.83,
+      "num_positions": 1
+    },
+    {
+      "date": "2026-04-09",
+      "total_value": 9816639.0,
+      "cash": 9607619.0,
+      "positions_value": 209020.0,
+      "return_pct": -1.83,
+      "num_positions": 1
+    },
+    {
+      "date": "2026-04-10",
+      "total_value": 9812743.0,
+      "cash": 9607619.0,
+      "positions_value": 205124.0,
+      "return_pct": -1.87,
+      "num_positions": 1
+    },
+    {
+      "date": "2026-04-13",
+      "total_value": 9807094.0,
+      "cash": 9607619.0,
+      "positions_value": 199475.0,
+      "return_pct": -1.93,
+      "num_positions": 1
+    },
+    {
+      "date": "2026-04-14",
+      "total_value": 9813133.0,
+      "cash": 9607619.0,
+      "positions_value": 205514.0,
+      "return_pct": -1.87,
+      "num_positions": 1
+    },
+    {
+      "date": "2026-04-15",
+      "total_value": 9810990.0,
+      "cash": 9607619.0,
+      "positions_value": 203371.0,
+      "return_pct": -1.89,
+      "num_positions": 1
+    }
+  ],
+  "created_at": "2026-02-18T08:22:46.494764"
+}

@@ -1,0 +1,1202 @@
+{
+  "ATCO-A.ST": {
+    "avanza_id": "5234",
+    "isin": "SE0017486889",
+    "name": "Atlas Copco A",
+    "ticker": "ATCO A",
+    "list": "Large Cap Stockholm",
+    "owners": 20930
+  },
+  "ATCO-B.ST": {
+    "avanza_id": "5235",
+    "isin": "SE0017486897",
+    "name": "Atlas Copco B",
+    "ticker": "ATCO B",
+    "list": "Large Cap Stockholm",
+    "owners": 86221
+  },
+  "ALIV-SDB.ST": {
+    "avanza_id": "5236",
+    "isin": "SE0021309614",
+    "name": "Autoliv SDB",
+    "ticker": "ALIV SDB",
+    "list": "Large Cap Stockholm",
+    "owners": 8005
+  },
+  "ELUX-A.ST": {
+    "avanza_id": "5237",
+    "isin": "SE0016589170",
+    "name": "Electrolux A",
+    "ticker": "ELUX A",
+    "list": "Large Cap Stockholm",
+    "owners": 509
+  },
+  "ELUX-B.ST": {
+    "avanza_id": "5238",
+    "isin": "SE0016589188",
+    "name": "Electrolux B",
+    "ticker": "ELUX B",
+    "list": "Large Cap Stockholm",
+    "owners": 22106
+  },
+  "ERIC-A.ST": {
+    "avanza_id": "5239",
+    "isin": "SE0000108649",
+    "name": "Ericsson A",
+    "ticker": "ERIC A",
+    "list": "Large Cap Stockholm",
+    "owners": 5361
+  },
+  "ERIC-B.ST": {
+    "avanza_id": "5240",
+    "isin": "SE0000108656",
+    "name": "Ericsson B",
+    "ticker": "ERIC B",
+    "list": "Large Cap Stockholm",
+    "owners": 68037
+  },
+  "SWED-A.ST": {
+    "avanza_id": "5241",
+    "isin": "SE0000242455",
+    "name": "Swedbank A",
+    "ticker": "SWED A",
+    "list": "Large Cap Stockholm",
+    "owners": 157976
+  },
+  "INDU-A.ST": {
+    "avanza_id": "5244",
+    "isin": "SE0000190126",
+    "name": "Industrivärden A",
+    "ticker": "INDU A",
+    "list": "Large Cap Stockholm",
+    "owners": 24435
+  },
+  "INDU-C.ST": {
+    "avanza_id": "5245",
+    "isin": "SE0000107203",
+    "name": "Industrivärden C",
+    "ticker": "INDU C",
+    "list": "Large Cap Stockholm",
+    "owners": 87010
+  },
+  "INVE-A.ST": {
+    "avanza_id": "5246",
+    "isin": "SE0015811955",
+    "name": "Investor A",
+    "ticker": "INVE A",
+    "list": "Large Cap Stockholm",
+    "owners": 96424
+  },
+  "INVE-B.ST": {
+    "avanza_id": "5247",
+    "isin": "SE0015811963",
+    "name": "Investor B",
+    "ticker": "INVE B",
+    "list": "Large Cap Stockholm",
+    "owners": 499409
+  },
+  "NDA-SE.ST": {
+    "avanza_id": "5249",
+    "isin": "FI4000297767",
+    "name": "Nordea Bank",
+    "ticker": "NDA SE",
+    "list": "Large Cap Stockholm",
+    "owners": 96777
+  },
+  "HOLM-A.ST": {
+    "avanza_id": "5250",
+    "isin": "SE0011090000",
+    "name": "Holmen A",
+    "ticker": "HOLM A",
+    "list": "Large Cap Stockholm",
+    "owners": 2933
+  },
+  "HOLM-B.ST": {
+    "avanza_id": "5251",
+    "isin": "SE0011090018",
+    "name": "Holmen B",
+    "ticker": "HOLM B",
+    "list": "Large Cap Stockholm",
+    "owners": 17023
+  },
+  "SEB-A.ST": {
+    "avanza_id": "5255",
+    "isin": "SE0000148884",
+    "name": "SEB A",
+    "ticker": "SEB A",
+    "list": "Large Cap Stockholm",
+    "owners": 81756
+  },
+  "SEB-C.ST": {
+    "avanza_id": "5256",
+    "isin": "SE0000120784",
+    "name": "SEB C",
+    "ticker": "SEB C",
+    "list": "Large Cap Stockholm",
+    "owners": 14506
+  },
+  "SKA-B.ST": {
+    "avanza_id": "5257",
+    "isin": "SE0000113250",
+    "name": "Skanska B",
+    "ticker": "SKA B",
+    "list": "Large Cap Stockholm",
+    "owners": 49447
+  },
+  "SKF-A.ST": {
+    "avanza_id": "5258",
+    "isin": "SE0000108201",
+    "name": "SKF A",
+    "ticker": "SKF A",
+    "list": "Large Cap Stockholm",
+    "owners": 4784
+  },
+  "SKF-B.ST": {
+    "avanza_id": "5259",
+    "isin": "SE0000108227",
+    "name": "SKF B",
+    "ticker": "SKF B",
+    "list": "Large Cap Stockholm",
+    "owners": 33437
+  },
+  "SSAB-A.ST": {
+    "avanza_id": "5260",
+    "isin": "SE0000171100",
+    "name": "SSAB A",
+    "ticker": "SSAB A",
+    "list": "Large Cap Stockholm",
+    "owners": 21343
+  },
+  "SSAB-B.ST": {
+    "avanza_id": "5261",
+    "isin": "SE0000120669",
+    "name": "SSAB B",
+    "ticker": "SSAB B",
+    "list": "Large Cap Stockholm",
+    "owners": 115544
+  },
+  "SCA-A.ST": {
+    "avanza_id": "5262",
+    "isin": "SE0000171886",
+    "name": "SCA A",
+    "ticker": "SCA A",
+    "list": "Large Cap Stockholm",
+    "owners": 5703
+  },
+  "SCA-B.ST": {
+    "avanza_id": "5263",
+    "isin": "SE0000112724",
+    "name": "SCA B",
+    "ticker": "SCA B",
+    "list": "Large Cap Stockholm",
+    "owners": 35685
+  },
+  "SHB-A.ST": {
+    "avanza_id": "5264",
+    "isin": "SE0007100599",
+    "name": "Handelsbanken A",
+    "ticker": "SHB A",
+    "list": "Large Cap Stockholm",
+    "owners": 126186
+  },
+  "SHB-B.ST": {
+    "avanza_id": "5265",
+    "isin": "SE0007100607",
+    "name": "Handelsbanken B",
+    "ticker": "SHB B",
+    "list": "Large Cap Stockholm",
+    "owners": 36090
+  },
+  "TREL-B.ST": {
+    "avanza_id": "5267",
+    "isin": "SE0000114837",
+    "name": "Trelleborg B",
+    "ticker": "TREL B",
+    "list": "Large Cap Stockholm",
+    "owners": 15629
+  },
+  "VOLV-A.ST": {
+    "avanza_id": "5268",
+    "isin": "SE0000115420",
+    "name": "Volvo A",
+    "ticker": "VOLV A",
+    "list": "Large Cap Stockholm",
+    "owners": 16929
+  },
+  "VOLV-B.ST": {
+    "avanza_id": "5269",
+    "isin": "SE0000115446",
+    "name": "Volvo B",
+    "ticker": "VOLV B",
+    "list": "Large Cap Stockholm",
+    "owners": 203874
+  },
+  "SECU-B.ST": {
+    "avanza_id": "5270",
+    "isin": "SE0000163594",
+    "name": "Securitas B",
+    "ticker": "SECU B",
+    "list": "Large Cap Stockholm",
+    "owners": 31659
+  },
+  "ASSA-B.ST": {
+    "avanza_id": "5271",
+    "isin": "SE0007100581",
+    "name": "Assa Abloy B",
+    "ticker": "ASSA B",
+    "list": "Large Cap Stockholm",
+    "owners": 32278
+  },
+  "BEIJ-B.ST": {
+    "avanza_id": "5274",
+    "isin": "SE0015949748",
+    "name": "Beijer Ref B",
+    "ticker": "BEIJ B",
+    "list": "Large Cap Stockholm",
+    "owners": 9388
+  },
+  "BERG-B.ST": {
+    "avanza_id": "5275",
+    "isin": "SE0000101362",
+    "name": "Bergman & Beving B",
+    "ticker": "BERG B",
+    "list": "Mid Cap Stockholm",
+    "owners": 3069
+  },
+  "BILI-A.ST": {
+    "avanza_id": "5276",
+    "isin": "SE0009921588",
+    "name": "Bilia A",
+    "ticker": "BILI A",
+    "list": "Large Cap Stockholm",
+    "owners": 12398
+  },
+  "BURE.ST": {
+    "avanza_id": "5277",
+    "isin": "SE0000195810",
+    "name": "Bure Equity",
+    "ticker": "BURE",
+    "list": "Large Cap Stockholm",
+    "owners": 31217
+  },
+  "CNCJO-B.ST": {
+    "avanza_id": "5279",
+    "isin": "SE0000236382",
+    "name": "Concejo B",
+    "ticker": "CNCJO B",
+    "list": "Small Cap Stockholm",
+    "owners": 3630
+  },
+  "EKTA-B.ST": {
+    "avanza_id": "5280",
+    "isin": "SE0000163628",
+    "name": "Elekta B",
+    "ticker": "EKTA B",
+    "list": "Large Cap Stockholm",
+    "owners": 12734
+  },
+  "GETI-B.ST": {
+    "avanza_id": "5282",
+    "isin": "SE0000202624",
+    "name": "Getinge B",
+    "ticker": "GETI B",
+    "list": "Large Cap Stockholm",
+    "owners": 24872
+  },
+  "HEXA-B.ST": {
+    "avanza_id": "5286",
+    "isin": "SE0015961909",
+    "name": "Hexagon B",
+    "ticker": "HEXA B",
+    "list": "Large Cap Stockholm",
+    "owners": 34181
+  },
+  "HUFV-A.ST": {
+    "avanza_id": "5287",
+    "isin": "SE0000170375",
+    "name": "Hufvudstaden A",
+    "ticker": "HUFV A",
+    "list": "Large Cap Stockholm",
+    "owners": 13029
+  },
+  "HAKI-A.ST": {
+    "avanza_id": "5291",
+    "isin": "SE0000122657",
+    "name": "HAKI Safety A",
+    "ticker": "HAKI A",
+    "list": "Small Cap Stockholm",
+    "owners": 304
+  },
+  "HAKI-B.ST": {
+    "avanza_id": "5292",
+    "isin": "SE0000122673",
+    "name": "HAKI Safety B",
+    "ticker": "HAKI B",
+    "list": "Small Cap Stockholm",
+    "owners": 1322
+  },
+  "NCC-A.ST": {
+    "avanza_id": "5293",
+    "isin": "SE0000118952",
+    "name": "NCC A",
+    "ticker": "NCC A",
+    "list": "Large Cap Stockholm",
+    "owners": 3212
+  },
+  "NCC-B.ST": {
+    "avanza_id": "5294",
+    "isin": "SE0000117970",
+    "name": "NCC B",
+    "ticker": "NCC B",
+    "list": "Large Cap Stockholm",
+    "owners": 21923
+  },
+  "FABG.ST": {
+    "avanza_id": "5300",
+    "isin": "SE0011166974",
+    "name": "Fabege",
+    "ticker": "FABG",
+    "list": "Large Cap Stockholm",
+    "owners": 10369
+  },
+  "AFRY.ST": {
+    "avanza_id": "5301",
+    "isin": "SE0005999836",
+    "name": "AFRY",
+    "ticker": "AFRY",
+    "list": "Large Cap Stockholm",
+    "owners": 11296
+  },
+  "ORES.ST": {
+    "avanza_id": "5302",
+    "isin": "SE0008321608",
+    "name": "Öresund",
+    "ticker": "ORES",
+    "list": "Mid Cap Stockholm",
+    "owners": 13851
+  },
+  "BEIA-B.ST": {
+    "avanza_id": "5303",
+    "isin": "SE0011090547",
+    "name": "Beijer Alma B",
+    "ticker": "BEIA B",
+    "list": "Large Cap Stockholm",
+    "owners": 7227
+  },
+  "ACTI.ST": {
+    "avanza_id": "5304",
+    "isin": "SE0001137985",
+    "name": "Active Biotech",
+    "ticker": "ACTI",
+    "list": "Small Cap Stockholm",
+    "owners": 10932
+  },
+  "BONG.ST": {
+    "avanza_id": "5307",
+    "isin": "SE0000396061",
+    "name": "Bong",
+    "ticker": "BONG",
+    "list": "Small Cap Stockholm",
+    "owners": 1568
+  },
+  "ELAN-B.ST": {
+    "avanza_id": "5311",
+    "isin": "SE0000119299",
+    "name": "Elanders B",
+    "ticker": "ELAN B",
+    "list": "Mid Cap Stockholm",
+    "owners": 2781
+  },
+  "FAG.ST": {
+    "avanza_id": "5314",
+    "isin": "SE0010048884",
+    "name": "Fagerhult Group",
+    "ticker": "FAG",
+    "list": "Mid Cap Stockholm",
+    "owners": 4847
+  },
+  "KABE-B.ST": {
+    "avanza_id": "5319",
+    "isin": "SE0000107724",
+    "name": "KABE Group B",
+    "ticker": "KABE B",
+    "list": "Mid Cap Stockholm",
+    "owners": 2715
+  },
+  "LATO-B.ST": {
+    "avanza_id": "5321",
+    "isin": "SE0010100958",
+    "name": "Latour B",
+    "ticker": "LATO B",
+    "list": "Large Cap Stockholm",
+    "owners": 91929
+  },
+  "NEWA-B.ST": {
+    "avanza_id": "5324",
+    "isin": "SE0020356970",
+    "name": "New Wave B",
+    "ticker": "NEWA B",
+    "list": "Large Cap Stockholm",
+    "owners": 23750
+  },
+  "NIBE-B.ST": {
+    "avanza_id": "5325",
+    "isin": "SE0015988019",
+    "name": "Nibe Industrier B",
+    "ticker": "NIBE B",
+    "list": "Large Cap Stockholm",
+    "owners": 110404
+  },
+  "NOLA-B.ST": {
+    "avanza_id": "5327",
+    "isin": "SE0015962477",
+    "name": "Nolato B",
+    "ticker": "NOLA B",
+    "list": "Large Cap Stockholm",
+    "owners": 6342
+  },
+  "OEM-B.ST": {
+    "avanza_id": "5329",
+    "isin": "SE0017766843",
+    "name": "OEM International B",
+    "ticker": "OEM B",
+    "list": "Large Cap Stockholm",
+    "owners": 5104
+  },
+  "PEAB-B.ST": {
+    "avanza_id": "5330",
+    "isin": "SE0000106205",
+    "name": "Peab B",
+    "ticker": "PEAB B",
+    "list": "Large Cap Stockholm",
+    "owners": 30903
+  },
+  "PROF-B.ST": {
+    "avanza_id": "5331",
+    "isin": "SE0000393860",
+    "name": "ProfilGruppen B",
+    "ticker": "PROF B",
+    "list": "Small Cap Stockholm",
+    "owners": 1847
+  },
+  "RROS.ST": {
+    "avanza_id": "5332",
+    "isin": "SE0000112252",
+    "name": "Rottneros",
+    "ticker": "RROS",
+    "list": "Small Cap Stockholm",
+    "owners": 6292
+  },
+  "SVED-B.ST": {
+    "avanza_id": "5335",
+    "isin": "SE0000407991",
+    "name": "Svedbergs Group B",
+    "ticker": "SVED B",
+    "list": "Mid Cap Stockholm",
+    "owners": 6154
+  },
+  "SVOL-A.ST": {
+    "avanza_id": "5336",
+    "isin": "SE0017161441",
+    "name": "Svolder A",
+    "ticker": "SVOL A",
+    "list": "Mid Cap Stockholm",
+    "owners": 273
+  },
+  "SVOL-B.ST": {
+    "avanza_id": "5337",
+    "isin": "SE0017161458",
+    "name": "Svolder B",
+    "ticker": "SVOL B",
+    "list": "Mid Cap Stockholm",
+    "owners": 44160
+  },
+  "SKIS-B.ST": {
+    "avanza_id": "5339",
+    "isin": "SE0012141687",
+    "name": "SkiStar B",
+    "ticker": "SKIS B",
+    "list": "Large Cap Stockholm",
+    "owners": 33002
+  },
+  "VBG-B.ST": {
+    "avanza_id": "5342",
+    "isin": "SE0000115107",
+    "name": "VBG Group B",
+    "ticker": "VBG B",
+    "list": "Mid Cap Stockholm",
+    "owners": 6634
+  },
+  "WALL-B.ST": {
+    "avanza_id": "5344",
+    "isin": "SE0017780133",
+    "name": "Wallenstam B",
+    "ticker": "WALL B",
+    "list": "Large Cap Stockholm",
+    "owners": 10073
+  },
+  "BIOG-B.ST": {
+    "avanza_id": "5349",
+    "isin": "SE0017769995",
+    "name": "BioGaia B",
+    "ticker": "BIOG B",
+    "list": "Mid Cap Stockholm",
+    "owners": 7508
+  },
+  "CAST.ST": {
+    "avanza_id": "5353",
+    "isin": "SE0000379190",
+    "name": "Castellum",
+    "ticker": "CAST",
+    "list": "Large Cap Stockholm",
+    "owners": 64636
+  },
+  "FPAR-A.ST": {
+    "avanza_id": "5357",
+    "isin": "SE0013512506",
+    "name": "Fastpartner A",
+    "ticker": "FPAR A",
+    "list": "Large Cap Stockholm",
+    "owners": 2149
+  },
+  "AZA.ST": {
+    "avanza_id": "5361",
+    "isin": "SE0012454072",
+    "name": "Avanza Bank Holding",
+    "ticker": "AZA",
+    "list": "Large Cap Stockholm",
+    "owners": 62678
+  },
+  "HAV-B.ST": {
+    "avanza_id": "5362",
+    "isin": "SE0000312043",
+    "name": "Havsfrun Investment B",
+    "ticker": "HAV B",
+    "list": "Small Cap Stockholm",
+    "owners": 7363
+  },
+  "HEBA-B.ST": {
+    "avanza_id": "5363",
+    "isin": "SE0017911480",
+    "name": "Heba B",
+    "ticker": "HEBA B",
+    "list": "Mid Cap Stockholm",
+    "owners": 2563
+  },
+  "HM-B.ST": {
+    "avanza_id": "5364",
+    "isin": "SE0000106270",
+    "name": "H&M B",
+    "ticker": "HM B",
+    "list": "Large Cap Stockholm",
+    "owners": 80804
+  },
+  "KINV-A.ST": {
+    "avanza_id": "5368",
+    "isin": "SE0022060513",
+    "name": "Kinnevik A",
+    "ticker": "KINV A",
+    "list": "Large Cap Stockholm",
+    "owners": 10089
+  },
+  "KINV-B.ST": {
+    "avanza_id": "5369",
+    "isin": "SE0022060521",
+    "name": "Kinnevik B",
+    "ticker": "KINV B",
+    "list": "Large Cap Stockholm",
+    "owners": 97356
+  },
+  "STWK.ST": {
+    "avanza_id": "5373",
+    "isin": "SE0012257970",
+    "name": "Stockwik Förvaltning",
+    "ticker": "STWK",
+    "list": "Small Cap Stockholm",
+    "owners": 3994
+  },
+  "ATRLJ-B.ST": {
+    "avanza_id": "5374",
+    "isin": "SE0024320832",
+    "name": "Atrium Ljungberg B",
+    "ticker": "ATRLJ B",
+    "list": "Large Cap Stockholm",
+    "owners": 4612
+  },
+  "LUND-B.ST": {
+    "avanza_id": "5375",
+    "isin": "SE0000108847",
+    "name": "Lundberg B",
+    "ticker": "LUND B",
+    "list": "Large Cap Stockholm",
+    "owners": 47590
+  },
+  "MVIR.ST": {
+    "avanza_id": "5380",
+    "isin": "SE0020181014",
+    "name": "Medivir",
+    "ticker": "MVIR",
+    "list": "Small Cap Stockholm",
+    "owners": 5737
+  },
+  "SAFETY-B.ST": {
+    "avanza_id": "5382",
+    "isin": "SE0010769182",
+    "name": "mySafety Group B",
+    "ticker": "SAFETY B",
+    "list": "Small Cap Stockholm",
+    "owners": 4339
+  },
+  "TEL2-A.ST": {
+    "avanza_id": "5385",
+    "isin": "SE0005190220",
+    "name": "Tele2 A",
+    "ticker": "TEL2 A",
+    "list": "Large Cap Stockholm",
+    "owners": 1394
+  },
+  "TEL2-B.ST": {
+    "avanza_id": "5386",
+    "isin": "SE0005190238",
+    "name": "Tele2 B",
+    "ticker": "TEL2 B",
+    "list": "Large Cap Stockholm",
+    "owners": 69257
+  },
+  "PREV-B.ST": {
+    "avanza_id": "5394",
+    "isin": "SE0000356008",
+    "name": "Prevas B",
+    "ticker": "PREV B",
+    "list": "Small Cap Stockholm",
+    "owners": 3360
+  },
+  "PRIC-B.ST": {
+    "avanza_id": "5395",
+    "isin": "SE0000233934",
+    "name": "Pricer B",
+    "ticker": "PRIC B",
+    "list": "Small Cap Stockholm",
+    "owners": 5804
+  },
+  "RATO-A.ST": {
+    "avanza_id": "5396",
+    "isin": "SE0000191090",
+    "name": "Ratos A",
+    "ticker": "RATO A",
+    "list": "Mid Cap Stockholm",
+    "owners": 2788
+  },
+  "RATO-B.ST": {
+    "avanza_id": "5397",
+    "isin": "SE0000111940",
+    "name": "Ratos B",
+    "ticker": "RATO B",
+    "list": "Mid Cap Stockholm",
+    "owners": 28564
+  },
+  "LAMM-B.ST": {
+    "avanza_id": "5399",
+    "isin": "SE0000386138",
+    "name": "Lammhults Design Group B",
+    "ticker": "LAMM B",
+    "list": "Small Cap Stockholm",
+    "owners": 2216
+  },
+  "SAAB-B.ST": {
+    "avanza_id": "5401",
+    "isin": "SE0021921269",
+    "name": "SAAB B",
+    "ticker": "SAAB B",
+    "list": "Large Cap Stockholm",
+    "owners": 183840
+  },
+  "SINT.ST": {
+    "avanza_id": "5406",
+    "isin": "SE0000950982",
+    "name": "Sintercast",
+    "ticker": "SINT",
+    "list": "Small Cap Stockholm",
+    "owners": 2052
+  },
+  "SWEC-A.ST": {
+    "avanza_id": "5408",
+    "isin": "SE0014960365",
+    "name": "Sweco A",
+    "ticker": "SWEC A",
+    "list": "Large Cap Stockholm",
+    "owners": 1209
+  },
+  "SWEC-B.ST": {
+    "avanza_id": "5409",
+    "isin": "SE0014960373",
+    "name": "Sweco B",
+    "ticker": "SWEC B",
+    "list": "Large Cap Stockholm",
+    "owners": 9250
+  },
+  "RAY-B.ST": {
+    "avanza_id": "5410",
+    "isin": "SE0000135485",
+    "name": "RaySearch Laboratories B",
+    "ticker": "RAY B",
+    "list": "Mid Cap Stockholm",
+    "owners": 8890
+  },
+  "XANO-B.ST": {
+    "avanza_id": "5415",
+    "isin": "SE0018014151",
+    "name": "XANO Industri B",
+    "ticker": "XANO B",
+    "list": "Mid Cap Stockholm",
+    "owners": 3087
+  },
+  "ENEA.ST": {
+    "avanza_id": "5416",
+    "isin": "SE0009697220",
+    "name": "Enea",
+    "ticker": "ENEA",
+    "list": "Mid Cap Stockholm",
+    "owners": 3057
+  },
+  "SOF-B.ST": {
+    "avanza_id": "5418",
+    "isin": "SE0000323305",
+    "name": "Softronic B",
+    "ticker": "SOF B",
+    "list": "Small Cap Stockholm",
+    "owners": 6084
+  },
+  "STE-A.ST": {
+    "avanza_id": "5421",
+    "isin": "FI0009007603",
+    "name": "Stora Enso A",
+    "ticker": "STE A",
+    "list": "Large Cap Stockholm",
+    "owners": 6188
+  },
+  "STE-R.ST": {
+    "avanza_id": "5422",
+    "isin": "FI0009007611",
+    "name": "Stora Enso R",
+    "ticker": "STE R",
+    "list": "Large Cap Stockholm",
+    "owners": 11087
+  },
+  "CTT.ST": {
+    "avanza_id": "5425",
+    "isin": "SE0000418923",
+    "name": "CTT Systems",
+    "ticker": "CTT",
+    "list": "Mid Cap Stockholm",
+    "owners": 2290
+  },
+  "SECT-B.ST": {
+    "avanza_id": "5426",
+    "isin": "SE0022419784",
+    "name": "Sectra B",
+    "ticker": "SECT B",
+    "list": "Large Cap Stockholm",
+    "owners": 8479
+  },
+  "KNOW.ST": {
+    "avanza_id": "5428",
+    "isin": "SE0000421273",
+    "name": "Knowit",
+    "ticker": "KNOW",
+    "list": "Mid Cap Stockholm",
+    "owners": 5517
+  },
+  "MEAB-B.ST": {
+    "avanza_id": "5429",
+    "isin": "SE0000507659",
+    "name": "Malmbergs Elektriska B",
+    "ticker": "MEAB B",
+    "list": "Small Cap Stockholm",
+    "owners": 985
+  },
+  "AZN.ST": {
+    "avanza_id": "5431",
+    "isin": "GB0009895292",
+    "name": "AstraZeneca",
+    "ticker": "AZN",
+    "list": "Large Cap Stockholm",
+    "owners": 72087
+  },
+  "IS.ST": {
+    "avanza_id": "5436",
+    "isin": "SE0006421871",
+    "name": "Image Systems",
+    "ticker": "IS",
+    "list": "Small Cap Stockholm",
+    "owners": 2266
+  },
+  "MTG-A.ST": {
+    "avanza_id": "5437",
+    "isin": "SE0018012486",
+    "name": "MTG A",
+    "ticker": "MTG A",
+    "list": "Mid Cap Stockholm",
+    "owners": 449
+  },
+  "MTG-B.ST": {
+    "avanza_id": "5438",
+    "isin": "SE0018012494",
+    "name": "MTG B",
+    "ticker": "MTG B",
+    "list": "Mid Cap Stockholm",
+    "owners": 9606
+  },
+  "NETI-B.ST": {
+    "avanza_id": "5440",
+    "isin": "SE0000366098",
+    "name": "Net Insight B",
+    "ticker": "NETI B",
+    "list": "Mid Cap Stockholm",
+    "owners": 4355
+  },
+  "ANOD-B.ST": {
+    "avanza_id": "5442",
+    "isin": "SE0017885767",
+    "name": "Addnode Group B",
+    "ticker": "ANOD B",
+    "list": "Large Cap Stockholm",
+    "owners": 3736
+  },
+  "MSON-A.ST": {
+    "avanza_id": "5443",
+    "isin": "SE0000565210",
+    "name": "Midsona A",
+    "ticker": "MSON A",
+    "list": "Small Cap Stockholm",
+    "owners": 216
+  },
+  "MSON-B.ST": {
+    "avanza_id": "5444",
+    "isin": "SE0000565228",
+    "name": "Midsona B",
+    "ticker": "MSON B",
+    "list": "Small Cap Stockholm",
+    "owners": 4082
+  },
+  "ABB.ST": {
+    "avanza_id": "5447",
+    "isin": "CH0012221716",
+    "name": "ABB",
+    "ticker": "ABB",
+    "list": "Large Cap Stockholm",
+    "owners": 66621
+  },
+  "PION-B.ST": {
+    "avanza_id": "5450",
+    "isin": "SE0000567539",
+    "name": "PION Group B",
+    "ticker": "PION B",
+    "list": "Small Cap Stockholm",
+    "owners": 2494
+  },
+  "NTEK-B.ST": {
+    "avanza_id": "5452",
+    "isin": "SE0000567752",
+    "name": "Novotek B",
+    "ticker": "NTEK B",
+    "list": "Small Cap Stockholm",
+    "owners": 2964
+  },
+  "PACT.ST": {
+    "avanza_id": "5453",
+    "isin": "SE0015961222",
+    "name": "Proact IT Group",
+    "ticker": "PACT",
+    "list": "Mid Cap Stockholm",
+    "owners": 6189
+  },
+  "DURC-B.ST": {
+    "avanza_id": "5454",
+    "isin": "SE0000331266",
+    "name": "Duroc B",
+    "ticker": "DURC B",
+    "list": "Small Cap Stockholm",
+    "owners": 989
+  },
+  "TIETOS.ST": {
+    "avanza_id": "5455",
+    "isin": "FI0009000277",
+    "name": "Tietoevry",
+    "ticker": "TIETOS",
+    "list": "Large Cap Stockholm",
+    "owners": 4423
+  },
+  "CLAS-B.ST": {
+    "avanza_id": "5457",
+    "isin": "SE0000584948",
+    "name": "Clas Ohlson B",
+    "ticker": "CLAS B",
+    "list": "Large Cap Stockholm",
+    "owners": 26201
+  },
+  "BALD-B.ST": {
+    "avanza_id": "5459",
+    "isin": "SE0017832488",
+    "name": "Balder B",
+    "ticker": "BALD B",
+    "list": "Large Cap Stockholm",
+    "owners": 16816
+  },
+  "AXFO.ST": {
+    "avanza_id": "5465",
+    "isin": "SE0006993770",
+    "name": "Axfood",
+    "ticker": "AXFO",
+    "list": "Large Cap Stockholm",
+    "owners": 94738
+  },
+  "MYCR.ST": {
+    "avanza_id": "5466",
+    "isin": "SE0025158629",
+    "name": "Mycronic",
+    "ticker": "MYCR",
+    "list": "Large Cap Stockholm",
+    "owners": 10610
+  },
+  "FING-B.ST": {
+    "avanza_id": "5468",
+    "isin": "SE0026141665",
+    "name": "Fingerprint Cards B",
+    "ticker": "FING B",
+    "list": "Small Cap Stockholm",
+    "owners": 13220
+  },
+  "SAND.ST": {
+    "avanza_id": "5471",
+    "isin": "SE0000667891",
+    "name": "Sandvik",
+    "ticker": "SAND",
+    "list": "Large Cap Stockholm",
+    "owners": 52526
+  },
+  "TRAC-B.ST": {
+    "avanza_id": "5472",
+    "isin": "SE0000391716",
+    "name": "Traction B",
+    "ticker": "TRAC B",
+    "list": "Mid Cap Stockholm",
+    "owners": 3415
+  },
+  "MEKO.ST": {
+    "avanza_id": "5474",
+    "isin": "SE0002110064",
+    "name": "MEKO",
+    "ticker": "MEKO",
+    "list": "Mid Cap Stockholm",
+    "owners": 6170
+  },
+  "EPEN.ST": {
+    "avanza_id": "5478",
+    "isin": "SE0000671711",
+    "name": "Ependion",
+    "ticker": "EPEN",
+    "list": "Mid Cap Stockholm",
+    "owners": 2379
+  },
+  "TELIA.ST": {
+    "avanza_id": "5479",
+    "isin": "SE0000667925",
+    "name": "Telia Company",
+    "ticker": "TELIA",
+    "list": "Large Cap Stockholm",
+    "owners": 61384
+  },
+  "ANOT.ST": {
+    "avanza_id": "5480",
+    "isin": "SE0010415281",
+    "name": "Anoto Group",
+    "ticker": "ANOT",
+    "list": "Small Cap Stockholm",
+    "owners": 7201
+  },
+  "BETS-B.ST": {
+    "avanza_id": "5482",
+    "isin": "SE0022726485",
+    "name": "Betsson B",
+    "ticker": "BETS B",
+    "list": "Large Cap Stockholm",
+    "owners": 27666
+  },
+  "PREC.ST": {
+    "avanza_id": "5490",
+    "isin": "SE0018013849",
+    "name": "Precise Biometrics",
+    "ticker": "PREC",
+    "list": "Small Cap Stockholm",
+    "owners": 11862
+  },
+  "ENRO.ST": {
+    "avanza_id": "5491",
+    "isin": "SE0011256312",
+    "name": "Eniro Group",
+    "ticker": "ENRO",
+    "list": "Small Cap Stockholm",
+    "owners": 7066
+  },
+  "SGG.ST": {
+    "avanza_id": "5497",
+    "isin": "SE0020356244",
+    "name": "Sensys Gatso Group",
+    "ticker": "SGG",
+    "list": "Small Cap Stockholm",
+    "owners": 5468
+  },
+  "SVIK.ST": {
+    "avanza_id": "5500",
+    "isin": "SE0000653230",
+    "name": "Studsvik",
+    "ticker": "SVIK",
+    "list": "Small Cap Stockholm",
+    "owners": 5440
+  },
+  "JM.ST": {
+    "avanza_id": "5501",
+    "isin": "SE0000806994",
+    "name": "JM",
+    "ticker": "JM",
+    "list": "Large Cap Stockholm",
+    "owners": 14380
+  },
+  "BTS-B.ST": {
+    "avanza_id": "5503",
+    "isin": "SE0000805426",
+    "name": "BTS Group B",
+    "ticker": "BTS B",
+    "list": "Mid Cap Stockholm",
+    "owners": 3214
+  },
+  "BINV.ST": {
+    "avanza_id": "5505",
+    "isin": "SE0015244520",
+    "name": "BioInvent International",
+    "ticker": "BINV",
+    "list": "Mid Cap Stockholm",
+    "owners": 5099
+  },
+  "VITR.ST": {
+    "avanza_id": "5508",
+    "isin": "SE0011205202",
+    "name": "Vitrolife",
+    "ticker": "VITR",
+    "list": "Large Cap Stockholm",
+    "owners": 8863
+  },
+  "XACT-OMXS30.ST": {
+    "avanza_id": "5510",
+    "isin": "SE0000693293",
+    "name": "XACT OMXS30 ESG (UCITS ETF)",
+    "ticker": "XACT OMXS30",
+    "list": "",
+    "owners": 6040
+  },
+  "VIT-B.ST": {
+    "avanza_id": "5526",
+    "isin": "SE0007871363",
+    "name": "Vitec Software Group B",
+    "ticker": "VIT B",
+    "list": "Large Cap Stockholm",
+    "owners": 7559
+  },
+  "STAR-B.ST": {
+    "avanza_id": "5528",
+    "isin": "SE0005992831",
+    "name": "Starbreeze B",
+    "ticker": "STAR B",
+    "list": "Small Cap Stockholm",
+    "owners": 18417
+  },
+  "AQ.ST": {
+    "avanza_id": "5534",
+    "isin": "SE0022062196",
+    "name": "AQ Group",
+    "ticker": "AQ",
+    "list": "Large Cap Stockholm",
+    "owners": 7220
+  },
+  "LAGR-B.ST": {
+    "avanza_id": "5536",
+    "isin": "SE0014990966",
+    "name": "Lagercrantz Group B",
+    "ticker": "LAGR B",
+    "list": "Large Cap Stockholm",
+    "owners": 11087
+  },
+  "ADDT-B.ST": {
+    "avanza_id": "5537",
+    "isin": "SE0014781795",
+    "name": "Addtech B",
+    "ticker": "ADDT B",
+    "list": "Large Cap Stockholm",
+    "owners": 9872
+  },
+  "BILL.ST": {
+    "avanza_id": "5556",
+    "isin": "SE0000862997",
+    "name": "Billerud",
+    "ticker": "BILL",
+    "list": "Large Cap Stockholm",
+    "owners": 19724
+  },
+  "BOL.ST": {
+    "avanza_id": "5564",
+    "isin": "SE0020050417",
+    "name": "Boliden",
+    "ticker": "BOL",
+    "list": "Large Cap Stockholm",
+    "owners": 57212
+  },
+  "ALFA.ST": {
+    "avanza_id": "5580",
+    "isin": "SE0000695876",
+    "name": "Alfa Laval",
+    "ticker": "ALFA",
+    "list": "Large Cap Stockholm",
+    "owners": 31494
+  },
+  "INTRUM.ST": {
+    "avanza_id": "5583",
+    "isin": "SE0000936478",
+    "name": "Intrum",
+    "ticker": "INTRUM",
+    "list": "Mid Cap Stockholm",
+    "owners": 29874
+  },
+  "NOBI.ST": {
+    "avanza_id": "5586",
+    "isin": "SE0000949331",
+    "name": "Nobia",
+    "ticker": "NOBI",
+    "list": "Mid Cap Stockholm",
+    "owners": 10376
+  },
+  "XACT-Sverige.ST": {
+    "avanza_id": "5649",
+    "isin": "SE0001056045",
+    "name": "XACT Sverige (UCITS ETF)",
+    "ticker": "XACT Sverige",
+    "list": "",
+    "owners": 5891
+  },
+  "ORRON.ST": {
+    "avanza_id": "5698",
+    "isin": "SE0000825820",
+    "name": "Orrön Energy",
+    "ticker": "ORRON",
+    "list": "Mid Cap Stockholm",
+    "owners": 24476
+  },
+  "NOTE.ST": {
+    "avanza_id": "6331",
+    "isin": "SE0001161654",
+    "name": "Note",
+    "ticker": "NOTE",
+    "list": "Mid Cap Stockholm",
+    "owners": 10431
+  }
+}

@@ -1,0 +1,3982 @@
+{
+  "5247": {
+    "name": "Investor B",
+    "avanza_id": "5247",
+    "isin": "SE0015811963",
+    "ticker": "INVE B",
+    "country": "SE",
+    "list": "Large Cap Stockholm",
+    "currency": "SEK",
+    "owners": 499409
+  },
+  "5269": {
+    "name": "Volvo B",
+    "avanza_id": "5269",
+    "isin": "SE0000115446",
+    "ticker": "VOLV B",
+    "country": "SE",
+    "list": "Large Cap Stockholm",
+    "currency": "SEK",
+    "owners": 203874
+  },
+  "5401": {
+    "name": "SAAB B",
+    "avanza_id": "5401",
+    "isin": "SE0021921269",
+    "ticker": "SAAB B",
+    "country": "SE",
+    "list": "Large Cap Stockholm",
+    "currency": "SEK",
+    "owners": 183840
+  },
+  "5241": {
+    "name": "Swedbank A",
+    "avanza_id": "5241",
+    "isin": "SE0000242455",
+    "ticker": "SWED A",
+    "country": "SE",
+    "list": "Large Cap Stockholm",
+    "currency": "SEK",
+    "owners": 157976
+  },
+  "5264": {
+    "name": "Handelsbanken A",
+    "avanza_id": "5264",
+    "isin": "SE0007100599",
+    "ticker": "SHB A",
+    "country": "SE",
+    "list": "Large Cap Stockholm",
+    "currency": "SEK",
+    "owners": 126186
+  },
+  "517316": {
+    "name": "SBB Norden B",
+    "avanza_id": "517316",
+    "isin": "SE0009554454",
+    "ticker": "SBB B",
+    "country": "SE",
+    "list": "Mid Cap Stockholm",
+    "currency": "SEK",
+    "owners": 120772
+  },
+  "5261": {
+    "name": "SSAB B",
+    "avanza_id": "5261",
+    "isin": "SE0000120669",
+    "ticker": "SSAB B",
+    "country": "SE",
+    "list": "Large Cap Stockholm",
+    "currency": "SEK",
+    "owners": 115544
+  },
+  "52300": {
+    "name": "Novo Nordisk B ",
+    "avanza_id": "52300",
+    "isin": "DK0062498333",
+    "ticker": "NOVO B",
+    "country": "DK",
+    "list": "Large Cap Copenhagen",
+    "currency": "DKK",
+    "owners": 110973
+  },
+  "5325": {
+    "name": "Nibe Industrier B",
+    "avanza_id": "5325",
+    "isin": "SE0015988019",
+    "ticker": "NIBE B",
+    "country": "SE",
+    "list": "Large Cap Stockholm",
+    "currency": "SEK",
+    "owners": 110404
+  },
+  "5369": {
+    "name": "Kinnevik B",
+    "avanza_id": "5369",
+    "isin": "SE0022060521",
+    "ticker": "KINV B",
+    "country": "SE",
+    "list": "Large Cap Stockholm",
+    "currency": "SEK",
+    "owners": 97356
+  },
+  "4478": {
+    "name": "NVIDIA",
+    "avanza_id": "4478",
+    "isin": "US67066G1040",
+    "ticker": "NVDA",
+    "country": "US",
+    "list": "",
+    "currency": "USD",
+    "owners": 97336
+  },
+  "5249": {
+    "name": "Nordea Bank",
+    "avanza_id": "5249",
+    "isin": "FI4000297767",
+    "ticker": "NDA SE",
+    "country": "SE",
+    "list": "Large Cap Stockholm",
+    "currency": "SEK",
+    "owners": 96777
+  },
+  "5246": {
+    "name": "Investor A",
+    "avanza_id": "5246",
+    "isin": "SE0015811955",
+    "ticker": "INVE A",
+    "country": "SE",
+    "list": "Large Cap Stockholm",
+    "currency": "SEK",
+    "owners": 96424
+  },
+  "5465": {
+    "name": "Axfood",
+    "avanza_id": "5465",
+    "isin": "SE0006993770",
+    "ticker": "AXFO",
+    "country": "SE",
+    "list": "Large Cap Stockholm",
+    "currency": "SEK",
+    "owners": 94738
+  },
+  "1296604": {
+    "name": "Volvo Car B",
+    "avanza_id": "1296604",
+    "isin": "SE0021628898",
+    "ticker": "VOLCAR B",
+    "country": "SE",
+    "list": "Large Cap Stockholm",
+    "currency": "SEK",
+    "owners": 92217
+  },
+  "5321": {
+    "name": "Latour B",
+    "avanza_id": "5321",
+    "isin": "SE0010100958",
+    "ticker": "LATO B",
+    "country": "SE",
+    "list": "Large Cap Stockholm",
+    "currency": "SEK",
+    "owners": 91929
+  },
+  "5245": {
+    "name": "Industrivärden C",
+    "avanza_id": "5245",
+    "isin": "SE0000107203",
+    "ticker": "INDU C",
+    "country": "SE",
+    "list": "Large Cap Stockholm",
+    "currency": "SEK",
+    "owners": 87010
+  },
+  "5235": {
+    "name": "Atlas Copco B",
+    "avanza_id": "5235",
+    "isin": "SE0017486897",
+    "ticker": "ATCO B",
+    "country": "SE",
+    "list": "Large Cap Stockholm",
+    "currency": "SEK",
+    "owners": 86221
+  },
+  "5255": {
+    "name": "SEB A",
+    "avanza_id": "5255",
+    "isin": "SE0000148884",
+    "ticker": "SEB A",
+    "country": "SE",
+    "list": "Large Cap Stockholm",
+    "currency": "SEK",
+    "owners": 81756
+  },
+  "5364": {
+    "name": "H&M B",
+    "avanza_id": "5364",
+    "isin": "SE0000106270",
+    "ticker": "HM B",
+    "country": "SE",
+    "list": "Large Cap Stockholm",
+    "currency": "SEK",
+    "owners": 80804
+  },
+  "5431": {
+    "name": "AstraZeneca",
+    "avanza_id": "5431",
+    "isin": "GB0009895292",
+    "ticker": "AZN",
+    "country": "SE",
+    "list": "Large Cap Stockholm",
+    "currency": "SEK",
+    "owners": 72087
+  },
+  "5386": {
+    "name": "Tele2 B",
+    "avanza_id": "5386",
+    "isin": "SE0005190238",
+    "ticker": "TEL2 B",
+    "country": "SE",
+    "list": "Large Cap Stockholm",
+    "currency": "SEK",
+    "owners": 69257
+  },
+  "5240": {
+    "name": "Ericsson B",
+    "avanza_id": "5240",
+    "isin": "SE0000108656",
+    "ticker": "ERIC B",
+    "country": "SE",
+    "list": "Large Cap Stockholm",
+    "currency": "SEK",
+    "owners": 68037
+  },
+  "3873": {
+    "name": "Microsoft",
+    "avanza_id": "3873",
+    "isin": "US5949181045",
+    "ticker": "MSFT",
+    "country": "US",
+    "list": "",
+    "currency": "USD",
+    "owners": 67694
+  },
+  "5447": {
+    "name": "ABB",
+    "avanza_id": "5447",
+    "isin": "CH0012221716",
+    "ticker": "ABB",
+    "country": "SE",
+    "list": "Large Cap Stockholm",
+    "currency": "SEK",
+    "owners": 66621
+  },
+  "5353": {
+    "name": "Castellum",
+    "avanza_id": "5353",
+    "isin": "SE0000379190",
+    "ticker": "CAST",
+    "country": "SE",
+    "list": "Large Cap Stockholm",
+    "currency": "SEK",
+    "owners": 64636
+  },
+  "549768": {
+    "name": "Evolution",
+    "avanza_id": "549768",
+    "isin": "SE0012673267",
+    "ticker": "EVO",
+    "country": "SE",
+    "list": "Large Cap Stockholm",
+    "currency": "SEK",
+    "owners": 64628
+  },
+  "5361": {
+    "name": "Avanza Bank Holding",
+    "avanza_id": "5361",
+    "isin": "SE0012454072",
+    "ticker": "AZA",
+    "country": "SE",
+    "list": "Large Cap Stockholm",
+    "currency": "SEK",
+    "owners": 62678
+  },
+  "5479": {
+    "name": "Telia Company",
+    "avanza_id": "5479",
+    "isin": "SE0000667925",
+    "ticker": "TELIA",
+    "country": "SE",
+    "list": "Large Cap Stockholm",
+    "currency": "SEK",
+    "owners": 61384
+  },
+  "117108": {
+    "name": "Neobo Fastigheter",
+    "avanza_id": "117108",
+    "isin": "SE0005034550",
+    "ticker": "NEOBO",
+    "country": "SE",
+    "list": "Mid Cap Stockholm",
+    "currency": "SEK",
+    "owners": 60554
+  },
+  "5564": {
+    "name": "Boliden",
+    "avanza_id": "5564",
+    "isin": "SE0020050417",
+    "ticker": "BOL",
+    "country": "SE",
+    "list": "Large Cap Stockholm",
+    "currency": "SEK",
+    "owners": 57212
+  },
+  "3323": {
+    "name": "Apple",
+    "avanza_id": "3323",
+    "isin": "US0378331005",
+    "ticker": "AAPL",
+    "country": "US",
+    "list": "",
+    "currency": "USD",
+    "owners": 57086
+  },
+  "238449": {
+    "name": "Tesla",
+    "avanza_id": "238449",
+    "isin": "US88160R1014",
+    "ticker": "TSLA",
+    "country": "US",
+    "list": "",
+    "currency": "USD",
+    "owners": 55860
+  },
+  "707695": {
+    "name": "Embracer Group B",
+    "avanza_id": "707695",
+    "isin": "SE0023615885",
+    "ticker": "EMBRAC B",
+    "country": "SE",
+    "list": "Large Cap Stockholm",
+    "currency": "SEK",
+    "owners": 55307
+  },
+  "2246915": {
+    "name": "Coffee Stain Group B",
+    "avanza_id": "2246915",
+    "isin": "SE0026599557",
+    "ticker": "COFFEE B",
+    "country": "SE",
+    "list": "",
+    "currency": "SEK",
+    "owners": 54231
+  },
+  "1001617": {
+    "name": "EQT",
+    "avanza_id": "1001617",
+    "isin": "SE0012853455",
+    "ticker": "EQT",
+    "country": "SE",
+    "list": "Large Cap Stockholm",
+    "currency": "SEK",
+    "owners": 53551
+  },
+  "831975": {
+    "name": "Cibus Nordic Real Estate",
+    "avanza_id": "831975",
+    "isin": "SE0010832204",
+    "ticker": "CIBUS",
+    "country": "SE",
+    "list": "Mid Cap Stockholm",
+    "currency": "SEK",
+    "owners": 52842
+  },
+  "5471": {
+    "name": "Sandvik",
+    "avanza_id": "5471",
+    "isin": "SE0000667891",
+    "ticker": "SAND",
+    "country": "SE",
+    "list": "Large Cap Stockholm",
+    "currency": "SEK",
+    "owners": 52526
+  },
+  "5257": {
+    "name": "Skanska B",
+    "avanza_id": "5257",
+    "isin": "SE0000113250",
+    "ticker": "SKA B",
+    "country": "SE",
+    "list": "Large Cap Stockholm",
+    "currency": "SEK",
+    "owners": 49447
+  },
+  "5375": {
+    "name": "Lundberg B",
+    "avanza_id": "5375",
+    "isin": "SE0000108847",
+    "ticker": "LUND B",
+    "country": "SE",
+    "list": "Large Cap Stockholm",
+    "currency": "SEK",
+    "owners": 47590
+  },
+  "1961461": {
+    "name": "Asmodee",
+    "avanza_id": "1961461",
+    "isin": "SE0023615638",
+    "ticker": "ASMDEE B",
+    "country": "SE",
+    "list": "Large Cap Stockholm",
+    "currency": "SEK",
+    "owners": 46566
+  },
+  "599956": {
+    "name": "Sinch",
+    "avanza_id": "599956",
+    "isin": "SE0016101844",
+    "ticker": "SINCH",
+    "country": "SE",
+    "list": "Large Cap Stockholm",
+    "currency": "SEK",
+    "owners": 44470
+  },
+  "5337": {
+    "name": "Svolder B",
+    "avanza_id": "5337",
+    "isin": "SE0017161458",
+    "ticker": "SVOL B",
+    "country": "SE",
+    "list": "Mid Cap Stockholm",
+    "currency": "SEK",
+    "owners": 44160
+  },
+  "573878": {
+    "name": "SolTech Energy Sweden",
+    "avanza_id": "573878",
+    "isin": "SE0005392537",
+    "ticker": "SOLT",
+    "country": "SE",
+    "list": "",
+    "currency": "SEK",
+    "owners": 43600
+  },
+  "52634": {
+    "name": "Norwegian Air Shuttle",
+    "avanza_id": "52634",
+    "isin": "NO0010196140",
+    "ticker": "NAS",
+    "country": "NO",
+    "list": "OBX Top 25",
+    "currency": "NOK",
+    "owners": 43273
+  },
+  "1908460": {
+    "name": "Apotea",
+    "avanza_id": "1908460",
+    "isin": "SE0023313762",
+    "ticker": "APOTEA",
+    "country": "SE",
+    "list": "Mid Cap Stockholm",
+    "currency": "SEK",
+    "owners": 40922
+  },
+  "3986": {
+    "name": "Amazon.com",
+    "avanza_id": "3986",
+    "isin": "US0231351067",
+    "ticker": "AMZN",
+    "country": "US",
+    "list": "",
+    "currency": "USD",
+    "owners": 40792
+  },
+  "528238": {
+    "name": "Lundin Gold",
+    "avanza_id": "528238",
+    "isin": "CA5503711080",
+    "ticker": "LUG",
+    "country": "SE",
+    "list": "Large Cap Stockholm",
+    "currency": "SEK",
+    "owners": 37612
+  },
+  "5265": {
+    "name": "Handelsbanken B",
+    "avanza_id": "5265",
+    "isin": "SE0007100607",
+    "ticker": "SHB B",
+    "country": "SE",
+    "list": "Large Cap Stockholm",
+    "currency": "SEK",
+    "owners": 36090
+  },
+  "299737": {
+    "name": "Hexatronic Group",
+    "avanza_id": "299737",
+    "isin": "SE0018040677",
+    "ticker": "HTRO",
+    "country": "SE",
+    "list": "Mid Cap Stockholm",
+    "currency": "SEK",
+    "owners": 35858
+  },
+  "163148": {
+    "name": "Cloetta",
+    "avanza_id": "163148",
+    "isin": "SE0002626861",
+    "ticker": "CLA B",
+    "country": "SE",
+    "list": "Mid Cap Stockholm",
+    "currency": "SEK",
+    "owners": 35773
+  },
+  "764241": {
+    "name": "Essity B",
+    "avanza_id": "764241",
+    "isin": "SE0009922164",
+    "ticker": "ESSITY B",
+    "country": "SE",
+    "list": "Large Cap Stockholm",
+    "currency": "SEK",
+    "owners": 35716
+  },
+  "5263": {
+    "name": "SCA B",
+    "avanza_id": "5263",
+    "isin": "SE0000112724",
+    "ticker": "SCA B",
+    "country": "SE",
+    "list": "Large Cap Stockholm",
+    "currency": "SEK",
+    "owners": 35685
+  },
+  "5286": {
+    "name": "Hexagon B",
+    "avanza_id": "5286",
+    "isin": "SE0015961909",
+    "ticker": "HEXA B",
+    "country": "SE",
+    "list": "Large Cap Stockholm",
+    "currency": "SEK",
+    "owners": 34181
+  },
+  "5259": {
+    "name": "SKF B",
+    "avanza_id": "5259",
+    "isin": "SE0000108227",
+    "ticker": "SKF B",
+    "country": "SE",
+    "list": "Large Cap Stockholm",
+    "currency": "SEK",
+    "owners": 33437
+  },
+  "613140": {
+    "name": "Scandic Hotels Group",
+    "avanza_id": "613140",
+    "isin": "SE0007640156",
+    "ticker": "SHOT",
+    "country": "SE",
+    "list": "Large Cap Stockholm",
+    "currency": "SEK",
+    "owners": 33151
+  },
+  "5339": {
+    "name": "SkiStar B",
+    "avanza_id": "5339",
+    "isin": "SE0012141687",
+    "ticker": "SKIS B",
+    "country": "SE",
+    "list": "Large Cap Stockholm",
+    "currency": "SEK",
+    "owners": 33002
+  },
+  "5271": {
+    "name": "Assa Abloy B",
+    "avanza_id": "5271",
+    "isin": "SE0007100581",
+    "ticker": "ASSA B",
+    "country": "SE",
+    "list": "Large Cap Stockholm",
+    "currency": "SEK",
+    "owners": 32278
+  },
+  "1455120": {
+    "name": "Alleima",
+    "avanza_id": "1455120",
+    "isin": "SE0017615644",
+    "ticker": "ALLEI",
+    "country": "SE",
+    "list": "Large Cap Stockholm",
+    "currency": "SEK",
+    "owners": 32175
+  },
+  "7010": {
+    "name": "Lundin Mining Corporation",
+    "avanza_id": "7010",
+    "isin": "CA5503721063",
+    "ticker": "LUMI",
+    "country": "SE",
+    "list": "Large Cap Stockholm",
+    "currency": "SEK",
+    "owners": 31972
+  },
+  "5270": {
+    "name": "Securitas B",
+    "avanza_id": "5270",
+    "isin": "SE0000163594",
+    "ticker": "SECU B",
+    "country": "SE",
+    "list": "Large Cap Stockholm",
+    "currency": "SEK",
+    "owners": 31659
+  },
+  "5580": {
+    "name": "Alfa Laval",
+    "avanza_id": "5580",
+    "isin": "SE0000695876",
+    "ticker": "ALFA",
+    "country": "SE",
+    "list": "Large Cap Stockholm",
+    "currency": "SEK",
+    "owners": 31494
+  },
+  "4457": {
+    "name": "Alphabet Inc Class C",
+    "avanza_id": "4457",
+    "isin": "US02079K1079",
+    "ticker": "GOOG",
+    "country": "US",
+    "list": "",
+    "currency": "USD",
+    "owners": 31271
+  },
+  "5277": {
+    "name": "Bure Equity",
+    "avanza_id": "5277",
+    "isin": "SE0000195810",
+    "ticker": "BURE",
+    "country": "SE",
+    "list": "Large Cap Stockholm",
+    "currency": "SEK",
+    "owners": 31217
+  },
+  "5330": {
+    "name": "Peab B",
+    "avanza_id": "5330",
+    "isin": "SE0000106205",
+    "ticker": "PEAB B",
+    "country": "SE",
+    "list": "Large Cap Stockholm",
+    "currency": "SEK",
+    "owners": 30903
+  },
+  "338588": {
+    "name": "Creades A",
+    "avanza_id": "338588",
+    "isin": "SE0015661236",
+    "ticker": "CRED A",
+    "country": "SE",
+    "list": "Mid Cap Stockholm",
+    "currency": "SEK",
+    "owners": 30188
+  },
+  "5583": {
+    "name": "Intrum",
+    "avanza_id": "5583",
+    "isin": "SE0000936478",
+    "ticker": "INTRUM",
+    "country": "SE",
+    "list": "Mid Cap Stockholm",
+    "currency": "SEK",
+    "owners": 29874
+  },
+  "529720": {
+    "name": "Advanced Micro Devices",
+    "avanza_id": "529720",
+    "isin": "US0079031078",
+    "ticker": "AMD",
+    "country": "US",
+    "list": "",
+    "currency": "USD",
+    "owners": 29458
+  },
+  "1235164": {
+    "name": "MilDef Group",
+    "avanza_id": "1235164",
+    "isin": "SE0016074249",
+    "ticker": "MILDEF",
+    "country": "SE",
+    "list": "Mid Cap Stockholm",
+    "currency": "SEK",
+    "owners": 28661
+  },
+  "5397": {
+    "name": "Ratos B",
+    "avanza_id": "5397",
+    "isin": "SE0000111940",
+    "ticker": "RATO B",
+    "country": "SE",
+    "list": "Mid Cap Stockholm",
+    "currency": "SEK",
+    "owners": 28564
+  },
+  "5482": {
+    "name": "Betsson B",
+    "avanza_id": "5482",
+    "isin": "SE0022726485",
+    "ticker": "BETS B",
+    "country": "SE",
+    "list": "Large Cap Stockholm",
+    "currency": "SEK",
+    "owners": 27666
+  },
+  "472095": {
+    "name": "Alphabet Inc Class A",
+    "avanza_id": "472095",
+    "isin": "US02079K3059",
+    "ticker": "GOOGL",
+    "country": "US",
+    "list": "",
+    "currency": "USD",
+    "owners": 26655
+  },
+  "945460": {
+    "name": "Viaplay Group B",
+    "avanza_id": "945460",
+    "isin": "SE0012116390",
+    "ticker": "VPLAY B",
+    "country": "SE",
+    "list": "Mid Cap Stockholm",
+    "currency": "SEK",
+    "owners": 26292
+  },
+  "5457": {
+    "name": "Clas Ohlson B",
+    "avanza_id": "5457",
+    "isin": "SE0000584948",
+    "ticker": "CLAS B",
+    "country": "SE",
+    "list": "Large Cap Stockholm",
+    "currency": "SEK",
+    "owners": 26201
+  },
+  "5282": {
+    "name": "Getinge B",
+    "avanza_id": "5282",
+    "isin": "SE0000202624",
+    "ticker": "GETI B",
+    "country": "SE",
+    "list": "Large Cap Stockholm",
+    "currency": "SEK",
+    "owners": 24872
+  },
+  "1292424": {
+    "name": "Flat Capital",
+    "avanza_id": "1292424",
+    "isin": "SE0016609846",
+    "ticker": "FLAT B",
+    "country": "SE",
+    "list": "",
+    "currency": "SEK",
+    "owners": 24531
+  },
+  "5698": {
+    "name": "Orrön Energy",
+    "avanza_id": "5698",
+    "isin": "SE0000825820",
+    "ticker": "ORRON",
+    "country": "SE",
+    "list": "Mid Cap Stockholm",
+    "currency": "SEK",
+    "owners": 24476
+  },
+  "5244": {
+    "name": "Industrivärden A",
+    "avanza_id": "5244",
+    "isin": "SE0000190126",
+    "ticker": "INDU A",
+    "country": "SE",
+    "list": "Large Cap Stockholm",
+    "currency": "SEK",
+    "owners": 24435
+  },
+  "527998": {
+    "name": "PowerCell Sweden",
+    "avanza_id": "527998",
+    "isin": "SE0006425815",
+    "ticker": "PCELL",
+    "country": "SE",
+    "list": "Mid Cap Stockholm",
+    "currency": "SEK",
+    "owners": 24433
+  },
+  "1523003": {
+    "name": "Scandinavian Astor Group",
+    "avanza_id": "1523003",
+    "isin": "SE0019175274",
+    "ticker": "ASTOR",
+    "country": "SE",
+    "list": "",
+    "currency": "SEK",
+    "owners": 24078
+  },
+  "45189": {
+    "name": "Husqvarna B",
+    "avanza_id": "45189",
+    "isin": "SE0001662230",
+    "ticker": "HUSQ B",
+    "country": "SE",
+    "list": "Large Cap Stockholm",
+    "currency": "SEK",
+    "owners": 24056
+  },
+  "1138439": {
+    "name": "Palantir Technologies",
+    "avanza_id": "1138439",
+    "isin": "US69608A1088",
+    "ticker": "PLTR",
+    "country": "US",
+    "list": "",
+    "currency": "USD",
+    "owners": 23770
+  },
+  "5324": {
+    "name": "New Wave B",
+    "avanza_id": "5324",
+    "isin": "SE0020356970",
+    "ticker": "NEWA B",
+    "country": "SE",
+    "list": "Large Cap Stockholm",
+    "currency": "SEK",
+    "owners": 23750
+  },
+  "649096": {
+    "name": "Plejd",
+    "avanza_id": "649096",
+    "isin": "SE0008014476",
+    "ticker": "PLEJD",
+    "country": "SE",
+    "list": "",
+    "currency": "SEK",
+    "owners": 23730
+  },
+  "4109": {
+    "name": "Berkshire Hathaway Inc Class B",
+    "avanza_id": "4109",
+    "isin": "US0846707026",
+    "ticker": "BRK.B",
+    "country": "US",
+    "list": "",
+    "currency": "USD",
+    "owners": 23424
+  },
+  "350795": {
+    "name": "Meta Platforms A",
+    "avanza_id": "350795",
+    "isin": "US30303M1027",
+    "ticker": "META",
+    "country": "US",
+    "list": "",
+    "currency": "USD",
+    "owners": 23415
+  },
+  "26268": {
+    "name": "AAK",
+    "avanza_id": "26268",
+    "isin": "SE0011337708",
+    "ticker": "AAK",
+    "country": "SE",
+    "list": "Large Cap Stockholm",
+    "currency": "SEK",
+    "owners": 23222
+  },
+  "106733": {
+    "name": "Bahnhof B",
+    "avanza_id": "106733",
+    "isin": "SE0010442418",
+    "ticker": "BAHN B",
+    "country": "SE",
+    "list": "",
+    "currency": "SEK",
+    "owners": 22432
+  },
+  "1284767": {
+    "name": "Storskogen B",
+    "avanza_id": "1284767",
+    "isin": "SE0016797732",
+    "ticker": "STOR B",
+    "country": "SE",
+    "list": "Large Cap Stockholm",
+    "currency": "SEK",
+    "owners": 22322
+  },
+  "5238": {
+    "name": "Electrolux B",
+    "avanza_id": "5238",
+    "isin": "SE0016589188",
+    "ticker": "ELUX B",
+    "country": "SE",
+    "list": "Large Cap Stockholm",
+    "currency": "SEK",
+    "owners": 22106
+  },
+  "5294": {
+    "name": "NCC B",
+    "avanza_id": "5294",
+    "isin": "SE0000117970",
+    "ticker": "NCC B",
+    "country": "SE",
+    "list": "Large Cap Stockholm",
+    "currency": "SEK",
+    "owners": 21923
+  },
+  "206868": {
+    "name": "Aker BP",
+    "avanza_id": "206868",
+    "isin": "NO0010345853",
+    "ticker": "AKRBP",
+    "country": "NO",
+    "list": "OBX Top 25",
+    "currency": "NOK",
+    "owners": 21872
+  },
+  "5260": {
+    "name": "SSAB A",
+    "avanza_id": "5260",
+    "isin": "SE0000171100",
+    "ticker": "SSAB A",
+    "country": "SE",
+    "list": "Large Cap Stockholm",
+    "currency": "SEK",
+    "owners": 21343
+  },
+  "607468": {
+    "name": "Minesto",
+    "avanza_id": "607468",
+    "isin": "SE0007578141",
+    "ticker": "MINEST",
+    "country": "SE",
+    "list": "",
+    "currency": "SEK",
+    "owners": 21175
+  },
+  "34911": {
+    "name": "Taiwan Semicond Mfg Co",
+    "avanza_id": "34911",
+    "isin": "US8740391003",
+    "ticker": "TSM",
+    "country": "US",
+    "list": "",
+    "currency": "USD",
+    "owners": 21089
+  },
+  "5234": {
+    "name": "Atlas Copco A",
+    "avanza_id": "5234",
+    "isin": "SE0017486889",
+    "ticker": "ATCO A",
+    "country": "SE",
+    "list": "Large Cap Stockholm",
+    "currency": "SEK",
+    "owners": 20930
+  },
+  "881354": {
+    "name": "NIO ADR A",
+    "avanza_id": "881354",
+    "isin": "US62914V1061",
+    "ticker": "NIO",
+    "country": "US",
+    "list": "",
+    "currency": "USD",
+    "owners": 20619
+  },
+  "913957": {
+    "name": "SBB Norden D",
+    "avanza_id": "913957",
+    "isin": "SE0011844091",
+    "ticker": "SBB D",
+    "country": "SE",
+    "list": "Mid Cap Stockholm",
+    "currency": "SEK",
+    "owners": 20521
+  },
+  "861431": {
+    "name": "Epiroc B",
+    "avanza_id": "861431",
+    "isin": "SE0015658117",
+    "ticker": "EPI B",
+    "country": "SE",
+    "list": "Large Cap Stockholm",
+    "currency": "SEK",
+    "owners": 20409
+  },
+  "5556": {
+    "name": "Billerud",
+    "avanza_id": "5556",
+    "isin": "SE0000862997",
+    "ticker": "BILL",
+    "country": "SE",
+    "list": "Large Cap Stockholm",
+    "currency": "SEK",
+    "owners": 19724
+  },
+  "2185531": {
+    "name": "Verisure",
+    "avanza_id": "2185531",
+    "isin": "GB00BVMN1558",
+    "ticker": "VSURE",
+    "country": "SE",
+    "list": "Large Cap Stockholm",
+    "currency": "EUR",
+    "owners": 19592
+  },
+  "521491": {
+    "name": "Thule Group",
+    "avanza_id": "521491",
+    "isin": "SE0006422390",
+    "ticker": "THULE",
+    "country": "SE",
+    "list": "Large Cap Stockholm",
+    "currency": "SEK",
+    "owners": 19544
+  },
+  "730897": {
+    "name": "Oncopeptides",
+    "avanza_id": "730897",
+    "isin": "SE0009414576",
+    "ticker": "ONCO",
+    "country": "SE",
+    "list": "Small Cap Stockholm",
+    "currency": "SEK",
+    "owners": 19503
+  },
+  "2160377": {
+    "name": "Klarna Group",
+    "avanza_id": "2160377",
+    "isin": "GB00BMHVL512",
+    "ticker": "KLAR",
+    "country": "US",
+    "list": "",
+    "currency": "USD",
+    "owners": 19316
+  },
+  "487396": {
+    "name": "Scandinavian Enviro Systems",
+    "avanza_id": "487396",
+    "isin": "SE0005877560",
+    "ticker": "SES",
+    "country": "SE",
+    "list": "",
+    "currency": "SEK",
+    "owners": 19032
+  },
+  "1144919": {
+    "name": "Zaptec",
+    "avanza_id": "1144919",
+    "isin": "NO0010713936",
+    "ticker": "ZAP",
+    "country": "NO",
+    "list": "OB Match",
+    "currency": "NOK",
+    "owners": 18958
+  },
+  "32576": {
+    "name": "Storytel B",
+    "avanza_id": "32576",
+    "isin": "SE0007439443",
+    "ticker": "STORY B",
+    "country": "SE",
+    "list": "",
+    "currency": "SEK",
+    "owners": 18565
+  },
+  "5528": {
+    "name": "Starbreeze B",
+    "avanza_id": "5528",
+    "isin": "SE0005992831",
+    "ticker": "STAR B",
+    "country": "SE",
+    "list": "Small Cap Stockholm",
+    "currency": "SEK",
+    "owners": 18417
+  },
+  "520898": {
+    "name": "Lifco B",
+    "avanza_id": "520898",
+    "isin": "SE0015949201",
+    "ticker": "LIFCO B",
+    "country": "SE",
+    "list": "Large Cap Stockholm",
+    "currency": "SEK",
+    "owners": 18387
+  },
+  "187248": {
+    "name": "K33",
+    "avanza_id": "187248",
+    "isin": "SE0007614722",
+    "ticker": "K33",
+    "country": "SE",
+    "list": "",
+    "currency": "SEK",
+    "owners": 18338
+  },
+  "68827": {
+    "name": "Viscaria",
+    "avanza_id": "68827",
+    "isin": "SE0021148160",
+    "ticker": "VISC",
+    "country": "SE",
+    "list": "Mid Cap Stockholm",
+    "currency": "SEK",
+    "owners": 18334
+  },
+  "790266": {
+    "name": "Zalando SE",
+    "avanza_id": "790266",
+    "isin": "DE000ZAL1111",
+    "ticker": "ZAL",
+    "country": "DE",
+    "list": "",
+    "currency": "EUR",
+    "owners": 18129
+  },
+  "178628": {
+    "name": "Eolus B",
+    "avanza_id": "178628",
+    "isin": "SE0007075056",
+    "ticker": "EOLU B",
+    "country": "SE",
+    "list": "Small Cap Stockholm",
+    "currency": "SEK",
+    "owners": 18066
+  },
+  "791946": {
+    "name": "BioArctic B",
+    "avanza_id": "791946",
+    "isin": "SE0010323311",
+    "ticker": "BIOA B",
+    "country": "SE",
+    "list": "Large Cap Stockholm",
+    "currency": "SEK",
+    "owners": 17538
+  },
+  "556359": {
+    "name": "SaltX Technology Holding B",
+    "avanza_id": "556359",
+    "isin": "SE0005308541",
+    "ticker": "SALT B",
+    "country": "SE",
+    "list": "",
+    "currency": "SEK",
+    "owners": 17532
+  },
+  "891292": {
+    "name": "Metacon",
+    "avanza_id": "891292",
+    "isin": "SE0003086214",
+    "ticker": "META",
+    "country": "SE",
+    "list": "",
+    "currency": "SEK",
+    "owners": 17368
+  },
+  "5251": {
+    "name": "Holmen B",
+    "avanza_id": "5251",
+    "isin": "SE0011090018",
+    "ticker": "HOLM B",
+    "country": "SE",
+    "list": "Large Cap Stockholm",
+    "currency": "SEK",
+    "owners": 17023
+  },
+  "87027": {
+    "name": "VNV Global",
+    "avanza_id": "87027",
+    "isin": "SE0014428835",
+    "ticker": "VNV",
+    "country": "SE",
+    "list": "Mid Cap Stockholm",
+    "currency": "SEK",
+    "owners": 17003
+  },
+  "1295598": {
+    "name": "Spiltan Invest",
+    "avanza_id": "1295598",
+    "isin": "SE0013382546",
+    "ticker": "SPLTN",
+    "country": "SE",
+    "list": "",
+    "currency": "SEK",
+    "owners": 16956
+  },
+  "5268": {
+    "name": "Volvo A",
+    "avanza_id": "5268",
+    "isin": "SE0000115420",
+    "ticker": "VOLV A",
+    "country": "SE",
+    "list": "Large Cap Stockholm",
+    "currency": "SEK",
+    "owners": 16929
+  },
+  "5459": {
+    "name": "Balder B",
+    "avanza_id": "5459",
+    "isin": "SE0017832488",
+    "ticker": "BALD B",
+    "country": "SE",
+    "list": "Large Cap Stockholm",
+    "currency": "SEK",
+    "owners": 16816
+  },
+  "732321": {
+    "name": "Rheinmetall",
+    "avanza_id": "732321",
+    "isin": "DE0007030009",
+    "ticker": "RHM",
+    "country": "DE",
+    "list": "",
+    "currency": "EUR",
+    "owners": 16790
+  },
+  "757761": {
+    "name": "MPC Container Ships",
+    "avanza_id": "757761",
+    "isin": "NO0010791353",
+    "ticker": "MPCC",
+    "country": "NO",
+    "list": "OBX Top 25",
+    "currency": "NOK",
+    "owners": 16786
+  },
+  "556803": {
+    "name": "Tobii",
+    "avanza_id": "556803",
+    "isin": "SE0002591420",
+    "ticker": "TOBII",
+    "country": "SE",
+    "list": "Small Cap Stockholm",
+    "currency": "SEK",
+    "owners": 16761
+  },
+  "233288": {
+    "name": "Byggmax Group",
+    "avanza_id": "233288",
+    "isin": "SE0003303627",
+    "ticker": "BMAX",
+    "country": "SE",
+    "list": "Mid Cap Stockholm",
+    "currency": "SEK",
+    "owners": 15979
+  },
+  "972553": {
+    "name": "TRATON SE",
+    "avanza_id": "972553",
+    "isin": "DE000TRAT0N7",
+    "ticker": "8TRA",
+    "country": "SE",
+    "list": "Large Cap Stockholm",
+    "currency": "SEK",
+    "owners": 15927
+  },
+  "185896": {
+    "name": "Netflix",
+    "avanza_id": "185896",
+    "isin": "US64110L1061",
+    "ticker": "NFLX",
+    "country": "US",
+    "list": "",
+    "currency": "USD",
+    "owners": 15894
+  },
+  "3803": {
+    "name": "Coca-Cola",
+    "avanza_id": "3803",
+    "isin": "US1912161007",
+    "ticker": "KO",
+    "country": "US",
+    "list": "",
+    "currency": "USD",
+    "owners": 15814
+  },
+  "5267": {
+    "name": "Trelleborg B",
+    "avanza_id": "5267",
+    "isin": "SE0000114837",
+    "ticker": "TREL B",
+    "country": "SE",
+    "list": "Large Cap Stockholm",
+    "currency": "SEK",
+    "owners": 15629
+  },
+  "804998": {
+    "name": "Sivers Semiconductors",
+    "avanza_id": "804998",
+    "isin": "SE0003917798",
+    "ticker": "SIVE",
+    "country": "SE",
+    "list": "Small Cap Stockholm",
+    "currency": "SEK",
+    "owners": 15587
+  },
+  "399180": {
+    "name": "Cell Impact",
+    "avanza_id": "399180",
+    "isin": "SE0025940513",
+    "ticker": "CI",
+    "country": "SE",
+    "list": "",
+    "currency": "SEK",
+    "owners": 15404
+  },
+  "250993": {
+    "name": "Meren Energy",
+    "avanza_id": "250993",
+    "isin": "CA5889141019",
+    "ticker": "MER",
+    "country": "SE",
+    "list": "Mid Cap Stockholm",
+    "currency": "SEK",
+    "owners": 15202
+  },
+  "1243628": {
+    "name": "Intellego Technologies",
+    "avanza_id": "1243628",
+    "isin": "SE0016075063",
+    "ticker": "INT",
+    "country": "SE",
+    "list": "",
+    "currency": "SEK",
+    "owners": 15080
+  },
+  "262988": {
+    "name": "Nelly Group",
+    "avanza_id": "262988",
+    "isin": "SE0015245535",
+    "ticker": "NELLY",
+    "country": "SE",
+    "list": "Mid Cap Stockholm",
+    "currency": "SEK",
+    "owners": 14919
+  },
+  "414975": {
+    "name": "Diamyd Medical B",
+    "avanza_id": "414975",
+    "isin": "SE0005162880",
+    "ticker": "DMYD B",
+    "country": "SE",
+    "list": "",
+    "currency": "SEK",
+    "owners": 14615
+  },
+  "1206860": {
+    "name": "Yubico",
+    "avanza_id": "1206860",
+    "isin": "SE0015657788",
+    "ticker": "YUBICO",
+    "country": "SE",
+    "list": "Large Cap Stockholm",
+    "currency": "SEK",
+    "owners": 14615
+  },
+  "5256": {
+    "name": "SEB C",
+    "avanza_id": "5256",
+    "isin": "SE0000120784",
+    "ticker": "SEB C",
+    "country": "SE",
+    "list": "Large Cap Stockholm",
+    "currency": "SEK",
+    "owners": 14506
+  },
+  "5501": {
+    "name": "JM",
+    "avanza_id": "5501",
+    "isin": "SE0000806994",
+    "ticker": "JM",
+    "country": "SE",
+    "list": "Large Cap Stockholm",
+    "currency": "SEK",
+    "owners": 14380
+  },
+  "1108920": {
+    "name": "Subgen AI",
+    "avanza_id": "1108920",
+    "isin": "SE0026820854",
+    "ticker": "SUBGEN",
+    "country": "SE",
+    "list": "",
+    "currency": "SEK",
+    "owners": 14291
+  },
+  "703653": {
+    "name": "Sagax D",
+    "avanza_id": "703653",
+    "isin": "SE0009161052",
+    "ticker": "SAGA D",
+    "country": "SE",
+    "list": "Large Cap Stockholm",
+    "currency": "SEK",
+    "owners": 14238
+  },
+  "1422858": {
+    "name": "Polestar ADR",
+    "avanza_id": "1422858",
+    "isin": "US7311054099",
+    "ticker": "PSNY",
+    "country": "US",
+    "list": "",
+    "currency": "USD",
+    "owners": 14218
+  },
+  "549022": {
+    "name": "Cantargia",
+    "avanza_id": "549022",
+    "isin": "SE0006371126",
+    "ticker": "CANTA",
+    "country": "SE",
+    "list": "Small Cap Stockholm",
+    "currency": "SEK",
+    "owners": 14208
+  },
+  "812516": {
+    "name": "Done.ai Group",
+    "avanza_id": "812516",
+    "isin": "SE0010546911",
+    "ticker": "DONE",
+    "country": "SE",
+    "list": "",
+    "currency": "SEK",
+    "owners": 14166
+  },
+  "52750": {
+    "name": "Fortum",
+    "avanza_id": "52750",
+    "isin": "FI0009007132",
+    "ticker": "FORTUM",
+    "country": "FI",
+    "list": "Large Cap Helsinki",
+    "currency": "EUR",
+    "owners": 14076
+  },
+  "1286052": {
+    "name": "Truecaller",
+    "avanza_id": "1286052",
+    "isin": "SE0016787071",
+    "ticker": "TRUE B",
+    "country": "SE",
+    "list": "Large Cap Stockholm",
+    "currency": "SEK",
+    "owners": 13970
+  },
+  "5302": {
+    "name": "Öresund",
+    "avanza_id": "5302",
+    "isin": "SE0008321608",
+    "ticker": "ORES",
+    "country": "SE",
+    "list": "Mid Cap Stockholm",
+    "currency": "SEK",
+    "owners": 13851
+  },
+  "674279": {
+    "name": "SynAct Pharma",
+    "avanza_id": "674279",
+    "isin": "SE0008241491",
+    "ticker": "SYNACT",
+    "country": "SE",
+    "list": "Small Cap Stockholm",
+    "currency": "SEK",
+    "owners": 13650
+  },
+  "852674": {
+    "name": "Ovzon",
+    "avanza_id": "852674",
+    "isin": "SE0010948711",
+    "ticker": "OVZON",
+    "country": "SE",
+    "list": "Mid Cap Stockholm",
+    "currency": "SEK",
+    "owners": 13634
+  },
+  "194698": {
+    "name": "GameStop",
+    "avanza_id": "194698",
+    "isin": "US36467W1099",
+    "ticker": "GME",
+    "country": "US",
+    "list": "",
+    "currency": "USD",
+    "owners": 13626
+  },
+  "507540": {
+    "name": "Inwido",
+    "avanza_id": "507540",
+    "isin": "SE0006220018",
+    "ticker": "INWI",
+    "country": "SE",
+    "list": "Mid Cap Stockholm",
+    "currency": "SEK",
+    "owners": 13581
+  },
+  "661786": {
+    "name": "Paradox Interactive",
+    "avanza_id": "661786",
+    "isin": "SE0008294953",
+    "ticker": "PDX",
+    "country": "SE",
+    "list": "",
+    "currency": "SEK",
+    "owners": 13476
+  },
+  "98087": {
+    "name": "Hansa Biopharma",
+    "avanza_id": "98087",
+    "isin": "SE0002148817",
+    "ticker": "HNSA",
+    "country": "SE",
+    "list": "Mid Cap Stockholm",
+    "currency": "SEK",
+    "owners": 13439
+  },
+  "765299": {
+    "name": "BONESUPPORT",
+    "avanza_id": "765299",
+    "isin": "SE0009858152",
+    "ticker": "BONEX",
+    "country": "SE",
+    "list": "Large Cap Stockholm",
+    "currency": "SEK",
+    "owners": 13397
+  },
+  "740416": {
+    "name": "Mips",
+    "avanza_id": "740416",
+    "isin": "SE0009216278",
+    "ticker": "MIPS",
+    "country": "SE",
+    "list": "Large Cap Stockholm",
+    "currency": "SEK",
+    "owners": 13371
+  },
+  "745862": {
+    "name": "LVMH Moet Hennessy Louis Vuitton",
+    "avanza_id": "745862",
+    "isin": "FR0000121014",
+    "ticker": "MCp",
+    "country": "FR",
+    "list": "",
+    "currency": "EUR",
+    "owners": 13295
+  },
+  "5468": {
+    "name": "Fingerprint Cards B",
+    "avanza_id": "5468",
+    "isin": "SE0026141665",
+    "ticker": "FING B",
+    "country": "SE",
+    "list": "Small Cap Stockholm",
+    "currency": "SEK",
+    "owners": 13220
+  },
+  "1144920": {
+    "name": "Verve Group",
+    "avanza_id": "1144920",
+    "isin": "SE0018538068",
+    "ticker": "VER",
+    "country": "SE",
+    "list": "",
+    "currency": "SEK",
+    "owners": 13140
+  },
+  "1314432": {
+    "name": "Dynavox Group",
+    "avanza_id": "1314432",
+    "isin": "SE0017105620",
+    "ticker": "DYVOX",
+    "country": "SE",
+    "list": "Mid Cap Stockholm",
+    "currency": "SEK",
+    "owners": 13078
+  },
+  "836433": {
+    "name": "Spotify",
+    "avanza_id": "836433",
+    "isin": "LU1778762911",
+    "ticker": "SPOT",
+    "country": "US",
+    "list": "",
+    "currency": "USD",
+    "owners": 13070
+  },
+  "475457": {
+    "name": "Saniona",
+    "avanza_id": "475457",
+    "isin": "SE0005794617",
+    "ticker": "SANION",
+    "country": "SE",
+    "list": "Small Cap Stockholm",
+    "currency": "SEK",
+    "owners": 13036
+  },
+  "5287": {
+    "name": "Hufvudstaden A",
+    "avanza_id": "5287",
+    "isin": "SE0000170375",
+    "ticker": "HUFV A",
+    "country": "SE",
+    "list": "Large Cap Stockholm",
+    "currency": "SEK",
+    "owners": 13029
+  },
+  "1346625": {
+    "name": "Vår Energi",
+    "avanza_id": "1346625",
+    "isin": "NO0011202772",
+    "ticker": "VAR",
+    "country": "NO",
+    "list": "OBX Top 25",
+    "currency": "NOK",
+    "owners": 13001
+  },
+  "5280": {
+    "name": "Elekta B",
+    "avanza_id": "5280",
+    "isin": "SE0000163628",
+    "ticker": "EKTA B",
+    "country": "SE",
+    "list": "Large Cap Stockholm",
+    "currency": "SEK",
+    "owners": 12734
+  },
+  "861798": {
+    "name": "Dicot Pharma",
+    "avanza_id": "861798",
+    "isin": "SE0011178458",
+    "ticker": "DICOT",
+    "country": "SE",
+    "list": "",
+    "currency": "SEK",
+    "owners": 12683
+  },
+  "1655314": {
+    "name": "Rusta",
+    "avanza_id": "1655314",
+    "isin": "SE0020848356",
+    "ticker": "RUSTA",
+    "country": "SE",
+    "list": "Mid Cap Stockholm",
+    "currency": "SEK",
+    "owners": 12682
+  },
+  "3658": {
+    "name": "Intel",
+    "avanza_id": "3658",
+    "isin": "US4581401001",
+    "ticker": "INTC",
+    "country": "US",
+    "list": "",
+    "currency": "USD",
+    "owners": 12404
+  },
+  "5276": {
+    "name": "Bilia A",
+    "avanza_id": "5276",
+    "isin": "SE0009921588",
+    "ticker": "BILI A",
+    "country": "SE",
+    "list": "Large Cap Stockholm",
+    "currency": "SEK",
+    "owners": 12398
+  },
+  "614237": {
+    "name": "Stillfront Group",
+    "avanza_id": "614237",
+    "isin": "SE0015346135",
+    "ticker": "SF",
+    "country": "SE",
+    "list": "Mid Cap Stockholm",
+    "currency": "SEK",
+    "owners": 12373
+  },
+  "810953": {
+    "name": "Arjo",
+    "avanza_id": "810953",
+    "isin": "SE0010468116",
+    "ticker": "ARJO B",
+    "country": "SE",
+    "list": "Mid Cap Stockholm",
+    "currency": "SEK",
+    "owners": 12311
+  },
+  "51308": {
+    "name": "Swedish Orphan Biovitrum",
+    "avanza_id": "51308",
+    "isin": "SE0000872095",
+    "ticker": "SOBI",
+    "country": "SE",
+    "list": "Large Cap Stockholm",
+    "currency": "SEK",
+    "owners": 12293
+  },
+  "13480": {
+    "name": "Sotkamo Silver",
+    "avanza_id": "13480",
+    "isin": "SE0001057910",
+    "ticker": "SOSI",
+    "country": "SE",
+    "list": "",
+    "currency": "SEK",
+    "owners": 12102
+  },
+  "755803": {
+    "name": "Munters Group AB",
+    "avanza_id": "755803",
+    "isin": "SE0009806607",
+    "ticker": "MTRS",
+    "country": "SE",
+    "list": "Large Cap Stockholm",
+    "currency": "SEK",
+    "owners": 12073
+  },
+  "450548": {
+    "name": "AMC Entertainment A",
+    "avanza_id": "450548",
+    "isin": "US00165C3025",
+    "ticker": "AMC",
+    "country": "US",
+    "list": "",
+    "currency": "USD",
+    "owners": 11984
+  },
+  "710675": {
+    "name": "Smart Eye",
+    "avanza_id": "710675",
+    "isin": "SE0009268279",
+    "ticker": "SEYE",
+    "country": "SE",
+    "list": "",
+    "currency": "SEK",
+    "owners": 11958
+  },
+  "1233195": {
+    "name": "Linc",
+    "avanza_id": "1233195",
+    "isin": "SE0015949433",
+    "ticker": "LINC",
+    "country": "SE",
+    "list": "Mid Cap Stockholm",
+    "currency": "SEK",
+    "owners": 11945
+  },
+  "5490": {
+    "name": "Precise Biometrics",
+    "avanza_id": "5490",
+    "isin": "SE0018013849",
+    "ticker": "PREC",
+    "country": "SE",
+    "list": "Small Cap Stockholm",
+    "currency": "SEK",
+    "owners": 11862
+  },
+  "18813": {
+    "name": "Wihlborgs Fastigheter",
+    "avanza_id": "18813",
+    "isin": "SE0018012635",
+    "ticker": "WIHL",
+    "country": "SE",
+    "list": "Large Cap Stockholm",
+    "currency": "SEK",
+    "owners": 11745
+  },
+  "732279": {
+    "name": "ASML HOLDING",
+    "avanza_id": "732279",
+    "isin": "NL0010273215",
+    "ticker": "ASMLa",
+    "country": "NL",
+    "list": "",
+    "currency": "EUR",
+    "owners": 11724
+  },
+  "4145": {
+    "name": "Pfizer",
+    "avanza_id": "4145",
+    "isin": "US7170811035",
+    "ticker": "PFE",
+    "country": "US",
+    "list": "",
+    "currency": "USD",
+    "owners": 11518
+  },
+  "517315": {
+    "name": "Humble Group",
+    "avanza_id": "517315",
+    "isin": "SE0006261046",
+    "ticker": "HUMBLE",
+    "country": "SE",
+    "list": "Mid Cap Stockholm",
+    "currency": "SEK",
+    "owners": 11500
+  },
+  "52622": {
+    "name": "Orkla",
+    "avanza_id": "52622",
+    "isin": "NO0003733800",
+    "ticker": "ORK",
+    "country": "NO",
+    "list": "OBX Top 25",
+    "currency": "NOK",
+    "owners": 11467
+  },
+  "1279465": {
+    "name": "CTEK",
+    "avanza_id": "1279465",
+    "isin": "SE0016798763",
+    "ticker": "CTEK",
+    "country": "SE",
+    "list": "Small Cap Stockholm",
+    "currency": "SEK",
+    "owners": 11464
+  },
+  "811076": {
+    "name": "Corem Property Group B",
+    "avanza_id": "811076",
+    "isin": "SE0010714287",
+    "ticker": "CORE B",
+    "country": "SE",
+    "list": "Large Cap Stockholm",
+    "currency": "SEK",
+    "owners": 11441
+  },
+  "602637": {
+    "name": "Bravida Holding",
+    "avanza_id": "602637",
+    "isin": "SE0007491303",
+    "ticker": "BRAV",
+    "country": "SE",
+    "list": "Large Cap Stockholm",
+    "currency": "SEK",
+    "owners": 11422
+  },
+  "5301": {
+    "name": "AFRY",
+    "avanza_id": "5301",
+    "isin": "SE0005999836",
+    "ticker": "AFRY",
+    "country": "SE",
+    "list": "Large Cap Stockholm",
+    "currency": "SEK",
+    "owners": 11296
+  },
+  "107013": {
+    "name": "Take-Two Interactive Software",
+    "avanza_id": "107013",
+    "isin": "US8740541094",
+    "ticker": "TTWO",
+    "country": "US",
+    "list": "",
+    "currency": "USD",
+    "owners": 11247
+  },
+  "4414": {
+    "name": "Millicom International Cellular",
+    "avanza_id": "4414",
+    "isin": "LU0038705702",
+    "ticker": "TIGO",
+    "country": "US",
+    "list": "",
+    "currency": "USD",
+    "owners": 11100
+  },
+  "5422": {
+    "name": "Stora Enso R",
+    "avanza_id": "5422",
+    "isin": "FI0009007611",
+    "ticker": "STE R",
+    "country": "SE",
+    "list": "Large Cap Stockholm",
+    "currency": "SEK",
+    "owners": 11087
+  },
+  "5536": {
+    "name": "Lagercrantz Group B",
+    "avanza_id": "5536",
+    "isin": "SE0014990966",
+    "ticker": "LAGR B",
+    "country": "SE",
+    "list": "Large Cap Stockholm",
+    "currency": "SEK",
+    "owners": 11087
+  },
+  "52301": {
+    "name": "Danske Bank ",
+    "avanza_id": "52301",
+    "isin": "DK0010274414",
+    "ticker": "DANSKE",
+    "country": "DK",
+    "list": "Large Cap Copenhagen",
+    "currency": "DKK",
+    "owners": 11012
+  },
+  "702377": {
+    "name": "BICO Group",
+    "avanza_id": "702377",
+    "isin": "SE0013647385",
+    "ticker": "BICO",
+    "country": "SE",
+    "list": "Mid Cap Stockholm",
+    "currency": "SEK",
+    "owners": 10986
+  },
+  "5304": {
+    "name": "Active Biotech",
+    "avanza_id": "5304",
+    "isin": "SE0001137985",
+    "ticker": "ACTI",
+    "country": "SE",
+    "list": "Small Cap Stockholm",
+    "currency": "SEK",
+    "owners": 10932
+  },
+  "137349": {
+    "name": "Beowulf Mining SDB",
+    "avanza_id": "137349",
+    "isin": "SE0022240073",
+    "ticker": "BEO SDB",
+    "country": "SE",
+    "list": "",
+    "currency": "SEK",
+    "owners": 10899
+  },
+  "792017": {
+    "name": "Climeon B",
+    "avanza_id": "792017",
+    "isin": "SE0023837182",
+    "ticker": "CLIME B",
+    "country": "SE",
+    "list": "",
+    "currency": "SEK",
+    "owners": 10856
+  },
+  "26607": {
+    "name": "Indutrade",
+    "avanza_id": "26607",
+    "isin": "SE0001515552",
+    "ticker": "INDT",
+    "country": "SE",
+    "list": "Large Cap Stockholm",
+    "currency": "SEK",
+    "owners": 10786
+  },
+  "742357": {
+    "name": "Intervacc",
+    "avanza_id": "742357",
+    "isin": "SE0009607252",
+    "ticker": "IVACC",
+    "country": "SE",
+    "list": "",
+    "currency": "SEK",
+    "owners": 10762
+  },
+  "612775": {
+    "name": "Immunovia",
+    "avanza_id": "612775",
+    "isin": "SE0006091997",
+    "ticker": "IMMNOV",
+    "country": "SE",
+    "list": "Small Cap Stockholm",
+    "currency": "SEK",
+    "owners": 10749
+  },
+  "1308441": {
+    "name": "Höegh Autoliners",
+    "avanza_id": "1308441",
+    "isin": "NO0011082075",
+    "ticker": "HAUTO",
+    "country": "NO",
+    "list": "OBX Top 25",
+    "currency": "NOK",
+    "owners": 10734
+  },
+  "5466": {
+    "name": "Mycronic",
+    "avanza_id": "5466",
+    "isin": "SE0025158629",
+    "ticker": "MYCR",
+    "country": "SE",
+    "list": "Large Cap Stockholm",
+    "currency": "SEK",
+    "owners": 10610
+  },
+  "237353": {
+    "name": "Vivesto",
+    "avanza_id": "237353",
+    "isin": "SE0000722365",
+    "ticker": "VIVE",
+    "country": "SE",
+    "list": "Small Cap Stockholm",
+    "currency": "SEK",
+    "owners": 10551
+  },
+  "976095": {
+    "name": "2020 Bulkers",
+    "avanza_id": "976095",
+    "isin": "BMG9156K1018",
+    "ticker": "2020",
+    "country": "NO",
+    "list": "OB Match",
+    "currency": "NOK",
+    "owners": 10441
+  },
+  "6331": {
+    "name": "Note",
+    "avanza_id": "6331",
+    "isin": "SE0001161654",
+    "ticker": "NOTE",
+    "country": "SE",
+    "list": "Mid Cap Stockholm",
+    "currency": "SEK",
+    "owners": 10431
+  },
+  "5586": {
+    "name": "Nobia",
+    "avanza_id": "5586",
+    "isin": "SE0000949331",
+    "ticker": "NOBI",
+    "country": "SE",
+    "list": "Mid Cap Stockholm",
+    "currency": "SEK",
+    "owners": 10376
+  },
+  "5300": {
+    "name": "Fabege",
+    "avanza_id": "5300",
+    "isin": "SE0011166974",
+    "ticker": "FABG",
+    "country": "SE",
+    "list": "Large Cap Stockholm",
+    "currency": "SEK",
+    "owners": 10369
+  },
+  "579702": {
+    "name": "VEF",
+    "avanza_id": "579702",
+    "isin": "SE0016128151",
+    "ticker": "VEFAB",
+    "country": "SE",
+    "list": "Mid Cap Stockholm",
+    "currency": "SEK",
+    "owners": 10335
+  },
+  "668939": {
+    "name": "Cereno Scientific B",
+    "avanza_id": "668939",
+    "isin": "SE0008241558",
+    "ticker": "CRNO B",
+    "country": "SE",
+    "list": "",
+    "currency": "SEK",
+    "owners": 10250
+  },
+  "399875": {
+    "name": "Strategy A",
+    "avanza_id": "399875",
+    "isin": "US5949724083",
+    "ticker": "MSTR",
+    "country": "US",
+    "list": "",
+    "currency": "USD",
+    "owners": 10243
+  },
+  "147048": {
+    "name": "Realty Income REIT",
+    "avanza_id": "147048",
+    "isin": "US7561091049",
+    "ticker": "O",
+    "country": "US",
+    "list": "",
+    "currency": "USD",
+    "owners": 10218
+  },
+  "862045": {
+    "name": "Midsummer",
+    "avanza_id": "862045",
+    "isin": "SE0011281757",
+    "ticker": "MIDS",
+    "country": "SE",
+    "list": "",
+    "currency": "SEK",
+    "owners": 10140
+  },
+  "574898": {
+    "name": "SpectraCure AB",
+    "avanza_id": "574898",
+    "isin": "SE0007158118",
+    "ticker": "SPEC",
+    "country": "SE",
+    "list": "",
+    "currency": "SEK",
+    "owners": 10095
+  },
+  "5368": {
+    "name": "Kinnevik A",
+    "avanza_id": "5368",
+    "isin": "SE0022060513",
+    "ticker": "KINV A",
+    "country": "SE",
+    "list": "Large Cap Stockholm",
+    "currency": "SEK",
+    "owners": 10089
+  },
+  "214533": {
+    "name": "Micron Technology",
+    "avanza_id": "214533",
+    "isin": "US5951121038",
+    "ticker": "MU",
+    "country": "US",
+    "list": "",
+    "currency": "USD",
+    "owners": 10088
+  },
+  "5344": {
+    "name": "Wallenstam B",
+    "avanza_id": "5344",
+    "isin": "SE0017780133",
+    "ticker": "WALL B",
+    "country": "SE",
+    "list": "Large Cap Stockholm",
+    "currency": "SEK",
+    "owners": 10073
+  },
+  "278389": {
+    "name": "Novakand Pharma",
+    "avanza_id": "278389",
+    "isin": "SE0015658570",
+    "ticker": "NOVKAN",
+    "country": "SE",
+    "list": "",
+    "currency": "SEK",
+    "owners": 10059
+  },
+  "1310582": {
+    "name": "Solid Försäkring",
+    "avanza_id": "1310582",
+    "isin": "SE0017082548",
+    "ticker": "SFAB",
+    "country": "SE",
+    "list": "Small Cap Stockholm",
+    "currency": "SEK",
+    "owners": 9938
+  },
+  "369636": {
+    "name": "Broadcom",
+    "avanza_id": "369636",
+    "isin": "US11135F1012",
+    "ticker": "AVGO",
+    "country": "US",
+    "list": "",
+    "currency": "USD",
+    "owners": 9890
+  },
+  "5537": {
+    "name": "Addtech B",
+    "avanza_id": "5537",
+    "isin": "SE0014781795",
+    "ticker": "ADDT B",
+    "country": "SE",
+    "list": "Large Cap Stockholm",
+    "currency": "SEK",
+    "owners": 9872
+  },
+  "444958": {
+    "name": "BW LPG",
+    "avanza_id": "444958",
+    "isin": "SGXZ69436764",
+    "ticker": "BWLPG",
+    "country": "NO",
+    "list": "OBX Top 25",
+    "currency": "NOK",
+    "owners": 9775
+  },
+  "285632": {
+    "name": "KDventures B",
+    "avanza_id": "285632",
+    "isin": "SE0002190926",
+    "ticker": "KDV B",
+    "country": "SE",
+    "list": "Small Cap Stockholm",
+    "currency": "SEK",
+    "owners": 9683
+  },
+  "2094659": {
+    "name": "Hacksaw",
+    "avanza_id": "2094659",
+    "isin": "SE0025138357",
+    "ticker": "HACK",
+    "country": "SE",
+    "list": "Large Cap Stockholm",
+    "currency": "SEK",
+    "owners": 9671
+  },
+  "5438": {
+    "name": "MTG B",
+    "avanza_id": "5438",
+    "isin": "SE0018012494",
+    "ticker": "MTG B",
+    "country": "SE",
+    "list": "Mid Cap Stockholm",
+    "currency": "SEK",
+    "owners": 9606
+  },
+  "741998": {
+    "name": "Isofol Medical",
+    "avanza_id": "741998",
+    "isin": "SE0009581051",
+    "ticker": "ISOFOL",
+    "country": "SE",
+    "list": "Small Cap Stockholm",
+    "currency": "SEK",
+    "owners": 9540
+  },
+  "1296603": {
+    "name": "Gigasun",
+    "avanza_id": "1296603",
+    "isin": "SE0016101521",
+    "ticker": "GIGA",
+    "country": "SE",
+    "list": "",
+    "currency": "SEK",
+    "owners": 9537
+  },
+  "1241651": {
+    "name": "Revolutionrace",
+    "avanza_id": "1241651",
+    "isin": "SE0015962485",
+    "ticker": "RVRC",
+    "country": "SE",
+    "list": "Mid Cap Stockholm",
+    "currency": "SEK",
+    "owners": 9478
+  },
+  "611718": {
+    "name": "Dometic Group",
+    "avanza_id": "611718",
+    "isin": "SE0007691613",
+    "ticker": "DOM",
+    "country": "SE",
+    "list": "Large Cap Stockholm",
+    "currency": "SEK",
+    "owners": 9455
+  },
+  "613452": {
+    "name": "Camurus",
+    "avanza_id": "613452",
+    "isin": "SE0007692850",
+    "ticker": "CAMX",
+    "country": "SE",
+    "list": "Large Cap Stockholm",
+    "currency": "SEK",
+    "owners": 9418
+  },
+  "5274": {
+    "name": "Beijer Ref B",
+    "avanza_id": "5274",
+    "isin": "SE0015949748",
+    "ticker": "BEIJ B",
+    "country": "SE",
+    "list": "Large Cap Stockholm",
+    "currency": "SEK",
+    "owners": 9388
+  },
+  "1162349": {
+    "name": "Nordnet",
+    "avanza_id": "1162349",
+    "isin": "SE0015192067",
+    "ticker": "SAVE",
+    "country": "SE",
+    "list": "Large Cap Stockholm",
+    "currency": "SEK",
+    "owners": 9257
+  },
+  "5409": {
+    "name": "Sweco B",
+    "avanza_id": "5409",
+    "isin": "SE0014960373",
+    "ticker": "SWEC B",
+    "country": "SE",
+    "list": "Large Cap Stockholm",
+    "currency": "SEK",
+    "owners": 9250
+  },
+  "43267": {
+    "name": "Diös Fastigheter",
+    "avanza_id": "43267",
+    "isin": "SE0001634262",
+    "ticker": "DIOS",
+    "country": "SE",
+    "list": "Mid Cap Stockholm",
+    "currency": "SEK",
+    "owners": 9188
+  },
+  "347535": {
+    "name": "Neonode",
+    "avanza_id": "347535",
+    "isin": "US64051M7092",
+    "ticker": "NEON",
+    "country": "US",
+    "list": "",
+    "currency": "USD",
+    "owners": 9155
+  },
+  "757512": {
+    "name": "Terranet B",
+    "avanza_id": "757512",
+    "isin": "SE0009806045",
+    "ticker": "TERRNT B",
+    "country": "SE",
+    "list": "",
+    "currency": "SEK",
+    "owners": 9108
+  },
+  "1177700": {
+    "name": "Siemens Energy AG",
+    "avanza_id": "1177700",
+    "isin": "DE000ENER6Y0",
+    "ticker": "ENR",
+    "country": "DE",
+    "list": "",
+    "currency": "EUR",
+    "owners": 9054
+  },
+  "118370": {
+    "name": "GRANGEX",
+    "avanza_id": "118370",
+    "isin": "SE0018014243",
+    "ticker": "GRANGX",
+    "country": "SE",
+    "list": "",
+    "currency": "SEK",
+    "owners": 8986
+  },
+  "5410": {
+    "name": "RaySearch Laboratories B",
+    "avanza_id": "5410",
+    "isin": "SE0000135485",
+    "ticker": "RAY B",
+    "country": "SE",
+    "list": "Mid Cap Stockholm",
+    "currency": "SEK",
+    "owners": 8890
+  },
+  "732410": {
+    "name": "TUI AG",
+    "avanza_id": "732410",
+    "isin": "DE000TUAG505",
+    "ticker": "TUI1",
+    "country": "DE",
+    "list": "",
+    "currency": "EUR",
+    "owners": 8882
+  },
+  "5508": {
+    "name": "Vitrolife",
+    "avanza_id": "5508",
+    "isin": "SE0011205202",
+    "ticker": "VITR",
+    "country": "SE",
+    "list": "Large Cap Stockholm",
+    "currency": "SEK",
+    "owners": 8863
+  },
+  "572375": {
+    "name": "Coor Service Management Holding",
+    "avanza_id": "572375",
+    "isin": "SE0007158829",
+    "ticker": "COOR",
+    "country": "SE",
+    "list": "Mid Cap Stockholm",
+    "currency": "SEK",
+    "owners": 8834
+  },
+  "840508": {
+    "name": "KebNi B",
+    "avanza_id": "840508",
+    "isin": "SE0012904803",
+    "ticker": "KEBNI B",
+    "country": "SE",
+    "list": "",
+    "currency": "SEK",
+    "owners": 8656
+  },
+  "717421": {
+    "name": "AAC Clyde Space",
+    "avanza_id": "717421",
+    "isin": "SE0021020716",
+    "ticker": "AAC",
+    "country": "SE",
+    "list": "",
+    "currency": "SEK",
+    "owners": 8576
+  },
+  "52551": {
+    "name": "Kongsberg Gruppen",
+    "avanza_id": "52551",
+    "isin": "NO0013536151",
+    "ticker": "KOG",
+    "country": "NO",
+    "list": "OBX Top 25",
+    "currency": "NOK",
+    "owners": 8516
+  },
+  "538819": {
+    "name": "Dustin Group",
+    "avanza_id": "538819",
+    "isin": "SE0006625471",
+    "ticker": "DUST",
+    "country": "SE",
+    "list": "Mid Cap Stockholm",
+    "currency": "SEK",
+    "owners": 8507
+  },
+  "3997": {
+    "name": "Walt Disney",
+    "avanza_id": "3997",
+    "isin": "US2546871060",
+    "ticker": "DIS",
+    "country": "US",
+    "list": "",
+    "currency": "USD",
+    "owners": 8506
+  },
+  "5426": {
+    "name": "Sectra B",
+    "avanza_id": "5426",
+    "isin": "SE0022419784",
+    "ticker": "SECT B",
+    "country": "SE",
+    "list": "Large Cap Stockholm",
+    "currency": "SEK",
+    "owners": 8479
+  },
+  "2172399": {
+    "name": "NOBA Bank",
+    "avanza_id": "2172399",
+    "isin": "SE0023135298",
+    "ticker": "NOBA",
+    "country": "SE",
+    "list": "Large Cap Stockholm",
+    "currency": "SEK",
+    "owners": 8377
+  },
+  "130828": {
+    "name": "Hexpol B",
+    "avanza_id": "130828",
+    "isin": "SE0007074281",
+    "ticker": "HPOL B",
+    "country": "SE",
+    "list": "Large Cap Stockholm",
+    "currency": "SEK",
+    "owners": 8327
+  },
+  "3666": {
+    "name": "Johnson & Johnson",
+    "avanza_id": "3666",
+    "isin": "US4781601046",
+    "ticker": "JNJ",
+    "country": "US",
+    "list": "",
+    "currency": "USD",
+    "owners": 8317
+  },
+  "707779": {
+    "name": "Alligator Bioscience",
+    "avanza_id": "707779",
+    "isin": "SE0024173637",
+    "ticker": "ATORX",
+    "country": "SE",
+    "list": "Small Cap Stockholm",
+    "currency": "SEK",
+    "owners": 8267
+  },
+  "1072320": {
+    "name": "Electrolux Professional B",
+    "avanza_id": "1072320",
+    "isin": "SE0013747870",
+    "ticker": "EPRO B",
+    "country": "SE",
+    "list": "Large Cap Stockholm",
+    "currency": "SEK",
+    "owners": 8260
+  },
+  "663399": {
+    "name": "Bonava B",
+    "avanza_id": "663399",
+    "isin": "SE0008091581",
+    "ticker": "BONAV B",
+    "country": "SE",
+    "list": "Mid Cap Stockholm",
+    "currency": "SEK",
+    "owners": 8235
+  },
+  "746877": {
+    "name": "International Petroleum Corp.",
+    "avanza_id": "746877",
+    "isin": "CA46016U1084",
+    "ticker": "IPCO",
+    "country": "SE",
+    "list": "Large Cap Stockholm",
+    "currency": "SEK",
+    "owners": 8231
+  },
+  "907825": {
+    "name": "Nyfosa",
+    "avanza_id": "907825",
+    "isin": "SE0011426428",
+    "ticker": "NYF",
+    "country": "SE",
+    "list": "Large Cap Stockholm",
+    "currency": "SEK",
+    "owners": 8187
+  },
+  "2165771": {
+    "name": "BAE Systems PLC",
+    "avanza_id": "2165771",
+    "isin": "GB0002634946",
+    "ticker": "BAl",
+    "country": "GB",
+    "list": "",
+    "currency": "GBP",
+    "owners": 8177
+  },
+  "614837": {
+    "name": "Vicore Pharma Holding",
+    "avanza_id": "614837",
+    "isin": "SE0007577895",
+    "ticker": "VICO",
+    "country": "SE",
+    "list": "Mid Cap Stockholm",
+    "currency": "SEK",
+    "owners": 8129
+  },
+  "52332": {
+    "name": "Vestas Wind Systems ",
+    "avanza_id": "52332",
+    "isin": "DK0061539921",
+    "ticker": "VWS",
+    "country": "DK",
+    "list": "Large Cap Copenhagen",
+    "currency": "DKK",
+    "owners": 8106
+  },
+  "353445": {
+    "name": "ALM Equity Pref",
+    "avanza_id": "353445",
+    "isin": "SE0004109627",
+    "ticker": "ALM PREF",
+    "country": "SE",
+    "list": "",
+    "currency": "SEK",
+    "owners": 8093
+  },
+  "202888": {
+    "name": "BrightBid Group",
+    "avanza_id": "202888",
+    "isin": "SE0017937279",
+    "ticker": "BRIGHT",
+    "country": "SE",
+    "list": "",
+    "currency": "SEK",
+    "owners": 8056
+  },
+  "362015": {
+    "name": "Angler Gaming",
+    "avanza_id": "362015",
+    "isin": "MT0000650102",
+    "ticker": "ANGL",
+    "country": "SE",
+    "list": "",
+    "currency": "SEK",
+    "owners": 8055
+  },
+  "510194": {
+    "name": "Gränges",
+    "avanza_id": "510194",
+    "isin": "SE0006288015",
+    "ticker": "GRNG",
+    "country": "SE",
+    "list": "Large Cap Stockholm",
+    "currency": "SEK",
+    "owners": 8038
+  },
+  "643540": {
+    "name": "Garo",
+    "avanza_id": "643540",
+    "isin": "SE0015812417",
+    "ticker": "GARO",
+    "country": "SE",
+    "list": "Small Cap Stockholm",
+    "currency": "SEK",
+    "owners": 8031
+  },
+  "5236": {
+    "name": "Autoliv SDB",
+    "avanza_id": "5236",
+    "isin": "SE0021309614",
+    "ticker": "ALIV SDB",
+    "country": "SE",
+    "list": "Large Cap Stockholm",
+    "currency": "SEK",
+    "owners": 8005
+  },
+  "480188": {
+    "name": "Clavister",
+    "avanza_id": "480188",
+    "isin": "SE0005308558",
+    "ticker": "CLAV",
+    "country": "SE",
+    "list": "",
+    "currency": "SEK",
+    "owners": 7993
+  },
+  "52515": {
+    "name": "Tomra Systems",
+    "avanza_id": "52515",
+    "isin": "NO0012470089",
+    "ticker": "TOM",
+    "country": "NO",
+    "list": "OBX Top 25",
+    "currency": "NOK",
+    "owners": 7940
+  },
+  "127201": {
+    "name": "Ework Group",
+    "avanza_id": "127201",
+    "isin": "SE0002402701",
+    "ticker": "EWRK",
+    "country": "SE",
+    "list": "Mid Cap Stockholm",
+    "currency": "SEK",
+    "owners": 7872
+  },
+  "666686": {
+    "name": "Swedencare",
+    "avanza_id": "666686",
+    "isin": "SE0015988167",
+    "ticker": "SECARE",
+    "country": "SE",
+    "list": "",
+    "currency": "SEK",
+    "owners": 7774
+  },
+  "717535": {
+    "name": "SeaTwirl",
+    "avanza_id": "717535",
+    "isin": "SE0009242175",
+    "ticker": "STW",
+    "country": "SE",
+    "list": "",
+    "currency": "SEK",
+    "owners": 7773
+  },
+  "299178": {
+    "name": "ShaMaran Petroleum",
+    "avanza_id": "299178",
+    "isin": "CA8193201024",
+    "ticker": "SNM",
+    "country": "SE",
+    "list": "",
+    "currency": "SEK",
+    "owners": 7764
+  },
+  "482657": {
+    "name": "Kambi Group",
+    "avanza_id": "482657",
+    "isin": "MT0000780107",
+    "ticker": "KAMBI",
+    "country": "SE",
+    "list": "",
+    "currency": "SEK",
+    "owners": 7732
+  },
+  "488235": {
+    "name": "HANZA",
+    "avanza_id": "488235",
+    "isin": "SE0005878543",
+    "ticker": "HANZA",
+    "country": "SE",
+    "list": "Mid Cap Stockholm",
+    "currency": "SEK",
+    "owners": 7727
+  },
+  "630588": {
+    "name": "Xbrane Biopharma",
+    "avanza_id": "630588",
+    "isin": "SE0026598583",
+    "ticker": "XBRANE",
+    "country": "SE",
+    "list": "Small Cap Stockholm",
+    "currency": "SEK",
+    "owners": 7721
+  },
+  "745767": {
+    "name": "Leonardo S.p.A.",
+    "avanza_id": "745767",
+    "isin": "IT0003856405",
+    "ticker": "LDOm",
+    "country": "IT",
+    "list": "",
+    "currency": "EUR",
+    "owners": 7705
+  },
+  "405815": {
+    "name": "Sagax B",
+    "avanza_id": "405815",
+    "isin": "SE0005127818",
+    "ticker": "SAGA B",
+    "country": "SE",
+    "list": "Large Cap Stockholm",
+    "currency": "SEK",
+    "owners": 7678
+  },
+  "152492": {
+    "name": "G5 Entertainment",
+    "avanza_id": "152492",
+    "isin": "SE0001824004",
+    "ticker": "G5EN",
+    "country": "SE",
+    "list": "Small Cap Stockholm",
+    "currency": "SEK",
+    "owners": 7576
+  },
+  "1129406": {
+    "name": "XPeng A ADR",
+    "avanza_id": "1129406",
+    "isin": "US98422D1054",
+    "ticker": "XPEV",
+    "country": "US",
+    "list": "",
+    "currency": "USD",
+    "owners": 7575
+  },
+  "5526": {
+    "name": "Vitec Software Group B",
+    "avanza_id": "5526",
+    "isin": "SE0007871363",
+    "ticker": "VIT B",
+    "country": "SE",
+    "list": "Large Cap Stockholm",
+    "currency": "SEK",
+    "owners": 7559
+  },
+  "506278": {
+    "name": "Alibaba Group ADR",
+    "avanza_id": "506278",
+    "isin": "US01609W1027",
+    "ticker": "BABA",
+    "country": "US",
+    "list": "",
+    "currency": "USD",
+    "owners": 7538
+  },
+  "52645": {
+    "name": "NEL",
+    "avanza_id": "52645",
+    "isin": "NO0010081235",
+    "ticker": "NEL",
+    "country": "NO",
+    "list": "OB Match",
+    "currency": "NOK",
+    "owners": 7527
+  },
+  "5349": {
+    "name": "BioGaia B",
+    "avanza_id": "5349",
+    "isin": "SE0017769995",
+    "ticker": "BIOG B",
+    "country": "SE",
+    "list": "Mid Cap Stockholm",
+    "currency": "SEK",
+    "owners": 7508
+  },
+  "154930": {
+    "name": "Loomis",
+    "avanza_id": "154930",
+    "isin": "SE0014504817",
+    "ticker": "LOOMIS",
+    "country": "SE",
+    "list": "Large Cap Stockholm",
+    "currency": "SEK",
+    "owners": 7454
+  },
+  "255388": {
+    "name": "Episurf Medical B",
+    "avanza_id": "255388",
+    "isin": "SE0003491562",
+    "ticker": "EPIS B",
+    "country": "SE",
+    "list": "Small Cap Stockholm",
+    "currency": "SEK",
+    "owners": 7411
+  },
+  "5362": {
+    "name": "Havsfrun Investment B",
+    "avanza_id": "5362",
+    "isin": "SE0000312043",
+    "ticker": "HAV B",
+    "country": "SE",
+    "list": "Small Cap Stockholm",
+    "currency": "SEK",
+    "owners": 7363
+  },
+  "376275": {
+    "name": "Xvivo Perfusion",
+    "avanza_id": "376275",
+    "isin": "SE0004840718",
+    "ticker": "XVIVO",
+    "country": "SE",
+    "list": "Mid Cap Stockholm",
+    "currency": "SEK",
+    "owners": 7344
+  },
+  "752039": {
+    "name": "Instalco",
+    "avanza_id": "752039",
+    "isin": "SE0017483506",
+    "ticker": "INSTAL",
+    "country": "SE",
+    "list": "Mid Cap Stockholm",
+    "currency": "SEK",
+    "owners": 7318
+  },
+  "216649": {
+    "name": "Corem Property Group Pref",
+    "avanza_id": "216649",
+    "isin": "SE0010714311",
+    "ticker": "CORE PREF",
+    "country": "SE",
+    "list": "Large Cap Stockholm",
+    "currency": "SEK",
+    "owners": 7273
+  },
+  "5303": {
+    "name": "Beijer Alma B",
+    "avanza_id": "5303",
+    "isin": "SE0011090547",
+    "ticker": "BEIA B",
+    "country": "SE",
+    "list": "Large Cap Stockholm",
+    "currency": "SEK",
+    "owners": 7227
+  },
+  "5534": {
+    "name": "AQ Group",
+    "avanza_id": "5534",
+    "isin": "SE0022062196",
+    "ticker": "AQ",
+    "country": "SE",
+    "list": "Large Cap Stockholm",
+    "currency": "SEK",
+    "owners": 7220
+  },
+  "975972": {
+    "name": "Valuno Group",
+    "avanza_id": "975972",
+    "isin": "SE0010662585",
+    "ticker": "VALUNO",
+    "country": "SE",
+    "list": "Nordic SME Sweden",
+    "currency": "SEK",
+    "owners": 7204
+  },
+  "5480": {
+    "name": "Anoto Group",
+    "avanza_id": "5480",
+    "isin": "SE0010415281",
+    "ticker": "ANOT",
+    "country": "SE",
+    "list": "Small Cap Stockholm",
+    "currency": "SEK",
+    "owners": 7201
+  },
+  "832753": {
+    "name": "NP3 Fastigheter Pref",
+    "avanza_id": "832753",
+    "isin": "SE0010820514",
+    "ticker": "NP3 PREF",
+    "country": "SE",
+    "list": "Large Cap Stockholm",
+    "currency": "SEK",
+    "owners": 7149
+  },
+  "52626": {
+    "name": "Equinor",
+    "avanza_id": "52626",
+    "isin": "NO0010096985",
+    "ticker": "EQNR",
+    "country": "NO",
+    "list": "OBX Top 25",
+    "currency": "NOK",
+    "owners": 7139
+  },
+  "1648016": {
+    "name": "Mandatum",
+    "avanza_id": "1648016",
+    "isin": "FI4000552526",
+    "ticker": "MANTA",
+    "country": "FI",
+    "list": "Large Cap Helsinki",
+    "currency": "EUR",
+    "owners": 7101
+  },
+  "5491": {
+    "name": "Eniro Group",
+    "avanza_id": "5491",
+    "isin": "SE0011256312",
+    "ticker": "ENRO",
+    "country": "SE",
+    "list": "Small Cap Stockholm",
+    "currency": "SEK",
+    "owners": 7066
+  },
+  "29747": {
+    "name": "Visa",
+    "avanza_id": "29747",
+    "isin": "US92826C8394",
+    "ticker": "V",
+    "country": "US",
+    "list": "",
+    "currency": "USD",
+    "owners": 6948
+  },
+  "741528": {
+    "name": "Prolight Diagnostics",
+    "avanza_id": "741528",
+    "isin": "SE0027099656",
+    "ticker": "PRLD",
+    "country": "SE",
+    "list": "Nordic SME Sweden",
+    "currency": "SEK",
+    "owners": 6925
+  },
+  "838544": {
+    "name": "BHG Group",
+    "avanza_id": "838544",
+    "isin": "SE0010948588",
+    "ticker": "BHG",
+    "country": "SE",
+    "list": "Mid Cap Stockholm",
+    "currency": "SEK",
+    "owners": 6860
+  },
+  "82987": {
+    "name": "Nokia",
+    "avanza_id": "82987",
+    "isin": "FI0009000681",
+    "ticker": "NOKIA SEK",
+    "country": "SE",
+    "list": "Xterna listan",
+    "currency": "SEK",
+    "owners": 6794
+  },
+  "716263": {
+    "name": "Bluelake Mineral",
+    "avanza_id": "716263",
+    "isin": "SE0015382148",
+    "ticker": "BLUE",
+    "country": "SE",
+    "list": "Nordic SME Sweden",
+    "currency": "SEK",
+    "owners": 6755
+  },
+  "1230843": {
+    "name": "Oatly Group AB",
+    "avanza_id": "1230843",
+    "isin": "US67421J2078",
+    "ticker": "OTLY",
+    "country": "US",
+    "list": "",
+    "currency": "USD",
+    "owners": 6727
+  },
+  "13477": {
+    "name": "Kopparbergs B",
+    "avanza_id": "13477",
+    "isin": "SE0000500779",
+    "ticker": "KOBR B",
+    "country": "SE",
+    "list": "Nordic SME Sweden",
+    "currency": "SEK",
+    "owners": 6722
+  },
+  "425036": {
+    "name": "Oracle",
+    "avanza_id": "425036",
+    "isin": "US68389X1054",
+    "ticker": "ORCL",
+    "country": "US",
+    "list": "",
+    "currency": "USD",
+    "owners": 6707
+  },
+  "78529": {
+    "name": "Björn Borg",
+    "avanza_id": "78529",
+    "isin": "SE0021921327",
+    "ticker": "BORG",
+    "country": "SE",
+    "list": "Small Cap Stockholm",
+    "currency": "SEK",
+    "owners": 6693
+  },
+  "943604": {
+    "name": "Ferroamp",
+    "avanza_id": "943604",
+    "isin": "SE0012229920",
+    "ticker": "FERRO",
+    "country": "SE",
+    "list": "",
+    "currency": "SEK",
+    "owners": 6673
+  },
+  "5342": {
+    "name": "VBG Group B",
+    "avanza_id": "5342",
+    "isin": "SE0000115107",
+    "ticker": "VBG B",
+    "country": "SE",
+    "list": "Mid Cap Stockholm",
+    "currency": "SEK",
+    "owners": 6634
+  },
+  "941919": {
+    "name": "Ascelia Pharma",
+    "avanza_id": "941919",
+    "isin": "SE0010573113",
+    "ticker": "ACE",
+    "country": "SE",
+    "list": "Small Cap Stockholm",
+    "currency": "SEK",
+    "owners": 6607
+  },
+  "821459": {
+    "name": "Veteranpoolen B",
+    "avanza_id": "821459",
+    "isin": "SE0010663161",
+    "ticker": "VPAB B",
+    "country": "SE",
+    "list": "",
+    "currency": "SEK",
+    "owners": 6580
+  },
+  "126555": {
+    "name": "Vestum",
+    "avanza_id": "126555",
+    "isin": "SE0017134125",
+    "ticker": "VESTUM",
+    "country": "SE",
+    "list": "Mid Cap Stockholm",
+    "currency": "SEK",
+    "owners": 6525
+  },
+  "45188": {
+    "name": "Husqvarna A",
+    "avanza_id": "45188",
+    "isin": "SE0001662222",
+    "ticker": "HUSQ A",
+    "country": "SE",
+    "list": "Large Cap Stockholm",
+    "currency": "SEK",
+    "owners": 6513
+  },
+  "1601221": {
+    "name": "Observit",
+    "avanza_id": "1601221",
+    "isin": "SE0017911704",
+    "ticker": "OBSE",
+    "country": "SE",
+    "list": "",
+    "currency": "SEK",
+    "owners": 6483
+  },
+  "1220100": {
+    "name": "Hemnet Group",
+    "avanza_id": "1220100",
+    "isin": "SE0015671995",
+    "ticker": "HEM",
+    "country": "SE",
+    "list": "Large Cap Stockholm",
+    "currency": "SEK",
+    "owners": 6481
+  },
+  "827966": {
+    "name": "Coegin Pharma",
+    "avanza_id": "827966",
+    "isin": "SE0020357754",
+    "ticker": "COEGIN",
+    "country": "SE",
+    "list": "Nordic SME Sweden",
+    "currency": "SEK",
+    "owners": 6470
+  },
+  "488229": {
+    "name": "OptiCept Technologies",
+    "avanza_id": "488229",
+    "isin": "SE0005881786",
+    "ticker": "OPTI",
+    "country": "SE",
+    "list": "",
+    "currency": "SEK",
+    "owners": 6432
+  },
+  "750331": {
+    "name": "Bambuser",
+    "avanza_id": "750331",
+    "isin": "SE0027099326",
+    "ticker": "BUSER",
+    "country": "SE",
+    "list": "",
+    "currency": "SEK",
+    "owners": 6413
+  },
+  "3670": {
+    "name": "PepsiCo",
+    "avanza_id": "3670",
+    "isin": "US7134481081",
+    "ticker": "PEP",
+    "country": "US",
+    "list": "",
+    "currency": "USD",
+    "owners": 6406
+  },
+  "51149": {
+    "name": "Mastercard",
+    "avanza_id": "51149",
+    "isin": "US57636Q1040",
+    "ticker": "MA",
+    "country": "US",
+    "list": "",
+    "currency": "USD",
+    "owners": 6364
+  },
+  "5327": {
+    "name": "Nolato B",
+    "avanza_id": "5327",
+    "isin": "SE0015962477",
+    "ticker": "NOLA B",
+    "country": "SE",
+    "list": "Large Cap Stockholm",
+    "currency": "SEK",
+    "owners": 6342
+  },
+  "1234103": {
+    "name": "SoFi Technologies",
+    "avanza_id": "1234103",
+    "isin": "US83406F1021",
+    "ticker": "SOFI",
+    "country": "US",
+    "list": "",
+    "currency": "USD",
+    "owners": 6319
+  },
+  "325050": {
+    "name": "Lucara Diamond Corp",
+    "avanza_id": "325050",
+    "isin": "CA54928Q1081",
+    "ticker": "LUC",
+    "country": "SE",
+    "list": "",
+    "currency": "SEK",
+    "owners": 6305
+  },
+  "861430": {
+    "name": "Epiroc A",
+    "avanza_id": "861430",
+    "isin": "SE0015658109",
+    "ticker": "EPI A",
+    "country": "SE",
+    "list": "Large Cap Stockholm",
+    "currency": "SEK",
+    "owners": 6304
+  },
+  "5332": {
+    "name": "Rottneros",
+    "avanza_id": "5332",
+    "isin": "SE0000112252",
+    "ticker": "RROS",
+    "country": "SE",
+    "list": "Small Cap Stockholm",
+    "currency": "SEK",
+    "owners": 6292
+  },
+  "1739455": {
+    "name": "Karnell",
+    "avanza_id": "1739455",
+    "isin": "SE0017832173",
+    "ticker": "KARNEL B",
+    "country": "SE",
+    "list": "Mid Cap Stockholm",
+    "currency": "SEK",
+    "owners": 6263
+  },
+  "1166180": {
+    "name": "Annehem Fastigheter B",
+    "avanza_id": "1166180",
+    "isin": "SE0015221684",
+    "ticker": "ANNE B",
+    "country": "SE",
+    "list": "Small Cap Stockholm",
+    "currency": "SEK",
+    "owners": 6261
+  },
+  "59810": {
+    "name": "Lindab International",
+    "avanza_id": "59810",
+    "isin": "SE0001852419",
+    "ticker": "LIAB",
+    "country": "SE",
+    "list": "Large Cap Stockholm",
+    "currency": "SEK",
+    "owners": 6244
+  },
+  "2006454": {
+    "name": "Asker Healthcare",
+    "avanza_id": "2006454",
+    "isin": "SE0024171458",
+    "ticker": "ASKER",
+    "country": "SE",
+    "list": "Large Cap Stockholm",
+    "currency": "SEK",
+    "owners": 6229
+  },
+  "5453": {
+    "name": "Proact IT Group",
+    "avanza_id": "5453",
+    "isin": "SE0015961222",
+    "ticker": "PACT",
+    "country": "SE",
+    "list": "Mid Cap Stockholm",
+    "currency": "SEK",
+    "owners": 6189
+  },
+  "5421": {
+    "name": "Stora Enso A",
+    "avanza_id": "5421",
+    "isin": "FI0009007603",
+    "ticker": "STE A",
+    "country": "SE",
+    "list": "Large Cap Stockholm",
+    "currency": "SEK",
+    "owners": 6188
+  },
+  "1320992": {
+    "name": "W5 Solutions",
+    "avanza_id": "1320992",
+    "isin": "SE0016786040",
+    "ticker": "W5",
+    "country": "SE",
+    "list": "",
+    "currency": "SEK",
+    "owners": 6173
+  },
+  "5474": {
+    "name": "MEKO",
+    "avanza_id": "5474",
+    "isin": "SE0002110064",
+    "ticker": "MEKO",
+    "country": "SE",
+    "list": "Mid Cap Stockholm",
+    "currency": "SEK",
+    "owners": 6170
+  },
+  "1501331": {
+    "name": "Mahvie Minerals",
+    "avanza_id": "1501331",
+    "isin": "SE0018768210",
+    "ticker": "MAHVIE",
+    "country": "SE",
+    "list": "Nordic SME Sweden",
+    "currency": "SEK",
+    "owners": 6157
+  },
+  "5335": {
+    "name": "Svedbergs Group B",
+    "avanza_id": "5335",
+    "isin": "SE0000407991",
+    "ticker": "SVED B",
+    "country": "SE",
+    "list": "Mid Cap Stockholm",
+    "currency": "SEK",
+    "owners": 6154
+  },
+  "4026": {
+    "name": "Eli Lilly",
+    "avanza_id": "4026",
+    "isin": "US5324571083",
+    "ticker": "LLY",
+    "country": "US",
+    "list": "",
+    "currency": "USD",
+    "owners": 6149
+  },
+  "2161147": {
+    "name": "HF Reverse (RTO) B",
+    "avanza_id": "2161147",
+    "isin": "SE0025937899",
+    "ticker": "HFRTO B",
+    "country": "SE",
+    "list": "",
+    "currency": "SEK",
+    "owners": 6127
+  },
+  "1296601": {
+    "name": "Synsam",
+    "avanza_id": "1296601",
+    "isin": "SE0016829709",
+    "ticker": "SYNSAM",
+    "country": "SE",
+    "list": "Mid Cap Stockholm",
+    "currency": "SEK",
+    "owners": 6112
+  },
+  "1254715": {
+    "name": "Quantum Computing",
+    "avanza_id": "1254715",
+    "isin": "US74766W1080",
+    "ticker": "QUBT",
+    "country": "US",
+    "list": "",
+    "currency": "USD",
+    "owners": 6111
+  },
+  "552343": {
+    "name": "Summa Defence",
+    "avanza_id": "552343",
+    "isin": "FI4000592282",
+    "ticker": "SUMMAS",
+    "country": "SE",
+    "list": "",
+    "currency": "SEK",
+    "owners": 6091
+  },
+  "5418": {
+    "name": "Softronic B",
+    "avanza_id": "5418",
+    "isin": "SE0000323305",
+    "ticker": "SOF B",
+    "country": "SE",
+    "list": "Small Cap Stockholm",
+    "currency": "SEK",
+    "owners": 6084
+  },
+  "764878": {
+    "name": "Surgical Science",
+    "avanza_id": "764878",
+    "isin": "SE0014428512",
+    "ticker": "SUS",
+    "country": "SE",
+    "list": "",
+    "currency": "SEK",
+    "owners": 6067
+  },
+  "847286": {
+    "name": "Africa Energy Corp",
+    "avanza_id": "847286",
+    "isin": "CA00830W5019",
+    "ticker": "AEC",
+    "country": "SE",
+    "list": "",
+    "currency": "SEK",
+    "owners": 6008
+  },
+  "952575": {
+    "name": "Eurobattery Minerals",
+    "avanza_id": "952575",
+    "isin": "SE0012481570",
+    "ticker": "BAT",
+    "country": "SE",
+    "list": "Nordic SME Sweden",
+    "currency": "SEK",
+    "owners": 5978
+  },
+  "742358": {
+    "name": "Actic Group",
+    "avanza_id": "742358",
+    "isin": "SE0009269467",
+    "ticker": "ATIC",
+    "country": "SE",
+    "list": "Small Cap Stockholm",
+    "currency": "SEK",
+    "owners": 5941
+  },
+  "262018": {
+    "name": "Moberg Pharma",
+    "avanza_id": "262018",
+    "isin": "SE0020353928",
+    "ticker": "MOB",
+    "country": "SE",
+    "list": "Small Cap Stockholm",
+    "currency": "SEK",
+    "owners": 5891
+  },
+  "756633": {
+    "name": "Abelco Investment Group",
+    "avanza_id": "756633",
+    "isin": "SE0003617075",
+    "ticker": "ABIG",
+    "country": "SE",
+    "list": "Nordic SME Sweden",
+    "currency": "SEK",
+    "owners": 5888
+  },
+  "810954": {
+    "name": "Lyko Group A",
+    "avanza_id": "810954",
+    "isin": "SE0010468918",
+    "ticker": "LYKO A",
+    "country": "SE",
+    "list": "",
+    "currency": "SEK",
+    "owners": 5875
+  },
+  "409455": {
+    "name": "Mendus",
+    "avanza_id": "409455",
+    "isin": "SE0022239950",
+    "ticker": "IMMU",
+    "country": "SE",
+    "list": "Small Cap Stockholm",
+    "currency": "SEK",
+    "owners": 5871
+  },
+  "95968": {
+    "name": "Star Vault B",
+    "avanza_id": "95968",
+    "isin": "SE0002149369",
+    "ticker": "STVA B",
+    "country": "SE",
+    "list": "Nordic SME Sweden",
+    "currency": "SEK",
+    "owners": 5866
+  },
+  "462932": {
+    "name": "Bufab",
+    "avanza_id": "462932",
+    "isin": "SE0025010671",
+    "ticker": "BUFAB",
+    "country": "SE",
+    "list": "Large Cap Stockholm",
+    "currency": "SEK",
+    "owners": 5851
+  },
+  "52810": {
+    "name": "Sampo A",
+    "avanza_id": "52810",
+    "isin": "FI4000552500",
+    "ticker": "SAMPO",
+    "country": "FI",
+    "list": "Large Cap Helsinki",
+    "currency": "EUR",
+    "owners": 5837
+  },
+  "1306448": {
+    "name": "Logistea B",
+    "avanza_id": "1306448",
+    "isin": "SE0017131337",
+    "ticker": "LOGI B",
+    "country": "SE",
+    "list": "Mid Cap Stockholm",
+    "currency": "SEK",
+    "owners": 5829
+  },
+  "5395": {
+    "name": "Pricer B",
+    "avanza_id": "5395",
+    "isin": "SE0000233934",
+    "ticker": "PRIC B",
+    "country": "SE",
+    "list": "Small Cap Stockholm",
+    "currency": "SEK",
+    "owners": 5804
+  },
+  "1242472": {
+    "name": "Corem Property Group D",
+    "avanza_id": "1242472",
+    "isin": "SE0015961594",
+    "ticker": "CORE D",
+    "country": "SE",
+    "list": "Large Cap Stockholm",
+    "currency": "SEK",
+    "owners": 5800
+  },
+  "388806": {
+    "name": "Arctic Paper",
+    "avanza_id": "388806",
+    "isin": "PLARTPR00012",
+    "ticker": "ARP",
+    "country": "SE",
+    "list": "Mid Cap Stockholm",
+    "currency": "SEK",
+    "owners": 5797
+  },
+  "1447081": {
+    "name": "Norion Bank",
+    "avanza_id": "1447081",
+    "isin": "SE0017831795",
+    "ticker": "NORION",
+    "country": "SE",
+    "list": "Mid Cap Stockholm",
+    "currency": "SEK",
+    "owners": 5785
+  },
+  "472376": {
+    "name": "Doxa",
+    "avanza_id": "472376",
+    "isin": "SE0005624756",
+    "ticker": "DOXA",
+    "country": "SE",
+    "list": "",
+    "currency": "SEK",
+    "owners": 5783
+  },
+  "97527": {
+    "name": "Super Micro Computer",
+    "avanza_id": "97527",
+    "isin": "US86800U3023",
+    "ticker": "SMCI",
+    "country": "US",
+    "list": "",
+    "currency": "USD",
+    "owners": 5779
+  },
+  "1211627": {
+    "name": "Coinbase Global, Inc. - 3Class A",
+    "avanza_id": "1211627",
+    "isin": "US19260Q1076",
+    "ticker": "COIN",
+    "country": "US",
+    "list": "",
+    "currency": "USD",
+    "owners": 5744
+  },
+  "5380": {
+    "name": "Medivir",
+    "avanza_id": "5380",
+    "isin": "SE0020181014",
+    "ticker": "MVIR",
+    "country": "SE",
+    "list": "Small Cap Stockholm",
+    "currency": "SEK",
+    "owners": 5737
+  },
+  "1192970": {
+    "name": "Cint Group",
+    "avanza_id": "1192970",
+    "isin": "SE0015483276",
+    "ticker": "CINT",
+    "country": "SE",
+    "list": "Mid Cap Stockholm",
+    "currency": "SEK",
+    "owners": 5734
+  },
+  "1051357": {
+    "name": "Qlife Holding",
+    "avanza_id": "1051357",
+    "isin": "SE0022574331",
+    "ticker": "QLIFE",
+    "country": "SE",
+    "list": "",
+    "currency": "SEK",
+    "owners": 5711
+  },
+  "643541": {
+    "name": "AddLife B",
+    "avanza_id": "643541",
+    "isin": "SE0014401378",
+    "ticker": "ALIF B",
+    "country": "SE",
+    "list": "Large Cap Stockholm",
+    "currency": "SEK",
+    "owners": 5709
+  },
+  "5262": {
+    "name": "SCA A",
+    "avanza_id": "5262",
+    "isin": "SE0000171886",
+    "ticker": "SCA A",
+    "country": "SE",
+    "list": "Large Cap Stockholm",
+    "currency": "SEK",
+    "owners": 5703
+  },
+  "237299": {
+    "name": "Wallenius Wilhelmsen",
+    "avanza_id": "237299",
+    "isin": "NO0010571680",
+    "ticker": "WAWI",
+    "country": "NO",
+    "list": "OBX Top 25",
+    "currency": "NOK",
+    "owners": 5666
+  },
+  "808452": {
+    "name": "Acconeer",
+    "avanza_id": "808452",
+    "isin": "SE0010546242",
+    "ticker": "ACCON",
+    "country": "SE",
+    "list": "",
+    "currency": "SEK",
+    "owners": 5661
+  },
+  "750330": {
+    "name": "Mantex",
+    "avanza_id": "750330",
+    "isin": "SE0023467451",
+    "ticker": "MANTEX",
+    "country": "SE",
+    "list": "",
+    "currency": "SEK",
+    "owners": 5656
+  },
+  "745811": {
+    "name": "Airbus SE",
+    "avanza_id": "745811",
+    "isin": "NL0000235190",
+    "ticker": "AIRp",
+    "country": "FR",
+    "list": "",
+    "currency": "EUR",
+    "owners": 5653
+  },
+  "732348": {
+    "name": "Siemens AG",
+    "avanza_id": "732348",
+    "isin": "DE0007236101",
+    "ticker": "SIE",
+    "country": "DE",
+    "list": "",
+    "currency": "EUR",
+    "owners": 5634
+  },
+  "249109": {
+    "name": "Zinzino B",
+    "avanza_id": "249109",
+    "isin": "SE0002480442",
+    "ticker": "ZZ B",
+    "country": "SE",
+    "list": "",
+    "currency": "SEK",
+    "owners": 5595
+  },
+  "568303": {
+    "name": "SpectrumOne",
+    "avanza_id": "568303",
+    "isin": "SE0006994448",
+    "ticker": "SPEONE",
+    "country": "SE",
+    "list": "",
+    "currency": "SEK",
+    "owners": 5584
+  },
+  "1242469": {
+    "name": "Hexicon",
+    "avanza_id": "1242469",
+    "isin": "SE0004898799",
+    "ticker": "HEXI",
+    "country": "SE",
+    "list": "",
+    "currency": "SEK",
+    "owners": 5548
+  },
+  "895245": {
+    "name": "Lumito",
+    "avanza_id": "895245",
+    "isin": "SE0027620956",
+    "ticker": "LUMITO",
+    "country": "SE",
+    "list": "Nordic SME Sweden",
+    "currency": "SEK",
+    "owners": 5538
+  },
+  "4323": {
+    "name": "UnitedHealth Group",
+    "avanza_id": "4323",
+    "isin": "US91324P1021",
+    "ticker": "UNH",
+    "country": "US",
+    "list": "",
+    "currency": "USD",
+    "owners": 5521
+  },
+  "5428": {
+    "name": "Knowit",
+    "avanza_id": "5428",
+    "isin": "SE0000421273",
+    "ticker": "KNOW",
+    "country": "SE",
+    "list": "Mid Cap Stockholm",
+    "currency": "SEK",
+    "owners": 5517
+  },
+  "2086531": {
+    "name": "Enity",
+    "avanza_id": "2086531",
+    "isin": "SE0025011554",
+    "ticker": "ENITY",
+    "country": "SE",
+    "list": "Mid Cap Stockholm",
+    "currency": "SEK",
+    "owners": 5498
+  },
+  "5497": {
+    "name": "Sensys Gatso Group",
+    "avanza_id": "5497",
+    "isin": "SE0020356244",
+    "ticker": "SGG",
+    "country": "SE",
+    "list": "Small Cap Stockholm",
+    "currency": "SEK",
+    "owners": 5468
+  },
+  "5500": {
+    "name": "Studsvik",
+    "avanza_id": "5500",
+    "isin": "SE0000653230",
+    "ticker": "SVIK",
+    "country": "SE",
+    "list": "Small Cap Stockholm",
+    "currency": "SEK",
+    "owners": 5440
+  },
+  "5239": {
+    "name": "Ericsson A",
+    "avanza_id": "5239",
+    "isin": "SE0000108649",
+    "ticker": "ERIC A",
+    "country": "SE",
+    "list": "Large Cap Stockholm",
+    "currency": "SEK",
+    "owners": 5361
+  },
+  "632719": {
+    "name": "Catena Media",
+    "avanza_id": "632719",
+    "isin": "MT0001000109",
+    "ticker": "CTM",
+    "country": "SE",
+    "list": "Small Cap Stockholm",
+    "currency": "SEK",
+    "owners": 5360
+  },
+  "1142999": {
+    "name": "Qliro",
+    "avanza_id": "1142999",
+    "isin": "SE0013719077",
+    "ticker": "QLIRO",
+    "country": "SE",
+    "list": "Small Cap Stockholm",
+    "currency": "SEK",
+    "owners": 5303
+  },
+  "1501882": {
+    "name": "Sampo A",
+    "avanza_id": "1501882",
+    "isin": "FI4000552500",
+    "ticker": "SAMPO SEK",
+    "country": "SE",
+    "list": "Large Cap Stockholm",
+    "currency": "SEK",
+    "owners": 5292
+  },
+  "290011": {
+    "name": "Bulten",
+    "avanza_id": "290011",
+    "isin": "SE0003849223",
+    "ticker": "BULTEN",
+    "country": "SE",
+    "list": "Small Cap Stockholm",
+    "currency": "SEK",
+    "owners": 5280
+  },
+  "1418985": {
+    "name": "engcon B",
+    "avanza_id": "1418985",
+    "isin": "SE0017769847",
+    "ticker": "ENGCON B",
+    "country": "SE",
+    "list": "Large Cap Stockholm",
+    "currency": "SEK",
+    "owners": 5276
+  },
+  "33127": {
+    "name": "Moment Group",
+    "avanza_id": "33127",
+    "isin": "SE0020388932",
+    "ticker": "MOMENT",
+    "country": "SE",
+    "list": "Small Cap Stockholm",
+    "currency": "SEK",
+    "owners": 5265
+  },
+  "572681": {
+    "name": "Nanexa",
+    "avanza_id": "572681",
+    "isin": "SE0007074166",
+    "ticker": "NANEXA",
+    "country": "SE",
+    "list": "",
+    "currency": "SEK",
+    "owners": 5253
+  },
+  "1211629": {
+    "name": "AST SpaceMobile A",
+    "avanza_id": "1211629",
+    "isin": "US00217D1000",
+    "ticker": "ASTS",
+    "country": "US",
+    "list": "",
+    "currency": "USD",
+    "owners": 5252
+  },
+  "1310966": {
+    "name": "KlaraBo",
+    "avanza_id": "1310966",
+    "isin": "SE0010832287",
+    "ticker": "KLARA B",
+    "country": "SE",
+    "list": "Mid Cap Stockholm",
+    "currency": "SEK",
+    "owners": 5251
+  },
+  "283294": {
+    "name": "Egetis Therapeutics",
+    "avanza_id": "283294",
+    "isin": "SE0003815604",
+    "ticker": "EGTX",
+    "country": "SE",
+    "list": "Mid Cap Stockholm",
+    "currency": "SEK",
+    "owners": 5244
+  },
+  "1284389": {
+    "name": "IonQ",
+    "avanza_id": "1284389",
+    "isin": "US46222L1089",
+    "ticker": "IONQ",
+    "country": "US",
+    "list": "",
+    "currency": "USD",
+    "owners": 5243
+  },
+  "4013": {
+    "name": "Exxon Mobil",
+    "avanza_id": "4013",
+    "isin": "US30231G1022",
+    "ticker": "XOM",
+    "country": "US",
+    "list": "",
+    "currency": "USD",
+    "owners": 5170
+  },
+  "233628": {
+    "name": "Parans",
+    "avanza_id": "233628",
+    "isin": "SE0002392886",
+    "ticker": "PARA",
+    "country": "SE",
+    "list": "Inofficiella (beQuoted)",
+    "currency": "SEK",
+    "owners": 5164
+  },
+  "5329": {
+    "name": "OEM International B",
+    "avanza_id": "5329",
+    "isin": "SE0017766843",
+    "ticker": "OEM B",
+    "country": "SE",
+    "list": "Large Cap Stockholm",
+    "currency": "SEK",
+    "owners": 5104
+  },
+  "5505": {
+    "name": "BioInvent International",
+    "avanza_id": "5505",
+    "isin": "SE0015244520",
+    "ticker": "BINV",
+    "country": "SE",
+    "list": "Mid Cap Stockholm",
+    "currency": "SEK",
+    "owners": 5099
+  },
+  "59050": {
+    "name": "BE Group",
+    "avanza_id": "59050",
+    "isin": "SE0008321921",
+    "ticker": "BEGR",
+    "country": "SE",
+    "list": "Small Cap Stockholm",
+    "currency": "SEK",
+    "owners": 5093
+  },
+  "741458": {
+    "name": "Ambea",
+    "avanza_id": "741458",
+    "isin": "SE0009663826",
+    "ticker": "AMBEA",
+    "country": "SE",
+    "list": "Mid Cap Stockholm",
+    "currency": "SEK",
+    "owners": 5089
+  },
+  "2165971": {
+    "name": "Rolls-Royce Holdings PLC",
+    "avanza_id": "2165971",
+    "isin": "GB00B63H8491",
+    "ticker": "RRl",
+    "country": "GB",
+    "list": "",
+    "currency": "GBP",
+    "owners": 5059
+  },
+  "709195": {
+    "name": "Volati",
+    "avanza_id": "709195",
+    "isin": "SE0009143662",
+    "ticker": "VOLO",
+    "country": "SE",
+    "list": "Mid Cap Stockholm",
+    "currency": "SEK",
+    "owners": 5049
+  },
+  "7074": {
+    "name": "Impact Coatings",
+    "avanza_id": "7074",
+    "isin": "SE0001279142",
+    "ticker": "IMPC",
+    "country": "SE",
+    "list": "",
+    "currency": "SEK",
+    "owners": 5040
+  },
+  "954655": {
+    "name": "Beyond Meat",
+    "avanza_id": "954655",
+    "isin": "US08862E1091",
+    "ticker": "BYND",
+    "country": "US",
+    "list": "",
+    "currency": "USD",
+    "owners": 5024
+  },
+  "745915": {
+    "name": "Schneider Electric SE",
+    "avanza_id": "745915",
+    "isin": "FR0000121972",
+    "ticker": "SUp",
+    "country": "FR",
+    "list": "",
+    "currency": "EUR",
+    "owners": 5012
+  },
+  "569319": {
+    "name": "Starbreeze A",
+    "avanza_id": "569319",
+    "isin": "SE0007158928",
+    "ticker": "STAR A",
+    "country": "SE",
+    "list": "Small Cap Stockholm",
+    "currency": "SEK",
+    "owners": 5010
+  },
+  "1787847": {
+    "name": "Cavendish Hydrogen",
+    "avanza_id": "1787847",
+    "isin": "NO0013219535",
+    "ticker": "CAVEN",
+    "country": "NO",
+    "list": "OB Match",
+    "currency": "NOK",
+    "owners": 5000
+  }
+}

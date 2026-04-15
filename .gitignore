@@ -1,0 +1,11 @@
+__pycache__/
+*.pyc
+venv/
+.DS_Store
+.vscode/
+.idea/
+.env
+data/edge_signals.db
+data/edge_signals.db-shm
+data/edge_signals.db-wal
+stocks.db
