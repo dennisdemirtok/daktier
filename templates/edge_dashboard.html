@@ -8,89 +8,91 @@
     <style>
         :root {
             --green: #00C281;
-            --green-light: #e6f9f1;
-            --green-dark: #00a870;
-            --red: #FF2B51;
-            --red-light: #ffeaee;
-            --blue: #0046FF;
-            --blue-light: #e8eeff;
+            --green-light: rgba(0,194,129,0.08);
+            --green-dark: #006c46;
+            --red: #be0033;
+            --red-light: rgba(190,0,51,0.08);
+            --blue: #0035c7;
+            --blue-light: rgba(0,53,199,0.08);
             --orange: #FF8A00;
-            --orange-light: #fff3e0;
+            --orange-light: rgba(255,138,0,0.08);
             --purple: #7C3AED;
-            --purple-light: #f0e8ff;
-            --bg: #f5f5f5;
+            --purple-light: rgba(124,58,237,0.08);
+            --bg: #f8f9fa;
             --white: #ffffff;
-            --text: #1a1a1a;
-            --text-sec: #666;
-            --text-muted: #999;
-            --border: #e5e5e5;
-            --border-light: #f0f0f0;
-            --shadow: 0 1px 3px rgba(0,0,0,0.06);
-            --shadow-hover: 0 4px 12px rgba(0,0,0,0.08);
+            --text: #191c1d;
+            --text-sec: #3c4a41;
+            --text-muted: #6c7b70;
+            --border: transparent;
+            --border-light: transparent;
+            --shadow: none;
+            --shadow-hover: 0 12px 32px rgba(25,28,29,0.04);
             --radius: 12px;
+            --surface-low: #f3f4f5;
+            --surface-high: #e8e8e8;
         }
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg); color: var(--text); line-height: 1.5; }
 
         /* ── Header ──── */
-        .header { background: var(--white); border-bottom: 1px solid var(--border); padding: 14px 24px; display: flex; justify-content: space-between; align-items: center; position: sticky; top: 0; z-index: 100; }
+        .header { background: rgba(255,255,255,0.8); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); border-bottom: none; padding: 14px 32px; display: flex; justify-content: space-between; align-items: center; position: sticky; top: 0; z-index: 100; }
         .header-left { display: flex; align-items: center; gap: 12px; }
-        .logo { width: 32px; height: 32px; background: var(--green); border-radius: 8px; display: flex; align-items: center; justify-content: center; color: white; font-weight: 700; font-size: 16px; }
+        .logo { width: 32px; height: 32px; background: linear-gradient(135deg, var(--green-dark), var(--green)); border-radius: 8px; display: flex; align-items: center; justify-content: center; color: white; font-weight: 700; font-size: 16px; }
         .header h1 { font-size: 18px; font-weight: 700; }
         .header h1 span { color: var(--text-muted); font-weight: 400; font-size: 14px; }
         .header-right { display: flex; align-items: center; gap: 12px; }
         .update-time { font-size: 13px; color: var(--text-muted); }
-        .refresh-btn { background: var(--green); color: white; border: none; padding: 8px 20px; border-radius: 20px; cursor: pointer; font-family: inherit; font-size: 13px; font-weight: 600; transition: all 0.2s; }
-        .refresh-btn:hover { background: var(--green-dark); }
+        .refresh-btn { background: linear-gradient(135deg, var(--green-dark), var(--green)); color: white; border: none; padding: 8px 20px; border-radius: 8px; cursor: pointer; font-family: inherit; font-size: 13px; font-weight: 600; transition: all 0.2s; }
+        .refresh-btn:hover { opacity: 0.9; transform: translateY(-1px); }
         .refresh-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
         /* ── Layout ──── */
         .container { max-width: 1500px; margin: 0 auto; padding: 20px; }
 
         /* ── Summary ──── */
-        .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px; margin-bottom: 20px; }
-        .card { background: var(--white); border-radius: var(--radius); padding: 18px; box-shadow: var(--shadow); transition: box-shadow 0.2s; }
-        .card:hover { box-shadow: var(--shadow-hover); }
-        .card-label { font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600; }
-        .card-value { font-size: 28px; font-weight: 700; margin: 2px 0; }
+        .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 24px; }
+        .card { background: var(--white); border-radius: var(--radius); padding: 20px; transition: all 0.2s; border: 1px solid rgba(0,0,0,0.04); }
+        .card:hover { box-shadow: var(--shadow-hover); transform: translateY(-1px); }
+        .card-label { font-size: 10px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.8px; font-weight: 600; }
+        .card-value { font-size: 28px; font-weight: 800; margin: 4px 0; letter-spacing: -0.5px; }
         .card-sub { font-size: 12px; color: var(--text-sec); }
 
         /* ── Tabs ──── */
-        .tabs { display: flex; gap: 0; margin-bottom: 16px; border-bottom: 2px solid var(--border); }
-        .tab { padding: 10px 20px; background: none; border: none; font-family: inherit; font-size: 14px; font-weight: 500; color: var(--text-muted); cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -2px; transition: all 0.2s; }
-        .tab:hover { color: var(--text); }
-        .tab.active { color: var(--green); border-bottom-color: var(--green); font-weight: 600; }
+        .tabs { display: flex; gap: 0; margin-bottom: 20px; border-bottom: none; background: var(--surface-low); border-radius: var(--radius); padding: 4px; }
+        .tab { padding: 8px 18px; background: none; border: none; font-family: inherit; font-size: 13px; font-weight: 500; color: var(--text-muted); cursor: pointer; border-radius: 8px; margin-bottom: 0; transition: all 0.15s; border-bottom: none; }
+        .tab:hover { color: var(--text); background: rgba(255,255,255,0.6); }
+        .tab.active { color: var(--text); background: var(--white); font-weight: 600; box-shadow: 0 1px 3px rgba(0,0,0,0.06); }
 
         /* ── Filter ──── */
         .filter-bar { display: flex; gap: 10px; align-items: center; margin-bottom: 14px; flex-wrap: wrap; }
-        .search-input { padding: 8px 14px; border: 1px solid var(--border); border-radius: 8px; font-family: inherit; font-size: 14px; width: 300px; outline: none; transition: border-color 0.2s; }
-        .search-input:focus { border-color: var(--green); }
-        .filter-chip { padding: 5px 12px; border: 1px solid var(--border); border-radius: 20px; font-size: 12px; cursor: pointer; background: var(--white); color: var(--text-sec); transition: all 0.2s; font-family: inherit; }
-        .filter-chip:hover { border-color: var(--green); color: var(--green); }
-        .filter-chip.active { background: var(--green); color: white; border-color: var(--green); }
-        .period-chip { padding: 5px 12px; border: 1px solid var(--border); border-radius: 20px; font-size: 12px; cursor: pointer; background: var(--white); color: var(--text-sec); transition: all 0.2s; font-family: inherit; }
-        .period-chip:hover { border-color: var(--blue); color: var(--blue); }
-        .period-chip.active { background: var(--blue); color: white; border-color: var(--blue); }
-        .dir-chip { padding: 5px 12px; border: 1px solid var(--border); border-radius: 20px; font-size: 12px; cursor: pointer; background: var(--white); transition: all 0.2s; font-family: inherit; }
+        .search-input { padding: 8px 14px; border: none; border-radius: 8px; font-family: inherit; font-size: 14px; width: 300px; outline: none; transition: all 0.2s; background: var(--surface-low); }
+        .search-input:focus { background: var(--white); box-shadow: 0 0 0 2px rgba(0,194,129,0.2); }
+        .filter-chip { padding: 6px 14px; border: none; border-radius: 8px; font-size: 12px; cursor: pointer; background: var(--surface-low); color: var(--text-sec); transition: all 0.15s; font-family: inherit; }
+        .filter-chip:hover { background: var(--surface-high); color: var(--text); }
+        .filter-chip.active { background: var(--green); color: white; }
+        .period-chip { padding: 6px 14px; border: none; border-radius: 8px; font-size: 12px; cursor: pointer; background: var(--surface-low); color: var(--text-sec); transition: all 0.15s; font-family: inherit; }
+        .period-chip:hover { background: var(--surface-high); color: var(--text); }
+        .period-chip.active { background: var(--blue); color: white; }
+        .dir-chip { padding: 6px 14px; border: none; border-radius: 8px; font-size: 12px; cursor: pointer; background: var(--surface-low); transition: all 0.15s; font-family: inherit; }
         .dir-chip.up { color: var(--green); }
         .dir-chip.down { color: var(--red); }
-        .dir-chip.active.up { background: var(--green); color: white; border-color: var(--green); }
-        .dir-chip.active.down { background: var(--red); color: white; border-color: var(--red); }
-        .signal-chip { padding: 5px 12px; border: 1px solid var(--border); border-radius: 20px; font-size: 12px; cursor: pointer; background: var(--white); transition: all 0.2s; font-family: inherit; color: var(--text-sec); }
-        .signal-chip:hover { border-color: var(--purple); color: var(--purple); }
-        .signal-chip.active { background: var(--purple); color: white; border-color: var(--purple); }
+        .dir-chip.active.up { background: var(--green); color: white; }
+        .dir-chip.active.down { background: var(--red); color: white; }
+        .signal-chip { padding: 6px 14px; border: none; border-radius: 8px; font-size: 12px; cursor: pointer; background: var(--surface-low); transition: all 0.15s; font-family: inherit; color: var(--text-sec); }
+        .signal-chip:hover { background: var(--surface-high); color: var(--purple); }
+        .signal-chip.active { background: var(--purple); color: white; }
         .min-owners-select { padding: 5px 10px; border: 1px solid var(--border); border-radius: 8px; font-size: 12px; font-family: inherit; color: var(--text-sec); background: var(--white); cursor: pointer; }
 
         /* ── Table ──── */
-        .table-container { background: var(--white); border-radius: var(--radius); box-shadow: var(--shadow); overflow-x: auto; }
+        .table-container { background: var(--white); border-radius: var(--radius); overflow-x: auto; border: 1px solid rgba(0,0,0,0.04); }
         table { width: 100%; border-collapse: collapse; }
         thead { position: relative; z-index: 2; }
-        th { padding: 10px 14px; text-align: left; font-size: 11px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.3px; border-bottom: 2px solid var(--border); cursor: pointer; user-select: none; background: var(--white); white-space: nowrap; }
+        th { padding: 12px 14px; text-align: left; font-size: 10px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; border-bottom: none; cursor: pointer; user-select: none; background: var(--surface-low); white-space: nowrap; }
         th:hover { color: var(--text); }
         th.sorted { color: var(--green); }
-        td { padding: 10px 14px; border-bottom: 1px solid var(--border-light); font-size: 13px; }
+        td { padding: 12px 14px; border-bottom: none; font-size: 13px; }
         tr:last-child td { border-bottom: none; }
-        tr:hover { background: #fafafa; }
+        tr:hover { background: var(--surface-low); }
         .stock-name { font-weight: 600; color: var(--text); cursor: pointer; transition: color 0.15s; }
         .stock-name:hover { color: var(--blue); text-decoration: underline; }
         .stock-ticker { font-size: 11px; color: var(--text-muted); }
@@ -101,12 +103,12 @@
         .num-zero { color: var(--text-muted); }
 
         /* ── Badges ──── */
-        .badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 600; }
-        .badge-buy { background: var(--green-light); color: var(--green); }
-        .badge-sell { background: var(--red-light); color: var(--red); }
-        .badge-strong-buy { background: #00a870; color: white; }
+        .badge { display: inline-block; padding: 3px 10px; border-radius: 6px; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.3px; }
+        .badge-buy { background: rgba(0,194,129,0.12); color: var(--green-dark); }
+        .badge-sell { background: rgba(190,0,51,0.12); color: var(--red); }
+        .badge-strong-buy { background: var(--green-dark); color: white; }
         .badge-strong-sell { background: var(--red); color: white; }
-        .badge-hold { background: #f5f5f5; color: var(--text-sec); }
+        .badge-hold { background: var(--surface-low); color: var(--text-muted); }
 
         /* ── Score Bar ──── */
         .score-bar { width: 80px; height: 8px; background: #f0f0f0; border-radius: 4px; display: inline-block; vertical-align: middle; position: relative; overflow: hidden; }
@@ -164,14 +166,14 @@
         /* ── Drawer ──── */
         .drawer-overlay { position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.3);z-index:200;opacity:0;visibility:hidden;transition:opacity 0.3s,visibility 0.3s; }
         .drawer-overlay.open { opacity:1;visibility:visible; }
-        .drawer { position:fixed;top:0;right:0;bottom:0;width:520px;max-width:92vw;background:var(--white);z-index:201;box-shadow:-4px 0 24px rgba(0,0,0,0.12);transform:translateX(100%);transition:transform 0.3s ease;overflow-y:auto;display:flex;flex-direction:column; }
+        .drawer { position:fixed;top:0;right:0;bottom:0;width:520px;max-width:92vw;background:var(--white);z-index:201;box-shadow: -8px 0 32px rgba(25,28,29,0.06);transform:translateX(100%);transition:transform 0.3s ease;overflow-y:auto;display:flex;flex-direction:column; }
         .drawer.open { transform:translateX(0); }
-        .drawer-header { padding:20px 24px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:flex-start;position:sticky;top:0;background:var(--white);z-index:1; }
+        .drawer-header { padding:20px 24px;border-bottom: none;background: var(--surface-low);display:flex;justify-content:space-between;align-items:flex-start;position:sticky;top:0;z-index:1; }
         .drawer-close { background:none;border:none;font-size:20px;cursor:pointer;color:var(--text-muted);padding:4px 8px;border-radius:6px; }
         .drawer-close:hover { background:var(--bg);color:var(--text); }
         .drawer-body { padding:0 24px 24px;flex:1; }
         .drawer-section { margin-top:20px; }
-        .drawer-section-title { font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;color:var(--text-muted);margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid var(--border-light); }
+        .drawer-section-title { font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;color:var(--text-muted);margin-bottom:10px;padding-bottom:6px;border-bottom:none; }
         .drawer-grid { display:grid;grid-template-columns:1fr 1fr;gap:8px; }
         .drawer-grid-3 { display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px; }
         .drawer-item { background:var(--bg);border-radius:8px;padding:10px 12px; }
@@ -181,7 +183,7 @@
         /* ── Market Status ──── */
         .market-status { display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; padding: 4px 10px; border-radius: 12px; }
         .market-status.open { background: var(--green-light); color: var(--green-dark); }
-        .market-status.closed { background: #f5f5f5; color: var(--text-muted); }
+        .market-status.closed { background: var(--surface-low); color: var(--text-muted); }
         .market-dot { width: 8px; height: 8px; border-radius: 50%; }
         .market-dot.open { background: var(--green); animation: pulse 2s infinite; }
         .market-dot.closed { background: var(--text-muted); }
@@ -190,8 +192,8 @@
         /* ── Btn Group ──── */
         .btn-group { display: flex; gap: 0; }
         .btn-group .refresh-btn { border-radius: 0; }
-        .btn-group .refresh-btn:first-child { border-radius: 20px 0 0 20px; }
-        .btn-group .refresh-btn:last-child { border-radius: 0 20px 20px 0; }
+        .btn-group .refresh-btn:first-child { border-radius: 8px 0 0 8px; }
+        .btn-group .refresh-btn:last-child { border-radius: 0 8px 8px 0; }
         .btn-insider { background: var(--purple); font-size: 11px; padding: 8px 12px; }
         .btn-insider:hover { background: #6d28d9; }
 
@@ -273,15 +275,15 @@
     <div class="cards" id="cards"></div>
 
     <div class="tabs">
-        <button class="tab active" onclick="switchTab('signals', this)">Edge Signals</button>
-        <button class="tab" onclick="switchTab('stocks', this)">Alla aktier</button>
-        <button class="tab" onclick="switchTab('hotmovers', this)" style="background:#FFF3E0;color:#E65100">Hot Movers</button>
-        <button class="tab" onclick="switchTab('trending', this)">Trending</button>
-        <button class="tab" onclick="switchTab('insiders', this)">Insiders</button>
-        <button class="tab" onclick="switchTab('ocf', this)" style="background:var(--green-light);color:var(--green-dark)">Kassaflöde</button>
-        <button class="tab" onclick="switchTab('portfolio', this)" style="background:var(--purple-light);color:var(--purple)">Simulering</button>
-        <button class="tab" onclick="switchTab('myportfolio', this)" style="background:var(--orange-light);color:var(--orange)">Min Portfölj</button>
-        <button class="tab" onclick="switchTab('aitoplist', this)" style="background:linear-gradient(135deg,#f0e8ff,#e8eeff);color:var(--purple)">AI Topplista</button>
+        <button class="tab active" onclick="switchTab('signals', this)">⚡ Edge Signals</button>
+        <button class="tab" onclick="switchTab('stocks', this)">📊 Alla aktier</button>
+        <button class="tab" onclick="switchTab('hotmovers', this)">🔥 Hot Movers</button>
+        <button class="tab" onclick="switchTab('trending', this)">📈 Trending</button>
+        <button class="tab" onclick="switchTab('insiders', this)">🔍 Insiders</button>
+        <button class="tab" onclick="switchTab('ocf', this)">💰 Kassaflöde</button>
+        <button class="tab" onclick="switchTab('portfolio', this)">🎯 Simulering</button>
+        <button class="tab" onclick="switchTab('myportfolio', this)">📁 Min Portfölj</button>
+        <button class="tab" onclick="switchTab('aitoplist', this)">🤖 AI Topplista</button>
     </div>
 
     <div class="filter-bar" id="filterBar"></div>
@@ -714,7 +716,7 @@ function switchTab(tab, el) {
     document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
     if (el) { el.classList.add('active'); }
     else {
-        const tabMap = {portfolio:'Simulering',signals:'Edge Signals',stocks:'Alla aktier',ocf:'Kassaflöde',myportfolio:'Min Portfölj',aitoplist:'AI Topplista',hotmovers:'Hot Movers'};
+        const tabMap = {portfolio:'🎯 Simulering',signals:'⚡ Edge Signals',stocks:'📊 Alla aktier',ocf:'💰 Kassaflöde',myportfolio:'📁 Min Portfölj',aitoplist:'🤖 AI Topplista',hotmovers:'🔥 Hot Movers',trending:'📈 Trending',insiders:'🔍 Insiders'};
         const lbl = tabMap[tab];
         if (lbl) document.querySelectorAll('.tab').forEach(t => { if (t.textContent.trim() === lbl) t.classList.add('active'); });
     }
@@ -2454,18 +2456,64 @@ function renderAIToplist() {
     `;
 }
 
+// ── Prefetch all tabs for instant switching ──────────────
+
+async function prefetchAllTabs() {
+    const urls = [
+        {tab:'signals', url:'/api/signals?country=SE&sort=meta&order=desc&limit=50&offset=0&min_owners=10&signal=&action=', dataKey:'signals'},
+        {tab:'stocks', url:'/api/stocks?q=&country=&sort=owners&order=desc&limit=50&offset=0&min_owners=0', dataKey:'stocks'},
+        {tab:'hotmovers', url:'/api/hot-movers?direction=up&lookback=1&limit=50&offset=0&min_owners=100&country=', dataKey:'stocks'},
+        {tab:'trending', url:'/api/trending?period=1m&direction=up&limit=50&offset=0&min_owners=10', dataKey:'stocks'},
+        {tab:'insiders', url:'/api/insiders?q=&type=&limit=50&offset=0', dataKey:'transactions'},
+        {tab:'portfolio', url:'/api/simulation', dataKey:null},
+    ];
+
+    const fetches = urls.map(async ({tab, url, dataKey}) => {
+        try {
+            const data = await (await fetch(url)).json();
+            // Build cache keys that match what fetchData() generates
+            if (tab === 'signals') {
+                const params = {country:'SE', sort:'meta', order:'desc', limit:50, offset:0, min_owners:10, signal:'', action:''};
+                setCache(cacheKey('signals', params), data);
+            } else if (tab === 'stocks') {
+                const params = {q:'', country:'', sort:'owners', order:'desc', limit:50, offset:0, min_owners:0};
+                setCache(cacheKey('stocks', params), data);
+            } else if (tab === 'hotmovers') {
+                const params = {direction:'up', lookback:1, limit:50, offset:0, min_owners:100, country:''};
+                setCache(cacheKey('hotmovers', params), data);
+            } else if (tab === 'trending') {
+                const params = {period:'1m', direction:'up', limit:50, offset:0, min_owners:10};
+                setCache(cacheKey('trending', params), data);
+            } else if (tab === 'insiders') {
+                const params = {q:'', type:'', limit:50, offset:0};
+                setCache(cacheKey('insiders', params), data);
+            } else if (tab === 'portfolio') {
+                setCache(cacheKey('portfolio', {}), data);
+            }
+        } catch(e) { console.warn('Prefetch ' + tab + ' failed:', e); }
+    });
+    await Promise.all(fetches);
+}
+
 // ── Init ──────────────────────────────────────────
 
 async function init() {
+    // Start prefetching ALL tabs in background immediately
+    const prefetchPromise = prefetchAllTabs();
+
     await fetchStatus();
     renderFilterBar();
+
+    // Wait for prefetch to finish (or at least signals tab)
+    await prefetchPromise;
+
+    // Render current tab (will hit cache = instant)
     await fetchData();
 
     // Auto-refresh: poll varje 60s, only when a market is open
     setInterval(async () => {
         await fetchStatus();
         if (isAnyMarketOpen() && ['signals','portfolio','stocks','trending','ocf','hotmovers'].includes(currentTab)) {
-            // Invalidate cache for current tab so we get fresh data
             Object.keys(_tabCache).forEach(k => { if (k.startsWith(currentTab + '|')) delete _tabCache[k]; });
             await fetchData();
         }
