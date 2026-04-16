@@ -1488,6 +1488,26 @@ def _clamp(v, lo=0.0, hi=100.0):
         return None
     return max(lo, min(hi, v))
 
+
+def _is_pref_share(name):
+    """True om aktien är preferens-/utdelningsaktie eller klass D.
+
+    Pref-aktier har kapat uppåt-potential (fast utdelning) och hör inte hemma
+    i bokmodeller som värderar tillväxt/kvalitet — Graham, Buffett, Lynch,
+    Klarman och Magic Formula är alla skrivna om stamaktier.
+
+    Klass D på svenska marknaden är typiskt preferens (Sagax D, Klövern D, etc.).
+    """
+    if not name:
+        return False
+    n = name.lower()
+    if " pref" in n or n.endswith(" pref"):
+        return True
+    if n.endswith(" d"):
+        return True
+    return False
+
+
 def _score_book_models(s):
     """Returnerar dict {model_key: 0-100 score (eller None)} + composite.
 
@@ -2122,24 +2142,12 @@ def get_graham_defensive_portfolio(db, limit=20, country=""):
 
     rows = _fetchall(db, f"SELECT * FROM stocks {where}", params)
 
-    # Filtrera pref-aktier och klass-D/preferensaktier (Graham skriver om stamaktier)
-    def _is_pref(name):
-        if not name:
-            return False
-        n = name.lower()
-        if " pref" in n or n.endswith(" pref"):
-            return True
-        # Klass D = typiskt preferens på svenska marknaden (Sagax D, Klövern D, etc.)
-        if n.endswith(" d"):
-            return True
-        return False
-
     qualified = []
     seen_base = set()  # dedup A/B — behåll högst-ranked klass per bolag
     for r in rows:
         d = dict(r)
         name = d.get("name") or ""
-        if _is_pref(name):
+        if _is_pref_share(name):
             continue
         pe = d.get("pe_ratio")
         pb = d.get("price_book_ratio")
@@ -2213,6 +2221,9 @@ def get_quality_concentrated_portfolio(db, limit=8, country=""):
     qualified = []
     for r in rows:
         d = dict(r)
+        # Pref-aktier / klass-D hör inte hemma i Buffett-kvalitetsportfölj
+        if _is_pref_share(d.get("name") or ""):
+            continue
         de = d.get("debt_to_equity_ratio")
         nd = d.get("net_debt_ebitda_ratio")
         # Buffett skuld-test: kräver minst EN verifierad låg skuldmätare
@@ -2322,6 +2333,9 @@ def get_model_toplist(db, model="composite", limit=20, min_owners=100, country="
     scored = []
     for r in rows:
         d = dict(r)
+        # Filtrera bort pref-aktier och klass-D — bokmodellerna handlar om stamaktier
+        if _is_pref_share(d.get("name") or ""):
+            continue
         sc = _score_book_models(d)
         v = sc.get(model)
         if v is None:
@@ -2353,6 +2367,9 @@ def get_daily_picks(db, limit=5, min_owners=200, min_composite=70, min_models=7)
     picks = []
     for r in rows:
         d = dict(r)
+        # Pref-aktier hör inte hemma i dagens picks (bokmodellerna antar stamaktier)
+        if _is_pref_share(d.get("name") or ""):
+            continue
         sc = _score_book_models(d)
         comp = sc.get("composite")
         avail = sc.get("models_available", 0)
