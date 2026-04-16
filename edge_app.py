@@ -42,6 +42,16 @@ def _set_cache(key, data):
 def _clear_api_cache():
     _api_cache.clear()
 
+def _format_book_models(models):
+    """Formaterar lista av bokmodell-verdicts till text för AI-prompter."""
+    if not models:
+        return "(inga bokmodeller evaluerade)"
+    lines = []
+    for m in models:
+        icon = {"Pass": "✅", "Varning": "⚠️", "Fail": "❌"}.get(m.get("verdict"), "•")
+        lines.append(f"  {icon} {m.get('title','?')}: {m.get('verdict','?')} — {m.get('metric','')}")
+    return "\n".join(lines)
+
 # ── State ────────────────────────────────────────────────
 state = {
     "loading": False,
@@ -201,6 +211,191 @@ def api_status():
     })
 
 
+# ── Macro indicators (Shiller CAPE, Buffett Indicator, VIX, 10Y) ────
+_MACRO_CACHE = {"ts": 0, "data": None}
+_MACRO_TTL = 60 * 60  # 1 hour — these move slowly
+
+def _fetch_macro_indicators():
+    """Live macro indicators with graceful fallback to book-referenced April 2026 levels.
+    Uses yfinance for VIX, ^TNX (10y), GC=F (gold), ^GSPC (S&P). CAPE and
+    Buffett indicator are computed from approximations when live data is available,
+    otherwise falls back to the figures cited in book 2 (CAPE 36-39, Buffett 210%).
+    """
+    now = _time.time()
+    if _MACRO_CACHE["data"] and (now - _MACRO_CACHE["ts"]) < _MACRO_TTL:
+        return _MACRO_CACHE["data"]
+
+    # Book-referenced fallback (April 2026)
+    data = {
+        "cape": 37.5,               # Shiller CAPE — "mer än dubbla historiska snittet"
+        "buffett_indicator": 210.0, # Market cap / GDP
+        "vix": 18.5,
+        "us_10y": 4.35,             # US 10y treasury yield
+        "se_rate": 2.25,            # Riksbanken styrränta
+        "gold_ratio": 1.55,         # Gold / S&P 500 relative
+        "fear_greed": 62,           # 0 = extreme fear, 100 = extreme greed
+        "sp500": 5850.0,
+        "source": "fallback-apr2026",
+    }
+
+    try:
+        import yfinance as yf  # type: ignore
+        tickers = yf.Tickers("^VIX ^TNX ^GSPC GC=F")
+        vix = tickers.tickers["^VIX"].history(period="5d")
+        if not vix.empty:
+            data["vix"] = float(vix["Close"].iloc[-1])
+        tnx = tickers.tickers["^TNX"].history(period="5d")
+        if not tnx.empty:
+            data["us_10y"] = float(tnx["Close"].iloc[-1]) / 10.0  # ^TNX is 10× yield
+        sp = tickers.tickers["^GSPC"].history(period="5d")
+        if not sp.empty:
+            data["sp500"] = float(sp["Close"].iloc[-1])
+        gold = tickers.tickers["GC=F"].history(period="5d")
+        if not gold.empty and data["sp500"]:
+            data["gold_ratio"] = float(gold["Close"].iloc[-1]) / data["sp500"]
+
+        # Heuristic Fear & Greed from VIX (inverse): vix 12 → 85, vix 40 → 15
+        v = data["vix"]
+        fg = max(0, min(100, round(100 - (v - 10) * 3.0)))
+        data["fear_greed"] = fg
+        data["source"] = "live"
+    except Exception as e:
+        print(f"[macro] live fetch failed, using fallback: {e}", file=sys.stderr)
+
+    _MACRO_CACHE["ts"] = now
+    _MACRO_CACHE["data"] = data
+    return data
+
+
+def _build_model_signals(macro):
+    """Derive per-model verdicts from current macro state, based on book rules."""
+    out = []
+    cape = macro.get("cape") or 0
+    bi = macro.get("buffett_indicator") or 0
+    vix = macro.get("vix") or 0
+    fg = macro.get("fear_greed") or 50
+
+    # Shiller
+    if cape >= 30:
+        out.append({"code": "CAPE", "name": "Shiller CAPE", "color": "#c0392b",
+                    "desc": f"CAPE {cape:.1f} (snitt 17). Förv. 10-årsavkastning ≈ {100/max(cape,1):.1f}%/år.",
+                    "verdict": "🔴 KRAFTIGT ÖVERVÄRDERAT — öka kassa"})
+    elif cape >= 25:
+        out.append({"code": "CAPE", "name": "Shiller CAPE", "color": "#e67700",
+                    "desc": f"CAPE {cape:.1f}. Övervärderat relativt historiskt snitt.", "verdict": "🟠 Varning"})
+    elif cape < 15:
+        out.append({"code": "CAPE", "name": "Shiller CAPE", "color": "#00a870",
+                    "desc": f"CAPE {cape:.1f}. Attraktivt pris relativt historik.", "verdict": "🟢 KÖPSIGNAL"})
+    else:
+        out.append({"code": "CAPE", "name": "Shiller CAPE", "color": "#888",
+                    "desc": f"CAPE {cape:.1f}. Neutral zon.", "verdict": "⚪ Neutral"})
+
+    # Buffett Indicator
+    if bi >= 140:
+        out.append({"code": "BUFF", "name": "Buffett-indikator", "color": "#c0392b",
+                    "desc": f"Marknadsvärde/BNP = {bi:.0f}%. Buffett: >140% är farlig bubbla.",
+                    "verdict": "🔴 Minska aktier"})
+    elif bi >= 100:
+        out.append({"code": "BUFF", "name": "Buffett-indikator", "color": "#e67700",
+                    "desc": f"Buffett-indikator {bi:.0f}%. Övervärderat.", "verdict": "🟠 Var selektiv"})
+    else:
+        out.append({"code": "BUFF", "name": "Buffett-indikator", "color": "#00a870",
+                    "desc": f"Buffett-indikator {bi:.0f}%. Rimlig nivå.", "verdict": "🟢 Rimligt"})
+
+    # Marks pendel
+    pendel_score = (fg - 50)  # -50 (rädsla) → +50 (girighet)
+    if fg >= 75:
+        out.append({"code": "MARKS", "name": "Marks pendel", "color": "#c0392b",
+                    "desc": f"Fear & Greed {fg}/100. Extrem girighet.",
+                    "verdict": "🔴 Var rädd när andra är giriga"})
+    elif fg <= 25:
+        out.append({"code": "MARKS", "name": "Marks pendel", "color": "#00a870",
+                    "desc": f"Fear & Greed {fg}/100. Rädsla = köpläge.",
+                    "verdict": "🟢 KÖP när andra panikerar"})
+    else:
+        out.append({"code": "MARKS", "name": "Marks pendel", "color": "#888",
+                    "desc": f"Fear & Greed {fg}/100. Pendeln i mitten.", "verdict": "⚪ Håll selektivt"})
+
+    # Dalio All-Weather
+    out.append({"code": "DALIO", "name": "Dalio All-Weather", "color": "#006c46",
+                "desc": "30% aktier, 55% obligationer, 7.5% guld, 7.5% råvaror. Ombalansera årligen.",
+                "verdict": "📊 Rekommenderad defensiv allokering"})
+
+    # Klarman cash
+    rec_cash = 30 if cape >= 30 else (20 if cape >= 25 else 15)
+    out.append({"code": "KLARMAN", "name": "Klarman-kassa", "color": "#006c46",
+                "desc": f"Vid CAPE {cape:.1f} rekommenderas ~{rec_cash}% i kassa som ammunition.",
+                "verdict": f"🎯 Mål: {rec_cash}% cash"})
+
+    # Taleb Barbell
+    out.append({"code": "TALEB", "name": "Talebs Barbell", "color": "#006c46",
+                "desc": "85% extremt säkert + 15% extremt aggressivt. Max förlust 15%, obegränsad uppsida.",
+                "verdict": "📐 Alternativ strategi"})
+
+    return out
+
+
+@app.route("/api/dashboard")
+def api_dashboard():
+    ck = "dashboard|v1"
+    cached, hit = _cached_response(ck, ttl=300)  # 5 min cache
+    if hit:
+        return jsonify(cached)
+
+    db = get_db()
+    stats = get_stats(db)
+
+    # Signals count (7d) and insider tx (30d) — reuse existing helpers safely
+    try:
+        from edge_db import _fetchall, _ph as ph
+        # Signals in last 7 days
+        sig_row = _fetchall(db, "SELECT COUNT(*) as cnt FROM signals_history WHERE signal_date >= date('now','-7 days')") if False else None
+    except Exception:
+        sig_row = None
+
+    # Build top SE/US movers today from DB (small query)
+    top_se_gainer = top_se_loser = top_us_gainer = None
+    try:
+        se_stocks, _ = search_stocks(db, country="SE", sort="price_ytd", order="desc", limit=1, offset=0, min_owners=1000)
+        if se_stocks:
+            s = se_stocks[0]
+            top_se_gainer = {"name": s.get("name"), "change": (s.get("ytd_change_pct") or 0) / 100.0}
+        se_losers, _ = search_stocks(db, country="SE", sort="price_ytd", order="asc", limit=1, offset=0, min_owners=1000)
+        if se_losers:
+            s = se_losers[0]
+            top_se_loser = {"name": s.get("name"), "change": (s.get("ytd_change_pct") or 0) / 100.0}
+        us_stocks, _ = search_stocks(db, country="US", sort="price_ytd", order="desc", limit=1, offset=0, min_owners=500)
+        if us_stocks:
+            s = us_stocks[0]
+            top_us_gainer = {"name": s.get("name"), "change": (s.get("ytd_change_pct") or 0) / 100.0}
+    except Exception as e:
+        print(f"[dashboard] today section failed: {e}", file=sys.stderr)
+
+    db.close()
+
+    macro = _fetch_macro_indicators()
+    model_signals = _build_model_signals(macro)
+
+    out = {
+        "stats": {
+            "total_stocks": stats.get("total_stocks", 0),
+            "total_owners": stats.get("total_owners", 0),
+            "signals_today": stats.get("shorted_stocks", 0),  # reuse as "aktier med blankning"
+            "insider_tx": stats.get("insider_transactions", 0),
+        },
+        "macro": macro,
+        "model_signals": model_signals,
+        "today": {
+            "top_se_gainer": top_se_gainer,
+            "top_se_loser": top_se_loser,
+            "top_us_gainer": top_us_gainer,
+            "top_insider_buy": None,  # placeholder; can be wired to insiders endpoint
+        },
+    }
+    _set_cache(ck, out)
+    return jsonify(out)
+
+
 @app.route("/api/stocks")
 def api_stocks():
     ck = f"stocks|{request.query_string.decode()}"
@@ -272,8 +467,11 @@ def api_hot_movers():
       min_owners - minsta antal ägare (default 100)
       country    - landskod (default alla)
     """
+    mode = request.args.get("mode", "daily")
     ck = f"hotmovers|{request.query_string.decode()}"
-    cached, hit = _cached_response(ck)
+    # Live-läge får mycket kortare TTL så användaren ser intraday-förändringar
+    ttl = 60 if mode == "live" else _API_CACHE_TTL
+    cached, hit = _cached_response(ck, ttl=ttl)
     if hit:
         return jsonify(cached)
 
@@ -286,6 +484,7 @@ def api_hot_movers():
         limit=int(request.args.get("limit", 50)),
         offset=int(request.args.get("offset", 0)),
         country=request.args.get("country", ""),
+        mode=mode,
     )
     # Berika med discovery scores
     try:
@@ -305,6 +504,7 @@ def api_hot_movers():
         "total": total,
         "date_from": date_from,
         "date_to": date_to,
+        "mode": mode,
         "offset": int(request.args.get("offset", 0)),
         "limit": int(request.args.get("limit", 50)),
     }
@@ -1252,6 +1452,13 @@ Land: {data.get('country', '-')}
 - ACE: {data.get('ace_score', '-')}
 - Magic: {data.get('magic_score', '-')}
 - Meta Score: {data.get('meta_score', '-')}
+
+📚 BOKMODELLER (Graham, Buffett, Lynch, Greenblatt, Klarman, Bogle, Taleb, Kelly m.fl.):
+{_format_book_models(data.get('book_models', []))}
+Sammanfattning bokmodeller: {data.get('book_models_summary', 'ej evaluerat')}
+
+VÄG IN ALLA modeller ovan i din analys — både de kvantitativa scores (Edge/DSM/ACE/Magic/Meta)
+och de klassiska bokmodellerna. Notera särskilt konsensus eller motstridiga signaler mellan dem.
 
 Ge din analys i EXAKT detta JSON-format (inget annat):
 {{

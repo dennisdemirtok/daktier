@@ -1378,13 +1378,36 @@ def search_stocks(db, query="", country="", sort="owners", order="desc",
     sort_col = sort_map.get(sort, "number_of_owners")
     order_dir = "ASC" if order == "asc" else "DESC"
 
+    # NULL handling: always push NULL values to the end, regardless of direction.
+    # PostgreSQL: DESC defaults to NULLS FIRST — explicitly use NULLS LAST to avoid
+    # stocks with missing OCF/ROE/etc appearing at the top of rankings.
+    # SQLite: supports NULLS LAST as of 3.30 (2019). We use it unconditionally.
+    nulls_clause = "NULLS LAST"
+    # For sort columns that typically have NULL values, also filter non-null
+    # when sorting descending so blank rows never rank #1 in a top-list.
+    null_sensitive = {
+        "operating_cash_flow", "return_on_equity", "return_on_capital_employed",
+        "pe_ratio", "direct_yield", "rsi14", "ytd_change_pct", "market_cap",
+        "short_selling_ratio",
+    }
+
     total_row = _fetchone(db, f"SELECT COUNT(*) as cnt FROM stocks {where_clause}", params if params else None)
     total = total_row["cnt"] if _use_postgres() else total_row[0]
 
+    # When ranking a null-sensitive column descending, exclude NULL rows from
+    # the returned page so the top-list is meaningful. Keep total count intact
+    # so pagination still reflects full universe.
+    extra_where = ""
+    if sort_col in null_sensitive and order_dir == "DESC":
+        if where_clause.strip().upper().startswith("WHERE"):
+            extra_where = f" AND {sort_col} IS NOT NULL"
+        else:
+            extra_where = f" WHERE {sort_col} IS NOT NULL"
+
     sql = f"""
         SELECT * FROM stocks
-        {where_clause}
-        ORDER BY {sort_col} {order_dir}
+        {where_clause}{extra_where}
+        ORDER BY {sort_col} {order_dir} {nulls_clause}
         LIMIT {ph} OFFSET {ph}
     """
     params.extend([limit, offset])
@@ -1432,10 +1455,77 @@ def get_trending(db, period="1m", direction="up", limit=50, offset=0, min_owners
     return [dict(r) for r in rows], total
 
 
-def get_hot_movers(db, direction="up", lookback=1, min_owners=100, limit=50, offset=0, country=""):
-    """Hot Movers — daglig ägarförändring beräknad från egna owner_snapshots."""
+def get_hot_movers(db, direction="up", lookback=1, min_owners=100, limit=50, offset=0, country="", mode="daily"):
+    """Hot Movers — ägarförändring.
+
+    mode="daily" (default): snapshot-mot-snapshot (lookback dagar bakåt).
+    mode="live":  live stocks.number_of_owners mot senaste snapshot (intraday/realtime).
+    """
     ph = _ph()
 
+    # ── Live-läge: jämför live-kolumnen mot senaste snapshot ──
+    if mode == "live":
+        latest_row = _fetchone(db, "SELECT MAX(date) as d FROM owner_snapshots")
+        latest = latest_row["d"] if _use_postgres() else (latest_row[0] if latest_row else None)
+        if not latest:
+            return [], 0, None, None
+
+        country_filter = ""
+        params = [min_owners, latest]
+        if country:
+            country_filter = f"AND st.country = {ph}"
+            params.append(country)
+
+        direction_filter = (
+            "AND (st.number_of_owners - s.number_of_owners) > 0" if direction == "up"
+            else "AND (st.number_of_owners - s.number_of_owners) < 0"
+        )
+        order = "DESC" if direction == "up" else "ASC"
+
+        count_sql = f"""
+            SELECT COUNT(*) as cnt
+            FROM stocks st
+            JOIN owner_snapshots s ON st.orderbook_id = s.orderbook_id
+            WHERE st.number_of_owners >= {ph}
+            AND s.date = {ph}
+            AND s.number_of_owners > 0
+            {direction_filter}
+            {country_filter}
+        """
+        total_row = _fetchone(db, count_sql, params)
+        total = total_row["cnt"] if _use_postgres() else total_row[0]
+
+        data_sql = f"""
+            SELECT st.*,
+                   st.number_of_owners as snap_today,
+                   s.number_of_owners as snap_prev,
+                   (st.number_of_owners - s.number_of_owners) as owner_diff,
+                   CAST(st.number_of_owners - s.number_of_owners AS DOUBLE PRECISION) / s.number_of_owners as owner_diff_pct
+            FROM stocks st
+            JOIN owner_snapshots s ON st.orderbook_id = s.orderbook_id
+            WHERE st.number_of_owners >= {ph}
+            AND s.date = {ph}
+            AND s.number_of_owners > 0
+            {direction_filter}
+            {country_filter}
+            ORDER BY owner_diff_pct {order}
+            LIMIT {ph} OFFSET {ph}
+        """
+        rows = _fetchall(db, data_sql, params + [limit, offset])
+
+        results = []
+        for r in rows:
+            d = dict(r)
+            d["hot_diff"] = d["owner_diff"]
+            d["hot_diff_pct"] = d["owner_diff_pct"]
+            d["hot_from"] = d["snap_prev"]
+            d["hot_to"] = d["snap_today"]
+            d["hot_mode"] = "live"
+            results.append(d)
+
+        return results, total, "live", latest
+
+    # ── Dagligt snapshot-läge (default) ──
     dates_rows = _fetchall(db, f"SELECT DISTINCT date FROM owner_snapshots ORDER BY date DESC LIMIT {ph}", (lookback + 1,))
     if _use_postgres():
         dates = [r["date"] for r in dates_rows]

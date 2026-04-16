@@ -81,30 +81,60 @@
         .card-sub { font-size: 12px; color: var(--text-sec); }
 
         /* ── Tabs (inside content area) ──── */
-        .tabs { display: flex; gap: 6px; margin-bottom: 20px; padding-bottom: 0; flex-wrap: wrap; }
-        .tab { padding: 7px 16px; background: none; border: none; font-family: inherit; font-size: 13px; font-weight: 500; color: var(--text-muted); cursor: pointer; border-radius: 8px; transition: all 0.15s; white-space: nowrap; }
-        .tab:hover { color: var(--text); background: var(--surface-low); }
-        .tab.active { color: var(--text); background: var(--white); font-weight: 600; box-shadow: 0 1px 4px rgba(0,0,0,0.06); }
+        .tabs, .tab { display: none; }
+        .page-header { display:flex; align-items:flex-end; justify-content:space-between; margin:4px 0 20px; gap:16px; flex-wrap:wrap; }
+        .page-header-left { display:flex; flex-direction:column; gap:4px; }
+        .page-title { font-size:26px; font-weight:700; letter-spacing:-0.02em; color:var(--text); margin:0; }
+        .page-subtitle { font-size:13px; color:var(--text-muted); margin:0; font-weight:400; }
 
         /* ── Filter ──── */
-        .filter-bar { display: flex; gap: 8px; align-items: center; margin-bottom: 16px; flex-wrap: wrap; }
-        .search-input { padding: 8px 14px; border: none; border-radius: 8px; font-family: inherit; font-size: 13px; width: 280px; outline: none; transition: all 0.2s; background: var(--surface-low); }
-        .search-input:focus { background: var(--white); box-shadow: 0 0 0 2px rgba(0,194,129,0.15); }
-        .filter-chip { padding: 5px 12px; border: none; border-radius: 8px; font-size: 11px; cursor: pointer; background: var(--surface-low); color: var(--text-sec); transition: all 0.15s; font-family: inherit; font-weight: 500; }
-        .filter-chip:hover { background: var(--surface-high); color: var(--text); }
-        .filter-chip.active { background: var(--green); color: white; }
-        .period-chip { padding: 5px 12px; border: none; border-radius: 8px; font-size: 11px; cursor: pointer; background: var(--surface-low); color: var(--text-sec); transition: all 0.15s; font-family: inherit; font-weight: 500; }
-        .period-chip:hover { background: var(--surface-high); color: var(--text); }
-        .period-chip.active { background: var(--blue); color: white; }
-        .dir-chip { padding: 5px 12px; border: none; border-radius: 8px; font-size: 11px; cursor: pointer; background: var(--surface-low); transition: all 0.15s; font-family: inherit; font-weight: 500; }
-        .dir-chip.up { color: var(--green); }
+        .filter-bar { display: flex; gap: 10px; align-items: center; margin-bottom: 20px; flex-wrap: wrap; background: rgba(255,255,255,0.6); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); padding: 10px 12px; border-radius: 14px; }
+        .filter-group { display: inline-flex; align-items: center; gap: 4px; background: var(--surface-low); padding: 4px; border-radius: 10px; }
+        .filter-group.tight { gap: 2px; }
+        .filter-label { font-size: 9px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.8px; padding: 0 6px 0 10px; white-space: nowrap; }
+        .filter-divider { width: 1px; height: 20px; background: var(--surface-high); margin: 0 2px; opacity: 0.6; }
+        .search-input { padding: 8px 14px 8px 34px; border: none; border-radius: 10px; font-family: inherit; font-size: 13px; width: 280px; outline: none; transition: all 0.2s; background: var(--surface-low) url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%236c7b70'><path d='M15.5 14h-.79l-.28-.27a6.5 6.5 0 1 0-.7.7l.27.28v.79l5 4.99L20.49 19zM9.5 14A4.5 4.5 0 1 1 14 9.5 4.5 4.5 0 0 1 9.5 14'/></svg>") no-repeat 10px center; background-size: 16px; color: var(--text); }
+        .search-input::placeholder { color: var(--text-muted); }
+        .search-input:focus { background-color: var(--white); box-shadow: 0 0 0 2px rgba(0,194,129,0.18); }
+        .filter-chip, .period-chip, .dir-chip, .signal-chip { padding: 6px 12px; border: none; border-radius: 7px; font-size: 11px; cursor: pointer; background: transparent; color: var(--text-sec); transition: all 0.15s; font-family: inherit; font-weight: 600; letter-spacing: 0.1px; display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
+        .filter-chip:hover, .period-chip:hover, .signal-chip:hover, .dir-chip:hover { background: rgba(255,255,255,0.7); color: var(--text); }
+        .filter-chip.active { background: var(--green); color: white; box-shadow: 0 1px 2px rgba(0,108,70,0.2); }
+        .period-chip.active { background: var(--blue); color: white; box-shadow: 0 1px 2px rgba(0,53,199,0.2); }
+        .signal-chip.active { background: var(--purple); color: white; box-shadow: 0 1px 2px rgba(124,58,237,0.25); }
+        .dir-chip.up { color: var(--green-dark); }
         .dir-chip.down { color: var(--red); }
-        .dir-chip.active.up { background: var(--green); color: white; }
-        .dir-chip.active.down { background: var(--red); color: white; }
-        .signal-chip { padding: 5px 12px; border: none; border-radius: 8px; font-size: 11px; cursor: pointer; background: var(--surface-low); transition: all 0.15s; font-family: inherit; color: var(--text-sec); font-weight: 500; }
-        .signal-chip:hover { background: var(--surface-high); color: var(--purple); }
-        .signal-chip.active { background: var(--purple); color: white; }
-        .min-owners-select { padding: 5px 10px; border: none; border-radius: 8px; font-size: 11px; font-family: inherit; color: var(--text-sec); background: var(--surface-low); cursor: pointer; font-weight: 500; }
+        .dir-chip.active.up { background: var(--green); color: white; box-shadow: 0 1px 2px rgba(0,108,70,0.2); }
+        .dir-chip.active.down { background: var(--red); color: white; box-shadow: 0 1px 2px rgba(190,0,51,0.2); }
+        .min-owners-select { padding: 7px 28px 7px 12px; border: none; border-radius: 10px; font-size: 11px; font-family: inherit; color: var(--text-sec); background: var(--surface-low) url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%236c7b70'><path d='M7 10l5 5 5-5z'/></svg>") no-repeat right 6px center; background-size: 14px; cursor: pointer; font-weight: 600; appearance: none; -webkit-appearance: none; -moz-appearance: none; outline: none; transition: all 0.15s; }
+        .min-owners-select:hover { background-color: var(--surface-high); color: var(--text); }
+        .min-owners-select:focus { box-shadow: 0 0 0 2px rgba(0,194,129,0.18); background-color: var(--white); }
+        .filter-count { font-size: 10px; color: var(--text-muted); font-weight: 600; margin-left: auto; padding: 0 8px; font-variant-numeric: tabular-nums; }
+        .filter-reset { background: none; border: none; color: var(--text-muted); font-size: 11px; font-family: inherit; font-weight: 600; cursor: pointer; padding: 6px 10px; border-radius: 8px; transition: all 0.15s; display: inline-flex; align-items: center; gap: 4px; }
+        .filter-reset:hover { background: var(--red-light); color: var(--red); }
+        .filter-reset .material-symbols-outlined { font-size: 14px; }
+
+        /* ── Live indicator ──── */
+        .live-dot { width: 8px; height: 8px; border-radius: 50%; background: #E65100; display: inline-block; box-shadow: 0 0 0 0 rgba(230,81,0,0.6); animation: live-pulse 1.6s ease-out infinite; }
+        @keyframes live-pulse { 0% { box-shadow: 0 0 0 0 rgba(230,81,0,0.55);} 70% { box-shadow: 0 0 0 8px rgba(230,81,0,0);} 100% { box-shadow: 0 0 0 0 rgba(230,81,0,0);} }
+
+        /* ── Model Verdict cards (Bokmodeller i drawer) ──── */
+        .mv-stack { display: flex; flex-direction: column; gap: 6px; }
+        .model-verdict { background: var(--bg); border-radius: 10px; padding: 10px 12px; border-left: 3px solid var(--surface-high); }
+        .model-verdict.v-pass { border-left-color: var(--green); background: rgba(0,194,129,0.04); }
+        .model-verdict.v-warn { border-left-color: #f59e0b; background: rgba(245,158,11,0.05); }
+        .model-verdict.v-fail { border-left-color: var(--red); background: rgba(190,0,51,0.03); }
+        .mv-head { display: flex; align-items: center; gap: 10px; }
+        .mv-icon { font-size: 18px; flex-shrink: 0; }
+        .mv-title-wrap { flex: 1; min-width: 0; }
+        .mv-title { font-size: 12px; font-weight: 700; color: var(--text); line-height: 1.2; }
+        .mv-sub { font-size: 10px; color: var(--text-muted); margin-top: 2px; line-height: 1.2; }
+        .mv-badge { font-size: 10px; font-weight: 700; padding: 3px 8px; border-radius: 5px; white-space: nowrap; background: var(--white); flex-shrink: 0; }
+        .v-pass .mv-badge { color: var(--green-dark); }
+        .v-warn .mv-badge { color: #92400e; }
+        .v-fail .mv-badge { color: var(--red); }
+        .mv-metric { font-size: 11px; color: var(--text-sec); margin-top: 6px; padding-left: 28px; font-variant-numeric: tabular-nums; }
+        .mv-meter { height: 4px; background: rgba(0,0,0,0.06); border-radius: 2px; margin-top: 6px; overflow: hidden; }
+        .mv-meter-fill { height: 100%; transition: width 0.4s ease; }
 
         /* ── Table ──── */
         .table-container { background: var(--white); border-radius: var(--radius); overflow-x: auto; }
@@ -160,6 +190,76 @@
         /* ── Loading ──── */
         .loading-wrap { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 60px 20px; }
         .loading-spinner { width: 28px; height: 28px; border: 3px solid var(--surface-high); border-top-color: var(--green); border-radius: 50%; animation: spin 0.8s linear infinite; margin-bottom: 12px; }
+
+        /* ── Dashboard page ─────────────────────────────── */
+        .dash-grid { display: flex; flex-direction: column; gap: 28px; }
+        .dash-section { }
+        .dash-heading { font-size: 14px; font-weight: 600; color: var(--text); text-transform: uppercase; letter-spacing: 0.08em; margin: 0 0 14px; }
+        .dash-heading .dash-sub { font-weight: 400; text-transform: none; letter-spacing: 0; color: var(--text-muted); font-size: 12px; margin-left: 8px; }
+        .dash-top-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+        @media (max-width: 900px) { .dash-top-stats { grid-template-columns: repeat(2, 1fr); } }
+        .stat-tile { background: var(--white); border-radius: 12px; padding: 18px 18px; display: flex; flex-direction: column; gap: 6px; position: relative; transition: transform 0.15s; }
+        .stat-tile:hover { transform: translateY(-2px); }
+        .stat-icon { position: absolute; top: 14px; right: 14px; color: var(--green); opacity: 0.85; }
+        .stat-icon .material-symbols-outlined { font-size: 22px; }
+        .stat-val { font-size: 26px; font-weight: 700; color: var(--text); letter-spacing: -0.02em; }
+        .stat-lbl { font-size: 12px; color: var(--text-muted); font-weight: 500; }
+        .stat-skel { height: 82px; background: linear-gradient(90deg, var(--surface-low) 0%, var(--surface-high) 50%, var(--surface-low) 100%); background-size: 200% 100%; border-radius: 12px; animation: skeleton 1.2s infinite; }
+        @keyframes skeleton { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+
+        .dash-macro-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+        @media (max-width: 1100px) { .dash-macro-grid { grid-template-columns: repeat(2, 1fr); } }
+        @media (max-width: 700px) { .dash-macro-grid { grid-template-columns: 1fr; } }
+        .macro-card { background: var(--white); border-radius: 12px; padding: 16px 18px; display: flex; flex-direction: column; gap: 4px; }
+        .macro-label { font-size: 12px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.06em; font-weight: 600; }
+        .macro-label .macro-hint { text-transform: none; letter-spacing: 0; font-weight: 400; color: var(--text-sec); margin-left: 6px; }
+        .macro-value { font-size: 30px; font-weight: 700; color: var(--text); letter-spacing: -0.02em; line-height: 1.1; margin-top: 4px; }
+        .macro-zone { font-size: 13px; font-weight: 600; margin-top: 2px; }
+        .macro-note { font-size: 11px; color: var(--text-sec); margin-top: 6px; line-height: 1.4; }
+
+        .dash-model-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+        @media (max-width: 1100px) { .dash-model-grid { grid-template-columns: repeat(2, 1fr); } }
+        @media (max-width: 700px) { .dash-model-grid { grid-template-columns: 1fr; } }
+        .model-card { background: var(--white); border-radius: 12px; padding: 14px 16px; }
+        .model-card-hd { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
+        .model-badge { color: white; font-size: 11px; font-weight: 700; padding: 3px 8px; border-radius: 6px; letter-spacing: 0.03em; }
+        .model-name { font-size: 13px; font-weight: 600; color: var(--text); }
+        .model-desc { font-size: 12px; color: var(--text-muted); line-height: 1.5; }
+        .model-verdict { font-size: 13px; font-weight: 600; margin-top: 6px; }
+
+        .today-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+        @media (max-width: 900px) { .today-grid { grid-template-columns: repeat(2, 1fr); } }
+        .today-box { background: var(--white); border-radius: 12px; padding: 14px 16px; }
+        .today-label { font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600; margin-bottom: 4px; }
+        .today-val { font-size: 14px; font-weight: 600; }
+
+        /* ── Metrics tool ──────────────────────────────── */
+        .metrics-tabs { display: flex; gap: 6px; margin-bottom: 20px; }
+        .m-tab { padding: 8px 16px; background: none; border: none; font-family: inherit; font-size: 13px; font-weight: 600; color: var(--text-muted); cursor: pointer; border-radius: 8px; transition: all 0.15s; }
+        .m-tab:hover { background: var(--surface-low); }
+        .m-tab.active { background: var(--white); color: var(--text); box-shadow: 0 1px 4px rgba(0,0,0,0.06); }
+        .metrics-wrap { }
+        .section-heading { font-size: 15px; font-weight: 700; color: var(--text); margin: 0 0 14px; letter-spacing: -0.01em; }
+        .playbook-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; }
+        .playbook-card { background: var(--white); border-radius: 12px; padding: 14px 16px; border-left: 3px solid var(--green); }
+        .playbook-name { font-size: 13px; font-weight: 700; color: var(--text); margin-bottom: 4px; }
+        .playbook-desc { font-size: 12px; color: var(--text-muted); line-height: 1.5; margin-bottom: 6px; }
+        .playbook-weight { font-size: 11px; color: var(--green-dark); font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; }
+        .cat-block { margin-bottom: 20px; }
+        .cat-heading { font-size: 12px; font-weight: 700; color: var(--green-dark); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 8px; }
+        .m-table-wrap { background: var(--white); border-radius: 12px; overflow: hidden; }
+        .m-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+        .m-table thead { background: var(--surface-low); }
+        .m-table th { text-align: left; padding: 10px 14px; font-size: 11px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; }
+        .m-table td { padding: 10px 14px; border-top: 1px solid var(--surface-low); vertical-align: top; }
+        .m-code { display: inline-block; background: var(--surface-low); color: var(--text); font-family: 'SF Mono', Menlo, monospace; font-size: 11px; padding: 2px 6px; border-radius: 4px; font-weight: 600; }
+        .m-desc { color: var(--text-muted); line-height: 1.4; }
+        .m-rule { color: var(--green-dark); font-weight: 500; line-height: 1.4; }
+        .m-book { color: var(--text-sec); font-size: 12px; font-style: italic; }
+        .tips-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; }
+        .tip-card { background: var(--white); border-radius: 12px; padding: 14px 16px; }
+        .tip-hd { font-size: 12px; font-weight: 700; color: var(--green-dark); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 6px; }
+        .tip-body { font-size: 12px; color: var(--text); line-height: 1.5; }
         @keyframes spin { to { transform: rotate(360deg); } }
         .load-more { display: flex; justify-content: center; padding: 20px; }
         .load-more-spinner { width: 24px; height: 24px; border: 2px solid var(--surface-high); border-top-color: var(--green); border-radius: 50%; animation: spin 0.8s linear infinite; }
@@ -325,7 +425,11 @@
     <div class="sidebar-section-label">Verktyg</div>
     <div class="sidebar-sublabel">Edge Signals Analytics</div>
     <nav class="sidebar-nav">
-        <button class="sidebar-item active" onclick="sidebarNav('signals', this)" data-tab="signals">
+        <button class="sidebar-item active" onclick="sidebarNav('dashboard', this)" data-tab="dashboard">
+            <span class="material-symbols-outlined">space_dashboard</span>
+            Dashboard
+        </button>
+        <button class="sidebar-item" onclick="sidebarNav('signals', this)" data-tab="signals">
             <span class="material-symbols-outlined">electric_bolt</span>
             Edge Signals
         </button>
@@ -346,6 +450,11 @@
             Insiders
         </button>
         <div class="sidebar-divider"></div>
+        <div class="sidebar-section-label" style="margin-top:8px">Analys</div>
+        <button class="sidebar-item" onclick="sidebarNav('metrics', this)" data-tab="metrics">
+            <span class="material-symbols-outlined">functions</span>
+            Nyckeltal
+        </button>
         <button class="sidebar-item" onclick="sidebarNav('ocf', this)" data-tab="ocf">
             <span class="material-symbols-outlined">account_balance</span>
             Kassaflöde
@@ -378,16 +487,11 @@
 <div class="container">
     <div class="cards" id="cards"></div>
 
-    <div class="tabs">
-        <button class="tab active" onclick="switchTab('signals', this)">Edge Signals</button>
-        <button class="tab" onclick="switchTab('stocks', this)">Alla aktier</button>
-        <button class="tab" onclick="switchTab('hotmovers', this)">Hot Movers</button>
-        <button class="tab" onclick="switchTab('trending', this)">Trending</button>
-        <button class="tab" onclick="switchTab('insiders', this)">Insiders</button>
-        <button class="tab" onclick="switchTab('ocf', this)">Kassaflöde</button>
-        <button class="tab" onclick="switchTab('portfolio', this)">Simulering</button>
-        <button class="tab" onclick="switchTab('myportfolio', this)">Min Portfölj</button>
-        <button class="tab" onclick="switchTab('aitoplist', this)">AI Topplista</button>
+    <div class="page-header" id="pageHeader">
+        <div class="page-header-left">
+            <h2 class="page-title" id="pageTitle">Edge Signals</h2>
+            <p class="page-subtitle" id="pageSubtitle">Live-analys av Stockholmsbörsen</p>
+        </div>
     </div>
 
     <div class="filter-bar" id="filterBar"></div>
@@ -411,7 +515,7 @@
 
 <script>
 // ── State ──────────────────────────────────────────────
-let currentTab = 'signals';
+let currentTab = 'dashboard';
 let searchQuery = '';
 let countryFilter = '';
 let sortCol = 'meta';
@@ -426,6 +530,7 @@ let actionFilter = '';
 let hotLookback = 1;
 let hotDirection = 'up';
 let hotCountry = '';
+let hotMode = 'live';  // 'live' = intraday (stocks vs senaste snapshot), 'daily' = snapshot-mot-snapshot
 let hotDateFrom = '';
 let hotDateTo = '';
 
@@ -546,7 +651,7 @@ async function fetchData(append = false) {
             dataKey = 'stocks';
             renderFn = renderStocksTable;
         } else if (currentTab === 'hotmovers') {
-            params = {direction:hotDirection, lookback:hotLookback, limit:PAGE_SIZE, offset:currentOffset, min_owners:minOwners||100, country:hotCountry};
+            params = {mode:hotMode, direction:hotDirection, lookback:hotLookback, limit:PAGE_SIZE, offset:currentOffset, min_owners:minOwners||100, country:hotCountry};
             url = '/api/hot-movers?' + new URLSearchParams(params);
             ck = cacheKey('hotmovers', params);
             dataKey = 'stocks';
@@ -704,11 +809,46 @@ function renderCards() {
 
 // ── Filter Bar ──────────────────────────────────────
 
+function _ownersSelect(options) {
+    let o = '';
+    options.forEach(v => {
+        const lbl = v === 0 ? 'Alla ägare' : v.toLocaleString('sv') + '+ ägare';
+        o += `<option value="${v}" ${minOwners==v?'selected':''}>${lbl}</option>`;
+    });
+    return `<select class="min-owners-select" onchange="setMinOwners(this.value)" title="Minsta antal Avanza-ägare">${o}</select>`;
+}
+function _group(label, inner, tight) {
+    return `<div class="filter-group${tight?' tight':''}">${label?`<span class="filter-label">${label}</span>`:''}${inner}</div>`;
+}
+function _chips(items, activeVal, cls, handler) {
+    return items.map(it => `<button class="${cls} ${activeVal===it.v?'active':''}" onclick="${handler}('${it.v}')">${it.l}</button>`).join('');
+}
+function _hasActiveFilters() {
+    if (currentTab === 'signals') return actionFilter || signalFilter || signalCountry !== 'SE' || minOwners > 10;
+    if (currentTab === 'stocks') return searchQuery || countryFilter || minOwners > 0;
+    if (currentTab === 'trending') return trendPeriod !== '1m' || trendDirection !== 'up' || minOwners > 100;
+    if (currentTab === 'hotmovers') return hotLookback != 1 || hotDirection !== 'up' || hotCountry || minOwners > 100;
+    if (currentTab === 'insiders') return searchQuery || insiderType;
+    if (currentTab === 'ocf') return searchQuery || (countryFilter && countryFilter !== 'SE') || minOwners > 100;
+    return false;
+}
+function resetFilters() {
+    searchQuery = '';
+    if (currentTab === 'signals') { actionFilter=''; signalFilter=''; signalCountry='SE'; minOwners=10; }
+    else if (currentTab === 'stocks') { countryFilter=''; minOwners=0; }
+    else if (currentTab === 'trending') { trendPeriod='1m'; trendDirection='up'; minOwners=100; }
+    else if (currentTab === 'hotmovers') { hotLookback=1; hotDirection='up'; hotCountry=''; minOwners=100; }
+    else if (currentTab === 'insiders') { insiderType=''; }
+    else if (currentTab === 'ocf') { countryFilter='SE'; minOwners=100; }
+    fetchData();
+    renderFilterBar();
+}
+
 function renderFilterBar() {
     let html = '';
+    const FLAG = {SE:'🇸🇪', US:'🇺🇸', NO:'🇳🇴', DK:'🇩🇰', FI:'🇫🇮', DE:'🇩🇪', CA:'🇨🇦', FR:'🇫🇷', GB:'🇬🇧'};
 
     if (currentTab === 'signals') {
-        // Action filters (primary)
         const actionTypes = [
             {v:'', l:'Alla'},
             {v:'ENTRY', l:'🟢 Entry'},
@@ -716,120 +856,135 @@ function renderFilterBar() {
             {v:'WARNING', l:'🟠 Varning'},
             {v:'EXIT', l:'🔴 Exit'},
         ];
-        actionTypes.forEach(a => {
-            html += `<button class="signal-chip ${actionFilter===a.v?'active':''}" onclick="setActionFilter('${a.v}')">${a.l}</button>`;
-        });
-        html += '<span style="color:var(--text-muted);font-size:12px;margin-left:4px">|</span>';
-        // Signal type filters
+        html += _group('Åtgärd', _chips(actionTypes, actionFilter, 'signal-chip', 'setActionFilter'));
+
         const signalTypes = [
-            {v:'', l:'Alla signaler'},
+            {v:'', l:'Alla'},
             {v:'STRONG_BUY', l:'Stark Köp'},
             {v:'BUY', l:'Köp'},
             {v:'HOLD', l:'Neutral'},
             {v:'SELL', l:'Sälj'},
             {v:'STRONG_SELL', l:'Stark Sälj'},
         ];
-        signalTypes.forEach(s => {
-            html += `<button class="signal-chip ${signalFilter===s.v?'active':''}" onclick="setSignalFilter('${s.v}')">${s.l}</button>`;
-        });
-        // Country
-        const countries = ['SE', 'US', 'NO', 'DK', 'FI', 'DE'];
-        const cLabels = {SE:'🇸🇪 SE', US:'🇺🇸 US', NO:'🇳🇴 NO', DK:'🇩🇰 DK', FI:'🇫🇮 FI', DE:'🇩🇪 DE'};
-        html += '<span style="color:var(--text-muted);font-size:12px;margin-left:4px">|</span>';
-        countries.forEach(c => {
-            html += `<button class="filter-chip ${signalCountry===c?'active':''}" onclick="setSignalCountry('${c}')">${cLabels[c]}</button>`;
-        });
-        html += `<select class="min-owners-select" onchange="setMinOwners(this.value)">
-            <option value="10" ${minOwners<=10?'selected':''}>10+ ägare</option>
-            <option value="100" ${minOwners==100?'selected':''}>100+ ägare</option>
-            <option value="500" ${minOwners==500?'selected':''}>500+ ägare</option>
-            <option value="1000" ${minOwners==1000?'selected':''}>1 000+ ägare</option>
-            <option value="5000" ${minOwners==5000?'selected':''}>5 000+ ägare</option>
-        </select>`;
+        html += _group('Signal', _chips(signalTypes, signalFilter, 'signal-chip', 'setSignalFilter'));
+
+        const countries = [{v:'SE',l:'🇸🇪 SE'},{v:'US',l:'🇺🇸 US'},{v:'NO',l:'🇳🇴 NO'},{v:'DK',l:'🇩🇰 DK'},{v:'FI',l:'🇫🇮 FI'},{v:'DE',l:'🇩🇪 DE'}];
+        html += _group('Marknad', _chips(countries, signalCountry, 'filter-chip', 'setSignalCountry'));
+        html += _ownersSelect([10, 100, 500, 1000, 5000]);
+
     } else if (currentTab === 'stocks') {
-        html += `<input class="search-input" placeholder="Sök aktie (namn, ticker, ISIN)..." value="${searchQuery}" oninput="debounceSearch(this.value)" id="searchInput">`;
-        const countries = ['', 'SE', 'US', 'NO', 'DK', 'FI', 'DE', 'CA', 'FR', 'GB'];
-        const labels = {'':'Alla', SE:'🇸🇪 SE', US:'🇺🇸 US', NO:'🇳🇴 NO', DK:'🇩🇰 DK', FI:'🇫🇮 FI', DE:'🇩🇪 DE', CA:'🇨🇦 CA', FR:'🇫🇷 FR', GB:'🇬🇧 GB'};
-        countries.forEach(c => {
-            html += `<button class="filter-chip ${countryFilter===c?'active':''}" onclick="setCountry('${c}')">${labels[c]}</button>`;
-        });
-        html += `<select class="min-owners-select" onchange="setMinOwners(this.value)">
-            <option value="0" ${minOwners==0?'selected':''}>Alla ägare</option>
-            <option value="10" ${minOwners==10?'selected':''}>10+ ägare</option>
-            <option value="100" ${minOwners==100?'selected':''}>100+ ägare</option>
-            <option value="1000" ${minOwners==1000?'selected':''}>1 000+ ägare</option>
-            <option value="5000" ${minOwners==5000?'selected':''}>5 000+ ägare</option>
-            <option value="10000" ${minOwners==10000?'selected':''}>10 000+ ägare</option>
-        </select>`;
+        html += `<input class="search-input" placeholder="Sök namn, ticker eller ISIN" value="${searchQuery}" oninput="debounceSearch(this.value)" id="searchInput">`;
+        const countries = [{v:'',l:'Alla'},{v:'SE',l:'🇸🇪 SE'},{v:'US',l:'🇺🇸 US'},{v:'NO',l:'🇳🇴 NO'},{v:'DK',l:'🇩🇰 DK'},{v:'FI',l:'🇫🇮 FI'},{v:'DE',l:'🇩🇪 DE'},{v:'CA',l:'🇨🇦 CA'},{v:'FR',l:'🇫🇷 FR'},{v:'GB',l:'🇬🇧 GB'}];
+        html += _group('Marknad', _chips(countries, countryFilter, 'filter-chip', 'setCountry'));
+        html += _ownersSelect([0, 10, 100, 1000, 5000, 10000]);
+
     } else if (currentTab === 'trending') {
-        const periods = [{v:'1d',l:'1 dag'},{v:'1w',l:'1 vecka'},{v:'1m',l:'1 månad'},{v:'3m',l:'3 månader'},{v:'ytd',l:'I år'},{v:'1y',l:'1 år'}];
-        periods.forEach(p => {
-            html += `<button class="period-chip ${trendPeriod===p.v?'active':''}" onclick="setPeriod('${p.v}')">${p.l}</button>`;
-        });
-        html += `<button class="dir-chip up ${trendDirection==='up'?'active':''}" onclick="setDirection('up')">↑ Ökar mest</button>`;
-        html += `<button class="dir-chip down ${trendDirection==='down'?'active':''}" onclick="setDirection('down')">↓ Minskar mest</button>`;
-        html += `<select class="min-owners-select" onchange="setMinOwners(this.value)">
-            <option value="10" ${minOwners<=10?'selected':''}>10+ ägare</option>
-            <option value="100" ${minOwners==100?'selected':''}>100+ ägare</option>
-            <option value="1000" ${minOwners==1000?'selected':''}>1 000+ ägare</option>
-            <option value="5000" ${minOwners==5000?'selected':''}>5 000+ ägare</option>
-        </select>`;
+        const periods = [{v:'1d',l:'1 dag'},{v:'1w',l:'1 vecka'},{v:'1m',l:'1 månad'},{v:'3m',l:'3 mån'},{v:'ytd',l:'I år'},{v:'1y',l:'1 år'}];
+        html += _group('Period', _chips(periods, trendPeriod, 'period-chip', 'setPeriod'));
+        const dirs = [{v:'up',l:'↑ Ökar'},{v:'down',l:'↓ Minskar'}];
+        html += `<div class="filter-group tight">
+            <span class="filter-label">Riktning</span>
+            <button class="dir-chip up ${trendDirection==='up'?'active':''}" onclick="setDirection('up')">↑ Ökar mest</button>
+            <button class="dir-chip down ${trendDirection==='down'?'active':''}" onclick="setDirection('down')">↓ Minskar mest</button>
+        </div>`;
+        html += _ownersSelect([10, 100, 1000, 5000]);
+
     } else if (currentTab === 'hotmovers') {
-        const lookbacks = [{v:1,l:'1 dag'},{v:3,l:'3 dagar'},{v:5,l:'1 vecka'}];
-        lookbacks.forEach(p => {
-            html += `<button class="period-chip ${hotLookback==p.v?'active':''}" onclick="setHotLookback(${p.v})">${p.l}</button>`;
-        });
-        html += `<button class="dir-chip up ${hotDirection==='up'?'active':''}" onclick="setHotDirection('up')">🔥 Ökar</button>`;
-        html += `<button class="dir-chip down ${hotDirection==='down'?'active':''}" onclick="setHotDirection('down')">📉 Minskar</button>`;
-        html += '<span style="color:var(--text-muted);font-size:12px;margin-left:4px">|</span>';
-        const countries = ['', 'SE', 'US', 'NO', 'FI', 'DE'];
-        const cLabels = {'':'Alla', SE:'🇸🇪 SE', US:'🇺🇸 US', NO:'🇳🇴 NO', FI:'🇫🇮 FI', DE:'🇩🇪 DE'};
-        countries.forEach(c => {
-            html += `<button class="filter-chip ${hotCountry===c?'active':''}" onclick="setHotCountry('${c}')">${cLabels[c]}</button>`;
-        });
-        html += `<select class="min-owners-select" onchange="setMinOwners(this.value)">
-            <option value="100" ${minOwners<=100?'selected':''}>100+ ägare</option>
-            <option value="500" ${minOwners==500?'selected':''}>500+ ägare</option>
-            <option value="1000" ${minOwners==1000?'selected':''}>1 000+ ägare</option>
-            <option value="5000" ${minOwners==5000?'selected':''}>5 000+ ägare</option>
-        </select>`;
+        // Live/dagligt-läge
+        html += `<div class="filter-group tight">
+            <span class="filter-label">Läge</span>
+            <button class="period-chip ${hotMode==='live'?'active':''}" onclick="setHotMode('live')" title="Intraday: live-värdet mot senaste snapshot — uppdateras löpande">⚡ Live</button>
+            <button class="period-chip ${hotMode==='daily'?'active':''}" onclick="setHotMode('daily')" title="Snapshot-mot-snapshot — stabilare över tid">📅 Dagligt</button>
+        </div>`;
+        // Period-chips bara i dagligt läge
+        if (hotMode === 'daily') {
+            const lookbacks = [{v:'1',l:'Idag'},{v:'3',l:'3 dagar'},{v:'5',l:'1 vecka'}];
+            html += `<div class="filter-group tight">
+                <span class="filter-label">Period</span>
+                ${lookbacks.map(p => `<button class="period-chip ${hotLookback==p.v?'active':''}" onclick="setHotLookback(${p.v})">${p.l}</button>`).join('')}
+            </div>`;
+        }
+        html += `<div class="filter-group tight">
+            <span class="filter-label">Riktning</span>
+            <button class="dir-chip up ${hotDirection==='up'?'active':''}" onclick="setHotDirection('up')">🔥 Ökar</button>
+            <button class="dir-chip down ${hotDirection==='down'?'active':''}" onclick="setHotDirection('down')">📉 Minskar</button>
+        </div>`;
+        const countries = [{v:'',l:'Alla'},{v:'SE',l:'🇸🇪 SE'},{v:'US',l:'🇺🇸 US'},{v:'NO',l:'🇳🇴 NO'},{v:'FI',l:'🇫🇮 FI'},{v:'DE',l:'🇩🇪 DE'}];
+        html += _group('Marknad', _chips(countries, hotCountry, 'filter-chip', 'setHotCountry'));
+        html += _ownersSelect([100, 500, 1000, 5000]);
+
     } else if (currentTab === 'insiders') {
-        html += `<input class="search-input" placeholder="Sök emittent, person eller ISIN..." value="${searchQuery}" oninput="debounceSearch(this.value)" id="searchInput">`;
-        html += `<button class="filter-chip ${insiderType===''?'active':''}" onclick="setInsiderType('')">Alla</button>`;
-        html += `<button class="filter-chip ${insiderType==='Förvärv'?'active':''}" style="${insiderType==='Förvärv'?'background:var(--green);color:white;border-color:var(--green)':''}" onclick="setInsiderType('Förvärv')">Köp</button>`;
-        html += `<button class="filter-chip ${insiderType==='Avyttring'?'active':''}" style="${insiderType==='Avyttring'?'background:var(--red);color:white;border-color:var(--red)':''}" onclick="setInsiderType('Avyttring')">Sälj</button>`;
+        html += `<input class="search-input" placeholder="Sök emittent, person eller ISIN" value="${searchQuery}" oninput="debounceSearch(this.value)" id="searchInput">`;
+        const types = [{v:'',l:'Alla'},{v:'Förvärv',l:'🟢 Köp'},{v:'Avyttring',l:'🔴 Sälj'}];
+        html += `<div class="filter-group tight">
+            <span class="filter-label">Typ</span>
+            ${types.map(t => {
+                let cls = 'filter-chip';
+                if (insiderType === t.v && t.v === 'Förvärv') cls += ' active';
+                else if (insiderType === t.v && t.v === 'Avyttring') cls = 'dir-chip down active';
+                else if (insiderType === t.v) cls += ' active';
+                return `<button class="${cls}" onclick="setInsiderType('${t.v}')">${t.l}</button>`;
+            }).join('')}
+        </div>`;
+
     } else if (currentTab === 'ocf') {
-        html += `<input class="search-input" placeholder="Sök aktie..." value="${searchQuery}" oninput="debounceSearch(this.value)" id="searchInput">`;
-        const countries = ['SE', 'US', 'NO', 'DK', 'FI', 'DE'];
-        countries.forEach(c => {
-            html += `<button class="filter-chip ${(countryFilter||'SE')===c?'active':''}" onclick="setCountry('${c}')">${FLAGS[c]} ${c}</button>`;
-        });
-        html += `<select class="min-owners-select" onchange="setMinOwners(this.value)">
-            <option value="100" ${minOwners<=100?'selected':''}>100+ ägare</option>
-            <option value="1000" ${minOwners==1000?'selected':''}>1 000+ ägare</option>
-            <option value="5000" ${minOwners==5000?'selected':''}>5 000+ ägare</option>
-        </select>`;
+        html += `<input class="search-input" placeholder="Sök aktie" value="${searchQuery}" oninput="debounceSearch(this.value)" id="searchInput">`;
+        const countries = [{v:'SE',l:'🇸🇪 SE'},{v:'US',l:'🇺🇸 US'},{v:'NO',l:'🇳🇴 NO'},{v:'DK',l:'🇩🇰 DK'},{v:'FI',l:'🇫🇮 FI'},{v:'DE',l:'🇩🇪 DE'}];
+        const activeCountry = countryFilter || 'SE';
+        html += `<div class="filter-group tight">
+            <span class="filter-label">Marknad</span>
+            ${countries.map(c => `<button class="filter-chip ${activeCountry===c.v?'active':''}" onclick="setCountry('${c.v}')">${c.l}</button>`).join('')}
+        </div>`;
+        html += _ownersSelect([100, 1000, 5000]);
     }
 
-    document.getElementById('filterBar').innerHTML = html;
+    if (_hasActiveFilters()) {
+        html += `<button class="filter-reset" onclick="resetFilters()" title="Återställ filter"><span class="material-symbols-outlined">restart_alt</span>Återställ</button>`;
+    }
+
+    const bar = document.getElementById('filterBar');
+    if (bar) bar.innerHTML = html;
 }
 
 // ── Tab Switch ──────────────────────────────────────
 
+const TAB_META = {
+    dashboard:   { title: 'Dashboard',       sub: 'Marknadsöversikt & makro-indikatorer' },
+    signals:     { title: 'Edge Signals',    sub: 'AI-rankade köp- och säljsignaler' },
+    stocks:      { title: 'Alla aktier',     sub: 'Komplett databas över nordiska & US-aktier' },
+    hotmovers:   { title: 'Hot Movers',      sub: 'Största ägarförändringarna just nu' },
+    trending:    { title: 'Trending',        sub: 'Aktier med starkast momentum' },
+    insiders:    { title: 'Insiders',        sub: 'Insidertransaktioner i realtid' },
+    metrics:     { title: 'Nyckeltal',       sub: 'Modeller för SE & US marknaden – från böckerna' },
+    ocf:         { title: 'Kassaflöde',      sub: 'Topplista: operativt kassaflöde' },
+    portfolio:   { title: 'Simulering',      sub: 'Backtesta strategier mot historisk data' },
+    myportfolio: { title: 'Min Portfölj',    sub: 'Ditt bevakade innehav' },
+    aitoplist:   { title: 'AI Topplista',    sub: 'AI-rankning av alla bolag' },
+};
+
+let _hotLiveTimer = null;
+function _stopHotLiveTimer() { if (_hotLiveTimer) { clearInterval(_hotLiveTimer); _hotLiveTimer = null; } }
+function _startHotLiveTimer() {
+    _stopHotLiveTimer();
+    // Refresh var 60:e sekund när Hot Movers i live-läge visas
+    _hotLiveTimer = setInterval(() => {
+        if (currentTab === 'hotmovers' && hotMode === 'live' && document.visibilityState === 'visible') {
+            fetchData();
+        }
+    }, 60 * 1000);
+}
+
 function switchTab(tab, el) {
     currentTab = tab;
-    // Update tabs (content area)
-    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-    if (el) { el.classList.add('active'); }
-    else {
-        const tabMap = {portfolio:'Simulering',signals:'Edge Signals',stocks:'Alla aktier',ocf:'Kassaflöde',myportfolio:'Min Portfölj',aitoplist:'AI Topplista',hotmovers:'Hot Movers',trending:'Trending',insiders:'Insiders'};
-        const lbl = tabMap[tab];
-        if (lbl) document.querySelectorAll('.tab').forEach(t => { if (t.textContent.trim() === lbl) t.classList.add('active'); });
-    }
     // Update sidebar
     document.querySelectorAll('.sidebar-item').forEach(s => {
         s.classList.toggle('active', s.dataset.tab === tab);
     });
+    // Update page header title/subtitle
+    const meta = TAB_META[tab] || { title: tab, sub: '' };
+    const t = document.getElementById('pageTitle'); if (t) t.textContent = meta.title;
+    const s = document.getElementById('pageSubtitle'); if (s) s.textContent = meta.sub;
+
     searchQuery = '';
 
     if (tab === 'signals') { sortCol = 'meta'; sortOrder = 'desc'; }
@@ -838,6 +993,14 @@ function switchTab(tab, el) {
     else if (tab === 'hotmovers') { sortCol = 'hot_diff_pct'; sortOrder = 'desc'; }
     else if (tab === 'ocf') { sortCol = 'ocf'; sortOrder = 'desc'; }
     else { sortCol = 'date'; sortOrder = 'desc'; }
+
+    // Starta/stoppa Hot Movers live auto-refresh
+    if (tab === 'hotmovers') _startHotLiveTimer();
+    else _stopHotLiveTimer();
+
+    // Client-side only tabs (no API fetch)
+    if (tab === 'dashboard') { renderFilterBar(); renderDashboard(); return; }
+    if (tab === 'metrics')   { renderFilterBar(); renderMetricsTool(); return; }
 
     renderFilterBar();
     fetchData();
@@ -869,6 +1032,7 @@ function setDirection(d) { trendDirection = d; fetchData(); renderFilterBar(); }
 function setHotLookback(v) { hotLookback = v; fetchData(); renderFilterBar(); }
 function setHotDirection(d) { hotDirection = d; fetchData(); renderFilterBar(); }
 function setHotCountry(c) { hotCountry = c; fetchData(); renderFilterBar(); }
+function setHotMode(m) { hotMode = m; fetchData(); renderFilterBar(); }
 function setInsiderType(t) { insiderType = t; fetchData(); renderFilterBar(); }
 function setSignalFilter(s) { signalFilter = s; fetchData(); renderFilterBar(); }
 function setSignalCountry(c) { signalCountry = c; fetchData(); renderFilterBar(); }
@@ -1203,13 +1367,19 @@ function renderHotMoversTable() {
     }).join('');
 
     const dateInfo = hotDateFrom && hotDateTo ? `${hotDateFrom} → ${hotDateTo}` : '';
+    const modeLabel = hotMode === 'live'
+        ? `<span style="display:inline-flex;align-items:center;gap:4px"><span class="live-dot"></span>LIVE — intraday vs senaste snapshot (${hotDateTo||'–'})</span>`
+        : `📅 Dagligt (${dateInfo} · ${lbLabel})`;
+    const titleTxt = hotMode === 'live'
+        ? 'Hot Movers — Live ägarförändring'
+        : 'Hot Movers — Daglig ägarförändring';
 
     document.getElementById('content').innerHTML = `
         <div style="background:linear-gradient(135deg,#FFF3E0,#FFE0B2);border-radius:var(--radius);padding:12px 16px;margin-bottom:12px;display:flex;align-items:center;gap:12px">
             <span style="font-size:24px">🔥</span>
             <div>
-                <div style="font-weight:700;color:#E65100">Hot Movers — Realtids ägarförändring</div>
-                <div style="font-size:12px;color:#BF360C">Beräknad från dagliga snapshots: <strong>${dateInfo}</strong> (${lbLabel})</div>
+                <div style="font-weight:700;color:#E65100">${titleTxt}</div>
+                <div style="font-size:12px;color:#BF360C">${modeLabel}</div>
             </div>
             <div style="margin-left:auto;font-size:13px;color:#E65100;font-weight:600">${totalResults} aktier ${hotDirection==='up'?'ökar':'minskar'}</div>
         </div>
@@ -1814,17 +1984,25 @@ async function analyzeStock() {
     resultDiv.innerHTML = '';
 
     try {
+        // Kör bokmodellerna client-side och bifoga resultatet till AI-anropet
+        const bookModels = evaluateBookModels(s).map(m => ({
+            key: m.key, title: m.title, verdict: m.v.txt, metric: m.metric
+        }));
+        const bookPass = bookModels.filter(m => m.verdict === 'Pass').length;
+        const bookFail = bookModels.filter(m => m.verdict === 'Fail').length;
+
         const payload = {
             name: s.name, country: s.country, last_price: s.last_price,
             pe_ratio: s.pe_ratio, ps_ratio: s.price_sales_ratio, pb_ratio: s.price_to_book_value,
             ev_ebit_ratio: s.ev_ebit_ratio, ev_sales_ratio: s.ev_sales_ratio,
-            dividend_yield: s.dividend_yield,
+            dividend_yield: s.dividend_yield, direct_yield: s.direct_yield,
             return_on_capital_employed: s.return_on_capital_employed,
             return_on_equity: s.return_on_equity,
             net_margin: s.net_margin, gross_margin: s.gross_margin,
             sales: s.sales, net_profit: s.net_profit,
             operating_cash_flow: s.operating_cash_flow,
             debt_to_equity_ratio: s.debt_to_equity_ratio,
+            net_debt_ebitda_ratio: s.net_debt_ebitda_ratio,
             beta: s.beta, volatility: s.volatility,
             short_percent: s.short_percent_of_capital, dd_risk: s.dd_risk,
             rsi14: s.rsi14, macd_histogram: s.macd_histogram,
@@ -1834,6 +2012,8 @@ async function analyzeStock() {
             owners_7d_change: s.seven_days_change_pct,
             owners_30d_change: s.thirty_days_change_pct,
             owners_90d_change: s.three_months_change_pct,
+            owners_change_1m: s.owners_change_1m,
+            owners_change_1y: s.owners_change_1y,
             one_week_change: s.one_week_change_pct,
             one_month_change: s.one_month_change_pct,
             three_months_change: s.three_months_change_pct,
@@ -1842,6 +2022,9 @@ async function analyzeStock() {
             edge_score: s.edge_score, dsm_score: s.dsm_score,
             ace_score: s.ace_score, magic_score: s.magic_score,
             meta_score: s.meta_score,
+            // Bokmodeller: Graham, Buffett, Lynch, Greenblatt, Klarman, Taleb, Kelly m.fl.
+            book_models: bookModels,
+            book_models_summary: `${bookPass}/${bookModels.length} pass, ${bookFail} fail`,
         };
 
         const resp = await fetch('/api/analyze-stock', {
@@ -1901,6 +2084,218 @@ async function analyzeStock() {
         btn.innerHTML = '🧠 Analysera nyckeltal';
         btn.style.opacity = '1';
     }
+}
+
+// ── Bokmodeller — evaluerar aktien mot klassiska värderingsmodeller ──
+function _verdict(pass, warn) {
+    if (pass) return {cls:'v-pass', icon:'✅', txt:'Pass'};
+    if (warn) return {cls:'v-warn', icon:'⚠️', txt:'Varning'};
+    return {cls:'v-fail', icon:'❌', txt:'Fail'};
+}
+function evaluateBookModels(s) {
+    const out = [];
+    const pe = s.pe_ratio, pb = s.price_book_ratio, evEbit = s.ev_ebit_ratio;
+    const dy = s.direct_yield, roe = s.return_on_equity, roce = s.return_on_capital_employed;
+    const de = s.debt_to_equity_ratio, ndEbitda = s.net_debt_ebitda_ratio;
+    const vol = s.volatility, beta = s.beta, rsi = s.rsi14;
+    const sma200 = s.sma200; // pct deviation (positive = över)
+    const mcap = s.market_cap, ocf = s.operating_cash_flow;
+
+    // Graham Defensive (P/E < 15, P/B < 1.5, P/E * P/B < 22.5)
+    if (pe != null && pb != null) {
+        const prod = pe * pb;
+        const pass = pe < 15 && pb < 1.5 && prod < 22.5;
+        const warn = pe < 20 && pb < 2.5 && prod < 35;
+        const v = _verdict(pass, !pass && warn);
+        out.push({
+            key:'graham', icon:'📘', title:'Graham Defensive',
+            sub:'Den intelligente investeraren — P/E × P/B < 22,5',
+            v, metric: `P/E ${pe.toFixed(1)} × P/B ${pb.toFixed(2)} = ${prod.toFixed(1)}`
+        });
+    }
+
+    // Buffett Quality (ROE ≥ 15%, D/E < 0.5, ND/EBITDA < 3)
+    if (roe != null) {
+        const roePct = roe * 100;
+        const deOk = de == null || de < 0.5;
+        const ndOk = ndEbitda == null || ndEbitda < 3;
+        const pass = roePct >= 15 && deOk && ndOk;
+        const warn = roePct >= 10;
+        const v = _verdict(pass, !pass && warn);
+        out.push({
+            key:'buffett', icon:'🏰', title:'Buffett Quality Moat',
+            sub:'Hög ROE + låg skuld = kvalitetsbolag',
+            v, metric: `ROE ${roePct.toFixed(1)}% · D/E ${de!=null?de.toFixed(2):'—'} · ND/EBITDA ${ndEbitda!=null?ndEbitda.toFixed(1):'—'}`
+        });
+    }
+
+    // Lynch PEG (< 1 = billigt, < 1.5 = OK)
+    // PEG = P/E / tillväxt — vi approximerar tillväxt från ägarutveckling 1Y
+    const growthProxy = s.owners_change_1y != null ? s.owners_change_1y * 100 : null;
+    if (pe != null && growthProxy != null && growthProxy > 0) {
+        const peg = pe / growthProxy;
+        const pass = peg < 1;
+        const warn = peg < 1.5;
+        const v = _verdict(pass, !pass && warn);
+        out.push({
+            key:'lynch', icon:'🔎', title:'Lynch PEG',
+            sub:'P/E i relation till tillväxt (ägar-proxy)',
+            v, metric: `PEG ≈ ${peg.toFixed(2)} (P/E ${pe.toFixed(1)} / tillväxt ${growthProxy.toFixed(1)}%)`
+        });
+    }
+
+    // Magic Formula (Greenblatt): Earnings Yield (1/EV/EBIT) + ROC (~ROCE)
+    if (evEbit != null && roce != null) {
+        const ey = 1 / evEbit;  // earnings yield
+        const score = ey + roce; // båda decimaltal
+        const pass = evEbit < 10 && roce > 0.15;
+        const warn = evEbit < 15 && roce > 0.10;
+        const v = _verdict(pass, !pass && warn);
+        out.push({
+            key:'magic', icon:'📊', title:'Magic Formula',
+            sub:'Greenblatt: hög avkastning × billigt bolag',
+            v, metric: `EY ${(ey*100).toFixed(1)}% + ROCE ${(roce*100).toFixed(1)}% = ${(score*100).toFixed(1)}`
+        });
+    }
+
+    // Klarman Margin of Safety (P/B < 0.7 eller EV/EBIT < 6)
+    if (pb != null || evEbit != null) {
+        const pbOk = pb != null && pb < 0.7;
+        const evOk = evEbit != null && evEbit < 6;
+        const pass = pbOk || evOk;
+        const warn = (pb != null && pb < 1.2) || (evEbit != null && evEbit < 10);
+        const v = _verdict(pass, !pass && warn);
+        out.push({
+            key:'klarman', icon:'🛡️', title:'Klarman Margin of Safety',
+            sub:'Djupvärde — köp under "inre värde"',
+            v, metric: `P/B ${pb!=null?pb.toFixed(2):'—'} · EV/EBIT ${evEbit!=null?evEbit.toFixed(1):'—'}`
+        });
+    }
+
+    // Bogle/Investera — utdelning + kvalitet (DY ≥ 3%, ROE > 10%, D/E < 1)
+    if (dy != null) {
+        const dyPct = dy * 100;
+        const roeOk = roe == null || roe * 100 > 10;
+        const deOk = de == null || de < 1;
+        const pass = dyPct >= 3 && roeOk && deOk;
+        const warn = dyPct >= 2;
+        const v = _verdict(pass, !pass && warn);
+        out.push({
+            key:'divq', icon:'💰', title:'Utdelningskvalitet',
+            sub:'Stabil direktavkastning + hållbar balansräkning',
+            v, metric: `DY ${dyPct.toFixed(2)}% · ROE ${roe!=null?(roe*100).toFixed(1)+'%':'—'} · D/E ${de!=null?de.toFixed(2):'—'}`
+        });
+    }
+
+    // Trend / Momentum (ovanför SMA200, RSI < 70)
+    if (sma200 != null) {
+        const trendUp = sma200 > 0;
+        const rsiOk = rsi == null || rsi < 70;
+        const pass = trendUp && rsiOk && (rsi == null || rsi > 40);
+        const warn = trendUp;
+        const v = _verdict(pass, !pass && warn);
+        out.push({
+            key:'trend', icon:'📈', title:'Trend & Momentum',
+            sub:'Stinsen-regeln — följ trenden, undvik överköpta lägen',
+            v, metric: `SMA200 ${(sma200*100).toFixed(1)}% · RSI ${rsi!=null?rsi.toFixed(0):'—'}`
+        });
+    }
+
+    // Taleb Barbell — hög vol = spekulativ (liten andel); låg vol = säker (stor andel)
+    if (vol != null) {
+        const volPct = vol * 100;
+        let tag, v;
+        if (volPct < 25) { tag = 'Säker sida (80% av portföljen)'; v = _verdict(true, false); }
+        else if (volPct < 45) { tag = 'Mitten — begränsad roll'; v = _verdict(false, true); }
+        else { tag = 'Spekulativ sida (max 20%)'; v = _verdict(false, false); }
+        out.push({
+            key:'taleb', icon:'🎯', title:'Taleb Barbell',
+            sub:'Klassa som "säker" vs "spekulativ"',
+            v, metric: `${tag} · vol ${volPct.toFixed(0)}% · beta ${beta!=null?beta.toFixed(2):'—'}`
+        });
+    }
+
+    // Kelly Criterion — simpel sizing baserat på estimerat edge från meta_score
+    if (s.meta_score != null) {
+        const edge = (s.meta_score - 50) / 100;  // 50 = neutral, >50 = edge
+        const kelly = Math.max(-0.25, Math.min(0.25, edge * 0.5));
+        const kellyPct = kelly * 100;
+        const pass = kellyPct > 10;
+        const warn = kellyPct > 3;
+        const v = _verdict(pass, !pass && warn);
+        out.push({
+            key:'kelly', icon:'🎲', title:'Kelly Sizing',
+            sub:'Halv-Kelly från Meta Score (edge-baserad vikt)',
+            v, metric: `Föreslagen vikt ${kellyPct>0?'+':''}${kellyPct.toFixed(1)}%`
+        });
+    }
+
+    // Ägarmomentum (Spiltan/Stinsen — smart money flow)
+    if (s.owners_change_1m != null) {
+        const mom = s.owners_change_1m * 100;
+        const pass = mom > 3;
+        const warn = mom > 0;
+        const v = _verdict(pass, !pass && warn);
+        out.push({
+            key:'owners', icon:'👥', title:'Ägarmomentum',
+            sub:'Spiltan-approach — smart money följer kvalitet',
+            v, metric: `Ägare +${mom.toFixed(1)}% (30d) · totalt ${fmtNum(s.number_of_owners)}`
+        });
+    }
+
+    return out;
+}
+
+function renderBookModelSection(s) {
+    const models = evaluateBookModels(s);
+    if (!models.length) return '';
+
+    const passCount = models.filter(m => m.v.cls === 'v-pass').length;
+    const warnCount = models.filter(m => m.v.cls === 'v-warn').length;
+    const failCount = models.filter(m => m.v.cls === 'v-fail').length;
+    const total = models.length;
+    const passPct = (passCount / total) * 100;
+
+    let verdict, verdictColor;
+    if (passCount >= total * 0.6) { verdict = 'Stark bokmodell-konsensus'; verdictColor = 'var(--green-dark)'; }
+    else if (passCount + warnCount >= total * 0.6) { verdict = 'Blandad signal — läs detaljer'; verdictColor = '#92400e'; }
+    else { verdict = 'Svag enligt bokmodellerna'; verdictColor = 'var(--red)'; }
+
+    const cards = models.map(m => `
+        <div class="model-verdict ${m.v.cls}">
+            <div class="mv-head">
+                <span class="mv-icon">${m.icon}</span>
+                <div class="mv-title-wrap">
+                    <div class="mv-title">${m.title}</div>
+                    <div class="mv-sub">${m.sub}</div>
+                </div>
+                <span class="mv-badge">${m.v.icon} ${m.v.txt}</span>
+            </div>
+            <div class="mv-metric">${m.metric}</div>
+        </div>
+    `).join('');
+
+    return `<div class="drawer-section">
+        <div class="drawer-section-title">📚 Bokmodeller (från böckerna)</div>
+        <div style="background:linear-gradient(135deg,#f5f3ff,#ede9fe);border-radius:12px;padding:14px 16px;margin-bottom:10px">
+            <div style="display:flex;align-items:center;gap:14px">
+                <div>
+                    <div style="font-size:24px;font-weight:900;color:${verdictColor}">${passCount}/${total}</div>
+                    <div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.6px;font-weight:700">Pass</div>
+                </div>
+                <div style="flex:1">
+                    <div style="font-size:13px;font-weight:700;color:${verdictColor}">${verdict}</div>
+                    <div style="display:flex;gap:10px;margin-top:4px;font-size:11px;color:var(--text-muted)">
+                        <span>✅ ${passCount}</span>
+                        <span>⚠️ ${warnCount}</span>
+                        <span>❌ ${failCount}</span>
+                    </div>
+                    <div class="mv-meter"><div class="mv-meter-fill" style="width:${passPct}%;background:${verdictColor}"></div></div>
+                </div>
+            </div>
+        </div>
+        <div class="mv-stack">${cards}</div>
+    </div>`;
 }
 
 function openDrawer(s) {
@@ -2114,6 +2509,9 @@ function openDrawer(s) {
     html += `<div class="drawer-section"><div class="drawer-section-title">Tekniska indikatorer</div><div class="drawer-grid">${
         techItems.map(([l,v,fmt]) => `<div class="drawer-item"><div class="drawer-item-label">${l}</div><div class="drawer-item-value">${fmt(v)}</div></div>`).join('')
     }</div></div>`;
+
+    // ── BOKMODELLER (Graham, Buffett, Lynch, Greenblatt, Klarman, Taleb, Kelly m.fl.) ──
+    html += renderBookModelSection(s);
 
     // ── AI ANALYS-KNAPP ──
     html += `<div class="drawer-section">
@@ -2578,6 +2976,361 @@ function renderAIToplist() {
     `;
 }
 
+// ── Dashboard (landing) ─────────────────────────────────
+
+let _dashCache = null;
+async function renderDashboard() {
+    const root = document.getElementById('content');
+    const cards = document.getElementById('cards');
+    if (cards) cards.innerHTML = '';
+
+    root.innerHTML = `
+        <div class="dash-grid">
+            <div class="dash-section">
+                <h3 class="dash-heading">Marknadsöversikt</h3>
+                <div class="dash-top-stats" id="dashTopStats">
+                    <div class="stat-skel"></div><div class="stat-skel"></div>
+                    <div class="stat-skel"></div><div class="stat-skel"></div>
+                </div>
+            </div>
+            <div class="dash-section">
+                <h3 class="dash-heading">Makro-indikatorer <span class="dash-sub">från böckerna</span></h3>
+                <div class="dash-macro-grid" id="dashMacroGrid"></div>
+            </div>
+            <div class="dash-section">
+                <h3 class="dash-heading">Modell-signaler <span class="dash-sub">baserat på Graham, Greenblatt, Lynch, Klarman, Shiller m.fl.</span></h3>
+                <div class="dash-model-grid" id="dashModelGrid"></div>
+            </div>
+            <div class="dash-section">
+                <h3 class="dash-heading">Idag på marknaden</h3>
+                <div class="dash-today" id="dashToday"></div>
+            </div>
+        </div>
+    `;
+
+    try {
+        if (!_dashCache || (Date.now() - _dashCache._ts) > 60000) {
+            const r = await fetch('/api/dashboard');
+            _dashCache = await r.json();
+            _dashCache._ts = Date.now();
+        }
+        renderDashboardContent(_dashCache);
+    } catch(e) {
+        console.warn('dashboard fetch failed', e);
+        renderDashboardContent({});
+    }
+}
+
+function renderDashboardContent(d) {
+    const stats = d.stats || {};
+    const ts = document.getElementById('dashTopStats');
+    if (ts) {
+        ts.innerHTML = `
+            <div class="stat-tile">
+                <div class="stat-icon"><span class="material-symbols-outlined">inventory_2</span></div>
+                <div class="stat-val">${fmtNum(stats.total_stocks || 0)}</div>
+                <div class="stat-lbl">Aktier i databasen</div>
+            </div>
+            <div class="stat-tile">
+                <div class="stat-icon"><span class="material-symbols-outlined">groups</span></div>
+                <div class="stat-val">${fmtNum(stats.total_owners || 0)}</div>
+                <div class="stat-lbl">Avanza-ägare totalt</div>
+            </div>
+            <div class="stat-tile">
+                <div class="stat-icon"><span class="material-symbols-outlined">trending_down</span></div>
+                <div class="stat-val">${fmtNum(stats.signals_today || 0)}</div>
+                <div class="stat-lbl">Aktier med blankning</div>
+            </div>
+            <div class="stat-tile">
+                <div class="stat-icon"><span class="material-symbols-outlined">swap_horiz</span></div>
+                <div class="stat-val">${fmtNum(stats.insider_tx || 0)}</div>
+                <div class="stat-lbl">Insidertransaktioner (30d)</div>
+            </div>
+        `;
+    }
+
+    const macro = d.macro || {};
+    const mg = document.getElementById('dashMacroGrid');
+    if (mg) {
+        mg.innerHTML = renderMacroTile(macro);
+    }
+
+    const mods = document.getElementById('dashModelGrid');
+    if (mods) {
+        mods.innerHTML = (d.model_signals || []).map(m => `
+            <div class="model-card">
+                <div class="model-card-hd">
+                    <span class="model-badge" style="background:${m.color || '#006c46'}">${m.code || ''}</span>
+                    <div class="model-name">${m.name}</div>
+                </div>
+                <div class="model-desc">${m.desc || ''}</div>
+                <div class="model-verdict" style="color:${m.color || '#006c46'}">${m.verdict || ''}</div>
+            </div>
+        `).join('') || '<div style="padding:16px;color:var(--text-muted);font-size:13px">Ingen modelldata ännu</div>';
+    }
+
+    const today = document.getElementById('dashToday');
+    if (today) {
+        const t = d.today || {};
+        today.innerHTML = `
+            <div class="today-grid">
+                <div class="today-box">
+                    <div class="today-label">Topp Vinnare SE</div>
+                    <div class="today-val num-pos">${t.top_se_gainer ? t.top_se_gainer.name + ' ' + fmtPct(t.top_se_gainer.change) : '–'}</div>
+                </div>
+                <div class="today-box">
+                    <div class="today-label">Topp Förlorare SE</div>
+                    <div class="today-val num-neg">${t.top_se_loser ? t.top_se_loser.name + ' ' + fmtPct(t.top_se_loser.change) : '–'}</div>
+                </div>
+                <div class="today-box">
+                    <div class="today-label">Topp Vinnare US</div>
+                    <div class="today-val num-pos">${t.top_us_gainer ? t.top_us_gainer.name + ' ' + fmtPct(t.top_us_gainer.change) : '–'}</div>
+                </div>
+                <div class="today-box">
+                    <div class="today-label">Största insiderköp</div>
+                    <div class="today-val">${t.top_insider_buy ? t.top_insider_buy.name : '–'}</div>
+                </div>
+            </div>
+        `;
+    }
+}
+
+function renderMacroTile(m) {
+    const capeVal = m.cape != null ? m.cape.toFixed(1) : '–';
+    const capeZone = m.cape >= 35 ? {txt:'Spring för livet', col:'#c0392b'} : m.cape >= 25 ? {txt:'Varning', col:'#e67700'} : m.cape >= 15 ? {txt:'Neutral', col:'#888'} : {txt:'Köpsignal', col:'var(--green)'};
+
+    const bi = m.buffett_indicator != null ? m.buffett_indicator.toFixed(0) + '%' : '–';
+    const biZone = m.buffett_indicator >= 140 ? {txt:'Farlig bubbla', col:'#c0392b'} : m.buffett_indicator >= 100 ? {txt:'Övervärderat', col:'#e67700'} : m.buffett_indicator >= 70 ? {txt:'Rimligt', col:'#888'} : {txt:'Köp aggressivt', col:'var(--green)'};
+
+    const y10 = m.us_10y != null ? m.us_10y.toFixed(2) + '%' : '–';
+    const vix = m.vix != null ? m.vix.toFixed(1) : '–';
+    const vixZone = m.vix >= 30 ? {txt:'Rädsla (köpläge)', col:'var(--green)'} : m.vix >= 20 ? {txt:'Osäkerhet', col:'#e67700'} : {txt:'Lugn', col:'#888'};
+
+    const gold = m.gold_ratio != null ? m.gold_ratio.toFixed(1) : '–';
+    const sr = m.se_rate != null ? m.se_rate.toFixed(2) + '%' : '–';
+    const fg = m.fear_greed != null ? m.fear_greed : '–';
+    const fgZone = typeof m.fear_greed === 'number' ? (m.fear_greed >= 75 ? {txt:'Extrem girighet', col:'#c0392b'} : m.fear_greed >= 55 ? {txt:'Girighet', col:'#e67700'} : m.fear_greed >= 45 ? {txt:'Neutral', col:'#888'} : m.fear_greed >= 25 ? {txt:'Rädsla', col:'var(--green)'} : {txt:'Extrem rädsla (KÖP)', col:'var(--green)'}) : {txt:'–',col:'#888'};
+
+    return `
+        <div class="macro-card">
+            <div class="macro-label">Shillers CAPE <span class="macro-hint">S&P 500</span></div>
+            <div class="macro-value">${capeVal}</div>
+            <div class="macro-zone" style="color:${capeZone.col}">${capeZone.txt}</div>
+            <div class="macro-note">Snitt 1881: 17 · Dotcom-topp: 44 · Shillers formel: 1/CAPE = förv. årsavkastning</div>
+        </div>
+        <div class="macro-card">
+            <div class="macro-label">Buffett-indikatorn <span class="macro-hint">Börsvärde/BNP</span></div>
+            <div class="macro-value">${bi}</div>
+            <div class="macro-zone" style="color:${biZone.col}">${biZone.txt}</div>
+            <div class="macro-note">&lt;70% = köp · 70-100% = rimligt · 100-140% = dyrt · &gt;140% = bubbla</div>
+        </div>
+        <div class="macro-card">
+            <div class="macro-label">US 10y ränta <span class="macro-hint">Riskfri ränta</span></div>
+            <div class="macro-value">${y10}</div>
+            <div class="macro-zone">SE styrränta: ${sr}</div>
+            <div class="macro-note">Dalios regel: Stigande räntor → skuldkris-risk ökar</div>
+        </div>
+        <div class="macro-card">
+            <div class="macro-label">VIX <span class="macro-hint">Rädsloindex</span></div>
+            <div class="macro-value">${vix}</div>
+            <div class="macro-zone" style="color:${vixZone.col}">${vixZone.txt}</div>
+            <div class="macro-note">Marks pendel: &gt;30 = rädsla (köpläge) · &lt;15 = girighet</div>
+        </div>
+        <div class="macro-card">
+            <div class="macro-label">Guld/S&P <span class="macro-hint">Ratio</span></div>
+            <div class="macro-value">${gold}</div>
+            <div class="macro-zone">Dalios All-Weather</div>
+            <div class="macro-note">Hög ratio → aktier dyra relativt guld (riskoff)</div>
+        </div>
+        <div class="macro-card">
+            <div class="macro-label">Fear & Greed <span class="macro-hint">CNN-liknande</span></div>
+            <div class="macro-value">${fg}</div>
+            <div class="macro-zone" style="color:${fgZone.col}">${fgZone.txt}</div>
+            <div class="macro-note">Buffett: "Var rädd när andra är giriga, girig när andra är rädda"</div>
+        </div>
+    `;
+}
+
+// ── Nyckeltal (Metrics Tool) ────────────────────────────
+
+function renderMetricsTool() {
+    const root = document.getElementById('content');
+    const cards = document.getElementById('cards');
+    if (cards) cards.innerHTML = '';
+
+    root.innerHTML = `
+        <div class="metrics-tabs">
+            <button class="m-tab active" onclick="switchMetricsMarket('SE', this)">🇸🇪 Sverige</button>
+            <button class="m-tab" onclick="switchMetricsMarket('US', this)">🇺🇸 USA</button>
+            <button class="m-tab" onclick="switchMetricsMarket('BOTH', this)">Båda</button>
+        </div>
+        <div id="metricsContent"></div>
+    `;
+    renderMetricsContent('SE');
+}
+
+function switchMetricsMarket(m, el) {
+    document.querySelectorAll('.m-tab').forEach(t => t.classList.remove('active'));
+    el.classList.add('active');
+    renderMetricsContent(m);
+}
+
+const METRICS_DB = [
+    // === CORE VALUE (Graham, Klarman) ===
+    {cat:'Värde (Graham/Klarman)', market:'BOTH', code:'P/E', name:'Pris / Vinst', desc:'Hur många års vinster du betalar. Grahams defensiva gräns: max 15× snitt 3 år.', rule:'< 15 = attraktivt, > 22 = dyrt', book:'Graham'},
+    {cat:'Värde (Graham/Klarman)', market:'BOTH', code:'P/B', name:'Pris / Bokfört värde', desc:'Vad du betalar per krona bokfört värde. Grahams gräns: 1.5×.', rule:'< 1.5 = köpläge, Net-net < 0.67 = jackpot', book:'Graham'},
+    {cat:'Värde (Graham/Klarman)', market:'BOTH', code:'P/E × P/B', name:'Grahams kombo-test', desc:'Grahams enkla värdetest. Produkten bör vara under 22.5.', rule:'< 22.5 = godkänt', book:'Graham'},
+    {cat:'Värde (Graham/Klarman)', market:'BOTH', code:'NCAV', name:'Net-Net Working Capital', desc:'Omsättningstillgångar minus alla skulder. Köp under 2/3 av NCAV = ren Graham-rea.', rule:'Pris < 0.67 × NCAV', book:'Graham/Klarman'},
+    {cat:'Värde (Graham/Klarman)', market:'BOTH', code:'MoS', name:'Margin of Safety', desc:'(Verkligt värde − pris) / Verkligt värde. Kärnan i värdeinvestering.', rule:'≥ 25-30% krav, 50% för deep value', book:'Graham/Klarman'},
+
+    // === QUALITY (Buffett, Fisher, Greenblatt, Munger) ===
+    {cat:'Kvalitet (Buffett/Fisher)', market:'BOTH', code:'ROIC', name:'Return on Invested Capital', desc:'Kvalitetsmaskinens nyckeltal. Mäter hur effektivt bolaget förräntar allt kapital.', rule:'> 20% = kvalitetsmaskin, > 15% = bra, < 10% = ointressant', book:'Buffett/Greenblatt'},
+    {cat:'Kvalitet (Buffett/Fisher)', market:'BOTH', code:'ROE', name:'Return on Equity', desc:'Vinst på eget kapital. Fishers kvalitetskriterium.', rule:'> 15% konstant i 10 år = hög kvalitet', book:'Fisher'},
+    {cat:'Kvalitet (Buffett/Fisher)', market:'BOTH', code:'ROC', name:'Return on Capital (Greenblatt)', desc:'EBIT / (Rörelsekapital + nettoanläggningstillgångar). Greenblatts kvalitets-sida av Magic Formula.', rule:'Ranka topp 30 tillsammans med EY', book:'Greenblatt'},
+    {cat:'Kvalitet (Buffett/Fisher)', market:'BOTH', code:'Moat', name:'Vallgrav', desc:'Varumärke, nätverkseffekt, byteskostnad, kostnadsfördel, regulatorisk barriär.', rule:'≥ 2 av 5 typer = stark moat (Munger)', book:'Munger'},
+    {cat:'Kvalitet (Buffett/Fisher)', market:'BOTH', code:'GM%', name:'Bruttomarginal', desc:'Pricing power. Stabil hög marginal = vallgrav.', rule:'> 40% stabilt = premium-bolag', book:'Fisher'},
+    {cat:'Kvalitet (Buffett/Fisher)', market:'BOTH', code:'OPM%', name:'Rörelsemarginal', desc:'Hur väl bolaget omvandlar intäkter till vinst.', rule:'> 15% = effektivt', book:'Fisher'},
+
+    // === GREENBLATT MAGIC FORMULA ===
+    {cat:'Magic Formula (Greenblatt)', market:'BOTH', code:'EY', name:'Earnings Yield', desc:'EBIT / Enterprise Value. Greenblatts pris-sida.', rule:'> Riskfri ränta + 3% = billigt', book:'Greenblatt'},
+    {cat:'Magic Formula (Greenblatt)', market:'BOTH', code:'EV', name:'Enterprise Value', desc:'Börsvärde + Skuld − Kassa. Sanna priset på bolaget.', rule:'Använd EV, inte börsvärde, vid jämförelse', book:'Greenblatt'},
+    {cat:'Magic Formula (Greenblatt)', market:'BOTH', code:'MagicRank', name:'Kombinerad ranking', desc:'Ranka alla bolag på ROC + EY, summera rank. Köp topp 20-30.', rule:'Lägst kombinerad rank = bäst', book:'Greenblatt'},
+
+    // === LYNCH ===
+    {cat:'Tillväxt (Lynch)', market:'BOTH', code:'PEG', name:'Price / Earnings / Growth', desc:'P/E dividerat med vinsttillväxt (%). Lynchs gyllene nyckel.', rule:'< 1.0 = köpvärd, 1-1.5 = rimlig, > 2 = dyr', book:'Lynch'},
+    {cat:'Tillväxt (Lynch)', market:'BOTH', code:'EPS 5y CAGR', name:'Vinsttillväxt 5 år', desc:'Konsistent vinsttillväxt. Fast grower = 20-25%.', rule:'Slow grower: 2-4%, Stalwart: 10-12%, Fast grower: >20%', book:'Lynch'},
+    {cat:'Tillväxt (Lynch)', market:'BOTH', code:'2min', name:'Two-Minute Drill', desc:'Kan du förklara investeringsidén på 2 min? Om inte → förstår du inte bolaget.', rule:'Inversion: Formulera OCKSÅ bear case', book:'Lynch'},
+
+    // === DIVIDEND (Stinsen, Bogle) ===
+    {cat:'Utdelning (Stinsen)', market:'BOTH', code:'DY', name:'Direktavkastning', desc:'Årlig utdelning / aktiekurs.', rule:'3-5% + tillväxt > 2% högutdelande, < 1.5% ofta tillväxtbolag', book:'Stinsen'},
+    {cat:'Utdelning (Stinsen)', market:'BOTH', code:'Div Growth', name:'Utdelningstillväxt', desc:'Utdelningshöjningar år över år. Stinsens hemliga vapen.', rule:'≥ 10 år med höjning = utdelningsaristokrat', book:'Stinsen'},
+    {cat:'Utdelning (Stinsen)', market:'BOTH', code:'Payout', name:'Utdelningsandel', desc:'Andel av vinst delas ut. Hållbarhet i utdelningen.', rule:'< 60% = hållbart, > 80% = risk', book:'Stinsen'},
+    {cat:'Utdelning (Stinsen)', market:'BOTH', code:'YoC', name:'Yield on Cost', desc:'Din effektiva utdelning på ursprungliga investeringen.', rule:'Efter 20 år: 15-30% YoC från utd.tillväxt', book:'Stinsen'},
+
+    // === BALANCE SHEET (Graham, Buffett) ===
+    {cat:'Balansräkning', market:'BOTH', code:'D/E', name:'Skuldsättning / EK', desc:'Skulder genom eget kapital.', rule:'< 0.5 = stark, > 1.5 = risk i lågkonjunktur', book:'Graham/Marks'},
+    {cat:'Balansräkning', market:'BOTH', code:'Net Debt/EBITDA', name:'Nettoskuld / EBITDA', desc:'Hur många år av EBITDA behövs för att betala av skulden.', rule:'< 2× = tryggt, > 3× i cykliskt = fara', book:'Marks'},
+    {cat:'Balansräkning', market:'BOTH', code:'Current Ratio', name:'Likviditet', desc:'Omsättningstillgångar / kortfristiga skulder.', rule:'> 2.0 = Grahams defensiva krav', book:'Graham'},
+    {cat:'Balansräkning', market:'BOTH', code:'FCF', name:'Fritt kassaflöde', desc:'Operativt CF − CapEx. Sanningens siffra (Buffett).', rule:'Positivt i 10/10 år = kvalitetsbolag', book:'Buffett'},
+    {cat:'Balansräkning', market:'BOTH', code:'FCF Yield', name:'FCF-avkastning', desc:'FCF / börsvärde. Finare än EY i vissa branscher.', rule:'> 5% = attraktivt', book:'Damodaran'},
+
+    // === DCF (Damodaran) ===
+    {cat:'Värdering (Damodaran)', market:'BOTH', code:'DCF', name:'Discounted Cash Flow', desc:'Summan av framtida FCF diskonterat till dagens värde.', rule:'Pris < 0.7 × DCF = 30% MoS', book:'Damodaran'},
+    {cat:'Värdering (Damodaran)', market:'BOTH', code:'WACC', name:'Vägd kapitalkostnad', desc:'Diskonteringsränta för DCF. Stabila storbolag: 7-9%, startups: 15-25%.', rule:'Damodarans tumregel per risktyp', book:'Damodaran'},
+    {cat:'Värdering (Damodaran)', market:'BOTH', code:'Terminal g', name:'Terminal tillväxt', desc:'Långsiktig evighetstillväxt efter prognosperiod.', rule:'Max = BNP-tillväxt (2-3%)', book:'Damodaran'},
+
+    // === SE-SPECIFIC ===
+    {cat:'SE-specifikt', market:'SE', code:'Ägare', name:'Avanza ägare', desc:'Antal ägare på Avanza. Hög ägarspridning = likviditet + folkaktie.', rule:'> 10 000 ägare = solid, < 1 000 = illikvid', book:'–'},
+    {cat:'SE-specifikt', market:'SE', code:'Investmentbolag rabatt', name:'Substansrabatt', desc:'(NAV − börsvärde) / NAV. Klassisk svensk strategi.', rule:'> 15% rabatt = köpläge (Investor, Latour, Industrivärden)', book:'Stinsen'},
+    {cat:'SE-specifikt', market:'SE', code:'Insider %', name:'Insiderköp', desc:'Andelen senaste 90 dagarna som är köp vs sälj.', rule:'> 70% köp = stark signal (Finansinspektionen)', book:'Lynch'},
+    {cat:'SE-specifikt', market:'SE', code:'ISK vs KF', name:'Skattestruktur', desc:'ISK: schablonskatt ~0.9%/år. KF: företagsägd. Holdingbolag: 20.6% bolagsskatt.', rule:'10-30 MSEK → holdingbolag lönsamt', book:'Bok 2'},
+
+    // === US-SPECIFIC ===
+    {cat:'US-specifikt', market:'US', code:'Shiller CAPE', name:'CAPE-ratio', desc:'Pris / snitt 10 års inflationsjusterad vinst (S&P 500).', rule:'< 15 = köp, > 25 = varning, > 35 = krasch risk', book:'Shiller'},
+    {cat:'US-specifikt', market:'US', code:'Buffett Ind.', name:'Market Cap / GDP', desc:'Total marknad genom BNP. Buffetts makro-varningsflagg.', rule:'< 100% = rimligt, > 140% = fara', book:'Buffett/Shiller'},
+    {cat:'US-specifikt', market:'US', code:'Beta', name:'Beta (mot S&P500)', desc:'Hur volatil aktien är vs index. Markis avvisar detta som "risk".', rule:'0.8-1.2 = normal, > 1.5 = volatil', book:'Marks'},
+    {cat:'US-specifikt', market:'US', code:'Forward P/E', name:'Forward P/E', desc:'Pris / förväntad vinst kommande år.', rule:'Jämför med historisk median för bolaget', book:'Damodaran'},
+    {cat:'US-specifikt', market:'US', code:'Short Interest', name:'Kort-andel', desc:'Andel av aktier som är blankade.', rule:'> 20% = hög kontroversiell position, short squeeze-risk', book:'–'},
+
+    // === PORTFOLIO / PSYCHOLOGY (Kahneman, Taleb, Dalio) ===
+    {cat:'Portfölj & Psykologi', market:'BOTH', code:'Kelly', name:'Kelly-kriteriet', desc:'f* = (bp − q) / b — optimal positionsstorlek.', rule:'Använd alltid max Half-Kelly (halvera)', book:'Taleb'},
+    {cat:'Portfölj & Psykologi', market:'BOTH', code:'Max DD', name:'Max Drawdown', desc:'Största nedgång från topp till botten. Viktigare än snittavkastning.', rule:'Stopp vid -30% portfölj, -50% kräver 100% för återhämtning', book:'Marks'},
+    {cat:'Portfölj & Psykologi', market:'BOTH', code:'Sharpe', name:'Sharpe-kvot', desc:'(Avkastning − riskfri) / volatilitet.', rule:'> 1 bra, > 2 exceptionellt', book:'Dalio'},
+    {cat:'Portfölj & Psykologi', market:'BOTH', code:'Barbell', name:'Talebs Barbell', desc:'85% extremt säkert + 15% extremt aggressivt, 0% i mitten.', rule:'Max förlust 15%, obegränsad uppsida', book:'Taleb'},
+    {cat:'Portfölj & Psykologi', market:'BOTH', code:'All Weather', name:'Dalios All Weather', desc:'30% aktier, 40% långa obl., 15% medel obl., 7.5% guld, 7.5% råvaror.', rule:'Ombalansera 1×/år', book:'Dalio'},
+    {cat:'Portfölj & Psykologi', market:'BOTH', code:'Cash %', name:'Kassaandel (Klarman)', desc:'Likvida medel redo för panik-köp.', rule:'15-30% normalt, upp till 50% när CAPE > 30', book:'Klarman'},
+];
+
+const STRATEGY_PLAYBOOK = {
+    SE: [
+        {name:'Stinsen-portfölj', desc:'Investor, Atlas Copco, Lifco, Hexagon, Addtech, Assa Abloy. ≥10 års utd.tillväxt. Sälj aldrig.', weight:'40-60% av portföljen'},
+        {name:'Svensk Magic Formula', desc:'Screen 20-30 svenska bolag på ROC + EY. Rotera årligen. Undvik fastighet & bank.', weight:'10-20%'},
+        {name:'Investmentbolag med substansrabatt', desc:'Investor, Latour, Industrivärden vid ≥10% rabatt = inbyggd MoS + utdelningstillväxt.', weight:'10-20%'},
+        {name:'Insider-signaler (FI)', desc:'Följ VD/styrelseköp ≥ 500 kSEK. Korrelerar historiskt med outperformance.', weight:'5-10%'},
+        {name:'Kvalitetsmaskiner (Fisher)', desc:'Lifco, Hexagon, Nibe — ROIC > 20%, återkommande förvärv.', weight:'15-25%'},
+    ],
+    US: [
+        {name:'S&P 500 Indexfond (Bogle)', desc:'Kärninnehav. 0.1% avgift. Dollar-cost averaging. Månadsköp.', weight:'30-50% av portföljen'},
+        {name:'All Weather (Dalio)', desc:'30% aktier, 55% obligationer, 7.5% guld, 7.5% råvaror. Max DD ~20%.', weight:'Alt. 100% strategi för defensiv'},
+        {name:'US Magic Formula', desc:'Rank på ROIC + EY. Filtrera bort finans & fastigheter. Hold 1 år.', weight:'10-20%'},
+        {name:'Wide Moat (Morningstar)', desc:'Bolag med rating Wide Moat + MoS ≥ 25% mot fair value.', weight:'15-25%'},
+        {name:'Barbell (Taleb)', desc:'85% statsobligationer/kassa + 15% aggressiva smallcaps/options/krypto. Binär utfallsmodell.', weight:'Alt. strategi för hög risktolerans'},
+    ],
+    BOTH: [
+        {name:'CAPE-baserad allokering (Shiller)', desc:'CAPE > 30 → öka kassa till 30-40%. CAPE < 15 → aggressiv köp. CAPE-viktad rebalansering.', weight:'Styr portfölj-viktning'},
+        {name:'Klarmans ammunition', desc:'Aldrig < 15% kassa. När CAPE > 30 → 30-50% kassa. Kassa = möjlighet, ej slack.', weight:'Ständig'},
+        {name:'20-håls regeln (Buffett)', desc:'Du har 20 köp på en livstid. Varje köp måste klara alla mästares filter. Radikal selektivitet.', weight:'Filosofi'},
+        {name:'Inversion (Munger)', desc:'Fråga: "Hur krossas detta bolag?" innan "Hur växer det?". Undvik deal-breakers FÖRST.', weight:'Filosofi'},
+    ],
+};
+
+function renderMetricsContent(market) {
+    const root = document.getElementById('metricsContent');
+    const filtered = METRICS_DB.filter(m => m.market === 'BOTH' || m.market === market || market === 'BOTH');
+    const cats = [...new Set(filtered.map(m => m.cat))];
+
+    let html = '<div class="metrics-wrap">';
+
+    // Strategy playbook first
+    const playbook = STRATEGY_PLAYBOOK[market] || STRATEGY_PLAYBOOK.BOTH;
+    html += `<div class="playbook-section">
+        <h3 class="section-heading">📘 Strategier (${market})</h3>
+        <div class="playbook-grid">` +
+        playbook.map(p => `
+            <div class="playbook-card">
+                <div class="playbook-name">${p.name}</div>
+                <div class="playbook-desc">${p.desc}</div>
+                <div class="playbook-weight">${p.weight}</div>
+            </div>`).join('') +
+        `</div></div>`;
+
+    // Metrics by category
+    html += `<h3 class="section-heading" style="margin-top:28px">📊 Nyckeltal</h3>`;
+    cats.forEach(cat => {
+        const metrics = filtered.filter(m => m.cat === cat);
+        html += `<div class="cat-block">
+            <div class="cat-heading">${cat}</div>
+            <div class="m-table-wrap"><table class="m-table">
+                <thead><tr>
+                    <th style="width:100px">Nyckeltal</th>
+                    <th>Namn</th>
+                    <th>Beskrivning</th>
+                    <th style="width:220px">Regel / Gräns</th>
+                    <th style="width:100px">Källa</th>
+                </tr></thead>
+                <tbody>` +
+                metrics.map(m => `<tr>
+                    <td><span class="m-code">${m.code}</span></td>
+                    <td><strong>${m.name}</strong></td>
+                    <td class="m-desc">${m.desc}</td>
+                    <td class="m-rule">${m.rule}</td>
+                    <td class="m-book">${m.book}</td>
+                </tr>`).join('') +
+            `</tbody></table></div>
+        </div>`;
+    });
+
+    // Tips section
+    html += `<h3 class="section-heading" style="margin-top:28px">💡 Tips från mästarna</h3>
+    <div class="tips-grid">
+        <div class="tip-card"><div class="tip-hd">Graham</div><div class="tip-body">"Kortsiktigt är marknaden en röstmaskin. Långsiktigt är den en våg." — Köp ALDRIG utan ≥25% margin of safety.</div></div>
+        <div class="tip-card"><div class="tip-hd">Munger</div><div class="tip-body">Inversion: "Hur blir jag INTE fattig?" — Undvik skuld, flocken, bubblor, komplicerad redovisning.</div></div>
+        <div class="tip-card"><div class="tip-hd">Buffett</div><div class="tip-body">"Vårt favorit-innehavstid är för evigt." 20-håls-kortet: tänk som om du bara har 20 köp i livet.</div></div>
+        <div class="tip-card"><div class="tip-hd">Lynch</div><div class="tip-body">Two-minute drill: Kan du inte förklara investeringsidén på 2 min — äg den inte. PEG &lt; 1 är guld.</div></div>
+        <div class="tip-card"><div class="tip-hd">Klarman</div><div class="tip-body">Kassa är AMMUNITION. Aldrig &lt; 15%. När alla panikerar — då slår du till.</div></div>
+        <div class="tip-card"><div class="tip-hd">Shiller</div><div class="tip-body">Högt CAPE → låg 10-årsavkastning. Förväntad årsavkastning ≈ 1/CAPE.</div></div>
+        <div class="tip-card"><div class="tip-hd">Marks</div><div class="tip-body">Second-level thinking: Det räcker inte att bolaget är bra. Fråga: Vad missar konsensus? Avkastning = verklighet − förväntningar.</div></div>
+        <div class="tip-card"><div class="tip-hd">Bogle</div><div class="tip-body">"I fondvärlden får du vad du INTE betalar för." 1% extra avgift stjäl 25% av din pension över 30 år.</div></div>
+        <div class="tip-card"><div class="tip-hd">Kahneman</div><div class="tip-body">Sök ALLTID det bästa motargumentet mot din tes. Om du inte kan formulera det — förstår du inte risken.</div></div>
+        <div class="tip-card"><div class="tip-hd">Taleb</div><div class="tip-body">Regel 1: Gå inte sönder. Regel 2: Se regel 1. Barbell: 85% säkert + 15% aggressivt — 0% i mitten.</div></div>
+        <div class="tip-card"><div class="tip-hd">Dalio</div><div class="tip-body">"He who lives by the crystal ball will eat shattered glass." Bygg en allväder-portfölj som fungerar oavsett konjunktur.</div></div>
+        <div class="tip-card"><div class="tip-hd">Stinsen</div><div class="tip-body">Köp utdelningshöjare. Sälj aldrig. Låt ränta-på-ränta jobba i 30+ år. Yield on Cost blir 20%+ efter 25 år.</div></div>
+    </div>`;
+
+    html += '</div>';
+    root.innerHTML = html;
+}
+
 // ── Prefetch all tabs for instant switching ──────────────
 
 async function prefetchAllTabs() {
@@ -2624,13 +3377,19 @@ async function init() {
     const prefetchPromise = prefetchAllTabs();
 
     await fetchStatus();
+
+    // Default to Dashboard on page load (no API fetch needed)
+    const meta = TAB_META[currentTab] || {title:'',sub:''};
+    const pt = document.getElementById('pageTitle'); if (pt) pt.textContent = meta.title;
+    const ps = document.getElementById('pageSubtitle'); if (ps) ps.textContent = meta.sub;
+
     renderFilterBar();
-
-    // Wait for prefetch to finish (or at least signals tab)
-    await prefetchPromise;
-
-    // Render current tab (will hit cache = instant)
-    await fetchData();
+    if (currentTab === 'dashboard') { renderDashboard(); }
+    else if (currentTab === 'metrics') { renderMetricsTool(); }
+    else {
+        await prefetchPromise;
+        await fetchData();
+    }
 
     // Auto-refresh: poll varje 60s, only when a market is open
     setInterval(async () => {
