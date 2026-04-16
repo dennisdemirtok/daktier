@@ -434,6 +434,62 @@
         /* ── Auto-rebalance Banner ──── */
         .auto-rebal-banner { background: linear-gradient(135deg, #ecfdf5, #f0fdf4); border: 1px solid #86efac; border-radius: var(--radius); padding: 12px 16px; margin-bottom: 16px; font-size: 13px; display: flex; align-items: center; gap: 8px; }
 
+        /* ── Simulation Page ──── */
+        .sim-hero { background: linear-gradient(135deg, #0b1437 0%, #1e1b4b 50%, #3b0764 100%); color: #fff; border-radius: 16px; padding: 24px 28px; margin-bottom: 20px; display: grid; grid-template-columns: 1.3fr 1fr 1fr 1fr; gap: 24px; align-items: center; position: relative; overflow: hidden; }
+        .sim-hero::before { content: ''; position: absolute; top: -50%; right: -10%; width: 400px; height: 400px; background: radial-gradient(circle, rgba(124,58,237,0.25), transparent 70%); pointer-events: none; }
+        .sim-hero::after { content: ''; position: absolute; bottom: -50%; left: -5%; width: 300px; height: 300px; background: radial-gradient(circle, rgba(0,194,129,0.15), transparent 70%); pointer-events: none; }
+        .sim-hero-title { font-size: 20px; font-weight: 800; letter-spacing: -0.3px; margin-bottom: 4px; position: relative; z-index: 1; }
+        .sim-hero-sub { font-size: 12px; opacity: 0.75; font-weight: 500; position: relative; z-index: 1; }
+        .sim-hero-kpi { position: relative; z-index: 1; }
+        .sim-hero-kpi-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.8px; opacity: 0.7; font-weight: 600; margin-bottom: 4px; }
+        .sim-hero-kpi-value { font-size: 22px; font-weight: 800; letter-spacing: -0.5px; }
+        .sim-hero-kpi-sub { font-size: 11px; opacity: 0.75; margin-top: 2px; }
+        .sim-hero-actions { display: flex; gap: 8px; position: relative; z-index: 1; justify-content: flex-end; }
+        .sim-hero-btn { background: rgba(255,255,255,0.1); backdrop-filter: blur(8px); color: #fff; border: 1px solid rgba(255,255,255,0.15); padding: 8px 14px; border-radius: 10px; font-size: 12px; font-weight: 600; cursor: pointer; font-family: inherit; transition: all 0.15s; }
+        .sim-hero-btn:hover { background: rgba(255,255,255,0.2); transform: translateY(-1px); }
+        .sim-hero-btn.danger:hover { background: rgba(190,0,51,0.4); border-color: rgba(190,0,51,0.6); }
+
+        .sim-section-head { display: flex; align-items: center; justify-content: space-between; margin: 28px 0 12px; }
+        .sim-section-head h2 { font-size: 13px; font-weight: 700; letter-spacing: 0.8px; text-transform: uppercase; color: var(--text-muted); }
+        .sim-section-head-tag { font-size: 11px; font-weight: 600; color: var(--text-muted); }
+
+        .sim-card-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 14px; }
+        .sim-pcard { background: var(--white); border-radius: var(--radius); padding: 18px; cursor: pointer; transition: transform 0.15s, box-shadow 0.15s; border: 1px solid var(--surface-low); position: relative; overflow: hidden; }
+        .sim-pcard::before { content: ''; position: absolute; top: 0; left: 0; width: 100%; height: 3px; background: var(--accent, var(--text-muted)); }
+        .sim-pcard:hover { transform: translateY(-3px); box-shadow: 0 12px 32px rgba(0,0,0,0.08); }
+        .sim-pcard-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+        .sim-pcard-title { font-size: 15px; font-weight: 700; display: flex; align-items: center; gap: 8px; }
+        .sim-pcard-icon { font-size: 20px; }
+        .sim-pcard-badge { font-size: 10px; font-weight: 600; padding: 3px 8px; border-radius: 6px; text-transform: uppercase; letter-spacing: 0.5px; background: var(--surface-low); color: var(--text-muted); }
+        .sim-pcard-value { font-size: 26px; font-weight: 800; letter-spacing: -0.5px; line-height: 1.1; }
+        .sim-pcard-return { display: inline-flex; align-items: baseline; gap: 6px; margin-top: 4px; font-size: 13px; font-weight: 600; padding: 3px 10px; border-radius: 999px; }
+        .sim-pcard-return.pos { background: var(--green-light); color: var(--green-dark); }
+        .sim-pcard-return.neg { background: var(--red-light); color: var(--red); }
+        .sim-pcard-return.neu { background: var(--surface-low); color: var(--text-muted); }
+        .sim-pcard-meta { font-size: 11px; color: var(--text-muted); margin-top: 10px; display: flex; gap: 12px; }
+        .sim-pcard-stats { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--surface-low); display: grid; grid-template-columns: 1fr 1fr; gap: 8px 14px; font-size: 11px; }
+        .sim-pcard-stat-label { color: var(--text-muted); font-weight: 500; }
+        .sim-pcard-stat-val { font-weight: 700; text-align: right; }
+        .sim-pcard-detail-hint { position: absolute; top: 14px; right: 14px; font-size: 10px; color: var(--text-muted); opacity: 0; transition: opacity 0.15s; font-weight: 600; letter-spacing: 0.3px; }
+        .sim-pcard:hover .sim-pcard-detail-hint { opacity: 1; }
+
+        .sim-ranking { background: var(--white); border-radius: var(--radius); padding: 18px; border: 1px solid var(--surface-low); }
+        .sim-ranking-head { font-size: 13px; font-weight: 700; margin-bottom: 12px; letter-spacing: 0.3px; display: flex; align-items: center; justify-content: space-between; }
+        .sim-ranking-row { display: grid; grid-template-columns: 28px 1fr auto; align-items: center; padding: 8px 0; gap: 10px; border-bottom: 1px solid var(--surface-low); font-size: 13px; }
+        .sim-ranking-row:last-child { border-bottom: none; }
+        .sim-ranking-rank { font-size: 14px; font-weight: 800; color: var(--text-muted); text-align: center; }
+        .sim-ranking-rank.gold { color: #d4a017; }
+        .sim-ranking-rank.silver { color: #94a3b8; }
+        .sim-ranking-rank.bronze { color: #b87333; }
+        .sim-ranking-name { font-weight: 600; display: flex; align-items: center; gap: 6px; }
+        .sim-ranking-ret { font-weight: 700; font-size: 14px; }
+
+        .sim-holdings-head { display: flex; align-items: center; justify-content: space-between; margin: 28px 0 10px; gap: 12px; flex-wrap: wrap; }
+        .sim-holdings-title { font-size: 15px; font-weight: 700; display: flex; align-items: center; gap: 8px; }
+        .sim-holdings-meta { font-size: 12px; color: var(--text-muted); font-weight: 500; }
+        .sim-holdings-wins { display: inline-flex; gap: 6px; font-size: 11px; }
+        .sim-holdings-wins-chip { padding: 2px 8px; border-radius: 6px; font-weight: 700; }
+
         /* ── Upload Zone ──── */
         .upload-zone { border: 2px dashed var(--surface-high); border-radius: var(--radius); padding: 40px; text-align: center; cursor: pointer; transition: all 0.2s; background: var(--white); }
         .upload-zone:hover, .upload-zone.dragover { border-color: var(--orange); background: var(--orange-light); }
@@ -1758,14 +1814,14 @@ function renderSimulation(simData) {
     const cash = simData.cash || {};
 
     const PCFG = {
-        trav:         { icon: '🏇', label: 'Trav-modellen',                color: 'var(--green)',  borderColor: 'var(--green)' },
-        magic:        { icon: '📊', label: 'Magic Formula',                color: 'var(--purple)', borderColor: 'var(--purple)' },
-        dsm:          { icon: '🎯', label: 'DSM (Dennis Signal)',          color: 'var(--blue)',   borderColor: 'var(--blue)' },
-        ace:          { icon: '⚡', label: 'ACE (Alpha Engine)',            color: 'var(--orange)', borderColor: 'var(--orange)' },
-        meta:         { icon: '🧠', label: 'Meta Score (Combo)',           color: '#e91e63',       borderColor: '#e91e63' },
-        books:        { icon: '📚', label: 'Böckerna (10 aktier)',         color: '#8b5cf6',       borderColor: '#8b5cf6' },
-        graham_def:   { icon: '📘', label: 'Graham Defensive (20 st)',     color: '#1d4ed8',       borderColor: '#1d4ed8' },
-        quality_conc: { icon: '🏰', label: 'Buffett Quality (8 st)',       color: '#b45309',       borderColor: '#b45309' },
+        trav:         { icon: '🏇', label: 'Trav-modellen',                color: 'var(--green)',  borderColor: 'var(--green)', category: 'signal' },
+        magic:        { icon: '📊', label: 'Magic Formula',                color: 'var(--purple)', borderColor: 'var(--purple)', category: 'book' },
+        dsm:          { icon: '🎯', label: 'DSM (Dennis Signal)',          color: 'var(--blue)',   borderColor: 'var(--blue)',  category: 'signal' },
+        ace:          { icon: '⚡', label: 'ACE (Alpha Engine)',            color: 'var(--orange)', borderColor: 'var(--orange)', category: 'signal' },
+        meta:         { icon: '🧠', label: 'Meta Score (Combo)',           color: '#e91e63',       borderColor: '#e91e63',  category: 'signal' },
+        books:        { icon: '📚', label: 'Böckerna (10 aktier)',         color: '#8b5cf6',       borderColor: '#8b5cf6',  category: 'book' },
+        graham_def:   { icon: '📘', label: 'Graham Defensive (20 st)',     color: '#1d4ed8',       borderColor: '#1d4ed8',  category: 'book' },
+        quality_conc: { icon: '🏰', label: 'Buffett Quality (8 st)',       color: '#b45309',       borderColor: '#b45309',  category: 'book' },
     };
 
     function fmtKr(n) { return n.toLocaleString('sv-SE', {minimumFractionDigits: 0, maximumFractionDigits: 0}) + ' kr'; }
@@ -1780,65 +1836,78 @@ function renderSimulation(simData) {
         </div>`;
     }
 
-    function bigCard(label, icon, color, port, portKey) {
+    function bigCard(label, icon, color, port, portKey, category) {
         if (!port) return '';
         const val = port.total_current_value;
         const gain = port.total_gain;
         const ret = port.total_return_pct;
         const r = realized[portKey] || {total_sells:0, wins:0, losses:0, win_rate:0, total_gain_kr:0};
         const c = cash[portKey] || 0;
+        const retClass = ret > 0 ? 'pos' : ret < 0 ? 'neg' : 'neu';
+        const retArrow = ret > 0 ? '▲' : ret < 0 ? '▼' : '●';
+        const badgeLabel = category === 'book' ? 'Bokstrategi' : 'Signalmodell';
 
-        return `<div onclick="showModelDetail('${portKey}')" title="Klicka för detaljerad vy, plan och transaktioner" style="background:var(--white);border-radius:var(--radius);padding:16px;box-shadow:var(--shadow);border-left:4px solid ${color};flex:1;min-width:260px;cursor:pointer;transition:transform 0.12s,box-shadow 0.12s" onmouseover="this.style.transform='translateY(-2px)';this.style.boxShadow='0 8px 24px rgba(0,0,0,0.08)'" onmouseout="this.style.transform='';this.style.boxShadow='var(--shadow)'">
-            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
-                <div style="font-size:16px;font-weight:700">${icon} ${label}</div>
-                <span style="font-size:10px;color:var(--green-dark);background:var(--surface-low);padding:3px 8px;border-radius:8px;font-weight:700">DETALJER →</span>
+        return `<div class="sim-pcard" style="--accent:${color}" onclick="showModelDetail('${portKey}')" title="Klicka för detaljerad vy, plan och transaktioner">
+            <span class="sim-pcard-detail-hint">DETALJER →</span>
+            <div class="sim-pcard-head">
+                <div class="sim-pcard-title"><span class="sim-pcard-icon">${icon}</span>${label}</div>
             </div>
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
-                <div><div style="font-size:10px;text-transform:uppercase;color:var(--text-muted);letter-spacing:0.5px">Startkapital</div>
-                     <div style="font-size:18px;font-weight:700">${fmtKr(port.start_capital)}</div></div>
-                <div><div style="font-size:10px;text-transform:uppercase;color:var(--text-muted);letter-spacing:0.5px">Nuvarande</div>
-                     <div style="font-size:18px;font-weight:700;color:${rc(gain)}">${fmtKr(val)}</div></div>
-                <div><div style="font-size:10px;text-transform:uppercase;color:var(--text-muted);letter-spacing:0.5px">Avkastning</div>
-                     <div style="font-size:18px;font-weight:700;color:${rc(ret)}">${fmtRet(ret)}</div></div>
-                <div><div style="font-size:10px;text-transform:uppercase;color:var(--text-muted);letter-spacing:0.5px">Aktier / Dagar</div>
-                     <div style="font-size:18px;font-weight:700">${port.holdings.length} / ${port.days_active}</div></div>
+            <div class="sim-pcard-badge" style="display:inline-block;margin-bottom:10px">${badgeLabel}</div>
+            <div class="sim-pcard-value" style="color:${ret >= 0 ? 'var(--text)' : 'var(--red)'}">${fmtKr(val)}</div>
+            <div class="sim-pcard-return ${retClass}">${retArrow} ${fmtRet(ret)} <span style="opacity:0.7;font-weight:500;margin-left:4px">(${gain>=0?'+':''}${fmtKr(gain)})</span></div>
+            <div class="sim-pcard-meta">
+                <span>${port.holdings.length} aktier</span><span>•</span>
+                <span>${port.days_active} dagar</span><span>•</span>
+                <span>Start: ${fmtKr(port.start_capital)}</span>
             </div>
-            <div style="border-top:1px solid var(--border-light);padding-top:8px">
-                ${statLine('Realiserat', r.total_gain_kr !== 0 ? (r.total_gain_kr>=0?'+':'')+fmtKr(r.total_gain_kr) : '—', r.total_gain_kr !== 0 ? rc(r.total_gain_kr) : 'var(--text-muted)')}
-                ${statLine('Orealiserat', gain !== 0 ? (gain>=0?'+':'')+fmtKr(gain) : '—', gain !== 0 ? rc(gain) : 'var(--text-muted)')}
-                ${statLine('Win rate', r.total_sells > 0 ? r.wins+'/'+r.total_sells+' ('+(r.win_rate*100).toFixed(0)+'%)' : 'Inga sälj', r.total_sells > 0 ? (r.win_rate >= 0.5 ? 'var(--green)' : 'var(--red)') : 'var(--text-muted)')}
-                ${statLine('Kassa', fmtKr(c), c > 0 ? 'var(--blue)' : 'var(--text-muted)')}
+            <div class="sim-pcard-stats">
+                <span class="sim-pcard-stat-label">Realiserat</span>
+                <span class="sim-pcard-stat-val" style="color:${r.total_gain_kr !== 0 ? rc(r.total_gain_kr) : 'var(--text-muted)'}">
+                    ${r.total_gain_kr !== 0 ? (r.total_gain_kr>=0?'+':'')+fmtKr(r.total_gain_kr) : '—'}
+                </span>
+                <span class="sim-pcard-stat-label">Orealiserat</span>
+                <span class="sim-pcard-stat-val" style="color:${gain !== 0 ? rc(gain) : 'var(--text-muted)'}">
+                    ${gain !== 0 ? (gain>=0?'+':'')+fmtKr(gain) : '—'}
+                </span>
+                <span class="sim-pcard-stat-label">Win rate</span>
+                <span class="sim-pcard-stat-val" style="color:${r.total_sells > 0 ? (r.win_rate >= 0.5 ? 'var(--green-dark)' : 'var(--red)') : 'var(--text-muted)'}">
+                    ${r.total_sells > 0 ? r.wins+'/'+r.total_sells+' ('+(r.win_rate*100).toFixed(0)+'%)' : 'Inga sälj'}
+                </span>
+                <span class="sim-pcard-stat-label">Kassa</span>
+                <span class="sim-pcard-stat-val" style="color:${c > 100 ? 'var(--blue)' : 'var(--text-muted)'}">${fmtKr(c)}</span>
             </div>
         </div>`;
     }
 
-    // Jämförelse-kort: ranking alla portföljer
-    let compareHtml = '';
-    if (portKeys.length >= 2) {
+    // Ranking-panel: alla portföljer sorterade på avkastning
+    let rankingHtml = '';
+    let hero = { totalVal: 0, totalCap: 0, totalRealized: 0, best: null, worst: null };
+    if (portKeys.length >= 1) {
         const sorted = portKeys
             .filter(k => portfolios[k])
             .map(k => ({ key: k, ret: portfolios[k].total_return_pct, val: portfolios[k].total_current_value, n: portfolios[k].holdings.length }))
             .sort((a,b) => b.ret - a.ret);
-        const best = sorted[0];
-        const worst = sorted[sorted.length - 1];
-        const bestCfg = PCFG[best.key] || {};
-        const worstCfg = PCFG[worst.key] || {};
-        const spreadPct = best.ret - worst.ret;
+        hero.best = sorted[0];
+        hero.worst = sorted[sorted.length - 1];
+        hero.totalVal = sorted.reduce((s, x) => s + x.val, 0);
+        hero.totalCap = portKeys.reduce((s, k) => s + (portfolios[k]?.start_capital || 0), 0);
+        hero.totalRealized = Object.values(realized).reduce((s, r) => s + (r.total_gain_kr || 0), 0);
 
-        compareHtml = `<div style="background:var(--white);border-radius:var(--radius);padding:16px;box-shadow:var(--shadow);border-left:4px solid ${spreadPct >= 0 ? 'var(--green)' : 'var(--red)'};flex:1;min-width:260px">
-            <div style="font-size:16px;font-weight:700;margin-bottom:12px">📈 Ranking</div>
+        rankingHtml = `<div class="sim-ranking">
+            <div class="sim-ranking-head">
+                <span>📈 Ranking</span>
+                <span style="font-size:11px;color:var(--text-muted);font-weight:500;text-transform:none;letter-spacing:0">efter avkastning</span>
+            </div>
             ${sorted.map((s, i) => {
                 const cfg = PCFG[s.key] || {icon:'', label:s.key};
-                const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : '#'+(i+1);
-                return `<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--border-light)">
-                    <span style="font-size:13px">${medal} ${cfg.icon} ${cfg.label}</span>
-                    <span style="font-size:14px;font-weight:700;color:${rc(s.ret)}">${fmtRet(s.ret)}</span>
+                const rankCls = i === 0 ? 'gold' : i === 1 ? 'silver' : i === 2 ? 'bronze' : '';
+                const rankDisp = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : '#'+(i+1);
+                return `<div class="sim-ranking-row">
+                    <span class="sim-ranking-rank ${rankCls}">${rankDisp}</span>
+                    <span class="sim-ranking-name"><span>${cfg.icon}</span>${cfg.label}</span>
+                    <span class="sim-ranking-ret" style="color:${rc(s.ret)}">${fmtRet(s.ret)}</span>
                 </div>`;
             }).join('')}
-            <div style="margin-top:8px;text-align:center;font-size:11px;color:var(--text-muted)">
-                Spread: <strong style="color:${rc(spreadPct)}">${fmtRet(spreadPct)}</strong>
-                (${bestCfg.icon||''} vs ${worstCfg.icon||''})
-            </div>
         </div>`;
     }
 
@@ -1952,11 +2021,15 @@ function renderSimulation(simData) {
         </div>`;
     }
 
-    // Dynamiska portföljkort
-    const cardsHtml = portKeys.map(k => {
-        const cfg = PCFG[k] || {icon:'📦', label:k, color:'var(--text)'};
-        return bigCard(cfg.label, cfg.icon, cfg.color, portfolios[k], k);
+    // Dynamiska portföljkort grupperade efter kategori
+    const signalKeys = portKeys.filter(k => (PCFG[k]?.category || 'signal') === 'signal');
+    const bookKeys   = portKeys.filter(k => (PCFG[k]?.category || '') === 'book');
+    const mkCardsHtml = (keys) => keys.map(k => {
+        const cfg = PCFG[k] || {icon:'📦', label:k, color:'var(--text)', category:'signal'};
+        return bigCard(cfg.label, cfg.icon, cfg.color, portfolios[k], k, cfg.category);
     }).join('');
+    const signalCardsHtml = mkCardsHtml(signalKeys);
+    const bookCardsHtml = mkCardsHtml(bookKeys);
 
     // Dynamiska holdings-tabeller
     const holdingsHtml = portKeys.map(k => {
@@ -1976,49 +2049,91 @@ function renderSimulation(simData) {
         }
     }
 
+    const totalGainAbs = hero.totalVal - hero.totalCap;
+    const totalRetPct = hero.totalCap > 0 ? (hero.totalVal - hero.totalCap) / hero.totalCap : 0;
+    const bestCfg = hero.best ? PCFG[hero.best.key] || {} : null;
+    const worstCfg = hero.worst ? PCFG[hero.worst.key] || {} : null;
+
     document.getElementById('content').innerHTML = `
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
-            <div class="info-banner" style="flex:1;margin:0;background:linear-gradient(135deg,#f0e8ff,#e8eeff)">
-                <div class="info-banner-icon">🏇📊🎯⚡🧠</div>
-                <div class="info-banner-text">
-                    <strong>Portföljsimulering — 5 modeller</strong> · Startdatum: <strong>${startDate}</strong> · 1 000 000 kr per portfölj<br>
-                    Trav (lönsamhet+ägare) · Magic Formula · DSM (kontrarian+värde) · ACE (multi-faktor) · Meta Score (combo)
+        <!-- ── HERO ── -->
+        <div class="sim-hero">
+            <div>
+                <div class="sim-hero-title">Portföljsimulering</div>
+                <div class="sim-hero-sub">${portKeys.length} strategier · Start ${startDate} · 1 000 000 kr per portfölj</div>
+                <div class="sim-hero-actions" style="justify-content:flex-start;margin-top:14px">
+                    <button class="sim-hero-btn" onclick="rebalanceSimulation()">🔄 Rebalansera nu</button>
+                    <button class="sim-hero-btn danger" onclick="resetSimulation()">Nollställ</button>
                 </div>
             </div>
-            <div style="display:flex;gap:8px;margin-left:12px;flex-shrink:0">
-                <button onclick="rebalanceSimulation()" style="background:var(--green-light);color:var(--green-dark);border:1px solid var(--green);padding:8px 16px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;white-space:nowrap">
-                    🔄 Rebalansera
-                </button>
-                <button onclick="resetSimulation()" style="background:#fff0f0;color:var(--red);border:1px solid var(--red);padding:8px 16px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;white-space:nowrap">
-                    Nollställ
-                </button>
+            <div class="sim-hero-kpi">
+                <div class="sim-hero-kpi-label">Totalt värde</div>
+                <div class="sim-hero-kpi-value">${fmtKr(hero.totalVal)}</div>
+                <div class="sim-hero-kpi-sub" style="color:${totalGainAbs >= 0 ? '#6ee7b7' : '#fca5a5'}">
+                    ${totalGainAbs >= 0 ? '▲' : '▼'} ${fmtRet(totalRetPct)} (${totalGainAbs>=0?'+':''}${fmtKr(totalGainAbs)})
+                </div>
+            </div>
+            <div class="sim-hero-kpi">
+                <div class="sim-hero-kpi-label">Bäst presterande</div>
+                <div class="sim-hero-kpi-value" style="color:#6ee7b7">${bestCfg ? bestCfg.icon+' '+fmtRet(hero.best.ret) : '—'}</div>
+                <div class="sim-hero-kpi-sub">${bestCfg ? bestCfg.label : ''}</div>
+            </div>
+            <div class="sim-hero-kpi">
+                <div class="sim-hero-kpi-label">Realiserat P&L</div>
+                <div class="sim-hero-kpi-value" style="color:${hero.totalRealized >= 0 ? '#6ee7b7' : '#fca5a5'}">
+                    ${hero.totalRealized >= 0 ? '+' : ''}${fmtKr(hero.totalRealized)}
+                </div>
+                <div class="sim-hero-kpi-sub">${trades.filter(t=>t.trade_type==='SELL').length} sälj · ${trades.filter(t=>t.trade_type==='BUY').length} köp</div>
             </div>
         </div>
 
         ${autoRebalHtml}
         ${rebalBanner}
 
-        <!-- Morning Brief Section -->
-        <div style="margin-bottom:20px">
-            <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">
+        <!-- ── Morgonbrief ── -->
+        <div style="margin-bottom:24px">
+            <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;flex-wrap:wrap">
                 <button id="morningBriefBtn" onclick="generateMorningBrief()" class="brief-btn">
                     🌅 Generera morgonbrief
                 </button>
-                <span style="font-size:12px;color:var(--text-muted)">Claude AI analyserar alla 5 portföljer + dagens stockpick</span>
+                <span style="font-size:12px;color:var(--text-muted)">Claude AI analyserar alla portföljer + dagens stockpick</span>
             </div>
             <div id="morningBriefResult"></div>
         </div>
 
-        <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(260px, 1fr));gap:14px;margin-bottom:20px">
-            ${cardsHtml}
-            ${compareHtml}
+        <!-- ── Signalmodeller ── -->
+        ${signalCardsHtml ? `
+        <div class="sim-section-head">
+            <h2>⚡ Signalmodeller</h2>
+            <span class="sim-section-head-tag">Entry/exit-driven · kort- till medellång sikt</span>
+        </div>
+        <div class="sim-card-grid">${signalCardsHtml}</div>
+        ` : ''}
+
+        <!-- ── Bokstrategier ── -->
+        ${bookCardsHtml ? `
+        <div class="sim-section-head">
+            <h2>📚 Bokstrategier</h2>
+            <span class="sim-section-head-tag">Fundamental analys · låg omsättning · långsiktigt</span>
+        </div>
+        <div class="sim-card-grid">${bookCardsHtml}</div>
+        ` : ''}
+
+        <!-- ── Ranking ── -->
+        <div class="sim-section-head">
+            <h2>🏆 Översikt</h2>
+            <span class="sim-section-head-tag">Klicka på en portfölj ovan för detaljer</span>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:14px;margin-bottom:24px">
+            ${rankingHtml}
         </div>
 
+        <!-- ── Holdings ── -->
         ${holdingsHtml}
 
+        <!-- ── Trades ── -->
         ${tradesTable()}
 
-        <div class="table-footer">Simulering startad ${startDate} · 5 modeller · Priser uppdateras automatiskt var 15:e minut under marknadstid</div>
+        <div class="table-footer">Simulering startad ${startDate} · ${portKeys.length} modeller · Priser uppdateras var 15:e minut under marknadstid</div>
     `;
 
     // Load cached brief if available

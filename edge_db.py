@@ -1531,24 +1531,46 @@ def _score_book_models(s):
 
     scores = {}
 
-    # Graham: P/E*P/B, bäst när lågt (< 22.5 enligt Graham)
-    # Sanity: orimligt låga tal (P/E < 2 eller P/B < 0.1) är oftast datafel/one-offs.
-    # Kräv BÅDA under Grahams individuella gränser (P/E<15 OCH P/B<1.5) för passerande poäng.
+    # Graham Defensive — Den intelligente investeraren, kap 14.
+    # Graham ger ingen exakt rankingformel; hans "tumregel" är:
+    #   P/E × P/B ≤ 22.5 (produkten är summan av hans margin-of-safety)
+    # Lägre produkt = större säkerhetsmarginal. Vi rankar därför direkt på
+    # produkten — ju lägre, desto bättre Graham-score.
+    #
+    # Kalibrering (produkt → score):
+    #   prod ≤  6  → 100   (extremt billigt, både vinst- och tillgångs-marginal)
+    #   prod 10   →  90
+    #   prod 15   →  75
+    #   prod 22.5 →  50   (Grahams gräns)
+    #   prod 35   →  20
+    #   prod 50+  →   0
+    #
+    # Hårda gates (Grahams individuella tröskelvärden):
+    #   P/E måste vara 2-80 (förlust eller absurd bubbla diskas)
+    #   P/B måste vara 0.1-20 (datafel diskas)
     if (pe is not None and pb is not None
         and 2 <= pe <= 80 and 0.1 <= pb <= 20):
         prod = pe * pb
-        # Konjunktiv: båda kriterier delvis uppfyllda — geometriskt medel
-        # P/E 10 = 100, 15 = 75, 22.5 = 50, 35 = 0
-        pe_score = _clamp(100 - (pe - 8) * 6)
-        # P/B 1 = 100, 1.5 = 75, 2.25 = 50, 4 = 0
-        pb_component = _clamp(100 - (pb - 0.75) * 30)
-        # Geometric mean — kräver att BÅDA är hyfsade
-        base = (pe_score * pb_component) ** 0.5
-        # Grahams produktregel som bonus/straff
-        if prod <= 22.5:
-            base = min(100, base * 1.1)  # liten bonus om produkten klarar gränsen
-        elif prod > 40:
-            base *= 0.7  # straffa om produkten är klart över
+        if prod <= 6:
+            base = 100
+        elif prod <= 10:
+            base = 100 - (prod - 6) * 2.5    # 6=100, 10=90
+        elif prod <= 15:
+            base = 90 - (prod - 10) * 3       # 10=90, 15=75
+        elif prod <= 22.5:
+            base = 75 - (prod - 15) * (25/7.5)  # 15=75, 22.5=50
+        elif prod <= 35:
+            base = 50 - (prod - 22.5) * (30/12.5)  # 22.5=50, 35=20
+        elif prod <= 50:
+            base = 20 - (prod - 35) * (20/15)      # 35=20, 50=0
+        else:
+            base = 0
+        # Straffa om en enskild komponent är absurt över Grahams gräns
+        # (P/B > 3 = mycket mer än 2x bokvärde; P/E > 25 = högt PE)
+        if pb > 3:
+            base *= max(0.4, 1 - (pb - 3) * 0.15)
+        if pe > 25:
+            base *= max(0.4, 1 - (pe - 25) * 0.03)
         scores["graham"] = _clamp(base)
     else:
         scores["graham"] = None
@@ -2347,8 +2369,19 @@ def get_model_toplist(db, model="composite", limit=20, min_owners=100, country="
 
     # Kräv minst 3 tillgängliga modeller för stabilitet
     scored = [s for s in scored if s["models_available"] >= 3]
-    # Sort primär: modell-score desc. Secondary: composite desc (bryter ties vid 100)
-    scored.sort(key=lambda x: (x["model_score"], x.get("composite_score") or 0), reverse=True)
+
+    # Sort: primärt modell-score desc, sedan modell-specifik tie-breaker
+    if model == "graham":
+        # Grahams egna tumregel: produkten P/E × P/B — lägre = billigare / större
+        # säkerhetsmarginal. Används som tie-breaker inom samma score-bucket.
+        def _graham_key(x):
+            pe = x.get("pe_ratio") or 99
+            pb = x.get("price_book_ratio") or 99
+            # Primär: model_score desc. Secondary: prod asc → vi negerar så reverse=True funkar
+            return (x["model_score"], -(pe * pb), x.get("composite_score") or 0)
+        scored.sort(key=_graham_key, reverse=True)
+    else:
+        scored.sort(key=lambda x: (x["model_score"], x.get("composite_score") or 0), reverse=True)
 
     return scored[:limit]
 

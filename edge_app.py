@@ -1285,50 +1285,72 @@ def api_simulation():
                     (today, "books", oid, s["name"], "BUY", s["last_price"], shares, alloc, reason))
 
         # ── GRAHAM_DEF: Grahams defensiva investerare — max 20 aktier, kvartalsvis rebalans ──
-        graham_stocks = get_graham_defensive_portfolio(db, limit=20)
-        if graham_stocks:
-            alloc = CAPITAL / len(graham_stocks)
-            for s in graham_stocks:
-                shares = alloc / s["last_price"]
-                oid = str(s["orderbook_id"])
-                pe = s.get("pe_ratio"); pb = s.get("price_book_ratio")
-                prod = (pe or 0) * (pb or 0)
-                reason = f"INITIAL · Graham: P/E {pe:.1f} × P/B {pb:.2f} = {prod:.1f}"
-                db.execute(f"""INSERT INTO simulation_holdings
-                    (portfolio, start_date, start_capital, orderbook_id, name, entry_price, shares, allocation, buy_date)
-                    VALUES ({_ph(9)})""",
-                    ("graham_def", today, CAPITAL, oid, s["name"], s["last_price"], shares, alloc, today))
-                db.execute(f"""INSERT INTO simulation_trades
-                    (trade_date, portfolio, orderbook_id, name, trade_type, price, shares, value, reason)
-                    VALUES ({_ph(9)})""",
-                    (today, "graham_def", oid, s["name"], "BUY", s["last_price"], shares, alloc, reason))
+        _sim_init_graham_def(db, today, CAPITAL)
 
         # ── QUALITY_CONC: Buffett/Munger/Fisher koncentrerad kvalitet — max 8 aktier, halvårsvis rebalans ──
-        quality_stocks = get_quality_concentrated_portfolio(db, limit=8)
-        if quality_stocks:
-            alloc = CAPITAL / len(quality_stocks)
-            for s in quality_stocks:
-                shares = alloc / s["last_price"]
-                oid = str(s["orderbook_id"])
-                roe = s.get("return_on_equity") or 0
-                roce = s.get("return_on_capital_employed") or 0
-                ev = s.get("ev_ebit_ratio") or 0
-                reason = f"INITIAL · Quality: ROE {roe*100:.0f}% · ROCE {roce*100:.0f}% · EV/EBIT {ev:.1f}"
-                db.execute(f"""INSERT INTO simulation_holdings
-                    (portfolio, start_date, start_capital, orderbook_id, name, entry_price, shares, allocation, buy_date)
-                    VALUES ({_ph(9)})""",
-                    ("quality_conc", today, CAPITAL, oid, s["name"], s["last_price"], shares, alloc, today))
-                db.execute(f"""INSERT INTO simulation_trades
-                    (trade_date, portfolio, orderbook_id, name, trade_type, price, shares, value, reason)
-                    VALUES ({_ph(9)})""",
-                    (today, "quality_conc", oid, s["name"], "BUY", s["last_price"], shares, alloc, reason))
+        _sim_init_quality_conc(db, today, CAPITAL)
 
         db.commit()
 
-    # ── GET ──
+    # ── GET — backfill saknade portföljer (om sim startades innan nya modeller lades till) ──
+    existing = {row["portfolio"] for row in db.execute("SELECT DISTINCT portfolio FROM simulation_holdings").fetchall()}
+    if existing:  # bara om sim är igång
+        today_str = datetime.now().strftime("%Y-%m-%d")
+        if "graham_def" not in existing:
+            _sim_init_graham_def(db, today_str, CAPITAL)
+            db.commit()
+        if "quality_conc" not in existing:
+            _sim_init_quality_conc(db, today_str, CAPITAL)
+            db.commit()
+
     result = _sim_get_state(db)
     db.close()
     return jsonify(result)
+
+
+def _sim_init_graham_def(db, today, capital):
+    """Initialisera Graham Defensive-portföljen (max 20 aktier)."""
+    stocks = get_graham_defensive_portfolio(db, limit=20)
+    if not stocks:
+        return
+    alloc = capital / len(stocks)
+    for s in stocks:
+        shares = alloc / s["last_price"]
+        oid = str(s["orderbook_id"])
+        pe = s.get("pe_ratio"); pb = s.get("price_book_ratio")
+        prod = (pe or 0) * (pb or 0)
+        reason = f"INITIAL · Graham: P/E {pe:.1f} × P/B {pb:.2f} = {prod:.1f}"
+        db.execute(f"""INSERT INTO simulation_holdings
+            (portfolio, start_date, start_capital, orderbook_id, name, entry_price, shares, allocation, buy_date)
+            VALUES ({_ph(9)})""",
+            ("graham_def", today, capital, oid, s["name"], s["last_price"], shares, alloc, today))
+        db.execute(f"""INSERT INTO simulation_trades
+            (trade_date, portfolio, orderbook_id, name, trade_type, price, shares, value, reason)
+            VALUES ({_ph(9)})""",
+            (today, "graham_def", oid, s["name"], "BUY", s["last_price"], shares, alloc, reason))
+
+
+def _sim_init_quality_conc(db, today, capital):
+    """Initialisera Buffett Quality Concentrated-portföljen (max 8 aktier)."""
+    stocks = get_quality_concentrated_portfolio(db, limit=8)
+    if not stocks:
+        return
+    alloc = capital / len(stocks)
+    for s in stocks:
+        shares = alloc / s["last_price"]
+        oid = str(s["orderbook_id"])
+        roe = s.get("return_on_equity") or 0
+        roce = s.get("return_on_capital_employed") or 0
+        ev = s.get("ev_ebit_ratio") or 0
+        reason = f"INITIAL · Quality: ROE {roe*100:.0f}% · ROCE {roce*100:.0f}% · EV/EBIT {ev:.1f}"
+        db.execute(f"""INSERT INTO simulation_holdings
+            (portfolio, start_date, start_capital, orderbook_id, name, entry_price, shares, allocation, buy_date)
+            VALUES ({_ph(9)})""",
+            ("quality_conc", today, capital, oid, s["name"], s["last_price"], shares, alloc, today))
+        db.execute(f"""INSERT INTO simulation_trades
+            (trade_date, portfolio, orderbook_id, name, trade_type, price, shares, value, reason)
+            VALUES ({_ph(9)})""",
+            (today, "quality_conc", oid, s["name"], "BUY", s["last_price"], shares, alloc, reason))
 
 
 def _do_rebalance(db, today):
