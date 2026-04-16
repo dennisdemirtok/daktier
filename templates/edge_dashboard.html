@@ -589,11 +589,7 @@
         </button>
         <button class="sidebar-item" onclick="sidebarNav('hotmovers', this)" data-tab="hotmovers">
             <span class="material-symbols-outlined">local_fire_department</span>
-            Hot Movers
-        </button>
-        <button class="sidebar-item" onclick="sidebarNav('trending', this)" data-tab="trending">
-            <span class="material-symbols-outlined">trending_up</span>
-            Trending
+            Ägarmomentum
         </button>
         <button class="sidebar-item" onclick="sidebarNav('insiders', this)" data-tab="insiders">
             <span class="material-symbols-outlined">person_search</span>
@@ -683,6 +679,8 @@ let hotCountry = '';
 let hotMode = 'live';  // 'live' = intraday (stocks vs senaste snapshot), 'daily' = snapshot-mot-snapshot
 let hotDateFrom = '';
 let hotDateTo = '';
+// Unified momentum period: live/1d/3d/1w → hot-movers API, 1m/3m/ytd/1y → trending API
+let momPeriod = 'live';
 
 // Pagination
 let currentOffset = 0;
@@ -801,17 +799,23 @@ async function fetchData(append = false) {
             dataKey = 'stocks';
             renderFn = renderStocksTable;
         } else if (currentTab === 'hotmovers') {
-            params = {mode:hotMode, direction:hotDirection, lookback:hotLookback, limit:PAGE_SIZE, offset:currentOffset, min_owners:minOwners||100, country:hotCountry};
-            url = '/api/hot-movers?' + new URLSearchParams(params);
-            ck = cacheKey('hotmovers', params);
-            dataKey = 'stocks';
-            renderFn = () => { hotDateFrom = data.date_from; hotDateTo = data.date_to; renderHotMoversTable(); };
-        } else if (currentTab === 'trending') {
-            params = {period:trendPeriod, direction:trendDirection, limit:PAGE_SIZE, offset:currentOffset, min_owners:minOwners||10};
-            url = '/api/trending?' + new URLSearchParams(params);
-            ck = cacheKey('trending', params);
-            dataKey = 'stocks';
-            renderFn = renderTrendingTable;
+            // Routing: kort sikt via /api/hot-movers (snapshots), lång via /api/trending (pre-computed)
+            const shortPeriods = {live:{mode:'live',lookback:1}, '1d':{mode:'daily',lookback:1}, '3d':{mode:'daily',lookback:3}, '1w':{mode:'daily',lookback:5}};
+            const longPeriodMap = {'1m':'1m', '3m':'3m', 'ytd':'ytd', '1y':'1y'};
+            if (shortPeriods[momPeriod]) {
+                const cfg = shortPeriods[momPeriod];
+                params = {mode:cfg.mode, direction:hotDirection, lookback:cfg.lookback, limit:PAGE_SIZE, offset:currentOffset, min_owners:minOwners||100, country:hotCountry};
+                url = '/api/hot-movers?' + new URLSearchParams(params);
+                ck = cacheKey('hotmovers_short', params);
+                dataKey = 'stocks';
+                renderFn = () => { hotDateFrom = data.date_from; hotDateTo = data.date_to; renderHotMoversTable(); };
+            } else {
+                params = {period: longPeriodMap[momPeriod] || '1m', direction:hotDirection, limit:PAGE_SIZE, offset:currentOffset, min_owners:minOwners||100};
+                url = '/api/trending?' + new URLSearchParams(params);
+                ck = cacheKey('hotmovers_long', params);
+                dataKey = 'stocks';
+                renderFn = renderTrendingTable;
+            }
         } else if (currentTab === 'insiders') {
             params = {q:searchQuery, type:insiderType, limit:PAGE_SIZE, offset:currentOffset};
             url = '/api/insiders?' + new URLSearchParams(params);
@@ -923,7 +927,18 @@ function renderCards() {
     const tg = s.top_gainer || {};
     const tl = s.top_loser || {};
 
-    document.getElementById('cards').innerHTML = `
+    // Dessa stats dupliceras på Dashboard-tabben — dölj dem där samma info
+    // redan finns tydligare, eller där de bara tar utrymme från huvudinnehållet.
+    const cardsEl = document.getElementById('cards');
+    const hideOn = ['trending', 'hotmovers', 'dashboard'];
+    if (hideOn.includes(currentTab)) {
+        cardsEl.style.display = 'none';
+        cardsEl.innerHTML = '';
+        return;
+    }
+    cardsEl.style.display = '';
+
+    cardsEl.innerHTML = `
         <div class="card">
             <div class="card-label">Aktier i databasen</div>
             <div class="card-value">${(s.total_stocks||0).toLocaleString('sv')}</div>
@@ -957,6 +972,11 @@ function renderCards() {
     `;
 }
 
+// Ska köras varje gång man byter tabb — så kort-synligheten uppdateras
+function updateCardsVisibility() {
+    if (statsData) renderCards();
+}
+
 // ── Filter Bar ──────────────────────────────────────
 
 function _ownersSelect(options) {
@@ -976,8 +996,7 @@ function _chips(items, activeVal, cls, handler) {
 function _hasActiveFilters() {
     if (currentTab === 'signals') return actionFilter || signalFilter || signalCountry !== 'SE' || minOwners > 10;
     if (currentTab === 'stocks') return searchQuery || countryFilter || minOwners > 0;
-    if (currentTab === 'trending') return trendPeriod !== '1m' || trendDirection !== 'up' || minOwners > 100;
-    if (currentTab === 'hotmovers') return hotLookback != 1 || hotDirection !== 'up' || hotCountry || minOwners > 100;
+    if (currentTab === 'hotmovers') return momPeriod !== 'live' || hotDirection !== 'up' || hotCountry || minOwners > 100;
     if (currentTab === 'insiders') return searchQuery || insiderType;
     if (currentTab === 'ocf') return searchQuery || (countryFilter && countryFilter !== 'SE') || minOwners > 100;
     return false;
@@ -986,8 +1005,7 @@ function resetFilters() {
     searchQuery = '';
     if (currentTab === 'signals') { actionFilter=''; signalFilter=''; signalCountry='SE'; minOwners=10; }
     else if (currentTab === 'stocks') { countryFilter=''; minOwners=0; }
-    else if (currentTab === 'trending') { trendPeriod='1m'; trendDirection='up'; minOwners=100; }
-    else if (currentTab === 'hotmovers') { hotLookback=1; hotDirection='up'; hotCountry=''; minOwners=100; }
+    else if (currentTab === 'hotmovers') { momPeriod='live'; hotDirection='up'; hotCountry=''; minOwners=100; }
     else if (currentTab === 'insiders') { insiderType=''; }
     else if (currentTab === 'ocf') { countryFilter='SE'; minOwners=100; }
     fetchData();
@@ -1028,32 +1046,23 @@ function renderFilterBar() {
         html += _group('Marknad', _chips(countries, countryFilter, 'filter-chip', 'setCountry'));
         html += _ownersSelect([0, 10, 100, 1000, 5000, 10000]);
 
-    } else if (currentTab === 'trending') {
-        const periods = [{v:'1d',l:'1 dag'},{v:'1w',l:'1 vecka'},{v:'1m',l:'1 månad'},{v:'3m',l:'3 mån'},{v:'ytd',l:'I år'},{v:'1y',l:'1 år'}];
-        html += _group('Period', _chips(periods, trendPeriod, 'period-chip', 'setPeriod'));
-        const dirs = [{v:'up',l:'↑ Ökar'},{v:'down',l:'↓ Minskar'}];
-        html += `<div class="filter-group tight">
-            <span class="filter-label">Riktning</span>
-            <button class="dir-chip up ${trendDirection==='up'?'active':''}" onclick="setDirection('up')">↑ Ökar mest</button>
-            <button class="dir-chip down ${trendDirection==='down'?'active':''}" onclick="setDirection('down')">↓ Minskar mest</button>
-        </div>`;
-        html += _ownersSelect([10, 100, 1000, 5000]);
-
     } else if (currentTab === 'hotmovers') {
-        // Live/dagligt-läge
+        // Enhetlig period-väljare: kort sikt via /api/hot-movers, lång sikt via /api/trending.
+        // 'live' uppdateras löpande (intraday), alla andra är snapshot-baserade.
+        const periods = [
+            {v:'live', l:'⚡ Live'},
+            {v:'1d',   l:'Idag'},
+            {v:'3d',   l:'3 dagar'},
+            {v:'1w',   l:'1 vecka'},
+            {v:'1m',   l:'1 månad'},
+            {v:'3m',   l:'3 mån'},
+            {v:'ytd',  l:'I år'},
+            {v:'1y',   l:'1 år'},
+        ];
         html += `<div class="filter-group tight">
-            <span class="filter-label">Läge</span>
-            <button class="period-chip ${hotMode==='live'?'active':''}" onclick="setHotMode('live')" title="Intraday: live-värdet mot senaste snapshot — uppdateras löpande">⚡ Live</button>
-            <button class="period-chip ${hotMode==='daily'?'active':''}" onclick="setHotMode('daily')" title="Snapshot-mot-snapshot — stabilare över tid">📅 Dagligt</button>
+            <span class="filter-label">Period</span>
+            ${periods.map(p => `<button class="period-chip ${momPeriod===p.v?'active':''}" onclick="setMomPeriod('${p.v}')" ${p.v==='live'?'title="Intraday: live vs senaste snapshot"':''}>${p.l}</button>`).join('')}
         </div>`;
-        // Period-chips bara i dagligt läge
-        if (hotMode === 'daily') {
-            const lookbacks = [{v:'1',l:'Idag'},{v:'3',l:'3 dagar'},{v:'5',l:'1 vecka'}];
-            html += `<div class="filter-group tight">
-                <span class="filter-label">Period</span>
-                ${lookbacks.map(p => `<button class="period-chip ${hotLookback==p.v?'active':''}" onclick="setHotLookback(${p.v})">${p.l}</button>`).join('')}
-            </div>`;
-        }
         html += `<div class="filter-group tight">
             <span class="filter-label">Riktning</span>
             <button class="dir-chip up ${hotDirection==='up'?'active':''}" onclick="setHotDirection('up')">🔥 Ökar</button>
@@ -1102,8 +1111,8 @@ const TAB_META = {
     dashboard:   { title: 'Dashboard',       sub: 'Marknadsöversikt & makro-indikatorer' },
     signals:     { title: 'Edge Signals',    sub: 'AI-rankade köp- och säljsignaler' },
     stocks:      { title: 'Alla aktier',     sub: 'Komplett databas över nordiska & US-aktier' },
-    hotmovers:   { title: 'Hot Movers',      sub: 'Största ägarförändringarna just nu' },
-    trending:    { title: 'Trending',        sub: 'Aktier med starkast momentum' },
+    hotmovers:   { title: 'Ägarmomentum',    sub: 'Ägarförändringar — från intraday till 1 år' },
+    trending:    { title: 'Ägarmomentum',    sub: 'Ägarförändringar — från intraday till 1 år' },
     insiders:    { title: 'Insiders',        sub: 'Insidertransaktioner i realtid' },
     metrics:     { title: 'Nyckeltal',       sub: 'Modeller för SE & US marknaden – från böckerna' },
     ocf:         { title: 'Kassaflöde',      sub: 'Topplista: operativt kassaflöde' },
@@ -1116,20 +1125,24 @@ let _hotLiveTimer = null;
 function _stopHotLiveTimer() { if (_hotLiveTimer) { clearInterval(_hotLiveTimer); _hotLiveTimer = null; } }
 function _startHotLiveTimer() {
     _stopHotLiveTimer();
-    // Refresh var 60:e sekund när Hot Movers i live-läge visas
+    // Refresh var 60:e sekund när Ägarmomentum i live-läge visas
     _hotLiveTimer = setInterval(() => {
-        if (currentTab === 'hotmovers' && hotMode === 'live' && document.visibilityState === 'visible') {
+        if (currentTab === 'hotmovers' && momPeriod === 'live' && document.visibilityState === 'visible') {
             fetchData();
         }
     }, 60 * 1000);
 }
 
 function switchTab(tab, el) {
+    // Backwards-compat: "trending" är numera merged med "hotmovers" under Ägarmomentum
+    if (tab === 'trending') { tab = 'hotmovers'; momPeriod = '1m'; }
     currentTab = tab;
     // Update sidebar
     document.querySelectorAll('.sidebar-item').forEach(s => {
         s.classList.toggle('active', s.dataset.tab === tab);
     });
+    // Dölj/visa stat-kort beroende på tabb (dashboard/trending/hotmovers har egna motsv. stats)
+    updateCardsVisibility();
     // Update page header title/subtitle
     const meta = TAB_META[tab] || { title: tab, sub: '' };
     const t = document.getElementById('pageTitle'); if (t) t.textContent = meta.title;
@@ -1139,13 +1152,16 @@ function switchTab(tab, el) {
 
     if (tab === 'signals') { sortCol = 'meta'; sortOrder = 'desc'; }
     else if (tab === 'stocks') { sortCol = 'owners'; sortOrder = 'desc'; }
-    else if (tab === 'trending') { sortCol = 'change_1m'; sortOrder = 'desc'; }
-    else if (tab === 'hotmovers') { sortCol = 'hot_diff_pct'; sortOrder = 'desc'; }
+    else if (tab === 'hotmovers') {
+        // Short periods sorterar på hot_diff_pct, long periods på change-kolumn
+        sortCol = (['live','1d','3d','1w'].includes(momPeriod)) ? 'hot_diff_pct' : 'change_1m';
+        sortOrder = 'desc';
+    }
     else if (tab === 'ocf') { sortCol = 'ocf'; sortOrder = 'desc'; }
     else { sortCol = 'date'; sortOrder = 'desc'; }
 
-    // Starta/stoppa Hot Movers live auto-refresh
-    if (tab === 'hotmovers') _startHotLiveTimer();
+    // Auto-refresh bara när Ägarmomentum + Live
+    if (tab === 'hotmovers' && momPeriod === 'live') _startHotLiveTimer();
     else _stopHotLiveTimer();
 
     // Client-side only tabs (no API fetch)
@@ -1187,6 +1203,14 @@ function setInsiderType(t) { insiderType = t; fetchData(); renderFilterBar(); }
 function setSignalFilter(s) { signalFilter = s; fetchData(); renderFilterBar(); }
 function setSignalCountry(c) { signalCountry = c; fetchData(); renderFilterBar(); }
 function setActionFilter(a) { actionFilter = a; fetchData(); renderFilterBar(); }
+
+// Ägarmomentum — enhetlig period-väljare. Styr live-timer: bara live triggar auto-refresh.
+function setMomPeriod(p) {
+    momPeriod = p;
+    if (p === 'live') _startHotLiveTimer(); else _stopHotLiveTimer();
+    fetchData();
+    renderFilterBar();
+}
 
 function doSort(col) {
     if (sortCol === col) sortOrder = sortOrder === 'desc' ? 'asc' : 'desc';
@@ -3922,11 +3946,12 @@ function renderMetricsContent(market) {
 // ── Prefetch all tabs for instant switching ──────────────
 
 async function prefetchAllTabs() {
+    // Prefetcha bara de tyngsta tabbarna som ofta öppnas. Hot Movers prefetcha-:s
+    // med livedata (match med default momPeriod='live'). Trending är merged in.
     const urls = [
         {tab:'signals', url:'/api/signals?country=SE&sort=meta&order=desc&limit=50&offset=0&min_owners=10&signal=&action=', dataKey:'signals'},
         {tab:'stocks', url:'/api/stocks?q=&country=&sort=owners&order=desc&limit=50&offset=0&min_owners=0', dataKey:'stocks'},
-        {tab:'hotmovers', url:'/api/hot-movers?direction=up&lookback=1&limit=50&offset=0&min_owners=100&country=', dataKey:'stocks'},
-        {tab:'trending', url:'/api/trending?period=1m&direction=up&limit=50&offset=0&min_owners=10', dataKey:'stocks'},
+        {tab:'hotmovers', url:'/api/hot-movers?mode=live&direction=up&lookback=1&limit=50&offset=0&min_owners=100&country=', dataKey:'stocks'},
         {tab:'insiders', url:'/api/insiders?q=&type=&limit=50&offset=0', dataKey:'transactions'},
         {tab:'portfolio', url:'/api/simulation', dataKey:null},
     ];
@@ -3942,11 +3967,9 @@ async function prefetchAllTabs() {
                 const params = {q:'', country:'', sort:'owners', order:'desc', limit:50, offset:0, min_owners:0};
                 setCache(cacheKey('stocks', params), data);
             } else if (tab === 'hotmovers') {
-                const params = {direction:'up', lookback:1, limit:50, offset:0, min_owners:100, country:''};
-                setCache(cacheKey('hotmovers', params), data);
-            } else if (tab === 'trending') {
-                const params = {period:'1m', direction:'up', limit:50, offset:0, min_owners:10};
-                setCache(cacheKey('trending', params), data);
+                // Match med short-period live-URL som fetchData bygger
+                const params = {mode:'live', direction:'up', lookback:1, limit:50, offset:0, min_owners:100, country:''};
+                setCache(cacheKey('hotmovers_short', params), data);
             } else if (tab === 'insiders') {
                 const params = {q:'', type:'', limit:50, offset:0};
                 setCache(cacheKey('insiders', params), data);
@@ -3982,8 +4005,8 @@ async function init() {
     // Auto-refresh: poll varje 60s, only when a market is open
     setInterval(async () => {
         await fetchStatus();
-        if (isAnyMarketOpen() && ['signals','portfolio','stocks','trending','ocf','hotmovers'].includes(currentTab)) {
-            Object.keys(_tabCache).forEach(k => { if (k.startsWith(currentTab + '|')) delete _tabCache[k]; });
+        if (isAnyMarketOpen() && ['signals','portfolio','stocks','ocf','hotmovers'].includes(currentTab)) {
+            Object.keys(_tabCache).forEach(k => { if (k.startsWith(currentTab + '|') || k.startsWith('hotmovers_')) delete _tabCache[k]; });
             await fetchData();
         }
     }, 60000);

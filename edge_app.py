@@ -48,6 +48,26 @@ def _set_cache(key, data):
 
 def _clear_api_cache():
     _api_cache.clear()
+    _maturity_cache['data'] = None
+    _maturity_cache['ts'] = 0
+
+
+# ── Maturity scores cache ─────────────────────────────────
+# get_maturity_scores() scannar HELA owner_history-tabellen och kör scoring på
+# ~11 000 aktier. Det är flera sekunder per anrop. Datan ändras max 1 gång/dag
+# (när owner-snapshots körs) → cachea 10 minuter på modulnivå.
+_MATURITY_TTL = 600  # 10 minuter
+_maturity_cache = {'data': None, 'ts': 0}
+
+def _get_maturity_cached(db):
+    now = _time.time()
+    if _maturity_cache['data'] is not None and (now - _maturity_cache['ts']) < _MATURITY_TTL:
+        return _maturity_cache['data']
+    from edge_db import get_maturity_scores as _gms
+    data = _gms(db)
+    _maturity_cache['data'] = data
+    _maturity_cache['ts'] = now
+    return data
 
 def _format_book_models(models):
     """Formaterar lista av bokmodell-verdicts till text för AI-prompter."""
@@ -550,7 +570,7 @@ def api_hot_movers():
     )
     # Berika med discovery scores
     try:
-        maturity_data = get_maturity_scores(db)
+        maturity_data = _get_maturity_cached(db)
         for s in stocks:
             oid = s.get("orderbook_id")
             if oid and oid in maturity_data:
@@ -2130,7 +2150,7 @@ def api_owner_maturity(orderbook_id):
     db = get_db()
     try:
         # Hämta maturity-data
-        maturity_data = get_maturity_scores(db)
+        maturity_data = _get_maturity_cached(db)
         maturity = maturity_data.get(orderbook_id, {
             "maturity_score": 0,
             "maturity_label": "Ej analyserad",
