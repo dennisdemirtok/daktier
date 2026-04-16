@@ -2018,6 +2018,173 @@ def _build_pick_reasons(stock, scores):
     return reasons
 
 
+def get_graham_defensive_portfolio(db, limit=20, country=""):
+    """Benjamin Graham — 'The Intelligent Investor' (kap 5: Defensive Investor).
+
+    STRIKTA REGLER (alla MÅSTE uppfyllas):
+      1. P/E ≤ 15                    (Graham: max 15× vinst)
+      2. P/B ≤ 1.5                   (Graham: max 1.5× bokfört värde)
+      3. P/E × P/B ≤ 22.5            (Grahams kombo-test)
+      4. Direktavkastning > 0        (kontinuerlig utdelning)
+      5. ROE ≥ 5%                    (positiv och stabil vinst)
+      6. Hanterbar skuld:
+         D/E < 2.0   ELLER   ND/EBITDA < 4.0
+      7. ≥ 1000 ägare                (storleks-/likviditets-proxy för 'stora bolag')
+      8. Pris > 0 och data tillgänglig
+
+    Sorteras på Graham-produkten (P/E × P/B) stigande = billigaste först.
+    Max 20 aktier (Graham: 10-30 för defensiv diversifiering).
+    """
+    ph = _ph()
+    # P/E >= 3 för att filtrera data-outliers (P/E 1.5 ≈ engångs-realisation / fel)
+    # DY <= 12% för att filtrera extrem utdelningsfälla / specialutdelning
+    where = f"""WHERE number_of_owners >= {ph}
+                AND last_price IS NOT NULL AND last_price > 0
+                AND pe_ratio IS NOT NULL AND pe_ratio >= 3 AND pe_ratio <= 15
+                AND price_book_ratio IS NOT NULL AND price_book_ratio > 0.3 AND price_book_ratio <= 1.5
+                AND direct_yield IS NOT NULL AND direct_yield > 0 AND direct_yield <= 0.12
+                AND return_on_equity IS NOT NULL AND return_on_equity >= 0.05"""
+    params = [1000]
+    if country:
+        where += f" AND country = {ph}"
+        params.append(country)
+
+    rows = _fetchall(db, f"SELECT * FROM stocks {where}", params)
+
+    # Filtrera pref-aktier och klass-D/preferensaktier (Graham skriver om stamaktier)
+    def _is_pref(name):
+        if not name:
+            return False
+        n = name.lower()
+        if " pref" in n or n.endswith(" pref"):
+            return True
+        # Klass D = typiskt preferens på svenska marknaden (Sagax D, Klövern D, etc.)
+        if n.endswith(" d"):
+            return True
+        return False
+
+    qualified = []
+    seen_base = set()  # dedup A/B — behåll högst-ranked klass per bolag
+    for r in rows:
+        d = dict(r)
+        name = d.get("name") or ""
+        if _is_pref(name):
+            continue
+        pe = d.get("pe_ratio")
+        pb = d.get("price_book_ratio")
+        # Graham kombo-test
+        if pe is None or pb is None or pe * pb > 22.5:
+            continue
+        # Skuldtest: minst en skuldmätare måste vara hanterbar
+        de = d.get("debt_to_equity_ratio")
+        nd = d.get("net_debt_ebitda_ratio")
+        debt_ok = (de is not None and de < 2.0) or (nd is not None and nd < 4.0)
+        if not debt_ok:
+            continue
+        d["graham_product"] = pe * pb
+        sc = _score_book_models(d)
+        d["composite_score"] = round(sc["composite"], 1) if sc.get("composite") is not None else None
+        d["graham_score"] = round(sc.get("graham"), 1) if sc.get("graham") is not None else None
+        qualified.append(d)
+
+    # Sortera på Grahams produkt stigande (billigast först)
+    qualified.sort(key=lambda x: x["graham_product"])
+
+    # Dedup: om "Ratos A" och "Ratos B" båda kvalificerar, behåll den först rankade
+    deduped = []
+    for s in qualified:
+        name = (s.get("name") or "").strip()
+        # Grund-namn: strippa sista "A", "B", "C"
+        parts = name.split()
+        if len(parts) > 1 and parts[-1] in ("A", "B", "C"):
+            base = " ".join(parts[:-1]).lower()
+        else:
+            base = name.lower()
+        if base in seen_base:
+            continue
+        seen_base.add(base)
+        deduped.append(s)
+
+    return deduped[:limit]
+
+
+def get_quality_concentrated_portfolio(db, limit=8, country=""):
+    """Buffett / Munger / Fisher / Greenblatt — Koncentrerad kvalitet.
+
+    STRIKTA REGLER (alla MÅSTE uppfyllas):
+      1. ROE ≥ 15%                   (Buffett: kvalitetsmaskinens minimum)
+      2. ROCE ≥ 15%                  (Greenblatts kvalitets-sida i Magic Formula)
+      3. Låg skuld:
+         D/E < 0.5   ELLER   ND/EBITDA < 3
+                                     (Buffett: undvik hävstångs-risk)
+      4. EV/EBIT ≤ 15                (inte absurt dyrt; Greenblatts pris-sida)
+      5. Composite ≥ 70              (minst 7 av 10 bokmodeller godkänner)
+      6. Volatilitet < 40%           (Fisher: inte spekulativ)
+      7. ≥ 500 ägare                 (likviditet / inte micro-cap)
+
+    Sorteras på (ROE + ROCE) * (1 - EV/EBIT/30) — kvalitet viktat mot rimligt pris.
+    Max 8 aktier (Munger: 'wide diversification only when investors do not understand what they're doing' — 3-10 koncentrerat).
+    """
+    ph = _ph()
+    where = f"""WHERE number_of_owners >= {ph}
+                AND last_price IS NOT NULL AND last_price > 0
+                AND return_on_equity IS NOT NULL AND return_on_equity >= 0.15
+                AND return_on_capital_employed IS NOT NULL AND return_on_capital_employed >= 0.15
+                AND ev_ebit_ratio IS NOT NULL AND ev_ebit_ratio > 0 AND ev_ebit_ratio <= 15
+                AND volatility IS NOT NULL AND volatility < 0.40"""
+    params = [500]
+    if country:
+        where += f" AND country = {ph}"
+        params.append(country)
+
+    rows = _fetchall(db, f"SELECT * FROM stocks {where}", params)
+
+    qualified = []
+    for r in rows:
+        d = dict(r)
+        de = d.get("debt_to_equity_ratio")
+        nd = d.get("net_debt_ebitda_ratio")
+        # Buffett skuld-test: kräver minst EN verifierad låg skuldmätare
+        debt_ok = (de is not None and de < 0.5) or (nd is not None and nd < 3.0)
+        if not debt_ok:
+            continue
+        sc = _score_book_models(d)
+        comp = sc.get("composite")
+        if comp is None or comp < 70:
+            continue
+        roe = d.get("return_on_equity") or 0
+        roce = d.get("return_on_capital_employed") or 0
+        ev = d.get("ev_ebit_ratio") or 15
+        # Kvalitets-poäng: hög ROE+ROCE, straffa dyrare
+        d["quality_score"] = (roe + roce) * 100 * max(0.1, 1 - ev / 30)
+        d["composite_score"] = round(comp, 1)
+        d["quality_rank_source"] = {
+            "roe_pct": round(roe * 100, 1),
+            "roce_pct": round(roce * 100, 1),
+            "ev_ebit": round(ev, 1),
+        }
+        qualified.append(d)
+
+    qualified.sort(key=lambda x: x["quality_score"], reverse=True)
+
+    # Dedup A/B/C — behåll den högst rankade
+    seen_base = set()
+    deduped = []
+    for s in qualified:
+        name = (s.get("name") or "").strip()
+        parts = name.split()
+        if len(parts) > 1 and parts[-1] in ("A", "B", "C"):
+            base = " ".join(parts[:-1]).lower()
+        else:
+            base = name.lower()
+        if base in seen_base:
+            continue
+        seen_base.add(base)
+        deduped.append(s)
+
+    return deduped[:limit]
+
+
 def get_books_portfolio_top10(db, limit=10, min_owners=200, min_composite=65, min_models=7, country=""):
     """Topp-N aktier för 'Böckernas portfölj' — den nya simuleringsmodellen.
 

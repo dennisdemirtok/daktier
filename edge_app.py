@@ -23,7 +23,12 @@ from edge_db import fetch_owner_history, get_maturity_scores, get_hot_movers
 from edge_db import calculate_dsm_score, compute_ace_scores, compute_magic_scores, calculate_edge_score
 from edge_db import _ph
 from edge_db import BOOK_MODELS, get_model_toplist, get_daily_picks, enrich_with_book_composite, _score_book_models
-from edge_db import get_books_portfolio_top10, _build_pick_reasons
+from edge_db import (
+    get_books_portfolio_top10,
+    get_graham_defensive_portfolio,
+    get_quality_concentrated_portfolio,
+    _build_pick_reasons,
+)
 
 app = Flask(__name__)
 
@@ -1279,6 +1284,45 @@ def api_simulation():
                     VALUES ({_ph(9)})""",
                     (today, "books", oid, s["name"], "BUY", s["last_price"], shares, alloc, reason))
 
+        # ── GRAHAM_DEF: Grahams defensiva investerare — max 20 aktier, kvartalsvis rebalans ──
+        graham_stocks = get_graham_defensive_portfolio(db, limit=20)
+        if graham_stocks:
+            alloc = CAPITAL / len(graham_stocks)
+            for s in graham_stocks:
+                shares = alloc / s["last_price"]
+                oid = str(s["orderbook_id"])
+                pe = s.get("pe_ratio"); pb = s.get("price_book_ratio")
+                prod = (pe or 0) * (pb or 0)
+                reason = f"INITIAL · Graham: P/E {pe:.1f} × P/B {pb:.2f} = {prod:.1f}"
+                db.execute(f"""INSERT INTO simulation_holdings
+                    (portfolio, start_date, start_capital, orderbook_id, name, entry_price, shares, allocation, buy_date)
+                    VALUES ({_ph(9)})""",
+                    ("graham_def", today, CAPITAL, oid, s["name"], s["last_price"], shares, alloc, today))
+                db.execute(f"""INSERT INTO simulation_trades
+                    (trade_date, portfolio, orderbook_id, name, trade_type, price, shares, value, reason)
+                    VALUES ({_ph(9)})""",
+                    (today, "graham_def", oid, s["name"], "BUY", s["last_price"], shares, alloc, reason))
+
+        # ── QUALITY_CONC: Buffett/Munger/Fisher koncentrerad kvalitet — max 8 aktier, halvårsvis rebalans ──
+        quality_stocks = get_quality_concentrated_portfolio(db, limit=8)
+        if quality_stocks:
+            alloc = CAPITAL / len(quality_stocks)
+            for s in quality_stocks:
+                shares = alloc / s["last_price"]
+                oid = str(s["orderbook_id"])
+                roe = s.get("return_on_equity") or 0
+                roce = s.get("return_on_capital_employed") or 0
+                ev = s.get("ev_ebit_ratio") or 0
+                reason = f"INITIAL · Quality: ROE {roe*100:.0f}% · ROCE {roce*100:.0f}% · EV/EBIT {ev:.1f}"
+                db.execute(f"""INSERT INTO simulation_holdings
+                    (portfolio, start_date, start_capital, orderbook_id, name, entry_price, shares, allocation, buy_date)
+                    VALUES ({_ph(9)})""",
+                    ("quality_conc", today, CAPITAL, oid, s["name"], s["last_price"], shares, alloc, today))
+                db.execute(f"""INSERT INTO simulation_trades
+                    (trade_date, portfolio, orderbook_id, name, trade_type, price, shares, value, reason)
+                    VALUES ({_ph(9)})""",
+                    (today, "quality_conc", oid, s["name"], "BUY", s["last_price"], shares, alloc, reason))
+
         db.commit()
 
     # ── GET ──
@@ -1626,6 +1670,190 @@ def _do_rebalance(db, today):
                     changes.append({"type": "BUY", "portfolio": "books", "name": s["name"],
                                    "reason": reason, "price": s["last_price"]})
 
+    # ══════════════════════════════════════════════
+    # GRAHAM_DEF: Defensive Investor — KVARTALSVIS rebalans (minst 90 dagar)
+    # Regel: säljer om P/E × P/B > 30 (övervärderat) ELLER vinst > +50% (ta hem)
+    #        ELLER faller ur top 20 vid kvartalsrevision.
+    # ══════════════════════════════════════════════
+    graham_holdings = db.execute("SELECT * FROM simulation_holdings WHERE portfolio='graham_def'").fetchall()
+    if graham_holdings:
+        # Kadens: minst 90 dagar sedan senaste trade i portföljen
+        last_trade_row = db.execute(
+            "SELECT MAX(trade_date) AS last_td FROM simulation_trades WHERE portfolio='graham_def'"
+        ).fetchone()
+        last_td_str = last_trade_row["last_td"] if last_trade_row else None
+        do_rebalance = True
+        if last_td_str:
+            try:
+                last_td = datetime.strptime(last_td_str, "%Y-%m-%d")
+                today_dt = datetime.strptime(today, "%Y-%m-%d")
+                days_since = (today_dt - last_td).days
+                if days_since < 90:
+                    do_rebalance = False
+            except Exception:
+                pass
+
+        if do_rebalance:
+            graham_freed = 0.0
+            # 1) Individuella sälj-triggar (övervärdering / take profit)
+            for h in graham_holdings:
+                oid = str(h["orderbook_id"])
+                row = db.execute(
+                    f"SELECT * FROM stocks WHERE CAST(orderbook_id AS TEXT)={_ph()}", (oid,)
+                ).fetchone()
+                if not row:
+                    continue
+                d = dict(row)
+                pe = d.get("pe_ratio"); pb = d.get("price_book_ratio")
+                cur_price = d.get("last_price") or h["entry_price"]
+                gain_pct = (cur_price - h["entry_price"]) / h["entry_price"] if h["entry_price"] else 0
+                sell = False; sell_kind = ""
+                if pe is not None and pb is not None and pe * pb > 30:
+                    sell = True; sell_kind = f"EXIT_OVERVALUED (P/E×P/B={pe*pb:.1f} > 30)"
+                elif gain_pct >= 0.50:
+                    sell = True; sell_kind = f"TAKE_PROFIT (+{gain_pct*100:.0f}%)"
+                elif pe is not None and pe > 20:
+                    sell = True; sell_kind = f"EXIT_PE_BROKE (P/E={pe:.1f})"
+
+                if sell:
+                    sell_value = h["shares"] * cur_price
+                    gain_kr = sell_value - h["allocation"]
+                    db.execute(f"""INSERT INTO simulation_trades
+                        (trade_date, portfolio, orderbook_id, name, trade_type, price, shares, value, reason, entry_price, gain_pct, gain_kr)
+                        VALUES ({_ph(12)})""",
+                        (today, "graham_def", oid, h["name"], "SELL", cur_price, h["shares"], sell_value, sell_kind, h["entry_price"], gain_pct, gain_kr))
+                    db.execute(f"DELETE FROM simulation_holdings WHERE id={_ph()}", (h["id"],))
+                    graham_freed += sell_value
+                    changes.append({"type": "SELL", "portfolio": "graham_def", "name": h["name"],
+                                   "reason": sell_kind, "price": cur_price, "gain_pct": gain_pct, "gain_kr": gain_kr})
+
+            # 2) Kvartalsrotation: fyll upp till 20 med nya Graham-kvalificerade aktier
+            remaining = db.execute("SELECT orderbook_id FROM simulation_holdings WHERE portfolio='graham_def'").fetchall()
+            held_oids = set(str(r["orderbook_id"]) for r in remaining)
+            new_top = get_graham_defensive_portfolio(db, limit=20)
+            slots = max(0, 20 - len(held_oids))
+            if slots > 0 and graham_freed > 0:
+                candidates = [s for s in new_top if str(s["orderbook_id"]) not in held_oids][:slots]
+                if candidates:
+                    alloc = graham_freed / len(candidates)
+                    start_row = db.execute(
+                        "SELECT start_date, start_capital FROM simulation_holdings WHERE portfolio='graham_def' LIMIT 1"
+                    ).fetchone()
+                    g_start = start_row["start_date"] if start_row else today
+                    g_cap = start_row["start_capital"] if start_row else 1_000_000
+                    for s in candidates:
+                        if not s.get("last_price") or s["last_price"] <= 0:
+                            continue
+                        shares = alloc / s["last_price"]
+                        oid = str(s["orderbook_id"])
+                        pe = s.get("pe_ratio") or 0; pb = s.get("price_book_ratio") or 0
+                        reason = f"QUARTERLY_ROTATION · P/E {pe:.1f} × P/B {pb:.2f} = {pe*pb:.1f}"
+                        db.execute(f"""INSERT INTO simulation_holdings
+                            (portfolio, start_date, start_capital, orderbook_id, name, entry_price, shares, allocation, buy_date)
+                            VALUES ({_ph(9)})""",
+                            ("graham_def", g_start, g_cap, oid, s["name"], s["last_price"], shares, alloc, today))
+                        db.execute(f"""INSERT INTO simulation_trades
+                            (trade_date, portfolio, orderbook_id, name, trade_type, price, shares, value, reason)
+                            VALUES ({_ph(9)})""",
+                            (today, "graham_def", oid, s["name"], "BUY", s["last_price"], shares, alloc, reason))
+                        changes.append({"type": "BUY", "portfolio": "graham_def", "name": s["name"],
+                                       "reason": reason, "price": s["last_price"]})
+
+    # ══════════════════════════════════════════════
+    # QUALITY_CONC: Buffett/Munger-koncentrerad — HALVÅRSVIS rebalans (minst 180 dagar)
+    # Regel: säljer ENDAST om tesen bryts
+    #   - composite < 55 (kvalitetsfall)
+    #   - ROE < 10% (lönsamhet rasar)
+    #   - EV/EBIT > 25 (extremt övervärderad) — ta hem
+    # Buffett: "Our favorite holding period is forever."
+    # ══════════════════════════════════════════════
+    quality_holdings = db.execute("SELECT * FROM simulation_holdings WHERE portfolio='quality_conc'").fetchall()
+    if quality_holdings:
+        last_trade_row = db.execute(
+            "SELECT MAX(trade_date) AS last_td FROM simulation_trades WHERE portfolio='quality_conc'"
+        ).fetchone()
+        last_td_str = last_trade_row["last_td"] if last_trade_row else None
+        do_rebalance = True
+        if last_td_str:
+            try:
+                last_td = datetime.strptime(last_td_str, "%Y-%m-%d")
+                today_dt = datetime.strptime(today, "%Y-%m-%d")
+                days_since = (today_dt - last_td).days
+                # Tillåt tes-brytar-sälj när som helst, men rotation var 180 dagar
+                if days_since < 180:
+                    do_rebalance = False
+            except Exception:
+                pass
+
+        # Sälj alltid om tesen bryts (även innan 180 dagar)
+        quality_freed = 0.0
+        for h in quality_holdings:
+            oid = str(h["orderbook_id"])
+            row = db.execute(
+                f"SELECT * FROM stocks WHERE CAST(orderbook_id AS TEXT)={_ph()}", (oid,)
+            ).fetchone()
+            if not row:
+                continue
+            d = dict(row)
+            sc = _score_book_models(d)
+            comp = sc.get("composite")
+            roe = d.get("return_on_equity")
+            ev = d.get("ev_ebit_ratio")
+            cur_price = d.get("last_price") or h["entry_price"]
+            gain_pct = (cur_price - h["entry_price"]) / h["entry_price"] if h["entry_price"] else 0
+            sell = False; sell_kind = ""
+            if comp is not None and comp < 55:
+                sell = True; sell_kind = f"THESIS_BREAK (composite {comp:.0f} < 55)"
+            elif roe is not None and roe < 0.10:
+                sell = True; sell_kind = f"QUALITY_COLLAPSE (ROE {roe*100:.0f}% < 10%)"
+            elif ev is not None and ev > 25:
+                sell = True; sell_kind = f"TAKE_PROFIT_OVERPRICED (EV/EBIT {ev:.1f} > 25)"
+
+            if sell:
+                sell_value = h["shares"] * cur_price
+                gain_kr = sell_value - h["allocation"]
+                db.execute(f"""INSERT INTO simulation_trades
+                    (trade_date, portfolio, orderbook_id, name, trade_type, price, shares, value, reason, entry_price, gain_pct, gain_kr)
+                    VALUES ({_ph(12)})""",
+                    (today, "quality_conc", oid, h["name"], "SELL", cur_price, h["shares"], sell_value, sell_kind, h["entry_price"], gain_pct, gain_kr))
+                db.execute(f"DELETE FROM simulation_holdings WHERE id={_ph()}", (h["id"],))
+                quality_freed += sell_value
+                changes.append({"type": "SELL", "portfolio": "quality_conc", "name": h["name"],
+                               "reason": sell_kind, "price": cur_price, "gain_pct": gain_pct, "gain_kr": gain_kr})
+
+        # Rotation endast om halvår passerat OCH kassa finns
+        remaining = db.execute("SELECT orderbook_id FROM simulation_holdings WHERE portfolio='quality_conc'").fetchall()
+        held_oids = set(str(r["orderbook_id"]) for r in remaining)
+        slots = max(0, 8 - len(held_oids))
+        if do_rebalance and slots > 0 and quality_freed > 0:
+            new_top = get_quality_concentrated_portfolio(db, limit=8)
+            candidates = [s for s in new_top if str(s["orderbook_id"]) not in held_oids][:slots]
+            if candidates:
+                alloc = quality_freed / len(candidates)
+                start_row = db.execute(
+                    "SELECT start_date, start_capital FROM simulation_holdings WHERE portfolio='quality_conc' LIMIT 1"
+                ).fetchone()
+                q_start = start_row["start_date"] if start_row else today
+                q_cap = start_row["start_capital"] if start_row else 1_000_000
+                for s in candidates:
+                    if not s.get("last_price") or s["last_price"] <= 0:
+                        continue
+                    shares = alloc / s["last_price"]
+                    oid = str(s["orderbook_id"])
+                    roe = s.get("return_on_equity") or 0
+                    roce = s.get("return_on_capital_employed") or 0
+                    reason = f"SEMIANNUAL_ROTATION · ROE {roe*100:.0f}% · ROCE {roce*100:.0f}%"
+                    db.execute(f"""INSERT INTO simulation_holdings
+                        (portfolio, start_date, start_capital, orderbook_id, name, entry_price, shares, allocation, buy_date)
+                        VALUES ({_ph(9)})""",
+                        ("quality_conc", q_start, q_cap, oid, s["name"], s["last_price"], shares, alloc, today))
+                    db.execute(f"""INSERT INTO simulation_trades
+                        (trade_date, portfolio, orderbook_id, name, trade_type, price, shares, value, reason)
+                        VALUES ({_ph(9)})""",
+                        (today, "quality_conc", oid, s["name"], "BUY", s["last_price"], shares, alloc, reason))
+                    changes.append({"type": "BUY", "portfolio": "quality_conc", "name": s["name"],
+                                   "reason": reason, "price": s["last_price"]})
+
     db.commit()
     return changes
 
@@ -1697,6 +1925,61 @@ SIM_MODEL_INFO = {
         "allocation": "Equal weight, ≈10% per aktie vid start.",
         "horizon": "Medellång–lång. Omvärderas vid varje rebalans.",
         "thesis": "Investment-klassikerna röstar ihop: bolag som flera böcker klassar som köpvärda.",
+    },
+    "graham_def": {
+        "label": "GRAHAM DEF — Defensive Investor",
+        "icon": "📘",
+        "target_size": "Exakt 20 aktier",
+        "universe": "≥1 000 ägare (storleks-/likviditets-proxy). Svenska + nordiska storbolag.",
+        "book_source": "Benjamin Graham — The Intelligent Investor (1949), kapitel 5: The Defensive Investor.",
+        "entry_rule": (
+            "ALLA dessa krav MÅSTE uppfyllas:\n"
+            "• P/E ≤ 15 (Grahams cap)\n"
+            "• P/B ≤ 1.5 (bokfört värde)\n"
+            "• P/E × P/B ≤ 22.5 (Grahams kombo-test)\n"
+            "• Direktavkastning > 0 (kontinuerlig utdelning)\n"
+            "• ROE ≥ 5% (positiv lönsamhet)\n"
+            "• D/E < 2.0 ELLER ND/EBITDA < 4.0 (hanterbar skuld)\n"
+            "Rankas på P/E × P/B stigande — billigaste 20 väljs."
+        ),
+        "exit_rule": (
+            "Säljer om NÅGOT av:\n"
+            "• P/E × P/B > 30 (övervärderat enligt Graham)\n"
+            "• P/E > 20 (brutit Grahams cap med marginal)\n"
+            "• Pris upp ≥ +50% från köp (take profit — Graham rekommenderade)"
+        ),
+        "allocation": "Equal weight — 5% per aktie (1/20). Graham: 'diversify to reduce single-stock risk'.",
+        "horizon": "Lång — KVARTALSVIS rebalans (minst 90 dagar mellan portföljändringar).",
+        "rebalance_cadence": "Kvartalsvis (90+ dagar)",
+        "thesis": "Graham skrev för lekmannen: köp billigt, diversifiera, håll länge. Strikt kvantitativa regler — inga gissningar om framtiden.",
+    },
+    "quality_conc": {
+        "label": "QUALITY CONC — Buffett/Munger Concentration",
+        "icon": "🏰",
+        "target_size": "Exakt 8 aktier",
+        "universe": "≥500 ägare, EV/EBIT + ROE + ROCE + volatilitet måste finnas.",
+        "book_source": "Buffett/Berkshire-brev + Charlie Munger (Poor Charlie's Almanack) + Philip Fisher (Common Stocks and Uncommon Profits) + Joel Greenblatt (The Little Book That Beats the Market).",
+        "entry_rule": (
+            "ALLA dessa krav MÅSTE uppfyllas:\n"
+            "• ROE ≥ 15% (Buffett: kvalitetsmaskin)\n"
+            "• ROCE ≥ 15% (Greenblatts kvalitets-sida)\n"
+            "• D/E < 0.5 ELLER ND/EBITDA < 3 (Buffett: undvik hävstångsrisk)\n"
+            "• EV/EBIT ≤ 15 (rimligt pris; Greenblatts pris-sida)\n"
+            "• Composite ≥ 70 (minst 7 av 10 bokmodeller godkänner)\n"
+            "• Volatilitet < 40% (inte spekulativ; Fisher)\n"
+            "Rankas på (ROE + ROCE) × (1 − EV/EBIT/30) — kvalitet mot rimligt pris."
+        ),
+        "exit_rule": (
+            "Säljer BARA om tesen bryts:\n"
+            "• Composite < 55 (kvalitetsfall)\n"
+            "• ROE < 10% (lönsamhet rasar)\n"
+            "• EV/EBIT > 25 (extremt övervärderad — ta hem)\n"
+            "Buffett: 'Our favorite holding period is forever.' Undvik onödig handel."
+        ),
+        "allocation": "Equal weight — 12.5% per aktie (1/8). Munger: 'Wide diversification is required only when investors do not understand what they are doing.'",
+        "horizon": "Mycket lång — HALVÅRSVIS rebalans (minst 180 dagar; tes-brytande sälj närsomhelst).",
+        "rebalance_cadence": "Halvårsvis (180+ dagar)",
+        "thesis": "Koncentrera i 3–10 wonderful businesses till fair price. Buffetts 20-håls-regel: tänk som om du bara har 20 köp i livet.",
     },
 }
 

@@ -1758,12 +1758,14 @@ function renderSimulation(simData) {
     const cash = simData.cash || {};
 
     const PCFG = {
-        trav:  { icon: '🏇', label: 'Trav-modellen',       color: 'var(--green)',  borderColor: 'var(--green)' },
-        magic: { icon: '📊', label: 'Magic Formula',        color: 'var(--purple)', borderColor: 'var(--purple)' },
-        dsm:   { icon: '🎯', label: 'DSM (Dennis Signal)',  color: 'var(--blue)',   borderColor: 'var(--blue)' },
-        ace:   { icon: '⚡', label: 'ACE (Alpha Engine)',    color: 'var(--orange)', borderColor: 'var(--orange)' },
-        meta:  { icon: '🧠', label: 'Meta Score (Combo)',   color: '#e91e63',       borderColor: '#e91e63' },
-        books: { icon: '📚', label: 'Böckerna (10 aktier)', color: '#8b5cf6',       borderColor: '#8b5cf6' },
+        trav:         { icon: '🏇', label: 'Trav-modellen',                color: 'var(--green)',  borderColor: 'var(--green)' },
+        magic:        { icon: '📊', label: 'Magic Formula',                color: 'var(--purple)', borderColor: 'var(--purple)' },
+        dsm:          { icon: '🎯', label: 'DSM (Dennis Signal)',          color: 'var(--blue)',   borderColor: 'var(--blue)' },
+        ace:          { icon: '⚡', label: 'ACE (Alpha Engine)',            color: 'var(--orange)', borderColor: 'var(--orange)' },
+        meta:         { icon: '🧠', label: 'Meta Score (Combo)',           color: '#e91e63',       borderColor: '#e91e63' },
+        books:        { icon: '📚', label: 'Böckerna (10 aktier)',         color: '#8b5cf6',       borderColor: '#8b5cf6' },
+        graham_def:   { icon: '📘', label: 'Graham Defensive (20 st)',     color: '#1d4ed8',       borderColor: '#1d4ed8' },
+        quality_conc: { icon: '🏰', label: 'Buffett Quality (8 st)',       color: '#b45309',       borderColor: '#b45309' },
     };
 
     function fmtKr(n) { return n.toLocaleString('sv-SE', {minimumFractionDigits: 0, maximumFractionDigits: 0}) + ' kr'; }
@@ -3232,15 +3234,27 @@ function _renderModelDetail(el, d) {
         return `<b>${head}</b> <span style="color:var(--text-muted)">· ${parts.slice(1).join(' · ')}</span>`;
     }
 
-    // Strategy-ruta
+    // Strategy-ruta — stödjer flerradiga regler (newlines → <br>) och extra bok-fält
+    function _nl2br(s) {
+        if (!s) return '—';
+        return String(s).replace(/</g,'&lt;').replace(/\n/g,'<br>');
+    }
+    const bookSourceRow = info.book_source
+        ? `<div class="mdo-strategy-row"><span class="mdo-k">📖 Bokkälla</span><span class="mdo-v" style="font-style:italic">${_nl2br(info.book_source)}</span></div>`
+        : '';
+    const cadenceRow = info.rebalance_cadence
+        ? `<div class="mdo-strategy-row"><span class="mdo-k">🔁 Rebalans-kadens</span><span class="mdo-v"><b>${info.rebalance_cadence}</b></span></div>`
+        : '';
     const strategyHtml = `<div class="mdo-strategy">
-        <div class="mdo-strategy-row"><span class="mdo-k">Modellens plan</span><span class="mdo-v">${info.thesis||'—'}</span></div>
+        <div class="mdo-strategy-row"><span class="mdo-k">Modellens plan</span><span class="mdo-v">${_nl2br(info.thesis)}</span></div>
+        ${bookSourceRow}
         <div class="mdo-strategy-row"><span class="mdo-k">Målstorlek</span><span class="mdo-v">${info.target_size||'—'}</span></div>
-        <div class="mdo-strategy-row"><span class="mdo-k">Universum</span><span class="mdo-v">${info.universe||'—'}</span></div>
-        <div class="mdo-strategy-row"><span class="mdo-k">Köpregel</span><span class="mdo-v">${info.entry_rule||'—'}</span></div>
-        <div class="mdo-strategy-row"><span class="mdo-k">Säljregel</span><span class="mdo-v">${info.exit_rule||'—'}</span></div>
-        <div class="mdo-strategy-row"><span class="mdo-k">Allokering</span><span class="mdo-v">${info.allocation||'—'}</span></div>
-        <div class="mdo-strategy-row"><span class="mdo-k">Tidshorisont</span><span class="mdo-v">${info.horizon||'—'}</span></div>
+        <div class="mdo-strategy-row"><span class="mdo-k">Universum</span><span class="mdo-v">${_nl2br(info.universe)}</span></div>
+        <div class="mdo-strategy-row"><span class="mdo-k">Köpregel</span><span class="mdo-v">${_nl2br(info.entry_rule)}</span></div>
+        <div class="mdo-strategy-row"><span class="mdo-k">Säljregel</span><span class="mdo-v">${_nl2br(info.exit_rule)}</span></div>
+        <div class="mdo-strategy-row"><span class="mdo-k">Allokering</span><span class="mdo-v">${_nl2br(info.allocation)}</span></div>
+        <div class="mdo-strategy-row"><span class="mdo-k">Tidshorisont</span><span class="mdo-v">${_nl2br(info.horizon)}</span></div>
+        ${cadenceRow}
     </div>`;
 
     // Stats-grid
