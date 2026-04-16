@@ -903,28 +903,27 @@ def api_portfolio():
     })
 
 
+import re as _re_shareclass
+
+def _shareclass_base_name(name):
+    """Normalisera t.ex. 'Odfjell A' / 'Odfjell B' / 'Wilh. Wilhelmsen ser. A' → 'Odfjell'."""
+    if not name:
+        return name
+    n = name.strip()
+    n = _re_shareclass.sub(r'\s+ser\.?\s*[AB]$', '', n, flags=_re_shareclass.IGNORECASE)
+    n = _re_shareclass.sub(r'\s+[AB]$', '', n)
+    n = _re_shareclass.sub(r'\s+Pref$', '', n, flags=_re_shareclass.IGNORECASE)
+    return n.strip()
+
+
 def _dedup_share_classes(stocks, score_key="edge_score"):
     """Ta bort dubbletter av aktieslag (A/B, ser. A/B, Pref).
     Behåller den med högst score per bolag."""
-    import re
-
-    def base_name(name):
-        if not name:
-            return name
-        n = name.strip()
-        # "Wilh. Wilhelmsen Holding ser. A" → "Wilh. Wilhelmsen Holding"
-        n = re.sub(r'\s+ser\.?\s*[AB]$', '', n, flags=re.IGNORECASE)
-        # "Odfjell A" / "Odfjell B" — men INTE "Odfjell Technology"
-        n = re.sub(r'\s+[AB]$', '', n)
-        # "Company Pref" / "Company PREF"
-        n = re.sub(r'\s+Pref$', '', n, flags=re.IGNORECASE)
-        return n.strip()
-
     seen = {}
     result = []
     for stock in stocks:
         sname = stock.get("name") or stock.get("stock_name") or ""
-        bn = base_name(sname)
+        bn = _shareclass_base_name(sname)
         if bn in seen:
             existing = seen[bn]
             existing_score = existing.get(score_key) or 0
@@ -939,8 +938,163 @@ def _dedup_share_classes(stocks, score_key="edge_score"):
     return result
 
 
-def _get_magic_top20(db):
-    """Hämta Magic Formula top 20 (EV/EBIT + ROCE ranking) — Global."""
+def _dedup_with_stickiness(stocks, held_oids, score_key, swap_threshold=5.0):
+    """Dedup share-classes men prefera klassen som redan finns i holdings.
+    Byt bara klass om den nya har >= swap_threshold poäng högre score.
+    Förhindrar A↔B flip-flop vid mikro-pris-rörelser."""
+    held_oids = {str(o) for o in (held_oids or [])}
+    groups = {}
+    for s in stocks:
+        sname = s.get("name") or s.get("stock_name") or ""
+        bn = _shareclass_base_name(sname)
+        groups.setdefault(bn, []).append(s)
+
+    out = []
+    for bn, cls_list in groups.items():
+        if len(cls_list) == 1:
+            out.append(cls_list[0])
+            continue
+        cls_list.sort(key=lambda x: (x.get(score_key) or 0), reverse=True)
+        best = cls_list[0]
+        held_in_group = next((s for s in cls_list if str(s.get("orderbook_id")) in held_oids), None)
+        if held_in_group is not None and held_in_group is not best:
+            best_score = best.get(score_key) or 0
+            held_score = held_in_group.get(score_key) or 0
+            if (best_score - held_score) < swap_threshold:
+                out.append(held_in_group)
+                continue
+        out.append(best)
+    # Behåll ursprunglig sortering — dedupen ger en vinnare per grupp men
+    # vi vill sortera listan på score så rank blir korrekt
+    out.sort(key=lambda x: (x.get(score_key) or 0), reverse=True)
+    return out
+
+
+def _rotate_ranked_portfolio(db, portfolio, today, *,
+                              extended_list, score_key, target_size,
+                              sell_rank_buffer=1.35, min_hold_days=10,
+                              rotation_reason="ROTATION"):
+    """Generisk rotation med hysteres, min-hold, stickiness och idempotens.
+
+    - extended_list: sorterad lista (score desc), innehåller minst target_size*2 aktier,
+      redan dedupad med `_dedup_with_stickiness` mot nuvarande holdings
+    - target_size: buy-rank-threshold (N)
+    - sell_rank_buffer: sälj om rank > target_size * buffer (default 1.35 → 15 köp / 21 sälj)
+    - min_hold_days: får inte säljas tidigare än så här många dagar efter köp
+    - rotation_reason: string som skrivs som trade.reason
+
+    Returnerar list[{type, portfolio, name, reason, price, ...}].
+    """
+    holdings = db.execute(
+        f"SELECT * FROM simulation_holdings WHERE portfolio={_ph()}", (portfolio,)
+    ).fetchall()
+    if not holdings:
+        return []
+
+    # Idempotens: rotation körs max en gång per dag per portfölj.
+    # (undanta INIT-trades eftersom de ligger på start_date)
+    last_rot_row = db.execute(
+        f"""SELECT MAX(trade_date) AS td FROM simulation_trades
+            WHERE portfolio={_ph()} AND reason={_ph()}""",
+        (portfolio, rotation_reason)
+    ).fetchone()
+    last_rot = last_rot_row["td"] if last_rot_row else None
+    if last_rot == today:
+        return []
+
+    changes = []
+    start_date = holdings[0]["start_date"]
+    start_capital = holdings[0]["start_capital"]
+
+    # Bygg rank- och pris-maps från extended list
+    rank_map = {str(s["orderbook_id"]): i + 1 for i, s in enumerate(extended_list)}
+    price_map = {str(s["orderbook_id"]): s.get("last_price") for s in extended_list}
+    sell_rank_cutoff = target_size * sell_rank_buffer
+
+    today_dt = datetime.strptime(today, "%Y-%m-%d")
+
+    # 1) SÄLJ: aktier som fallit ur extended list ELLER rankas för långt ner,
+    #    men bara om min-hold passerats.
+    freed = 0.0
+    for h in holdings:
+        oid = str(h["orderbook_id"])
+        buy_date_str = h["buy_date"] if "buy_date" in h.keys() else None
+        if not buy_date_str:
+            buy_date_str = h["start_date"]
+        try:
+            buy_dt = datetime.strptime(buy_date_str, "%Y-%m-%d")
+            days_held = (today_dt - buy_dt).days
+        except Exception:
+            days_held = 999
+        if days_held < min_hold_days:
+            continue  # låst period
+
+        cur_rank = rank_map.get(oid)
+        if cur_rank is None:
+            should_sell = True  # helt utanför extended list
+        elif cur_rank > sell_rank_cutoff:
+            should_sell = True
+        else:
+            should_sell = False
+        if not should_sell:
+            continue
+
+        sell_price = price_map.get(oid)
+        if not sell_price:
+            price_row = db.execute(
+                f"SELECT last_price FROM stocks WHERE CAST(orderbook_id AS TEXT)={_ph()}", (oid,)
+            ).fetchone()
+            sell_price = price_row["last_price"] if price_row else h["entry_price"]
+
+        sell_value = h["shares"] * sell_price
+        gain_kr = sell_value - h["allocation"]
+        gain_pct = (sell_price - h["entry_price"]) / h["entry_price"] if h["entry_price"] > 0 else 0
+
+        db.execute(f"""INSERT INTO simulation_trades
+            (trade_date, portfolio, orderbook_id, name, trade_type, price, shares, value, reason, entry_price, gain_pct, gain_kr)
+            VALUES ({_ph(12)})""",
+            (today, portfolio, oid, h["name"], "SELL", sell_price, h["shares"], sell_value,
+             rotation_reason, h["entry_price"], gain_pct, gain_kr))
+        db.execute(f"DELETE FROM simulation_holdings WHERE id={_ph()}", (h["id"],))
+        freed += sell_value
+        changes.append({"type": "SELL", "portfolio": portfolio, "name": h["name"],
+                        "reason": rotation_reason, "price": sell_price,
+                        "gain_pct": gain_pct, "gain_kr": gain_kr})
+
+    # 2) KÖP: top target_size som inte redan finns i holdings.
+    remaining = db.execute(
+        f"SELECT orderbook_id FROM simulation_holdings WHERE portfolio={_ph()}", (portfolio,)
+    ).fetchall()
+    held_oids_after_sell = {str(r["orderbook_id"]) for r in remaining}
+
+    top_n = extended_list[:target_size]
+    added = [s for s in top_n
+             if str(s["orderbook_id"]) not in held_oids_after_sell
+             and s.get("last_price") and s["last_price"] > 0]
+
+    if added and freed > 0:
+        alloc = freed / len(added)
+        for s in added:
+            shares = alloc / s["last_price"]
+            oid = str(s["orderbook_id"])
+            db.execute(f"""INSERT INTO simulation_holdings
+                (portfolio, start_date, start_capital, orderbook_id, name, entry_price, shares, allocation, buy_date)
+                VALUES ({_ph(9)})""",
+                (portfolio, start_date, start_capital, oid, s["name"], s["last_price"],
+                 shares, alloc, today))
+            db.execute(f"""INSERT INTO simulation_trades
+                (trade_date, portfolio, orderbook_id, name, trade_type, price, shares, value, reason)
+                VALUES ({_ph(9)})""",
+                (today, portfolio, oid, s["name"], "BUY", s["last_price"], shares, alloc,
+                 rotation_reason))
+            changes.append({"type": "BUY", "portfolio": portfolio, "name": s["name"],
+                            "reason": rotation_reason, "price": s["last_price"]})
+
+    return changes
+
+
+def _get_magic_scored(db):
+    """Alla Magic Formula-kvalificerade aktier, rankade & scored (inte dedupad)."""
     rows = db.execute("""
         SELECT * FROM stocks WHERE number_of_owners >= 100
         AND ev_ebit_ratio > 0 AND ev_ebit_ratio < 100
@@ -953,14 +1107,27 @@ def _get_magic_top20(db):
     for i, s in enumerate(ml): s["roce_rank"] = i + 1
     for s in ml: s["magic_rank"] = s["ev_rank"] + s["roce_rank"]
     ml.sort(key=lambda x: x["magic_rank"])
-    # Dedup: ge en inverterad score (lägst rank = högst score) för dedup-jämförelse
+    # Invertera magic_rank till score (högst = bäst) för jämförbarhet
     for s in ml: s["_dedup_score"] = -s["magic_rank"]
+    return [s for s in ml if s.get("last_price") and s["last_price"] > 0]
+
+
+def _get_magic_top20(db):
+    """Hämta Magic Formula top 20 (EV/EBIT + ROCE ranking) — Global."""
+    ml = _get_magic_scored(db)
     ml = _dedup_share_classes(ml, score_key="_dedup_score")
-    return [s for s in ml[:20] if s.get("last_price") and s["last_price"] > 0]
+    return ml[:20]
 
 
-def _get_dsm_stocks(db):
-    """DSM: Top 15 aktier med DSM score >= 50, OCF > 0 — Global."""
+def _get_magic_extended_ranked(db, held_oids=None, size=40):
+    """Extended Magic-lista för rotation: top 2N, dedup med stickiness."""
+    ml = _get_magic_scored(db)
+    ml = _dedup_with_stickiness(ml, held_oids or set(), score_key="_dedup_score")
+    return ml[:size]
+
+
+def _get_dsm_scored(db):
+    """Alla DSM-kvalificerade aktier, scored (inte dedupade)."""
     rows = db.execute("""
         SELECT * FROM stocks WHERE number_of_owners >= 50
         AND operating_cash_flow > 0
@@ -978,12 +1145,25 @@ def _get_dsm_stocks(db):
             scored.append(stock)
 
     scored.sort(key=lambda x: x["dsm_score"], reverse=True)
+    return [s for s in scored if s.get("last_price") and s["last_price"] > 0]
+
+
+def _get_dsm_stocks(db):
+    """DSM: Top 15 aktier med DSM score >= 50, OCF > 0 — Global."""
+    scored = _get_dsm_scored(db)
     scored = _dedup_share_classes(scored, score_key="dsm_score")
-    return [s for s in scored[:15] if s.get("last_price") and s["last_price"] > 0]
+    return scored[:15]
 
 
-def _get_ace_stocks(db):
-    """ACE: Top 25 aktier efter ACE percentil-ranking — Global."""
+def _get_dsm_extended_ranked(db, held_oids=None, size=30):
+    """Extended DSM-lista för rotation: top 2N, dedup med stickiness."""
+    scored = _get_dsm_scored(db)
+    scored = _dedup_with_stickiness(scored, held_oids or set(), score_key="dsm_score")
+    return scored[:size]
+
+
+def _get_ace_scored(db):
+    """Alla ACE-kvalificerade aktier, scored (inte dedupade)."""
     rows = db.execute("""
         SELECT * FROM stocks WHERE number_of_owners >= 50
         AND operating_cash_flow > 0
@@ -992,21 +1172,30 @@ def _get_ace_stocks(db):
         AND market_cap > 500000000
         AND (debt_to_equity_ratio IS NULL OR debt_to_equity_ratio < 3)
     """).fetchall()
-
     stocks_list = [dict(r) for r in rows]
     if not stocks_list:
         return []
-
     scored = compute_ace_scores(stocks_list)
+    return [s for s in scored if s.get("last_price") and s["last_price"] > 0]
+
+
+def _get_ace_stocks(db):
+    """ACE: Top 25 aktier efter ACE percentil-ranking — Global."""
+    scored = _get_ace_scored(db)
     scored = _dedup_share_classes(scored, score_key="ace_score")
-    return [s for s in scored[:25] if s.get("last_price") and s["last_price"] > 0]
+    return scored[:25]
 
 
-def _get_meta_stocks(db):
-    """META: Top 20 aktier efter meta_score (viktad kombination av alla 4 modeller) — Global."""
+def _get_ace_extended_ranked(db, held_oids=None, size=50):
+    scored = _get_ace_scored(db)
+    scored = _dedup_with_stickiness(scored, held_oids or set(), score_key="ace_score")
+    return scored[:size]
+
+
+def _get_meta_scored(db):
+    """Alla META-kvalificerade aktier, scored (inte dedupade)."""
     from edge_db import get_insider_summary, _normalize_name
 
-    # Hämta alla aktier med basfilter (globalt)
     rows = db.execute("""
         SELECT * FROM stocks WHERE number_of_owners >= 50
         AND operating_cash_flow > 0
@@ -1019,7 +1208,6 @@ def _get_meta_stocks(db):
     if not stocks_list:
         return []
 
-    # Insider-data för edge_score
     insider_summary = get_insider_summary(db, days_back=90)
     for stock in stocks_list:
         stock_norm = _normalize_name(stock.get("name") or "")
@@ -1040,7 +1228,6 @@ def _get_meta_stocks(db):
             stock["insider_net_value"] = 0
             stock["insider_cluster_buy"] = False
 
-    # Beräkna alla 4 modellers scores
     for stock in stocks_list:
         edge = calculate_edge_score(stock)
         stock.update(edge)
@@ -1050,7 +1237,6 @@ def _get_meta_stocks(db):
     compute_ace_scores(stocks_list)
     compute_magic_scores(stocks_list)
 
-    # Meta-score: viktat snitt
     META_W = {"edge": 0.30, "dsm": 0.25, "ace": 0.25, "magic": 0.20}
     for s in stocks_list:
         e = s.get("edge_score") or 0
@@ -1064,15 +1250,25 @@ def _get_meta_stocks(db):
             meta = (e * META_W["edge"] + d * META_W["dsm"] + a * META_W["ace"]) / w3 if w3 > 0 else 0
         s["meta_score"] = max(0, min(100, meta))
 
-    # Filtrera: meta_score >= 55 + inte DD-blockerad
     filtered = [s for s in stocks_list
                 if s["meta_score"] >= 55
                 and s.get("dd_risk", 100) < 60
                 and s.get("last_price") and s["last_price"] > 0]
-
     filtered.sort(key=lambda x: x["meta_score"], reverse=True)
+    return filtered
+
+
+def _get_meta_stocks(db):
+    """META: Top 20 aktier efter meta_score (viktad kombination av alla 4 modeller) — Global."""
+    filtered = _get_meta_scored(db)
     filtered = _dedup_share_classes(filtered, score_key="meta_score")
     return filtered[:20]
+
+
+def _get_meta_extended_ranked(db, held_oids=None, size=40):
+    filtered = _get_meta_scored(db)
+    filtered = _dedup_with_stickiness(filtered, held_oids or set(), score_key="meta_score")
+    return filtered[:size]
 
 
 def _books_buy_reason(stock, kind="NEW_ENTRY"):
@@ -1387,9 +1583,17 @@ def _do_rebalance(db, today):
 
     # ══════════════════════════════════════════════
     # TRAV: Sälj EXIT-aktier, köp nya ENTRY-aktier
+    # Min-hold 5 dagar för att undvika intraday-flip. Rotation max 1/dag.
     # ══════════════════════════════════════════════
     trav_holdings = db.execute("SELECT * FROM simulation_holdings WHERE portfolio='trav'").fetchall()
     trav_oids = set(str(h["orderbook_id"]) for h in trav_holdings)
+
+    # Idempotens: har vi redan kört trav-rotation idag?
+    _trav_last = db.execute(
+        f"""SELECT MAX(trade_date) AS td FROM simulation_trades
+            WHERE portfolio='trav' AND reason <> 'INITIAL'"""
+    ).fetchone()
+    _trav_skip = bool(_trav_last and _trav_last["td"] == today)
 
     # Hämta ALLA signaler (inte bara ENTRY) för att matcha befintliga holdings (Global)
     all_signals, _ = get_signals(db, country="", min_owners=0, limit=9999)
@@ -1397,39 +1601,57 @@ def _do_rebalance(db, today):
 
     freed_cash = 0.0
     exit_actions = {"EXIT_DECEL", "EXIT_REVERSAL", "EXIT_WEEKLY", "EXIT_INSIDER"}
+    _trav_min_hold = 5
+    _today_dt = datetime.strptime(today, "%Y-%m-%d")
 
-    for h in trav_holdings:
-        oid = str(h["orderbook_id"])
-        sig = signal_map.get(oid, {})
-        action = sig.get("action", "")
+    if not _trav_skip:
+        for h in trav_holdings:
+            oid = str(h["orderbook_id"])
+            sig = signal_map.get(oid, {})
+            action = sig.get("action", "")
 
-        if action in exit_actions:
-            # Hämta nuvarande pris
-            price_row = db.execute(f"SELECT last_price FROM stocks WHERE CAST(orderbook_id AS TEXT)={_ph()}", (oid,)).fetchone()
-            sell_price = price_row["last_price"] if price_row else h["entry_price"]
-            sell_value = h["shares"] * sell_price
-            gain_kr = sell_value - h["allocation"]
-            gain_pct = (sell_price - h["entry_price"]) / h["entry_price"] if h["entry_price"] > 0 else 0
+            # Min-hold 5 dagar — skydda mot intraday-flip
+            buy_date_str = h["buy_date"] if "buy_date" in h.keys() else None
+            if not buy_date_str:
+                buy_date_str = h["start_date"]
+            try:
+                _buy_dt = datetime.strptime(buy_date_str, "%Y-%m-%d")
+                days_held = (_today_dt - _buy_dt).days
+            except Exception:
+                days_held = 999
+            if days_held < _trav_min_hold:
+                continue
 
-            # SELL trade
-            db.execute(f"""INSERT INTO simulation_trades
-                (trade_date, portfolio, orderbook_id, name, trade_type, price, shares, value, reason, entry_price, gain_pct, gain_kr)
-                VALUES ({_ph(12)})""",
-                (today, "trav", oid, h["name"], "SELL", sell_price, h["shares"], sell_value, action, h["entry_price"], gain_pct, gain_kr))
-            db.execute(f"DELETE FROM simulation_holdings WHERE id={_ph()}", (h["id"],))
-            freed_cash += sell_value
-            changes.append({"type": "SELL", "portfolio": "trav", "name": h["name"],
-                           "reason": action, "price": sell_price, "gain_pct": gain_pct, "gain_kr": gain_kr})
+            if action in exit_actions:
+                # Hämta nuvarande pris
+                price_row = db.execute(f"SELECT last_price FROM stocks WHERE CAST(orderbook_id AS TEXT)={_ph()}", (oid,)).fetchone()
+                sell_price = price_row["last_price"] if price_row else h["entry_price"]
+                sell_value = h["shares"] * sell_price
+                gain_kr = sell_value - h["allocation"]
+                gain_pct = (sell_price - h["entry_price"]) / h["entry_price"] if h["entry_price"] > 0 else 0
 
-    # Kolla efter nya ENTRY-aktier (Global, dedup A/B)
-    entry_signals, _ = get_signals(db, country="", min_owners=100, limit=9999, action_filter="ENTRY")
-    entry_signals = _dedup_share_classes(entry_signals, score_key="edge_score")
-    # Uppdatera trav_oids efter sälj
-    remaining = db.execute("SELECT orderbook_id FROM simulation_holdings WHERE portfolio='trav'").fetchall()
-    trav_oids = set(str(r["orderbook_id"]) for r in remaining)
+                # SELL trade
+                db.execute(f"""INSERT INTO simulation_trades
+                    (trade_date, portfolio, orderbook_id, name, trade_type, price, shares, value, reason, entry_price, gain_pct, gain_kr)
+                    VALUES ({_ph(12)})""",
+                    (today, "trav", oid, h["name"], "SELL", sell_price, h["shares"], sell_value, action, h["entry_price"], gain_pct, gain_kr))
+                db.execute(f"DELETE FROM simulation_holdings WHERE id={_ph()}", (h["id"],))
+                freed_cash += sell_value
+                changes.append({"type": "SELL", "portfolio": "trav", "name": h["name"],
+                               "reason": action, "price": sell_price, "gain_pct": gain_pct, "gain_kr": gain_kr})
 
-    new_entries = [s for s in entry_signals if str(s["orderbook_id"]) not in trav_oids
-                   and s.get("last_price") and s["last_price"] > 0]
+    # Kolla efter nya ENTRY-aktier (Global, dedup A/B) — hoppa om idempotens-skipp
+    if not _trav_skip:
+        entry_signals, _ = get_signals(db, country="", min_owners=100, limit=9999, action_filter="ENTRY")
+        entry_signals = _dedup_share_classes(entry_signals, score_key="edge_score")
+        # Uppdatera trav_oids efter sälj
+        remaining = db.execute("SELECT orderbook_id FROM simulation_holdings WHERE portfolio='trav'").fetchall()
+        trav_oids = set(str(r["orderbook_id"]) for r in remaining)
+
+        new_entries = [s for s in entry_signals if str(s["orderbook_id"]) not in trav_oids
+                       and s.get("last_price") and s["last_price"] > 0]
+    else:
+        new_entries = []
 
     if new_entries and freed_cash > 0:
         alloc = freed_cash / len(new_entries)
@@ -1448,187 +1670,38 @@ def _do_rebalance(db, today):
                            "reason": "NEW_ENTRY", "price": s["last_price"]})
 
     # ══════════════════════════════════════════════
-    # MAGIC: Rotera om top 20 ändrats
+    # SIGNALMODELLER (MAGIC/DSM/ACE/META): rank-hysteres + min-hold + idempotens
+    # Hämtar extended list (2x target_size) med share-class stickiness mot
+    # aktuella holdings. Säljer bara om aktie faller ur utvidgad lista eller
+    # har rankings-buffert + 10 dagars minsta hålltid. Kör max 1 gång/dag.
     # ══════════════════════════════════════════════
-    magic_holdings = db.execute("SELECT * FROM simulation_holdings WHERE portfolio='magic'").fetchall()
-    magic_oids = set(str(h["orderbook_id"]) for h in magic_holdings)
-    magic_top = _get_magic_top20(db)
-    new_top_oids = set(str(s["orderbook_id"]) for s in magic_top)
-
-    dropped = [h for h in magic_holdings if str(h["orderbook_id"]) not in new_top_oids]
-    added = [s for s in magic_top if str(s["orderbook_id"]) not in magic_oids]
-
-    magic_freed = 0.0
-    for h in dropped:
-        oid = str(h["orderbook_id"])
-        price_row = db.execute(f"SELECT last_price FROM stocks WHERE CAST(orderbook_id AS TEXT)={_ph()}", (oid,)).fetchone()
-        sell_price = price_row["last_price"] if price_row else h["entry_price"]
-        sell_value = h["shares"] * sell_price
-        gain_kr = sell_value - h["allocation"]
-        gain_pct = (sell_price - h["entry_price"]) / h["entry_price"] if h["entry_price"] > 0 else 0
-
-        db.execute(f"""INSERT INTO simulation_trades
-            (trade_date, portfolio, orderbook_id, name, trade_type, price, shares, value, reason, entry_price, gain_pct, gain_kr)
-            VALUES ({_ph(12)})""",
-            (today, "magic", oid, h["name"], "SELL", sell_price, h["shares"], sell_value, "MF_ROTATION", h["entry_price"], gain_pct, gain_kr))
-        db.execute(f"DELETE FROM simulation_holdings WHERE id={_ph()}", (h["id"],))
-        magic_freed += sell_value
-        changes.append({"type": "SELL", "portfolio": "magic", "name": h["name"],
-                       "reason": "MF_ROTATION", "price": sell_price, "gain_pct": gain_pct, "gain_kr": gain_kr})
-
-    if added and magic_freed > 0:
-        alloc = magic_freed / len(added)
-        for s in added:
-            shares = alloc / s["last_price"]
-            oid = str(s["orderbook_id"])
-            db.execute(f"""INSERT INTO simulation_holdings
-                (portfolio, start_date, start_capital, orderbook_id, name, entry_price, shares, allocation, buy_date)
-                VALUES ({_ph(9)})""",
-                ("magic", start_date, start_capital, oid, s["name"], s["last_price"], shares, alloc, today))
-            db.execute(f"""INSERT INTO simulation_trades
-                (trade_date, portfolio, orderbook_id, name, trade_type, price, shares, value, reason)
-                VALUES ({_ph(9)})""",
-                (today, "magic", oid, s["name"], "BUY", s["last_price"], shares, alloc, "MF_ROTATION"))
-            changes.append({"type": "BUY", "portfolio": "magic", "name": s["name"],
-                           "reason": "MF_ROTATION", "price": s["last_price"]})
-
-    # ══════════════════════════════════════════════
-    # DSM: Rotera om top 15 ändrats
-    # ══════════════════════════════════════════════
-    dsm_holdings = db.execute("SELECT * FROM simulation_holdings WHERE portfolio='dsm'").fetchall()
-    if dsm_holdings:
-        dsm_oids = set(str(h["orderbook_id"]) for h in dsm_holdings)
-        dsm_top = _get_dsm_stocks(db)
-        new_dsm_oids = set(str(s["orderbook_id"]) for s in dsm_top)
-
-        dsm_dropped = [h for h in dsm_holdings if str(h["orderbook_id"]) not in new_dsm_oids]
-        dsm_added = [s for s in dsm_top if str(s["orderbook_id"]) not in dsm_oids]
-
-        dsm_freed = 0.0
-        for h in dsm_dropped:
-            oid = str(h["orderbook_id"])
-            price_row = db.execute(f"SELECT last_price FROM stocks WHERE CAST(orderbook_id AS TEXT)={_ph()}", (oid,)).fetchone()
-            sell_price = price_row["last_price"] if price_row else h["entry_price"]
-            sell_value = h["shares"] * sell_price
-            gain_kr = sell_value - h["allocation"]
-            gain_pct = (sell_price - h["entry_price"]) / h["entry_price"] if h["entry_price"] > 0 else 0
-
-            db.execute(f"""INSERT INTO simulation_trades
-                (trade_date, portfolio, orderbook_id, name, trade_type, price, shares, value, reason, entry_price, gain_pct, gain_kr)
-                VALUES ({_ph(12)})""",
-                (today, "dsm", oid, h["name"], "SELL", sell_price, h["shares"], sell_value, "DSM_ROTATION", h["entry_price"], gain_pct, gain_kr))
-            db.execute(f"DELETE FROM simulation_holdings WHERE id={_ph()}", (h["id"],))
-            dsm_freed += sell_value
-            changes.append({"type": "SELL", "portfolio": "dsm", "name": h["name"],
-                           "reason": "DSM_ROTATION", "price": sell_price, "gain_pct": gain_pct, "gain_kr": gain_kr})
-
-        if dsm_added and dsm_freed > 0:
-            alloc = dsm_freed / len(dsm_added)
-            for s in dsm_added:
-                shares = alloc / s["last_price"]
-                oid = str(s["orderbook_id"])
-                db.execute(f"""INSERT INTO simulation_holdings
-                    (portfolio, start_date, start_capital, orderbook_id, name, entry_price, shares, allocation, buy_date)
-                    VALUES ({_ph(9)})""",
-                    ("dsm", start_date, start_capital, oid, s["name"], s["last_price"], shares, alloc, today))
-                db.execute(f"""INSERT INTO simulation_trades
-                    (trade_date, portfolio, orderbook_id, name, trade_type, price, shares, value, reason)
-                    VALUES ({_ph(9)})""",
-                    (today, "dsm", oid, s["name"], "BUY", s["last_price"], shares, alloc, "DSM_ROTATION"))
-                changes.append({"type": "BUY", "portfolio": "dsm", "name": s["name"],
-                               "reason": "DSM_ROTATION", "price": s["last_price"]})
-
-    # ══════════════════════════════════════════════
-    # ACE: Rotera om top 25 ändrats
-    # ══════════════════════════════════════════════
-    ace_holdings = db.execute("SELECT * FROM simulation_holdings WHERE portfolio='ace'").fetchall()
-    if ace_holdings:
-        ace_oids = set(str(h["orderbook_id"]) for h in ace_holdings)
-        ace_top = _get_ace_stocks(db)
-        new_ace_oids = set(str(s["orderbook_id"]) for s in ace_top)
-
-        ace_dropped = [h for h in ace_holdings if str(h["orderbook_id"]) not in new_ace_oids]
-        ace_added = [s for s in ace_top if str(s["orderbook_id"]) not in ace_oids]
-
-        ace_freed = 0.0
-        for h in ace_dropped:
-            oid = str(h["orderbook_id"])
-            price_row = db.execute(f"SELECT last_price FROM stocks WHERE CAST(orderbook_id AS TEXT)={_ph()}", (oid,)).fetchone()
-            sell_price = price_row["last_price"] if price_row else h["entry_price"]
-            sell_value = h["shares"] * sell_price
-            gain_kr = sell_value - h["allocation"]
-            gain_pct = (sell_price - h["entry_price"]) / h["entry_price"] if h["entry_price"] > 0 else 0
-
-            db.execute(f"""INSERT INTO simulation_trades
-                (trade_date, portfolio, orderbook_id, name, trade_type, price, shares, value, reason, entry_price, gain_pct, gain_kr)
-                VALUES ({_ph(12)})""",
-                (today, "ace", oid, h["name"], "SELL", sell_price, h["shares"], sell_value, "ACE_ROTATION", h["entry_price"], gain_pct, gain_kr))
-            db.execute(f"DELETE FROM simulation_holdings WHERE id={_ph()}", (h["id"],))
-            ace_freed += sell_value
-            changes.append({"type": "SELL", "portfolio": "ace", "name": h["name"],
-                           "reason": "ACE_ROTATION", "price": sell_price, "gain_pct": gain_pct, "gain_kr": gain_kr})
-
-        if ace_added and ace_freed > 0:
-            alloc = ace_freed / len(ace_added)
-            for s in ace_added:
-                shares = alloc / s["last_price"]
-                oid = str(s["orderbook_id"])
-                db.execute(f"""INSERT INTO simulation_holdings
-                    (portfolio, start_date, start_capital, orderbook_id, name, entry_price, shares, allocation, buy_date)
-                    VALUES ({_ph(9)})""",
-                    ("ace", start_date, start_capital, oid, s["name"], s["last_price"], shares, alloc, today))
-                db.execute(f"""INSERT INTO simulation_trades
-                    (trade_date, portfolio, orderbook_id, name, trade_type, price, shares, value, reason)
-                    VALUES ({_ph(9)})""",
-                    (today, "ace", oid, s["name"], "BUY", s["last_price"], shares, alloc, "ACE_ROTATION"))
-                changes.append({"type": "BUY", "portfolio": "ace", "name": s["name"],
-                               "reason": "ACE_ROTATION", "price": s["last_price"]})
-
-    # ══════════════════════════════════════════════
-    # META: Rotera om top 20 ändrats
-    # ══════════════════════════════════════════════
-    meta_holdings = db.execute("SELECT * FROM simulation_holdings WHERE portfolio='meta'").fetchall()
-    if meta_holdings:
-        meta_oids = set(str(h["orderbook_id"]) for h in meta_holdings)
-        meta_top = _get_meta_stocks(db)
-        new_meta_oids = set(str(s["orderbook_id"]) for s in meta_top)
-
-        meta_dropped = [h for h in meta_holdings if str(h["orderbook_id"]) not in new_meta_oids]
-        meta_added = [s for s in meta_top if str(s["orderbook_id"]) not in meta_oids]
-
-        meta_freed = 0.0
-        for h in meta_dropped:
-            oid = str(h["orderbook_id"])
-            price_row = db.execute(f"SELECT last_price FROM stocks WHERE CAST(orderbook_id AS TEXT)={_ph()}", (oid,)).fetchone()
-            sell_price = price_row["last_price"] if price_row else h["entry_price"]
-            sell_value = h["shares"] * sell_price
-            gain_kr = sell_value - h["allocation"]
-            gain_pct = (sell_price - h["entry_price"]) / h["entry_price"] if h["entry_price"] > 0 else 0
-
-            db.execute(f"""INSERT INTO simulation_trades
-                (trade_date, portfolio, orderbook_id, name, trade_type, price, shares, value, reason, entry_price, gain_pct, gain_kr)
-                VALUES ({_ph(12)})""",
-                (today, "meta", oid, h["name"], "SELL", sell_price, h["shares"], sell_value, "META_ROTATION", h["entry_price"], gain_pct, gain_kr))
-            db.execute(f"DELETE FROM simulation_holdings WHERE id={_ph()}", (h["id"],))
-            meta_freed += sell_value
-            changes.append({"type": "SELL", "portfolio": "meta", "name": h["name"],
-                           "reason": "META_ROTATION", "price": sell_price, "gain_pct": gain_pct, "gain_kr": gain_kr})
-
-        if meta_added and meta_freed > 0:
-            alloc = meta_freed / len(meta_added)
-            for s in meta_added:
-                shares = alloc / s["last_price"]
-                oid = str(s["orderbook_id"])
-                db.execute(f"""INSERT INTO simulation_holdings
-                    (portfolio, start_date, start_capital, orderbook_id, name, entry_price, shares, allocation, buy_date)
-                    VALUES ({_ph(9)})""",
-                    ("meta", start_date, start_capital, oid, s["name"], s["last_price"], shares, alloc, today))
-                db.execute(f"""INSERT INTO simulation_trades
-                    (trade_date, portfolio, orderbook_id, name, trade_type, price, shares, value, reason)
-                    VALUES ({_ph(9)})""",
-                    (today, "meta", oid, s["name"], "BUY", s["last_price"], shares, alloc, "META_ROTATION"))
-                changes.append({"type": "BUY", "portfolio": "meta", "name": s["name"],
-                               "reason": "META_ROTATION", "price": s["last_price"]})
+    _sig_cfgs = [
+        ("magic", _get_magic_extended_ranked, "_dedup_score", 20, "MF_ROTATION"),
+        ("dsm",   _get_dsm_extended_ranked,   "dsm_score",    15, "DSM_ROTATION"),
+        ("ace",   _get_ace_extended_ranked,   "ace_score",    25, "ACE_ROTATION"),
+        ("meta",  _get_meta_extended_ranked,  "meta_score",   20, "META_ROTATION"),
+    ]
+    for _pf, _get_ext, _sk, _target, _reason in _sig_cfgs:
+        _hold_rows = db.execute(
+            f"SELECT orderbook_id FROM simulation_holdings WHERE portfolio={_ph()}", (_pf,)
+        ).fetchall()
+        if not _hold_rows:
+            continue
+        _held = {str(r["orderbook_id"]) for r in _hold_rows}
+        try:
+            _ext = _get_ext(db, held_oids=_held)
+        except Exception:
+            continue
+        _ch = _rotate_ranked_portfolio(
+            db, _pf, today,
+            extended_list=_ext,
+            score_key=_sk,
+            target_size=_target,
+            sell_rank_buffer=1.35,
+            min_hold_days=10,
+            rotation_reason=_reason,
+        )
+        changes.extend(_ch)
 
     # ══════════════════════════════════════════════
     # BOOKS: Böckernas portfölj — max 10 aktier, rotera när composite faller

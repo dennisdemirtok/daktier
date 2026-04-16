@@ -2339,16 +2339,28 @@ function evaluateBookModels(s) {
     const sma200 = s.sma200; // pct deviation (positive = över)
     const mcap = s.market_cap, ocf = s.operating_cash_flow;
 
-    // Graham Defensive (P/E < 15, P/B < 1.5, P/E * P/B < 22.5)
-    if (pe != null && pb != null) {
+    // Graham Defensive — bokens tumregel: P/E × P/B < 22.5 (produkten är
+    // summan av margin-of-safety). Rankar på produkten, straffar extrema
+    // enskilda gates mjukt (matchar backend `_score_book_models`).
+    if (pe != null && pb != null && pe >= 2 && pe <= 80 && pb >= 0.1 && pb <= 20) {
         const prod = pe * pb;
-        const pass = pe < 15 && pb < 1.5 && prod < 22.5;
-        const warn = pe < 20 && pb < 2.5 && prod < 35;
+        // Pass om produkten är under gränsen OCH inget enskilt värde är extremt
+        // (P/B > 3 = >2x bokvärde, P/E > 25 = högt pris på vinsten)
+        const pass = prod < 22.5 && pb <= 3 && pe <= 25;
+        // Varning: antingen produkten över 22.5 men under 35, eller produkten
+        // under gränsen men med en enskild komponent som är över mjuk gräns
+        const warn = (prod < 35) && !(pb > 4 || pe > 30);
         const v = _verdict(pass, !pass && warn);
+        // Visa varför varning/fail om produkten i sig är okej
+        let metric = `P/E ${pe.toFixed(1)} × P/B ${pb.toFixed(2)} = ${prod.toFixed(1)}`;
+        if (!pass && prod < 22.5) {
+            if (pb > 3) metric += ` · P/B ${pb.toFixed(2)} > 3 (enskild gate)`;
+            else if (pe > 25) metric += ` · P/E ${pe.toFixed(1)} > 25 (enskild gate)`;
+        }
         out.push({
             key:'graham', icon:'📘', title:'Graham Defensive',
             sub:'Den intelligente investeraren — P/E × P/B < 22,5',
-            v, metric: `P/E ${pe.toFixed(1)} × P/B ${pb.toFixed(2)} = ${prod.toFixed(1)}`
+            v, metric
         });
     }
 
