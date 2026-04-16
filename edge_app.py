@@ -23,6 +23,7 @@ from edge_db import fetch_owner_history, get_maturity_scores, get_hot_movers
 from edge_db import calculate_dsm_score, compute_ace_scores, compute_magic_scores, calculate_edge_score
 from edge_db import _ph
 from edge_db import BOOK_MODELS, get_model_toplist, get_daily_picks, enrich_with_book_composite, _score_book_models
+from edge_db import get_books_portfolio_top10, _build_pick_reasons
 
 app = Flask(__name__)
 
@@ -655,6 +656,7 @@ def api_daily_picks():
             "models_available": s.get("models_available"),
             "models_passing": s.get("models_passing"),
             "model_scores": s.get("model_scores"),
+            "reasons": s.get("reasons", []),
         })
 
     result = {"picks": slim, "count": len(slim), "generated_at": _time.time()}
@@ -1019,6 +1021,46 @@ def _get_meta_stocks(db):
     return filtered[:20]
 
 
+def _books_buy_reason(stock, kind="NEW_ENTRY"):
+    """Kort, läsbar reason-sträng som lagras på books-trades."""
+    comp = stock.get("composite_score")
+    passing = stock.get("models_passing")
+    avail = stock.get("models_available")
+    parts = []
+    if kind == "INITIAL":
+        parts.append("BOOKS_INITIAL")
+    elif kind == "ROTATION":
+        parts.append("BOOKS_ROTATION_IN")
+    else:
+        parts.append("BOOKS_NEW_ENTRY")
+    if comp is not None:
+        parts.append(f"composite {comp:.0f}")
+    if passing is not None and avail is not None:
+        parts.append(f"{passing}/{avail} modeller OK")
+    # Plocka de 3 starkaste modellerna
+    scores = stock.get("model_scores") or {}
+    if scores:
+        top3 = sorted(
+            [(k, v) for k, v in scores.items() if v is not None],
+            key=lambda kv: kv[1], reverse=True
+        )[:3]
+        if top3:
+            # Modellnamn-lookup
+            labels = {m["key"]: m["label"].split()[0] for m in BOOK_MODELS}
+            top_txt = ", ".join(f"{labels.get(k, k)} {v:.0f}" for k, v in top3)
+            parts.append(top_txt)
+    return " · ".join(parts)
+
+
+def _books_sell_reason(old_composite, new_composite=None, kind="DROP_BELOW_THRESHOLD"):
+    parts = [f"BOOKS_{kind}"]
+    if old_composite is not None:
+        parts.append(f"var composite {old_composite:.0f}")
+    if new_composite is not None:
+        parts.append(f"nu {new_composite:.0f}")
+    return " · ".join(parts)
+
+
 def _sim_get_state(db):
     """Hämta fullständig simuleringsstatus inkl trades, realized P&L och cash."""
     holdings = db.execute("""
@@ -1190,6 +1232,23 @@ def api_simulation():
                     (trade_date, portfolio, orderbook_id, name, trade_type, price, shares, value, reason)
                     VALUES ({_ph(9)})""",
                     (today, "meta", oid, s["name"], "BUY", s["last_price"], shares, alloc, "INITIAL"))
+
+        # ── BOOKS: Böckernas portfölj — max 10 bästa composite (Graham+Buffett+Lynch+Magic+Klarman+...) ──
+        books_stocks = get_books_portfolio_top10(db, limit=10)
+        if books_stocks:
+            alloc = CAPITAL / len(books_stocks)
+            for s in books_stocks:
+                shares = alloc / s["last_price"]
+                oid = str(s["orderbook_id"])
+                reason = _books_buy_reason(s, "INITIAL")
+                db.execute(f"""INSERT INTO simulation_holdings
+                    (portfolio, start_date, start_capital, orderbook_id, name, entry_price, shares, allocation, buy_date)
+                    VALUES ({_ph(9)})""",
+                    ("books", today, CAPITAL, oid, s["name"], s["last_price"], shares, alloc, today))
+                db.execute(f"""INSERT INTO simulation_trades
+                    (trade_date, portfolio, orderbook_id, name, trade_type, price, shares, value, reason)
+                    VALUES ({_ph(9)})""",
+                    (today, "books", oid, s["name"], "BUY", s["last_price"], shares, alloc, reason))
 
         db.commit()
 
@@ -1456,8 +1515,264 @@ def _do_rebalance(db, today):
                 changes.append({"type": "BUY", "portfolio": "meta", "name": s["name"],
                                "reason": "META_ROTATION", "price": s["last_price"]})
 
+    # ══════════════════════════════════════════════
+    # BOOKS: Böckernas portfölj — max 10 aktier, rotera när composite faller
+    # ══════════════════════════════════════════════
+    books_holdings = db.execute("SELECT * FROM simulation_holdings WHERE portfolio='books'").fetchall()
+    if books_holdings:
+        new_top = get_books_portfolio_top10(db, limit=10)
+        new_top_oids = set(str(s["orderbook_id"]) for s in new_top)
+
+        current_scores = {}
+        for h in books_holdings:
+            oid = str(h["orderbook_id"])
+            row = db.execute(f"SELECT * FROM stocks WHERE CAST(orderbook_id AS TEXT)={_ph()}", (oid,)).fetchone()
+            if row:
+                d = dict(row)
+                sc = _score_book_models(d)
+                current_scores[oid] = {
+                    "composite": sc.get("composite"),
+                    "models_available": sc.get("models_available", 0),
+                    "last_price": d.get("last_price"),
+                }
+
+        books_freed = 0.0
+        for h in books_holdings:
+            oid = str(h["orderbook_id"])
+            cur = current_scores.get(oid, {})
+            cur_comp = cur.get("composite")
+            if cur_comp is None:
+                continue
+            sell = False; sell_kind = ""
+            if cur_comp < 50:
+                sell = True; sell_kind = "EXIT_QUALITY_DROP"
+            elif oid not in new_top_oids and cur_comp < 65:
+                sell = True; sell_kind = "ROTATE_OUT"
+
+            if sell:
+                sell_price = cur.get("last_price") or h["entry_price"]
+                sell_value = h["shares"] * sell_price
+                gain_kr = sell_value - h["allocation"]
+                gain_pct = (sell_price - h["entry_price"]) / h["entry_price"] if h["entry_price"] > 0 else 0
+                reason = _books_sell_reason(cur_comp, kind=sell_kind)
+                db.execute(f"""INSERT INTO simulation_trades
+                    (trade_date, portfolio, orderbook_id, name, trade_type, price, shares, value, reason, entry_price, gain_pct, gain_kr)
+                    VALUES ({_ph(12)})""",
+                    (today, "books", oid, h["name"], "SELL", sell_price, h["shares"], sell_value, reason, h["entry_price"], gain_pct, gain_kr))
+                db.execute(f"DELETE FROM simulation_holdings WHERE id={_ph()}", (h["id"],))
+                books_freed += sell_value
+                changes.append({"type": "SELL", "portfolio": "books", "name": h["name"],
+                               "reason": reason, "price": sell_price, "gain_pct": gain_pct, "gain_kr": gain_kr})
+
+        remaining = db.execute("SELECT orderbook_id FROM simulation_holdings WHERE portfolio='books'").fetchall()
+        held_oids = set(str(r["orderbook_id"]) for r in remaining)
+        slots_to_fill = max(0, 10 - len(held_oids))
+
+        if slots_to_fill > 0 and books_freed > 0:
+            candidates = [s for s in new_top if str(s["orderbook_id"]) not in held_oids][:slots_to_fill]
+            if candidates:
+                alloc = books_freed / len(candidates)
+                start_row = db.execute(
+                    "SELECT start_date, start_capital FROM simulation_holdings WHERE portfolio='books' LIMIT 1"
+                ).fetchone()
+                if start_row:
+                    b_start = start_row["start_date"]; b_cap = start_row["start_capital"]
+                else:
+                    b_start = today; b_cap = 1_000_000
+
+                for s in candidates:
+                    if not s.get("last_price") or s["last_price"] <= 0:
+                        continue
+                    shares = alloc / s["last_price"]
+                    oid = str(s["orderbook_id"])
+                    reason = _books_buy_reason(s, "ROTATION")
+                    db.execute(f"""INSERT INTO simulation_holdings
+                        (portfolio, start_date, start_capital, orderbook_id, name, entry_price, shares, allocation, buy_date)
+                        VALUES ({_ph(9)})""",
+                        ("books", b_start, b_cap, oid, s["name"], s["last_price"], shares, alloc, today))
+                    db.execute(f"""INSERT INTO simulation_trades
+                        (trade_date, portfolio, orderbook_id, name, trade_type, price, shares, value, reason)
+                        VALUES ({_ph(9)})""",
+                        (today, "books", oid, s["name"], "BUY", s["last_price"], shares, alloc, reason))
+                    changes.append({"type": "BUY", "portfolio": "books", "name": s["name"],
+                                   "reason": reason, "price": s["last_price"]})
+
     db.commit()
     return changes
+
+
+# Modell-metadata: beskrivningar, strategier och förväntat uppträdande per simuleringsportfölj
+SIM_MODEL_INFO = {
+    "trav": {
+        "label": "TRAV — Edge Signals",
+        "icon": "🐎",
+        "target_size": "Obegränsad (alla ENTRY-signaler)",
+        "universe": "Global, ≥100 ägare, dedup A/B-aktier",
+        "entry_rule": "Aktier med action = ENTRY från Edge Signals.",
+        "exit_rule": "EXIT_DECEL, EXIT_REVERSAL, EXIT_WEEKLY eller EXIT_INSIDER.",
+        "allocation": "Equal weight bland ENTRY-aktier.",
+        "horizon": "Kort–medellång (swing). Omallokerar löpande.",
+        "thesis": "Fånga aktier där ägarbas & teknisk trend förstärks samtidigt.",
+    },
+    "magic": {
+        "label": "MAGIC — Magic Formula",
+        "icon": "📊",
+        "target_size": "Top 20",
+        "universe": "Aktier med EV/EBIT + ROCE tillgängligt.",
+        "entry_rule": "Kombinerad rank Earnings Yield + ROCE (Greenblatts regel).",
+        "exit_rule": "Droppa från top 20 → rotera ut.",
+        "allocation": "Equal weight, 1/20 per aktie.",
+        "horizon": "12 månader klassiskt; här löpande omräknad.",
+        "thesis": "Billiga bolag med hög kapitalavkastning — två enkla kvalitetsfilter.",
+    },
+    "dsm": {
+        "label": "DSM — Dennis Signal Model",
+        "icon": "🎯",
+        "target_size": "Top 15",
+        "universe": "Global, med likviditet + ägare.",
+        "entry_rule": "DSM-score rank 1–15 (momentum + ägarkvalitet + valuation-sanity).",
+        "exit_rule": "Drop ur top 15.",
+        "allocation": "Equal weight.",
+        "horizon": "Medellång swing.",
+        "thesis": "Proprietär viktning av momentum, ägarflöden och fundamentala flags.",
+    },
+    "ace": {
+        "label": "ACE — Alpha Composite Engine",
+        "icon": "⚡",
+        "target_size": "Top 25",
+        "universe": "Global, filter på likviditet.",
+        "entry_rule": "ACE-score: composite över flera edge-faktorer (momentum, quality, value).",
+        "exit_rule": "Drop ur top 25.",
+        "allocation": "Equal weight.",
+        "horizon": "Medellång.",
+        "thesis": "Diversifierad composite som jämnar ut enskilda faktorers svaghet.",
+    },
+    "meta": {
+        "label": "META — Meta Score",
+        "icon": "🧩",
+        "target_size": "Top 20",
+        "universe": "Kvalificerade aktier med både Edge + DSM + ACE (+ ev Magic).",
+        "entry_rule": "Meta-score ≥ 55, DD-risk < 60, top 20.",
+        "exit_rule": "Drop ur top 20.",
+        "allocation": "Equal weight.",
+        "horizon": "Medellång.",
+        "thesis": "Viktad konsensus — aktier som flera modeller rankar högt.",
+    },
+    "books": {
+        "label": "BOOKS — Böckernas portfölj",
+        "icon": "📚",
+        "target_size": "Max 10 aktier",
+        "universe": "≥200 ägare, minst 6 av 10 bokmodeller har data.",
+        "entry_rule": "Composite (Graham+Buffett+Lynch+Magic+Klarman+…) ≥ 65, placeras bland top 10.",
+        "exit_rule": "Säljs när composite < 50 (kvalitetsfall) eller faller ur top 10 och composite < 65.",
+        "allocation": "Equal weight, ≈10% per aktie vid start.",
+        "horizon": "Medellång–lång. Omvärderas vid varje rebalans.",
+        "thesis": "Investment-klassikerna röstar ihop: bolag som flera böcker klassar som köpvärda.",
+    },
+}
+
+
+@app.route("/api/simulation/model-info/<portfolio>")
+def api_simulation_model_info(portfolio):
+    """Metadata + innehav + transaktioner + prestandastatistik för en simuleringsportfölj."""
+    info = SIM_MODEL_INFO.get(portfolio)
+    if not info:
+        return jsonify({"error": "unknown portfolio"}), 404
+
+    db = get_db()
+    try:
+        # Innehav
+        holdings_rows = db.execute(f"""
+            SELECT h.*, s.last_price as current_price
+            FROM simulation_holdings h
+            LEFT JOIN stocks s ON CAST(h.orderbook_id AS TEXT) = CAST(s.orderbook_id AS TEXT)
+            WHERE h.portfolio={_ph()}
+            ORDER BY h.name
+        """, (portfolio,)).fetchall()
+
+        holdings = []
+        total_value = 0.0
+        for row in holdings_rows:
+            h = dict(row)
+            cp = h["current_price"] or h["entry_price"]
+            cv = h["shares"] * cp
+            total_value += cv
+            holdings.append({
+                "orderbook_id": h["orderbook_id"],
+                "name": h["name"],
+                "entry_price": h["entry_price"],
+                "current_price": cp,
+                "shares": h["shares"],
+                "allocation": h["allocation"],
+                "current_value": cv,
+                "gain_kr": cv - h["allocation"],
+                "return_pct": (cv - h["allocation"]) / h["allocation"] if h["allocation"] else 0,
+                "buy_date": h.get("buy_date") or h.get("start_date"),
+            })
+        holdings.sort(key=lambda x: x["return_pct"], reverse=True)
+
+        # Meta + performance
+        meta_row = db.execute(
+            f"SELECT start_date, start_capital FROM simulation_holdings WHERE portfolio={_ph()} LIMIT 1",
+            (portfolio,)
+        ).fetchone()
+        start_date = meta_row["start_date"] if meta_row else None
+        start_capital = meta_row["start_capital"] if meta_row else 0
+
+        # Transaktioner
+        tx_rows = db.execute(f"""
+            SELECT * FROM simulation_trades
+            WHERE portfolio={_ph()}
+            ORDER BY trade_date DESC, id DESC
+        """, (portfolio,)).fetchall()
+        trades = [dict(r) for r in tx_rows]
+
+        # Stats
+        sells = [t for t in trades if t["trade_type"] == "SELL"]
+        buys = [t for t in trades if t["trade_type"] == "BUY"]
+        wins = [t for t in sells if (t.get("gain_kr") or 0) > 0]
+        losses = [t for t in sells if (t.get("gain_kr") or 0) < 0]
+        realized_pnl = sum(t.get("gain_kr") or 0 for t in sells)
+
+        # Unrealized = nuvarande värde - kvarvarande allokering
+        unrealized_pnl = sum(h["gain_kr"] for h in holdings)
+
+        # Cash
+        buy_val = sum(t["value"] for t in buys)
+        sell_val = sum(t["value"] for t in sells)
+        cash = (start_capital or 0) - buy_val + sell_val
+
+        total_return_pct = ((total_value + cash) - (start_capital or 0)) / (start_capital or 1) if start_capital else 0
+        days_active = 0
+        if start_date:
+            try:
+                days_active = (datetime.now() - datetime.strptime(start_date, "%Y-%m-%d")).days
+            except Exception:
+                pass
+
+        return jsonify({
+            "portfolio": portfolio,
+            "info": info,
+            "start_date": start_date,
+            "start_capital": start_capital,
+            "days_active": days_active,
+            "holdings": holdings,
+            "holdings_count": len(holdings),
+            "total_value": total_value,
+            "cash": cash,
+            "realized_pnl": realized_pnl,
+            "unrealized_pnl": unrealized_pnl,
+            "total_return_pct": total_return_pct,
+            "trades": trades,
+            "trade_count": len(trades),
+            "buy_count": len(buys),
+            "sell_count": len(sells),
+            "win_count": len(wins),
+            "loss_count": len(losses),
+            "win_rate": (len(wins) / len(sells)) if sells else 0,
+        })
+    finally:
+        db.close()
 
 
 @app.route("/api/simulation/rebalance", methods=["POST"])

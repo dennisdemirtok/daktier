@@ -241,14 +241,26 @@
         .dpb-title { font-size: 16px; font-weight: 800; color: var(--green-dark); letter-spacing: -0.01em; }
         .dpb-sub { font-size: 12px; color: var(--text-sec); margin-top: 2px; }
         .dpb-live { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; font-size: 10px; font-weight: 800; letter-spacing: 1px; color: var(--green-dark); background: rgba(255,255,255,0.7); padding: 5px 10px; border-radius: 20px; }
-        .daily-picks-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px; }
-        .daily-pick-card { background: var(--white); border-radius: 12px; padding: 12px 14px; display: flex; align-items: center; gap: 12px; cursor: pointer; transition: all 0.15s; border-left: 3px solid var(--green); }
-        .daily-pick-card:hover { transform: translateY(-2px); box-shadow: 0 6px 18px rgba(0,108,70,0.1); }
+        .daily-picks-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 12px; }
+        .daily-pick-card { background: var(--white); border-radius: 12px; padding: 12px 14px; transition: all 0.15s; border-left: 3px solid var(--green); }
+        .daily-pick-card:hover { box-shadow: 0 6px 18px rgba(0,108,70,0.1); }
+        .dp-row { display: flex; align-items: center; gap: 12px; cursor: pointer; }
         .dp-rank { font-size: 20px; font-weight: 900; flex-shrink: 0; width: 28px; text-align: center; }
         .dp-main { flex: 1; min-width: 0; }
         .dp-name { font-size: 13px; font-weight: 700; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .dp-meta { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+        .dp-headline { font-size: 11px; color: var(--green-dark); font-weight: 700; margin-top: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .dp-headline-sub { color: var(--text-muted); font-weight: 500; }
         .dp-score { text-align: right; flex-shrink: 0; }
+        .dp-reasons { margin-top: 10px; padding-top: 10px; border-top: 1px dashed rgba(0,108,70,0.15); }
+        .dp-reasons-label { font-size: 10px; font-weight: 800; color: var(--green-dark); letter-spacing: 0.5px; text-transform: uppercase; margin-bottom: 6px; }
+        .dp-reasons-list { display: flex; flex-direction: column; gap: 4px; }
+        .dp-reason { display: flex; align-items: flex-start; gap: 6px; font-size: 11px; line-height: 1.35; color: var(--text); padding: 4px 6px; border-radius: 6px; background: rgba(236,253,245,0.5); }
+        .dp-reason.dp-strong { background: rgba(5,150,105,0.12); }
+        .dp-reason.dp-good { background: rgba(16,185,129,0.08); }
+        .dp-reason-ico { flex-shrink: 0; font-size: 12px; }
+        .dp-reason-text { flex: 1; min-width: 0; }
+        .dp-reason-text b { font-weight: 700; color: var(--green-dark); }
 
         /* ── Model toplist per bokmodell ──── */
         .model-toplist-wrap { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 14px; }
@@ -270,6 +282,35 @@
         .mtl-score { font-size: 16px; font-weight: 800; flex-shrink: 0; font-variant-numeric: tabular-nums; width: 36px; text-align: right; }
         .mtl-skel, .mtl-err, .mtl-empty { padding: 10px 8px; font-size: 12px; color: var(--text-muted); text-align: center; }
         .mtl-err { color: var(--red); }
+
+        /* ── Model Detail Overlay (simuleringsportfölj-djupdyk) ─── */
+        .model-detail-overlay { position: fixed; inset: 0; z-index: 1200; display: none; }
+        .model-detail-overlay.open { display: block; }
+        .mdo-backdrop { position: absolute; inset: 0; background: rgba(15,23,42,0.55); backdrop-filter: blur(3px); }
+        .mdo-panel { position: absolute; top: 0; right: 0; bottom: 0; width: min(780px, 92vw); background: var(--bg); box-shadow: -8px 0 36px rgba(0,0,0,0.22); display: flex; flex-direction: column; animation: mdoSlideIn 0.18s ease-out; }
+        @keyframes mdoSlideIn { from { transform: translateX(100%); } to { transform: none; } }
+        .mdo-close { position: absolute; top: 16px; right: 16px; width: 34px; height: 34px; display: flex; align-items: center; justify-content: center; border-radius: 50%; background: var(--white); cursor: pointer; z-index: 2; transition: background 0.15s; }
+        .mdo-close:hover { background: var(--surface-low); }
+        .mdo-body { overflow-y: auto; padding: 28px 32px 40px; }
+        .mdo-header { display: flex; align-items: center; gap: 14px; margin-bottom: 22px; }
+        .mdo-icon { font-size: 36px; }
+        .mdo-title { font-size: 22px; font-weight: 800; letter-spacing: -0.01em; }
+        .mdo-sub { font-size: 12px; color: var(--text-sec); margin-top: 3px; }
+        .mdo-section-h { font-size: 13px; font-weight: 800; color: var(--green-dark); letter-spacing: 0.5px; text-transform: uppercase; margin: 22px 0 10px; }
+        .mdo-strategy { background: var(--white); border-radius: 12px; padding: 14px 18px; display: flex; flex-direction: column; gap: 8px; }
+        .mdo-strategy-row { display: flex; gap: 14px; font-size: 13px; }
+        .mdo-k { flex: 0 0 120px; color: var(--text-muted); font-size: 11px; font-weight: 700; letter-spacing: 0.3px; text-transform: uppercase; padding-top: 2px; }
+        .mdo-v { flex: 1; color: var(--text); line-height: 1.5; }
+        .mdo-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; }
+        .mdo-stat { background: var(--white); border-radius: 10px; padding: 12px 14px; }
+        .mdo-stat-l { font-size: 10px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.3px; }
+        .mdo-stat-v { font-size: 16px; font-weight: 700; margin-top: 4px; }
+        .mdo-table-wrap { background: var(--white); border-radius: 12px; overflow: hidden; }
+        .mdo-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+        .mdo-table th { text-align: left; padding: 10px 12px; background: var(--surface-low); font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.3px; color: var(--text-muted); }
+        .mdo-table td { padding: 8px 12px; border-top: 1px solid var(--border-light); }
+        .mdo-table tbody tr:hover { background: var(--surface-low); }
+        @keyframes spin { to { transform: rotate(360deg); } }
 
         /* ── Metrics tool ──────────────────────────────── */
         .metrics-tabs { display: flex; gap: 6px; margin-bottom: 20px; }
@@ -1707,6 +1748,7 @@ function renderSimulation(simData) {
         dsm:   { icon: '🎯', label: 'DSM (Dennis Signal)',  color: 'var(--blue)',   borderColor: 'var(--blue)' },
         ace:   { icon: '⚡', label: 'ACE (Alpha Engine)',    color: 'var(--orange)', borderColor: 'var(--orange)' },
         meta:  { icon: '🧠', label: 'Meta Score (Combo)',   color: '#e91e63',       borderColor: '#e91e63' },
+        books: { icon: '📚', label: 'Böckerna (10 aktier)', color: '#8b5cf6',       borderColor: '#8b5cf6' },
     };
 
     function fmtKr(n) { return n.toLocaleString('sv-SE', {minimumFractionDigits: 0, maximumFractionDigits: 0}) + ' kr'; }
@@ -1729,8 +1771,11 @@ function renderSimulation(simData) {
         const r = realized[portKey] || {total_sells:0, wins:0, losses:0, win_rate:0, total_gain_kr:0};
         const c = cash[portKey] || 0;
 
-        return `<div style="background:var(--white);border-radius:var(--radius);padding:16px;box-shadow:var(--shadow);border-left:4px solid ${color};flex:1;min-width:260px">
-            <div style="font-size:16px;font-weight:700;margin-bottom:12px">${icon} ${label}</div>
+        return `<div onclick="showModelDetail('${portKey}')" title="Klicka för detaljerad vy, plan och transaktioner" style="background:var(--white);border-radius:var(--radius);padding:16px;box-shadow:var(--shadow);border-left:4px solid ${color};flex:1;min-width:260px;cursor:pointer;transition:transform 0.12s,box-shadow 0.12s" onmouseover="this.style.transform='translateY(-2px)';this.style.boxShadow='0 8px 24px rgba(0,0,0,0.08)'" onmouseout="this.style.transform='';this.style.boxShadow='var(--shadow)'">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+                <div style="font-size:16px;font-weight:700">${icon} ${label}</div>
+                <span style="font-size:10px;color:var(--green-dark);background:var(--surface-low);padding:3px 8px;border-radius:8px;font-weight:700">DETALJER →</span>
+            </div>
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
                 <div><div style="font-size:10px;text-transform:uppercase;color:var(--text-muted);letter-spacing:0.5px">Startkapital</div>
                      <div style="font-size:18px;font-weight:700">${fmtKr(port.start_capital)}</div></div>
@@ -1822,6 +1867,18 @@ function renderSimulation(simData) {
             'DSM_ROTATION': 'DSM rotation', 'ACE_ROTATION': 'ACE rotation',
             'META_ROTATION': 'Meta rotation', 'REBALANCE': 'Rebalans'
         };
+        // Books-portföljen har längre reason-strängar ("BOOKS_INITIAL · composite 82 · …")
+        // Rendera dem läsligt: bara första segmentet bold, resten muted.
+        function fmtReason(raw) {
+            if (!raw) return '';
+            const mapped = reasonLabels[raw];
+            if (mapped) return mapped;
+            if (raw.indexOf(' · ') === -1) return raw;
+            const parts = raw.split(' · ');
+            const head = parts[0].replace(/^BOOKS_/, '').replace(/_/g,' ').toLowerCase();
+            const rest = parts.slice(1).join(' · ');
+            return `<span style="font-weight:700">${head}</span><span style="color:var(--text-muted);margin-left:4px">· ${rest}</span>`;
+        }
         const portIcons = Object.fromEntries(Object.entries(PCFG).map(([k,v]) => [k, v.icon]));
 
         const rows = trades.map(t => {
@@ -1840,7 +1897,7 @@ function renderSimulation(simData) {
                 <td><span style="display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600;background:${typeBg};color:${typeColor}">${t.trade_type === 'BUY' ? 'KÖP' : 'SÄLJ'}</span></td>
                 <td style="text-align:right">${t.price.toFixed(2)}</td>
                 <td style="text-align:right;font-size:12px">${fmtKr(t.value)}</td>
-                <td style="font-size:12px;color:var(--text-sec)">${reasonLabels[t.reason] || t.reason || ''}</td>
+                <td style="font-size:12px;color:var(--text-sec);max-width:320px">${fmtReason(t.reason)}</td>
                 <td style="text-align:right">${gainStr}</td>
                 <td style="text-align:right;font-size:12px">${gainKrStr}</td>
             </tr>`;
@@ -3102,6 +3159,161 @@ async function _openPickStock(orderbookId) {
     }
     if (s) openDrawer(s);
 }
+
+// ══════════════════════════════════════════════
+// Model Detail — djupdyk-overlay per simuleringsportfölj
+// ══════════════════════════════════════════════
+async function showModelDetail(portfolioKey) {
+    // Bygg overlay om den inte redan finns
+    let ov = document.getElementById('modelDetailOverlay');
+    if (!ov) {
+        ov = document.createElement('div');
+        ov.id = 'modelDetailOverlay';
+        ov.className = 'model-detail-overlay';
+        ov.innerHTML = `<div class="mdo-backdrop" onclick="closeModelDetail()"></div>
+            <div class="mdo-panel">
+                <div class="mdo-close" onclick="closeModelDetail()" title="Stäng">
+                    <span class="material-symbols-outlined">close</span>
+                </div>
+                <div id="mdoBody" class="mdo-body">Laddar...</div>
+            </div>`;
+        document.body.appendChild(ov);
+    }
+    ov.classList.add('open');
+    const body = document.getElementById('mdoBody');
+    body.innerHTML = '<div style="padding:40px;text-align:center;color:var(--text-muted)"><span class="material-symbols-outlined" style="font-size:32px;animation:spin 1s linear infinite">progress_activity</span><div style="margin-top:8px">Laddar modelldetaljer...</div></div>';
+
+    try {
+        const r = await fetch(`/api/simulation/model-info/${portfolioKey}`);
+        if (!r.ok) { throw new Error('HTTP '+r.status); }
+        const d = await r.json();
+        _renderModelDetail(body, d);
+    } catch (e) {
+        body.innerHTML = `<div style="padding:40px;text-align:center;color:var(--red)">Kunde inte ladda modelldata. (${e.message})</div>`;
+    }
+}
+
+function closeModelDetail() {
+    const ov = document.getElementById('modelDetailOverlay');
+    if (ov) ov.classList.remove('open');
+}
+
+function _renderModelDetail(el, d) {
+    const fmtKr = n => (n||0).toLocaleString('sv-SE', {maximumFractionDigits:0}) + ' kr';
+    const fmtPct = n => ((n||0)*100).toFixed(2) + '%';
+    const rc = n => n >= 0 ? 'var(--green)' : 'var(--red)';
+    const info = d.info || {};
+    const retColor = rc(d.total_return_pct||0);
+
+    // Reason formatter (för trades)
+    const reasonLabels = {
+        'INITIAL': 'Start', 'NEW_ENTRY': 'Ny signal', 'EXIT_DECEL': 'Exit decel',
+        'EXIT_REVERSAL': 'Exit reversal', 'EXIT_WEEKLY': 'Exit vecka',
+        'EXIT_INSIDER': 'Exit insider', 'EXIT_DISCOVERY': 'Exit discovery',
+        'MF_ROTATION': 'MF rotation',
+        'DSM_ROTATION': 'DSM rotation', 'ACE_ROTATION': 'ACE rotation',
+        'META_ROTATION': 'Meta rotation', 'REBALANCE': 'Rebalans'
+    };
+    function fmtReason(raw) {
+        if (!raw) return '';
+        if (reasonLabels[raw]) return reasonLabels[raw];
+        if (raw.indexOf(' · ') === -1) return raw;
+        const parts = raw.split(' · ');
+        const head = parts[0].replace(/^BOOKS_/,'').replace(/_/g,' ').toLowerCase();
+        return `<b>${head}</b> <span style="color:var(--text-muted)">· ${parts.slice(1).join(' · ')}</span>`;
+    }
+
+    // Strategy-ruta
+    const strategyHtml = `<div class="mdo-strategy">
+        <div class="mdo-strategy-row"><span class="mdo-k">Modellens plan</span><span class="mdo-v">${info.thesis||'—'}</span></div>
+        <div class="mdo-strategy-row"><span class="mdo-k">Målstorlek</span><span class="mdo-v">${info.target_size||'—'}</span></div>
+        <div class="mdo-strategy-row"><span class="mdo-k">Universum</span><span class="mdo-v">${info.universe||'—'}</span></div>
+        <div class="mdo-strategy-row"><span class="mdo-k">Köpregel</span><span class="mdo-v">${info.entry_rule||'—'}</span></div>
+        <div class="mdo-strategy-row"><span class="mdo-k">Säljregel</span><span class="mdo-v">${info.exit_rule||'—'}</span></div>
+        <div class="mdo-strategy-row"><span class="mdo-k">Allokering</span><span class="mdo-v">${info.allocation||'—'}</span></div>
+        <div class="mdo-strategy-row"><span class="mdo-k">Tidshorisont</span><span class="mdo-v">${info.horizon||'—'}</span></div>
+    </div>`;
+
+    // Stats-grid
+    const statsHtml = `<div class="mdo-stats">
+        <div class="mdo-stat"><div class="mdo-stat-l">Startkapital</div><div class="mdo-stat-v">${fmtKr(d.start_capital)}</div></div>
+        <div class="mdo-stat"><div class="mdo-stat-l">Nuvarande värde</div><div class="mdo-stat-v">${fmtKr((d.total_value||0)+(d.cash||0))}</div></div>
+        <div class="mdo-stat"><div class="mdo-stat-l">Total avkastning</div><div class="mdo-stat-v" style="color:${retColor}">${fmtPct(d.total_return_pct)}</div></div>
+        <div class="mdo-stat"><div class="mdo-stat-l">Realiserat P&amp;L</div><div class="mdo-stat-v" style="color:${rc(d.realized_pnl)}">${fmtKr(d.realized_pnl)}</div></div>
+        <div class="mdo-stat"><div class="mdo-stat-l">Orealiserat</div><div class="mdo-stat-v" style="color:${rc(d.unrealized_pnl)}">${fmtKr(d.unrealized_pnl)}</div></div>
+        <div class="mdo-stat"><div class="mdo-stat-l">Kassa</div><div class="mdo-stat-v">${fmtKr(d.cash)}</div></div>
+        <div class="mdo-stat"><div class="mdo-stat-l">Antal aktier</div><div class="mdo-stat-v">${d.holdings_count||0}</div></div>
+        <div class="mdo-stat"><div class="mdo-stat-l">Transaktioner</div><div class="mdo-stat-v">${d.trade_count||0}</div></div>
+        <div class="mdo-stat"><div class="mdo-stat-l">Win-rate</div><div class="mdo-stat-v">${d.sell_count>0?(d.win_rate*100).toFixed(0)+'% ('+d.win_count+'/'+d.sell_count+')':'—'}</div></div>
+        <div class="mdo-stat"><div class="mdo-stat-l">Dagar aktiv</div><div class="mdo-stat-v">${d.days_active||0}</div></div>
+    </div>`;
+
+    // Innehav
+    const holdingsRows = (d.holdings||[]).map((h,i) => `
+        <tr>
+            <td>${i+1}</td>
+            <td>${h.name}</td>
+            <td style="text-align:right">${(h.entry_price||0).toFixed(2)}</td>
+            <td style="text-align:right">${(h.current_price||0).toFixed(2)}</td>
+            <td style="text-align:right;color:var(--text-sec)">${h.buy_date||''}</td>
+            <td style="text-align:right;font-weight:700;color:${rc(h.return_pct)}">${fmtPct(h.return_pct)}</td>
+        </tr>`).join('');
+    const holdingsHtml = d.holdings&&d.holdings.length ? `
+        <div class="mdo-table-wrap">
+            <table class="mdo-table">
+                <thead><tr><th>#</th><th>Aktie</th><th style="text-align:right">Köp</th><th style="text-align:right">Nu</th><th style="text-align:right">Köpdatum</th><th style="text-align:right">Avk %</th></tr></thead>
+                <tbody>${holdingsRows}</tbody>
+            </table>
+        </div>` : '<div style="color:var(--text-muted);text-align:center;padding:24px">Inga aktier i portföljen.</div>';
+
+    // Transaktioner
+    const tradesRows = (d.trades||[]).map(t => {
+        const isSell = t.trade_type === 'SELL';
+        const typeColor = isSell ? 'var(--red)' : 'var(--green)';
+        const typeBg = isSell ? 'var(--red-light)' : 'var(--green-light)';
+        const gainStr = isSell && t.gain_pct!=null
+            ? `<span style="color:${rc(t.gain_kr)};font-weight:700">${fmtPct(t.gain_pct)}</span>`
+            : '<span style="color:var(--text-muted)">—</span>';
+        const dateStr = t.trade_date ? t.trade_date.slice(5) : '';
+        return `<tr>
+            <td style="color:var(--text-sec)">${dateStr}</td>
+            <td>${t.name}</td>
+            <td><span style="display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:700;background:${typeBg};color:${typeColor}">${isSell?'SÄLJ':'KÖP'}</span></td>
+            <td style="text-align:right">${(t.price||0).toFixed(2)}</td>
+            <td style="font-size:11px;color:var(--text-sec)">${fmtReason(t.reason)}</td>
+            <td style="text-align:right">${gainStr}</td>
+        </tr>`;
+    }).join('');
+    const tradesHtml = d.trades&&d.trades.length ? `
+        <div class="mdo-table-wrap">
+            <table class="mdo-table">
+                <thead><tr><th>Datum</th><th>Aktie</th><th>Typ</th><th style="text-align:right">Pris</th><th>Anledning</th><th style="text-align:right">Avk %</th></tr></thead>
+                <tbody>${tradesRows}</tbody>
+            </table>
+        </div>` : '<div style="color:var(--text-muted);text-align:center;padding:24px">Inga transaktioner ännu.</div>';
+
+    el.innerHTML = `
+        <div class="mdo-header">
+            <div class="mdo-icon">${info.icon||'📊'}</div>
+            <div class="mdo-title-wrap">
+                <div class="mdo-title">${info.label||d.portfolio}</div>
+                <div class="mdo-sub">${d.holdings_count||0} aktier · start ${d.start_date||'—'} · <span style="color:${retColor};font-weight:700">${fmtPct(d.total_return_pct)}</span> total</div>
+            </div>
+        </div>
+
+        <h4 class="mdo-section-h">📋 Strategi &amp; plan</h4>
+        ${strategyHtml}
+
+        <h4 class="mdo-section-h">📈 Prestanda</h4>
+        ${statsHtml}
+
+        <h4 class="mdo-section-h">💼 Nuvarande innehav</h4>
+        ${holdingsHtml}
+
+        <h4 class="mdo-section-h">📝 Transaktioner med anledning</h4>
+        ${tradesHtml}
+    `;
+}
 async function renderDashboard() {
     const root = document.getElementById('content');
     const cards = document.getElementById('cards');
@@ -3174,16 +3386,37 @@ function renderDashboardContent(d) {
                 const chgStr = chg != null ? `<span class="${pctClass(chg)}" style="font-size:12px;font-weight:700">${fmtPct(chg)}</span>` : '';
                 const scoreColor = p.composite_score >= 80 ? 'var(--green-dark)' : p.composite_score >= 70 ? 'var(--green)' : '#92400e';
                 const rank = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : (i+1);
-                return `<div class="daily-pick-card" onclick='_openPickStock(${p.orderbook_id})' title="Klicka för att öppna analys">
-                    <div class="dp-rank">${rank}</div>
-                    <div class="dp-main">
-                        <div class="dp-name">${flag} ${p.name}</div>
-                        <div class="dp-meta">${p.short_name||''} · ${p.last_price!=null?p.last_price.toFixed(2)+' '+(p.currency||''):'–'} ${chgStr}</div>
+                // Reasons — render som chips inuti kortet
+                const reasons = p.reasons || [];
+                const summary = reasons.find(r => r.is_summary);
+                const detailReasons = reasons.filter(r => !r.is_summary);
+                const reasonChips = detailReasons.length ? `
+                    <div class="dp-reasons">
+                        <div class="dp-reasons-label">Varför idag:</div>
+                        <div class="dp-reasons-list">
+                            ${detailReasons.slice(0,6).map(r => `
+                                <div class="dp-reason dp-${r.strength||'ok'}" title="${r.title}">
+                                    <span class="dp-reason-ico">${r.icon||'•'}</span>
+                                    <span class="dp-reason-text"><b>${r.title}:</b> ${r.text}</span>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>` : '';
+                const headline = summary ? `<div class="dp-headline">${summary.icon} ${summary.title} <span class="dp-headline-sub">— ${summary.text}</span></div>` : '';
+                return `<div class="daily-pick-card" data-obid="${p.orderbook_id}">
+                    <div class="dp-row" onclick='_openPickStock(${p.orderbook_id})' title="Klicka för att öppna analys">
+                        <div class="dp-rank">${rank}</div>
+                        <div class="dp-main">
+                            <div class="dp-name">${flag} ${p.name}</div>
+                            <div class="dp-meta">${p.short_name||''} · ${p.last_price!=null?p.last_price.toFixed(2)+' '+(p.currency||''):'–'} ${chgStr}</div>
+                            ${headline}
+                        </div>
+                        <div class="dp-score" style="color:${scoreColor}">
+                            <div style="font-size:24px;font-weight:900;line-height:1">${p.composite_score!=null?p.composite_score.toFixed(0):'–'}</div>
+                            <div style="font-size:9px;text-transform:uppercase;letter-spacing:0.5px;font-weight:700;opacity:0.8">${p.models_passing}/${p.models_available} pass</div>
+                        </div>
                     </div>
-                    <div class="dp-score" style="color:${scoreColor}">
-                        <div style="font-size:24px;font-weight:900;line-height:1">${p.composite_score!=null?p.composite_score.toFixed(0):'–'}</div>
-                        <div style="font-size:9px;text-transform:uppercase;letter-spacing:0.5px;font-weight:700;opacity:0.8">${p.models_passing}/${p.models_available} pass</div>
-                    </div>
+                    ${reasonChips}
                 </div>`;
             }).join('');
             banner.outerHTML = `<div class="daily-picks-banner">
@@ -3191,7 +3424,7 @@ function renderDashboardContent(d) {
                     <span style="font-size:28px">🎯</span>
                     <div>
                         <div class="dpb-title">Dagens köp-rekommendationer</div>
-                        <div class="dpb-sub">Viktat composite-score över Graham, Buffett, Lynch, Greenblatt, Klarman m.fl. — uppdateras var 3:e minut</div>
+                        <div class="dpb-sub">Bolag där 6+ av 10 bok-modeller säger köp. Composite ≥ 68/100. Inte baserat på prisfall — utan fundamentalt undervärderat enligt Graham/Buffett/Lynch/Greenblatt/Klarman m.fl. Uppdateras var 3:e minut.</div>
                     </div>
                     <span class="dpb-live"><span class="live-dot" style="background:#00563B"></span>LIVE</span>
                 </div>

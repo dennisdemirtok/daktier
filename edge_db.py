@@ -1639,6 +1639,229 @@ def _score_book_models(s):
     return scores
 
 
+def _build_pick_reasons(stock, scores):
+    """Generera en läsbar lista med anledningar till varför en aktie triggas som köp.
+
+    Returnerar lista av dicts: {"icon": "📘", "title": "Graham Defensive", "text": "...", "strength": "strong"/"good"/"ok"}
+    """
+    g = stock.get
+    reasons = []
+
+    pe = g("pe_ratio")
+    pb = g("price_book_ratio")
+    ev = g("ev_ebit_ratio")
+    dy = g("direct_yield")
+    roe = g("return_on_equity")
+    roce = g("return_on_capital_employed")
+    de = g("debt_to_equity_ratio")
+    nd = g("net_debt_ebitda_ratio")
+    vol = g("volatility")
+    rsi = g("rsi14")
+    sma200 = g("sma200")
+    own_1m = g("owners_change_1m")
+    own_1y = g("owners_change_1y")
+    d1 = g("one_day_change_pct")
+    w1 = g("one_week_change_pct")
+    m1 = g("one_month_change_pct")
+    ytd = g("ytd_change_pct")
+
+    def _strength(score):
+        if score is None: return "ok"
+        if score >= 85: return "strong"
+        if score >= 70: return "good"
+        return "ok"
+
+    # Graham
+    s = scores.get("graham")
+    if s is not None and s >= 65 and pe and pb:
+        prod = pe * pb
+        reasons.append({
+            "icon": "📘", "model": "graham", "title": "Graham Defensive",
+            "text": f"P/E × P/B = {prod:.1f} (Grahams gräns 22,5) — värdemässigt rimlig",
+            "strength": _strength(s), "score": round(s, 0),
+        })
+
+    # Buffett
+    s = scores.get("buffett")
+    if s is not None and s >= 65 and roe is not None:
+        roe_pct = roe * 100
+        det = f"ROE {roe_pct:.0f}%"
+        if de is not None:
+            det += f", D/E {de:.2f}"
+        reasons.append({
+            "icon": "🏰", "model": "buffett", "title": "Buffett Quality",
+            "text": f"{det} — lönsam med hanterbar skuld",
+            "strength": _strength(s), "score": round(s, 0),
+        })
+
+    # Lynch PEG
+    s = scores.get("lynch")
+    if s is not None and s >= 65 and pe and own_1y and own_1y > 0:
+        growth = own_1y * 100
+        peg = pe / growth
+        reasons.append({
+            "icon": "🔎", "model": "lynch", "title": "Lynch PEG",
+            "text": f"PEG {peg:.2f} (P/E {pe:.1f} / tillväxt {growth:.0f}%) — tillväxt prissatt rimligt",
+            "strength": _strength(s), "score": round(s, 0),
+        })
+
+    # Magic Formula
+    s = scores.get("magic")
+    if s is not None and s >= 65 and ev and roce is not None:
+        ey = 1 / ev * 100
+        reasons.append({
+            "icon": "📊", "model": "magic", "title": "Magic Formula",
+            "text": f"Earnings Yield {ey:.0f}% + ROCE {roce*100:.0f}% — Greenblatts dubbla kvalitetsfilter",
+            "strength": _strength(s), "score": round(s, 0),
+        })
+
+    # Klarman / djupvärde
+    s = scores.get("klarman")
+    if s is not None and s >= 65:
+        bits = []
+        if pb is not None: bits.append(f"P/B {pb:.2f}")
+        if ev is not None: bits.append(f"EV/EBIT {ev:.1f}")
+        reasons.append({
+            "icon": "🛡️", "model": "klarman", "title": "Klarman Margin of Safety",
+            "text": (", ".join(bits) + " — köp under rimligt värde") if bits else "Djupvärde — köp under rimligt värde",
+            "strength": _strength(s), "score": round(s, 0),
+        })
+
+    # Utdelning
+    s = scores.get("divq")
+    if s is not None and s >= 65 and dy is not None:
+        reasons.append({
+            "icon": "💰", "model": "divq", "title": "Utdelningskvalitet",
+            "text": f"Direktavkastning {dy*100:.1f}% med hållbar täckning",
+            "strength": _strength(s), "score": round(s, 0),
+        })
+
+    # Trend
+    s = scores.get("trend")
+    if s is not None and s >= 65 and sma200 is not None:
+        sma_pct = sma200 * 100
+        rsi_txt = f", RSI {rsi:.0f}" if rsi is not None else ""
+        if sma_pct >= 0:
+            txt = f"{sma_pct:+.0f}% över 200-dagars{rsi_txt} — uppåttrend"
+        else:
+            txt = f"{sma_pct:+.0f}% mot 200-dagars{rsi_txt} — vändning att bevaka"
+        reasons.append({
+            "icon": "📈", "model": "trend", "title": "Trend & Momentum",
+            "text": txt, "strength": _strength(s), "score": round(s, 0),
+        })
+
+    # Taleb
+    s = scores.get("taleb")
+    if s is not None and s >= 65 and vol is not None:
+        reasons.append({
+            "icon": "🎯", "model": "taleb", "title": "Taleb Barbell (säker)",
+            "text": f"Volatilitet {vol*100:.0f}% — tillhör den stabila sidan",
+            "strength": _strength(s), "score": round(s, 0),
+        })
+
+    # Kelly
+    s = scores.get("kelly")
+    if s is not None and s >= 70:
+        reasons.append({
+            "icon": "🎲", "model": "kelly", "title": "Kelly Sizing",
+            "text": f"Meta-edge {s:.0f}/100 — stark kombinerad signal",
+            "strength": _strength(s), "score": round(s, 0),
+        })
+
+    # Ägarmomentum
+    s = scores.get("owners")
+    if s is not None and s >= 60 and own_1m is not None:
+        own_pct = own_1m * 100
+        if own_pct >= 2:
+            txt = f"Ägare +{own_pct:.1f}% senaste månaden — smart money köper"
+        elif own_pct >= 0:
+            txt = f"Ägare +{own_pct:.1f}% — stabil bas"
+        else:
+            txt = f"Ägare {own_pct:+.1f}% — bevaka utflöde"
+        reasons.append({
+            "icon": "👥", "model": "owners", "title": "Ägarmomentum",
+            "text": txt, "strength": _strength(s), "score": round(s, 0),
+        })
+
+    # Pris-kontext (värdefullt för att förstå VARFÖR idag)
+    price_bits = []
+    if d1 is not None:
+        price_bits.append(f"idag {d1:+.1f}%")
+    if w1 is not None:
+        price_bits.append(f"vecka {w1:+.1f}%")
+    if m1 is not None:
+        price_bits.append(f"mån {m1:+.1f}%")
+    if ytd is not None:
+        price_bits.append(f"YTD {ytd:+.1f}%")
+    if price_bits:
+        # Bestäm om det är rea (pris ned) eller rally (pris upp)
+        ctx_icon = "💸" if (m1 is not None and m1 < -3) else ("🚀" if (m1 is not None and m1 > 8) else "📉")
+        ctx_tag = "Rea-läge" if (m1 is not None and m1 < -3) else ("Momentum" if (m1 is not None and m1 > 8) else "Pris-kontext")
+        reasons.append({
+            "icon": ctx_icon, "model": "_price", "title": ctx_tag,
+            "text": " · ".join(price_bits),
+            "strength": "ok", "score": None,
+        })
+
+    # Sammanfattning överst
+    comp = scores.get("composite")
+    avail = scores.get("models_available", 0)
+    passing = sum(1 for m in BOOK_MODELS if (scores.get(m["key"]) or 0) >= 65)
+    if comp is not None:
+        if comp >= 85:
+            verdict = "Extremt stark signal"
+        elif comp >= 75:
+            verdict = "Mycket stark signal"
+        elif comp >= 68:
+            verdict = "Stark signal"
+        else:
+            verdict = "Godkänd signal"
+        summary = {
+            "icon": "⭐", "model": "_summary", "title": verdict,
+            "text": f"Viktat composite {comp:.0f}/100 · {passing} av {avail} modeller godkänner",
+            "strength": "strong" if comp >= 80 else "good", "score": round(comp, 0),
+            "is_summary": True,
+        }
+        return [summary] + reasons
+    return reasons
+
+
+def get_books_portfolio_top10(db, limit=10, min_owners=200, min_composite=65, min_models=6, country=""):
+    """Topp-N aktier för 'Böckernas portfölj' — den nya simuleringsmodellen.
+
+    Väljer de N aktier som bäst uppfyller kriterierna för samtliga bokmodeller
+    baserat på viktat composite-score. Mer tillåtande än daily-picks eftersom
+    vi vill ha 10 aktier för diversifiering.
+    """
+    ph = _ph()
+    where = f"WHERE number_of_owners >= {ph} AND last_price IS NOT NULL AND last_price > 0"
+    params = [min_owners]
+    if country:
+        where += f" AND country = {ph}"
+        params.append(country)
+
+    rows = _fetchall(db, f"SELECT * FROM stocks {where}", params)
+
+    scored = []
+    for r in rows:
+        d = dict(r)
+        sc = _score_book_models(d)
+        comp = sc.get("composite")
+        avail = sc.get("models_available", 0)
+        if comp is None or avail < min_models or comp < min_composite:
+            continue
+        pass_count = sum(1 for m in BOOK_MODELS if (sc.get(m["key"]) or 0) >= 65)
+        d["composite_score"] = round(comp, 1)
+        d["models_available"] = avail
+        d["models_passing"] = pass_count
+        d["model_scores"] = {m["key"]: round(sc[m["key"]], 1) if sc.get(m["key"]) is not None else None for m in BOOK_MODELS}
+        d["_book_reasons"] = _build_pick_reasons(d, sc)
+        scored.append(d)
+
+    scored.sort(key=lambda x: (x["composite_score"], x["models_passing"]), reverse=True)
+    return scored[:limit]
+
+
 def get_model_toplist(db, model="composite", limit=20, min_owners=100, country=""):
     """Returnerar top N aktier sorterade på en specifik bokmodell."""
     ph = _ph()
@@ -1701,6 +1924,7 @@ def get_daily_picks(db, limit=5, min_owners=200, min_composite=68, min_models=6)
         d["models_available"] = avail
         d["models_passing"] = pass_count
         d["model_scores"] = {m["key"]: round(sc[m["key"]], 1) if sc.get(m["key"]) is not None else None for m in BOOK_MODELS}
+        d["reasons"] = _build_pick_reasons(d, sc)
         picks.append(d)
 
     picks.sort(key=lambda x: (x["composite_score"], x["models_passing"]), reverse=True)
