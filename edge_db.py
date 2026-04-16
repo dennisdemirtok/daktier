@@ -38,17 +38,22 @@ AVANZA_HEADERS = {
 FI_INSIDER_URL = "https://marknadssok.fi.se/publiceringsklient/sv-SE/Search/Search"
 
 
+_tables_created = False
+
 def get_db():
-    """Get a database connection (creates tables if needed)."""
+    """Get a database connection (creates tables if needed on first call)."""
+    global _tables_created
     if _use_postgres():
-        db = psycopg2.connect(DATABASE_URL)
+        db = psycopg2.connect(DATABASE_URL, connect_timeout=5)
         db.autocommit = False
     else:
         db = sqlite3.connect(DB_PATH)
         db.row_factory = sqlite3.Row
         db.execute("PRAGMA journal_mode=WAL")
         db.execute("PRAGMA foreign_keys=ON")
-    _create_tables(db)
+    if not _tables_created:
+        _create_tables(db)
+        _tables_created = True
     return db
 
 
@@ -862,6 +867,22 @@ def get_maturity_scores(db):
 
     result = {}
 
+    # ── Pre-fetch ALL owner_history in one query (avoids N+1) ──
+    all_history = _fetchall(db, """
+        SELECT orderbook_id, week_date, number_of_owners
+        FROM owner_history
+        ORDER BY orderbook_id, week_date ASC
+    """)
+    history_by_oid = {}
+    for h in all_history:
+        if _use_postgres():
+            h_oid, h_date, h_owners = h["orderbook_id"], h["week_date"], h["number_of_owners"]
+        else:
+            h_oid, h_date, h_owners = h[0], h[1], h[2]
+        if h_oid not in history_by_oid:
+            history_by_oid[h_oid] = []
+        history_by_oid[h_oid].append((h_date, h_owners))
+
     for row in rows:
         if _use_postgres():
             oid = row["orderbook_id"]
@@ -880,15 +901,10 @@ def get_maturity_scores(db):
         oc3m = oc3m or 0
         ocytd = ocytd or 0
 
-        # Hämta veckohistorik (senaste 2 åren)
-        history = _fetchall(db, f"""
-            SELECT week_date, number_of_owners
-            FROM owner_history
-            WHERE orderbook_id = {ph}
-            ORDER BY week_date ASC
-        """, (oid,))
+        # Hämta veckohistorik från pre-fetched data
+        history_tuples = history_by_oid.get(oid, [])
 
-        if len(history) < 13:
+        if len(history_tuples) < 13:
             result[oid] = {"maturity_score": 0, "maturity_label": "Otillräcklig data",
                            "growth_consistency": 0, "crossed_5000_date": None,
                            "quarters_positive": 0, "quarters_total": 0,
@@ -899,10 +915,7 @@ def get_maturity_scores(db):
         # 1. Tillväxtkonsistens (40%) — kvartalvis analys
         # ──────────────────────────────────────────────
         quarters = []
-        if _use_postgres():
-            data_points = [(h["week_date"], h["number_of_owners"]) for h in history]
-        else:
-            data_points = [(h[0], h[1]) for h in history]
+        data_points = history_tuples  # Already (date, owners) tuples
         n = len(data_points)
 
         for q in range(4):

@@ -20,6 +20,7 @@ from edge_db import get_db, fetch_all_stocks_from_avanza, fetch_insider_transact
 from edge_db import search_stocks, get_trending, search_insiders, get_stats, get_signals
 from edge_db import fetch_owner_history, get_maturity_scores, get_hot_movers
 from edge_db import calculate_dsm_score, compute_ace_scores, compute_magic_scores, calculate_edge_score
+from edge_db import _ph
 
 app = Flask(__name__)
 
@@ -722,13 +723,13 @@ def api_simulation():
             for s in trav_stocks:
                 shares = alloc / s["last_price"]
                 oid = str(s["orderbook_id"])
-                db.execute("""INSERT INTO simulation_holdings
+                db.execute(f"""INSERT INTO simulation_holdings
                     (portfolio, start_date, start_capital, orderbook_id, name, entry_price, shares, allocation, buy_date)
-                    VALUES (?,?,?,?,?,?,?,?,?)""",
+                    VALUES ({_ph(9)})""",
                     ("trav", today, CAPITAL, oid, s["name"], s["last_price"], shares, alloc, today))
-                db.execute("""INSERT INTO simulation_trades
+                db.execute(f"""INSERT INTO simulation_trades
                     (trade_date, portfolio, orderbook_id, name, trade_type, price, shares, value, reason)
-                    VALUES (?,?,?,?,?,?,?,?,?)""",
+                    VALUES ({_ph(9)})""",
                     (today, "trav", oid, s["name"], "BUY", s["last_price"], shares, alloc, "INITIAL"))
 
         # ── MAGIC: Top 20 ──
@@ -738,13 +739,13 @@ def api_simulation():
             for s in magic_top:
                 shares = alloc / s["last_price"]
                 oid = str(s["orderbook_id"])
-                db.execute("""INSERT INTO simulation_holdings
+                db.execute(f"""INSERT INTO simulation_holdings
                     (portfolio, start_date, start_capital, orderbook_id, name, entry_price, shares, allocation, buy_date)
-                    VALUES (?,?,?,?,?,?,?,?,?)""",
+                    VALUES ({_ph(9)})""",
                     ("magic", today, CAPITAL, oid, s["name"], s["last_price"], shares, alloc, today))
-                db.execute("""INSERT INTO simulation_trades
+                db.execute(f"""INSERT INTO simulation_trades
                     (trade_date, portfolio, orderbook_id, name, trade_type, price, shares, value, reason)
-                    VALUES (?,?,?,?,?,?,?,?,?)""",
+                    VALUES ({_ph(9)})""",
                     (today, "magic", oid, s["name"], "BUY", s["last_price"], shares, alloc, "INITIAL"))
 
         # ── DSM: Dennis Signal Model ──
@@ -754,13 +755,13 @@ def api_simulation():
             for s in dsm_stocks:
                 shares = alloc / s["last_price"]
                 oid = str(s["orderbook_id"])
-                db.execute("""INSERT INTO simulation_holdings
+                db.execute(f"""INSERT INTO simulation_holdings
                     (portfolio, start_date, start_capital, orderbook_id, name, entry_price, shares, allocation, buy_date)
-                    VALUES (?,?,?,?,?,?,?,?,?)""",
+                    VALUES ({_ph(9)})""",
                     ("dsm", today, CAPITAL, oid, s["name"], s["last_price"], shares, alloc, today))
-                db.execute("""INSERT INTO simulation_trades
+                db.execute(f"""INSERT INTO simulation_trades
                     (trade_date, portfolio, orderbook_id, name, trade_type, price, shares, value, reason)
-                    VALUES (?,?,?,?,?,?,?,?,?)""",
+                    VALUES ({_ph(9)})""",
                     (today, "dsm", oid, s["name"], "BUY", s["last_price"], shares, alloc, "INITIAL"))
 
         # ── ACE: Alpha Composite Engine ──
@@ -770,13 +771,13 @@ def api_simulation():
             for s in ace_stocks:
                 shares = alloc / s["last_price"]
                 oid = str(s["orderbook_id"])
-                db.execute("""INSERT INTO simulation_holdings
+                db.execute(f"""INSERT INTO simulation_holdings
                     (portfolio, start_date, start_capital, orderbook_id, name, entry_price, shares, allocation, buy_date)
-                    VALUES (?,?,?,?,?,?,?,?,?)""",
+                    VALUES ({_ph(9)})""",
                     ("ace", today, CAPITAL, oid, s["name"], s["last_price"], shares, alloc, today))
-                db.execute("""INSERT INTO simulation_trades
+                db.execute(f"""INSERT INTO simulation_trades
                     (trade_date, portfolio, orderbook_id, name, trade_type, price, shares, value, reason)
-                    VALUES (?,?,?,?,?,?,?,?,?)""",
+                    VALUES ({_ph(9)})""",
                     (today, "ace", oid, s["name"], "BUY", s["last_price"], shares, alloc, "INITIAL"))
 
         # ── META: Meta Score Top 20 ──
@@ -786,13 +787,13 @@ def api_simulation():
             for s in meta_stocks:
                 shares = alloc / s["last_price"]
                 oid = str(s["orderbook_id"])
-                db.execute("""INSERT INTO simulation_holdings
+                db.execute(f"""INSERT INTO simulation_holdings
                     (portfolio, start_date, start_capital, orderbook_id, name, entry_price, shares, allocation, buy_date)
-                    VALUES (?,?,?,?,?,?,?,?,?)""",
+                    VALUES ({_ph(9)})""",
                     ("meta", today, CAPITAL, oid, s["name"], s["last_price"], shares, alloc, today))
-                db.execute("""INSERT INTO simulation_trades
+                db.execute(f"""INSERT INTO simulation_trades
                     (trade_date, portfolio, orderbook_id, name, trade_type, price, shares, value, reason)
-                    VALUES (?,?,?,?,?,?,?,?,?)""",
+                    VALUES ({_ph(9)})""",
                     (today, "meta", oid, s["name"], "BUY", s["last_price"], shares, alloc, "INITIAL"))
 
         db.commit()
@@ -835,18 +836,18 @@ def _do_rebalance(db, today):
 
         if action in exit_actions:
             # Hämta nuvarande pris
-            price_row = db.execute("SELECT last_price FROM stocks WHERE CAST(orderbook_id AS TEXT)=?", (oid,)).fetchone()
+            price_row = db.execute(f"SELECT last_price FROM stocks WHERE CAST(orderbook_id AS TEXT)={_ph()}", (oid,)).fetchone()
             sell_price = price_row["last_price"] if price_row else h["entry_price"]
             sell_value = h["shares"] * sell_price
             gain_kr = sell_value - h["allocation"]
             gain_pct = (sell_price - h["entry_price"]) / h["entry_price"] if h["entry_price"] > 0 else 0
 
             # SELL trade
-            db.execute("""INSERT INTO simulation_trades
+            db.execute(f"""INSERT INTO simulation_trades
                 (trade_date, portfolio, orderbook_id, name, trade_type, price, shares, value, reason, entry_price, gain_pct, gain_kr)
-                VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
+                VALUES ({_ph(12)})""",
                 (today, "trav", oid, h["name"], "SELL", sell_price, h["shares"], sell_value, action, h["entry_price"], gain_pct, gain_kr))
-            db.execute("DELETE FROM simulation_holdings WHERE id=?", (h["id"],))
+            db.execute(f"DELETE FROM simulation_holdings WHERE id={_ph()}", (h["id"],))
             freed_cash += sell_value
             changes.append({"type": "SELL", "portfolio": "trav", "name": h["name"],
                            "reason": action, "price": sell_price, "gain_pct": gain_pct, "gain_kr": gain_kr})
@@ -866,13 +867,13 @@ def _do_rebalance(db, today):
         for s in new_entries:
             shares = alloc / s["last_price"]
             oid = str(s["orderbook_id"])
-            db.execute("""INSERT INTO simulation_holdings
+            db.execute(f"""INSERT INTO simulation_holdings
                 (portfolio, start_date, start_capital, orderbook_id, name, entry_price, shares, allocation, buy_date)
-                VALUES (?,?,?,?,?,?,?,?,?)""",
+                VALUES ({_ph(9)})""",
                 ("trav", start_date, start_capital, oid, s["name"], s["last_price"], shares, alloc, today))
-            db.execute("""INSERT INTO simulation_trades
+            db.execute(f"""INSERT INTO simulation_trades
                 (trade_date, portfolio, orderbook_id, name, trade_type, price, shares, value, reason)
-                VALUES (?,?,?,?,?,?,?,?,?)""",
+                VALUES ({_ph(9)})""",
                 (today, "trav", oid, s["name"], "BUY", s["last_price"], shares, alloc, "NEW_ENTRY"))
             changes.append({"type": "BUY", "portfolio": "trav", "name": s["name"],
                            "reason": "NEW_ENTRY", "price": s["last_price"]})
@@ -891,17 +892,17 @@ def _do_rebalance(db, today):
     magic_freed = 0.0
     for h in dropped:
         oid = str(h["orderbook_id"])
-        price_row = db.execute("SELECT last_price FROM stocks WHERE CAST(orderbook_id AS TEXT)=?", (oid,)).fetchone()
+        price_row = db.execute(f"SELECT last_price FROM stocks WHERE CAST(orderbook_id AS TEXT)={_ph()}", (oid,)).fetchone()
         sell_price = price_row["last_price"] if price_row else h["entry_price"]
         sell_value = h["shares"] * sell_price
         gain_kr = sell_value - h["allocation"]
         gain_pct = (sell_price - h["entry_price"]) / h["entry_price"] if h["entry_price"] > 0 else 0
 
-        db.execute("""INSERT INTO simulation_trades
+        db.execute(f"""INSERT INTO simulation_trades
             (trade_date, portfolio, orderbook_id, name, trade_type, price, shares, value, reason, entry_price, gain_pct, gain_kr)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
+            VALUES ({_ph(12)})""",
             (today, "magic", oid, h["name"], "SELL", sell_price, h["shares"], sell_value, "MF_ROTATION", h["entry_price"], gain_pct, gain_kr))
-        db.execute("DELETE FROM simulation_holdings WHERE id=?", (h["id"],))
+        db.execute(f"DELETE FROM simulation_holdings WHERE id={_ph()}", (h["id"],))
         magic_freed += sell_value
         changes.append({"type": "SELL", "portfolio": "magic", "name": h["name"],
                        "reason": "MF_ROTATION", "price": sell_price, "gain_pct": gain_pct, "gain_kr": gain_kr})
@@ -911,13 +912,13 @@ def _do_rebalance(db, today):
         for s in added:
             shares = alloc / s["last_price"]
             oid = str(s["orderbook_id"])
-            db.execute("""INSERT INTO simulation_holdings
+            db.execute(f"""INSERT INTO simulation_holdings
                 (portfolio, start_date, start_capital, orderbook_id, name, entry_price, shares, allocation, buy_date)
-                VALUES (?,?,?,?,?,?,?,?,?)""",
+                VALUES ({_ph(9)})""",
                 ("magic", start_date, start_capital, oid, s["name"], s["last_price"], shares, alloc, today))
-            db.execute("""INSERT INTO simulation_trades
+            db.execute(f"""INSERT INTO simulation_trades
                 (trade_date, portfolio, orderbook_id, name, trade_type, price, shares, value, reason)
-                VALUES (?,?,?,?,?,?,?,?,?)""",
+                VALUES ({_ph(9)})""",
                 (today, "magic", oid, s["name"], "BUY", s["last_price"], shares, alloc, "MF_ROTATION"))
             changes.append({"type": "BUY", "portfolio": "magic", "name": s["name"],
                            "reason": "MF_ROTATION", "price": s["last_price"]})
@@ -937,17 +938,17 @@ def _do_rebalance(db, today):
         dsm_freed = 0.0
         for h in dsm_dropped:
             oid = str(h["orderbook_id"])
-            price_row = db.execute("SELECT last_price FROM stocks WHERE CAST(orderbook_id AS TEXT)=?", (oid,)).fetchone()
+            price_row = db.execute(f"SELECT last_price FROM stocks WHERE CAST(orderbook_id AS TEXT)={_ph()}", (oid,)).fetchone()
             sell_price = price_row["last_price"] if price_row else h["entry_price"]
             sell_value = h["shares"] * sell_price
             gain_kr = sell_value - h["allocation"]
             gain_pct = (sell_price - h["entry_price"]) / h["entry_price"] if h["entry_price"] > 0 else 0
 
-            db.execute("""INSERT INTO simulation_trades
+            db.execute(f"""INSERT INTO simulation_trades
                 (trade_date, portfolio, orderbook_id, name, trade_type, price, shares, value, reason, entry_price, gain_pct, gain_kr)
-                VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
+                VALUES ({_ph(12)})""",
                 (today, "dsm", oid, h["name"], "SELL", sell_price, h["shares"], sell_value, "DSM_ROTATION", h["entry_price"], gain_pct, gain_kr))
-            db.execute("DELETE FROM simulation_holdings WHERE id=?", (h["id"],))
+            db.execute(f"DELETE FROM simulation_holdings WHERE id={_ph()}", (h["id"],))
             dsm_freed += sell_value
             changes.append({"type": "SELL", "portfolio": "dsm", "name": h["name"],
                            "reason": "DSM_ROTATION", "price": sell_price, "gain_pct": gain_pct, "gain_kr": gain_kr})
@@ -957,13 +958,13 @@ def _do_rebalance(db, today):
             for s in dsm_added:
                 shares = alloc / s["last_price"]
                 oid = str(s["orderbook_id"])
-                db.execute("""INSERT INTO simulation_holdings
+                db.execute(f"""INSERT INTO simulation_holdings
                     (portfolio, start_date, start_capital, orderbook_id, name, entry_price, shares, allocation, buy_date)
-                    VALUES (?,?,?,?,?,?,?,?,?)""",
+                    VALUES ({_ph(9)})""",
                     ("dsm", start_date, start_capital, oid, s["name"], s["last_price"], shares, alloc, today))
-                db.execute("""INSERT INTO simulation_trades
+                db.execute(f"""INSERT INTO simulation_trades
                     (trade_date, portfolio, orderbook_id, name, trade_type, price, shares, value, reason)
-                    VALUES (?,?,?,?,?,?,?,?,?)""",
+                    VALUES ({_ph(9)})""",
                     (today, "dsm", oid, s["name"], "BUY", s["last_price"], shares, alloc, "DSM_ROTATION"))
                 changes.append({"type": "BUY", "portfolio": "dsm", "name": s["name"],
                                "reason": "DSM_ROTATION", "price": s["last_price"]})
@@ -983,17 +984,17 @@ def _do_rebalance(db, today):
         ace_freed = 0.0
         for h in ace_dropped:
             oid = str(h["orderbook_id"])
-            price_row = db.execute("SELECT last_price FROM stocks WHERE CAST(orderbook_id AS TEXT)=?", (oid,)).fetchone()
+            price_row = db.execute(f"SELECT last_price FROM stocks WHERE CAST(orderbook_id AS TEXT)={_ph()}", (oid,)).fetchone()
             sell_price = price_row["last_price"] if price_row else h["entry_price"]
             sell_value = h["shares"] * sell_price
             gain_kr = sell_value - h["allocation"]
             gain_pct = (sell_price - h["entry_price"]) / h["entry_price"] if h["entry_price"] > 0 else 0
 
-            db.execute("""INSERT INTO simulation_trades
+            db.execute(f"""INSERT INTO simulation_trades
                 (trade_date, portfolio, orderbook_id, name, trade_type, price, shares, value, reason, entry_price, gain_pct, gain_kr)
-                VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
+                VALUES ({_ph(12)})""",
                 (today, "ace", oid, h["name"], "SELL", sell_price, h["shares"], sell_value, "ACE_ROTATION", h["entry_price"], gain_pct, gain_kr))
-            db.execute("DELETE FROM simulation_holdings WHERE id=?", (h["id"],))
+            db.execute(f"DELETE FROM simulation_holdings WHERE id={_ph()}", (h["id"],))
             ace_freed += sell_value
             changes.append({"type": "SELL", "portfolio": "ace", "name": h["name"],
                            "reason": "ACE_ROTATION", "price": sell_price, "gain_pct": gain_pct, "gain_kr": gain_kr})
@@ -1003,13 +1004,13 @@ def _do_rebalance(db, today):
             for s in ace_added:
                 shares = alloc / s["last_price"]
                 oid = str(s["orderbook_id"])
-                db.execute("""INSERT INTO simulation_holdings
+                db.execute(f"""INSERT INTO simulation_holdings
                     (portfolio, start_date, start_capital, orderbook_id, name, entry_price, shares, allocation, buy_date)
-                    VALUES (?,?,?,?,?,?,?,?,?)""",
+                    VALUES ({_ph(9)})""",
                     ("ace", start_date, start_capital, oid, s["name"], s["last_price"], shares, alloc, today))
-                db.execute("""INSERT INTO simulation_trades
+                db.execute(f"""INSERT INTO simulation_trades
                     (trade_date, portfolio, orderbook_id, name, trade_type, price, shares, value, reason)
-                    VALUES (?,?,?,?,?,?,?,?,?)""",
+                    VALUES ({_ph(9)})""",
                     (today, "ace", oid, s["name"], "BUY", s["last_price"], shares, alloc, "ACE_ROTATION"))
                 changes.append({"type": "BUY", "portfolio": "ace", "name": s["name"],
                                "reason": "ACE_ROTATION", "price": s["last_price"]})
@@ -1029,17 +1030,17 @@ def _do_rebalance(db, today):
         meta_freed = 0.0
         for h in meta_dropped:
             oid = str(h["orderbook_id"])
-            price_row = db.execute("SELECT last_price FROM stocks WHERE CAST(orderbook_id AS TEXT)=?", (oid,)).fetchone()
+            price_row = db.execute(f"SELECT last_price FROM stocks WHERE CAST(orderbook_id AS TEXT)={_ph()}", (oid,)).fetchone()
             sell_price = price_row["last_price"] if price_row else h["entry_price"]
             sell_value = h["shares"] * sell_price
             gain_kr = sell_value - h["allocation"]
             gain_pct = (sell_price - h["entry_price"]) / h["entry_price"] if h["entry_price"] > 0 else 0
 
-            db.execute("""INSERT INTO simulation_trades
+            db.execute(f"""INSERT INTO simulation_trades
                 (trade_date, portfolio, orderbook_id, name, trade_type, price, shares, value, reason, entry_price, gain_pct, gain_kr)
-                VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
+                VALUES ({_ph(12)})""",
                 (today, "meta", oid, h["name"], "SELL", sell_price, h["shares"], sell_value, "META_ROTATION", h["entry_price"], gain_pct, gain_kr))
-            db.execute("DELETE FROM simulation_holdings WHERE id=?", (h["id"],))
+            db.execute(f"DELETE FROM simulation_holdings WHERE id={_ph()}", (h["id"],))
             meta_freed += sell_value
             changes.append({"type": "SELL", "portfolio": "meta", "name": h["name"],
                            "reason": "META_ROTATION", "price": sell_price, "gain_pct": gain_pct, "gain_kr": gain_kr})
@@ -1049,13 +1050,13 @@ def _do_rebalance(db, today):
             for s in meta_added:
                 shares = alloc / s["last_price"]
                 oid = str(s["orderbook_id"])
-                db.execute("""INSERT INTO simulation_holdings
+                db.execute(f"""INSERT INTO simulation_holdings
                     (portfolio, start_date, start_capital, orderbook_id, name, entry_price, shares, allocation, buy_date)
-                    VALUES (?,?,?,?,?,?,?,?,?)""",
+                    VALUES ({_ph(9)})""",
                     ("meta", start_date, start_capital, oid, s["name"], s["last_price"], shares, alloc, today))
-                db.execute("""INSERT INTO simulation_trades
+                db.execute(f"""INSERT INTO simulation_trades
                     (trade_date, portfolio, orderbook_id, name, trade_type, price, shares, value, reason)
-                    VALUES (?,?,?,?,?,?,?,?,?)""",
+                    VALUES ({_ph(9)})""",
                     (today, "meta", oid, s["name"], "BUY", s["last_price"], shares, alloc, "META_ROTATION"))
                 changes.append({"type": "BUY", "portfolio": "meta", "name": s["name"],
                                "reason": "META_ROTATION", "price": s["last_price"]})
@@ -1098,10 +1099,10 @@ def api_owner_maturity(orderbook_id):
         })
 
         # Hämta veckohistorik för sparkline
-        history = db.execute("""
+        history = db.execute(f"""
             SELECT week_date, number_of_owners
             FROM owner_history
-            WHERE orderbook_id = ?
+            WHERE orderbook_id = {_ph()}
             ORDER BY week_date ASC
         """, (orderbook_id,)).fetchall()
 
@@ -1109,10 +1110,10 @@ def api_owner_maturity(orderbook_id):
         history_points = [{"date": h[0], "owners": h[1]} for h in history[-104:]]
 
         # Hämta aktieinfo
-        stock = db.execute("""
+        stock = db.execute(f"""
             SELECT name, number_of_owners, return_on_equity,
                    owners_change_1m, owners_change_3m, owners_change_ytd
-            FROM stocks WHERE orderbook_id = ?
+            FROM stocks WHERE orderbook_id = {_ph()}
         """, (orderbook_id,)).fetchone()
 
         stock_info = {}
@@ -1421,7 +1422,7 @@ def api_ai_toplist_get():
         stock_name TEXT NOT NULL, ai_score INTEGER, ai_signal TEXT, ai_summary TEXT,
         meta_score REAL, edge_score REAL, model_agreement INTEGER, analysis_date TEXT,
         UNIQUE(stock_name, analysis_date))""")
-    rows = db.execute("SELECT * FROM ai_scores WHERE analysis_date=? ORDER BY ai_score DESC", (today,)).fetchall()
+    rows = db.execute(f"SELECT * FROM ai_scores WHERE analysis_date={_ph()} ORDER BY ai_score DESC", (today,)).fetchall()
     if not rows:
         rows = db.execute("SELECT * FROM ai_scores ORDER BY analysis_date DESC, ai_score DESC LIMIT 50").fetchall()
     db.close()
@@ -1495,9 +1496,9 @@ Score-guide: 80-100=STARK_KOP, 60-79=KOP, 40-59=NEUTRAL, 20-39=SALJ, 0-19=STARK_
 
             for item in parsed.get("scores", []):
                 matching = next((s for s in signals if s["name"] == item["name"]), {})
-                db.execute("""INSERT OR REPLACE INTO ai_scores
+                db.execute(f"""INSERT OR REPLACE INTO ai_scores
                     (orderbook_id, stock_name, ai_score, ai_signal, ai_summary, meta_score, edge_score, model_agreement, analysis_date)
-                    VALUES (?,?,?,?,?,?,?,?,?)""",
+                    VALUES ({_ph(9)})""",
                     (matching.get("orderbook_id"), item["name"], item.get("ai_score", 0), item.get("ai_signal", ""),
                      item.get("summary", ""), matching.get("meta_score", 0), matching.get("edge_score", 0),
                      matching.get("model_agreement", 0), today))
@@ -1565,7 +1566,7 @@ Svara EXAKT i JSON (inget annat):
         enriched = []
         for stock in parsed.get("stocks", []):
             sname = stock.get("name", "")
-            rows = db.execute("SELECT * FROM stocks WHERE name LIKE ? OR short_name LIKE ? LIMIT 1",
+            rows = db.execute(f"SELECT * FROM stocks WHERE name LIKE {_ph()} OR short_name LIKE {_ph()} LIMIT 1",
                               (f"%{sname}%", f"%{sname}%")).fetchall()
             if rows:
                 db_stock = dict(rows[0])
