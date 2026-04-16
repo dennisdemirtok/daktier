@@ -233,6 +233,44 @@
         .today-label { font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600; margin-bottom: 4px; }
         .today-val { font-size: 14px; font-weight: 600; }
 
+        /* ── Dagens köp-banner ──── */
+        .daily-picks-skel { background: linear-gradient(90deg, #f5f3ff 0%, #ede9fe 50%, #f5f3ff 100%); background-size: 200% 100%; animation: skeleton 1.2s infinite; border-radius: 16px; padding: 28px; color: var(--text-muted); font-size: 13px; text-align: center; }
+        .daily-picks-empty { background: linear-gradient(135deg, #fffbeb, #fef3c7); border-radius: 16px; padding: 18px 22px; }
+        .daily-picks-banner { background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%); border-radius: 16px; padding: 18px 22px; box-shadow: 0 8px 24px rgba(0,108,70,0.06); }
+        .dpb-hd { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
+        .dpb-title { font-size: 16px; font-weight: 800; color: var(--green-dark); letter-spacing: -0.01em; }
+        .dpb-sub { font-size: 12px; color: var(--text-sec); margin-top: 2px; }
+        .dpb-live { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; font-size: 10px; font-weight: 800; letter-spacing: 1px; color: var(--green-dark); background: rgba(255,255,255,0.7); padding: 5px 10px; border-radius: 20px; }
+        .daily-picks-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px; }
+        .daily-pick-card { background: var(--white); border-radius: 12px; padding: 12px 14px; display: flex; align-items: center; gap: 12px; cursor: pointer; transition: all 0.15s; border-left: 3px solid var(--green); }
+        .daily-pick-card:hover { transform: translateY(-2px); box-shadow: 0 6px 18px rgba(0,108,70,0.1); }
+        .dp-rank { font-size: 20px; font-weight: 900; flex-shrink: 0; width: 28px; text-align: center; }
+        .dp-main { flex: 1; min-width: 0; }
+        .dp-name { font-size: 13px; font-weight: 700; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .dp-meta { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+        .dp-score { text-align: right; flex-shrink: 0; }
+
+        /* ── Model toplist per bokmodell ──── */
+        .model-toplist-wrap { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 14px; }
+        .model-toplist-card { background: var(--white); border-radius: 14px; padding: 16px 18px; display: flex; flex-direction: column; gap: 12px; }
+        .mtl-head { display: flex; align-items: flex-start; gap: 10px; }
+        .mtl-icon { font-size: 22px; flex-shrink: 0; }
+        .mtl-title-wrap { flex: 1; min-width: 0; }
+        .mtl-title { font-size: 14px; font-weight: 700; color: var(--text); }
+        .mtl-desc { font-size: 11px; color: var(--text-muted); margin-top: 2px; line-height: 1.4; }
+        .mtl-expand { background: var(--surface-low); border: none; color: var(--green-dark); font-family: inherit; font-size: 11px; font-weight: 700; padding: 5px 10px; border-radius: 8px; cursor: pointer; flex-shrink: 0; transition: all 0.15s; white-space: nowrap; }
+        .mtl-expand:hover { background: var(--green); color: white; }
+        .mtl-list { display: flex; flex-direction: column; gap: 2px; max-height: 440px; overflow-y: auto; }
+        .mtl-row { display: flex; align-items: center; gap: 10px; padding: 6px 8px; border-radius: 8px; cursor: pointer; transition: background 0.1s; }
+        .mtl-row:hover { background: var(--surface-low); }
+        .mtl-rank { font-size: 11px; font-weight: 700; color: var(--text-muted); width: 20px; text-align: center; flex-shrink: 0; font-variant-numeric: tabular-nums; }
+        .mtl-body { flex: 1; min-width: 0; }
+        .mtl-stock { font-size: 12px; font-weight: 600; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .mtl-meta { font-size: 10px; color: var(--text-muted); margin-top: 1px; }
+        .mtl-score { font-size: 16px; font-weight: 800; flex-shrink: 0; font-variant-numeric: tabular-nums; width: 36px; text-align: right; }
+        .mtl-skel, .mtl-err, .mtl-empty { padding: 10px 8px; font-size: 12px; color: var(--text-muted); text-align: center; }
+        .mtl-err { color: var(--red); }
+
         /* ── Metrics tool ──────────────────────────────── */
         .metrics-tabs { display: flex; gap: 6px; margin-bottom: 20px; }
         .m-tab { padding: 8px 16px; background: none; border: none; font-family: inherit; font-size: 13px; font-weight: 600; color: var(--text-muted); cursor: pointer; border-radius: 8px; transition: all 0.15s; }
@@ -1210,6 +1248,7 @@ function renderSignalsTable() {
         <div class="info-banner-text">
             <strong>Meta Score v1:</strong> Viktat snitt av 4 modeller — Trav 30% + DSM 25% + ACE 25% + Magic Formula 20%.<br>
             <strong>🏇 Trav:</strong> Ägardriven momentum + lönsamhet · <strong>🎯 DSM:</strong> Kontrarian + värde · <strong>⚡ ACE:</strong> Percentil multi-faktor · <strong>📊 Magic:</strong> EV/EBIT + ROCE.<br>
+            <strong>📚 Bok-composite:</strong> Viktat snitt över 10 bokmodeller (Graham, Buffett, Lynch, Greenblatt, Klarman, Bogle, Stinsen, Taleb, Kelly, Spiltan) — grönt ≥65 = köpvärde enligt böckerna.<br>
             <strong>Enighet:</strong> Antal modeller med score ≥65. Hög enighet = starkare signal.<br>
             <strong>DD-skydd:</strong> Blockerar entry vid hög DD-risk (≥60) eller extrem pris-spike (6M >150%, YTD >200%).
         </div>
@@ -1232,6 +1271,15 @@ function renderSignalsTable() {
             : s.dd_blocked ? '<br><span style="font-size:10px;color:#dc2626">⚠ DD-risk</span>'
             : '<br>' + phaseBadge(s.phase);
 
+        const bookComp = s.book_composite;
+        const bookAvail = s.book_models_available || 0;
+        const bookColor = bookComp == null ? 'var(--text-muted)' : bookComp >= 75 ? 'var(--green-dark)' : bookComp >= 65 ? 'var(--green)' : bookComp >= 50 ? '#92400e' : 'var(--red)';
+        const bookCell = bookComp != null
+            ? `<span class="score-value" style="color:${bookColor};font-size:13px" title="Composite över ${bookAvail} bokmodeller">${bookComp.toFixed(0)}</span>
+               <div class="score-bar"><div class="score-bar-fill" style="width:${bookComp}%;background:${bookColor}"></div></div>
+               <div style="font-size:9px;color:var(--text-muted);margin-top:2px">${bookAvail}/10 modeller</div>`
+            : '<span style="color:var(--text-muted);font-size:11px">–</span>';
+
         return `<tr${s.action === 'ENTRY' ? ' style="background:#e6f9f1"' : s.action?.startsWith('EXIT') ? ' style="background:#ffeaee"' : ''}>
             <td>${i + 1}</td>
             <td>
@@ -1243,6 +1291,7 @@ function renderSignalsTable() {
                 <span class="score-value" style="color:${sc};font-size:13px">${score.toFixed(0)}</span>
                 <div class="score-bar"><div class="score-bar-fill" style="width:${score}%;background:${sc}"></div></div>
             </td>
+            <td>${bookCell}</td>
             <td>${actionBadge(s.action)}${warnTag}</td>
             <td>${flag} <span class="stock-name" onclick="openDrawer(allLoadedRows[${i}])">${s.name}</span></td>
             <td style="text-align:center">${trend7dBadge(s.trend_7d, s.trend_7d_sv)}</td>
@@ -1267,6 +1316,7 @@ function renderSignalsTable() {
                 <th style="width:40px">#</th>
                 <th onclick="doSort('meta')" class="${thClass('meta')}" style="min-width:140px">Meta Score ↓${sortArrow('meta')}</th>
                 <th onclick="doSort('score')" class="${thClass('score')}" style="min-width:80px">Edge${sortArrow('score')}</th>
+                <th style="min-width:90px" title="Viktat composite över 10 bokmodeller — Graham, Buffett, Lynch, Greenblatt, Klarman m.fl.">📚 Bok</th>
                 <th>Action / Fas</th>
                 <th onclick="doSort('name')" class="${thClass('name')}">Aktie${sortArrow('name')}</th>
                 <th style="text-align:center">7d</th>
@@ -2979,6 +3029,79 @@ function renderAIToplist() {
 // ── Dashboard (landing) ─────────────────────────────────
 
 let _dashCache = null;
+const _modelToplistCache = {};  // per-modell cache med TTL
+
+async function loadModelTopN(modelKey, limit = 5, expandView = false) {
+    const el = document.getElementById('mtl-list-' + modelKey);
+    if (!el) return;
+
+    const cacheKey = `${modelKey}|${limit}`;
+    const cached = _modelToplistCache[cacheKey];
+    if (cached && (Date.now() - cached._ts) < 5 * 60 * 1000) {
+        renderModelToplistRows(el, cached.stocks, limit, expandView);
+        return;
+    }
+
+    el.innerHTML = '<div class="mtl-skel">Laddar…</div>';
+    try {
+        const r = await fetch(`/api/model-toplist?model=${encodeURIComponent(modelKey)}&limit=${limit}`);
+        const data = await r.json();
+        _modelToplistCache[cacheKey] = {stocks: data.stocks || [], _ts: Date.now()};
+        renderModelToplistRows(el, data.stocks || [], limit, expandView);
+        // Cacha även för fetchAll så klick på aktie-namn går till drawer
+        (data.stocks || []).forEach(s => { if (!_picksLookup[s.orderbook_id]) _picksLookup[s.orderbook_id] = s; });
+
+        // Om första anropet var 5, visa "Visa topp 20"-knappen ändå
+        if (limit === 5) {
+            const btn = document.querySelector(`#mtl-${modelKey} .mtl-expand`);
+            if (btn) btn.onclick = () => loadModelTopN(modelKey, 20, true);
+        } else if (limit >= 20) {
+            const btn = document.querySelector(`#mtl-${modelKey} .mtl-expand`);
+            if (btn) { btn.textContent = 'Visa topp 5 ↑'; btn.onclick = () => loadModelTopN(modelKey, 5, false); }
+        }
+    } catch(e) {
+        el.innerHTML = '<div class="mtl-err">Kunde inte ladda</div>';
+    }
+}
+
+function renderModelToplistRows(el, stocks, limit, expandView) {
+    if (!stocks.length) {
+        el.innerHTML = '<div class="mtl-empty">Inga aktier matchar modellen just nu.</div>';
+        return;
+    }
+    const visible = stocks.slice(0, limit);
+    el.innerHTML = visible.map((s, i) => {
+        const flag = FLAGS[s.country] || '';
+        const sc = s.model_score;
+        const scoreColor = sc >= 80 ? 'var(--green-dark)' : sc >= 65 ? 'var(--green)' : sc >= 50 ? '#92400e' : 'var(--text-muted)';
+        const pe = s.pe_ratio != null ? `P/E ${s.pe_ratio.toFixed(1)}` : '';
+        const dy = s.direct_yield != null && s.direct_yield > 0 ? `${(s.direct_yield*100).toFixed(1)}%` : '';
+        const meta = [pe, dy].filter(Boolean).join(' · ');
+        return `<div class="mtl-row" onclick='_openPickStock(${s.orderbook_id})'>
+            <div class="mtl-rank">${i+1}</div>
+            <div class="mtl-body">
+                <div class="mtl-stock">${flag} ${s.name}</div>
+                <div class="mtl-meta">${s.short_name||''}${meta?' · '+meta:''}</div>
+            </div>
+            <div class="mtl-score" style="color:${scoreColor}">${sc!=null?sc.toFixed(0):'–'}</div>
+        </div>`;
+    }).join('');
+}
+
+const _picksLookup = {};
+
+async function _openPickStock(orderbookId) {
+    // Slå upp i lookup eller hämta via /api/stocks
+    let s = _picksLookup[orderbookId];
+    if (!s) {
+        try {
+            const r = await fetch(`/api/stocks?limit=1&offset=0&q=${orderbookId}`);
+            const d = await r.json();
+            if (d.stocks && d.stocks.length) s = d.stocks[0];
+        } catch(e) {}
+    }
+    if (s) openDrawer(s);
+}
 async function renderDashboard() {
     const root = document.getElementById('content');
     const cards = document.getElementById('cards');
@@ -2986,6 +3109,9 @@ async function renderDashboard() {
 
     root.innerHTML = `
         <div class="dash-grid">
+            <div class="dash-section" id="dailyPicksWrap">
+                <div id="dailyPicksBanner" class="daily-picks-skel">Hämtar dagens köp-rekommendationer...</div>
+            </div>
             <div class="dash-section">
                 <h3 class="dash-heading">Marknadsöversikt</h3>
                 <div class="dash-top-stats" id="dashTopStats">
@@ -3000,6 +3126,10 @@ async function renderDashboard() {
             <div class="dash-section">
                 <h3 class="dash-heading">Modell-signaler <span class="dash-sub">baserat på Graham, Greenblatt, Lynch, Klarman, Shiller m.fl.</span></h3>
                 <div class="dash-model-grid" id="dashModelGrid"></div>
+            </div>
+            <div class="dash-section">
+                <h3 class="dash-heading">Topplistor per bokmodell <span class="dash-sub">top 20 per strategi</span></h3>
+                <div id="dashModelToplists" class="model-toplist-wrap"></div>
             </div>
             <div class="dash-section">
                 <h3 class="dash-heading">Idag på marknaden</h3>
@@ -3022,6 +3152,82 @@ async function renderDashboard() {
 }
 
 function renderDashboardContent(d) {
+    // ── Dagens köp-banner ──
+    const picks = d.daily_picks || [];
+    picks.forEach(p => { if (p.orderbook_id) _picksLookup[p.orderbook_id] = p; });
+    const banner = document.getElementById('dailyPicksBanner');
+    if (banner) {
+        if (picks.length === 0) {
+            banner.outerHTML = `<div class="daily-picks-empty">
+                <div style="display:flex;align-items:center;gap:10px">
+                    <span class="material-symbols-outlined" style="font-size:28px;color:#92400e">hourglass_empty</span>
+                    <div>
+                        <div style="font-weight:700;color:#92400e">Inga köpkandidater passerar tröskeln idag</div>
+                        <div style="font-size:12px;color:var(--text-muted)">Inget bolag har composite ≥ 68 över minst 6 modeller just nu. Kom tillbaka om några timmar — det uppdateras löpande.</div>
+                    </div>
+                </div>
+            </div>`;
+        } else {
+            const cards = picks.map((p, i) => {
+                const flag = FLAGS[p.country] || '';
+                const chg = p.one_day_change_pct;
+                const chgStr = chg != null ? `<span class="${pctClass(chg)}" style="font-size:12px;font-weight:700">${fmtPct(chg)}</span>` : '';
+                const scoreColor = p.composite_score >= 80 ? 'var(--green-dark)' : p.composite_score >= 70 ? 'var(--green)' : '#92400e';
+                const rank = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : (i+1);
+                return `<div class="daily-pick-card" onclick='_openPickStock(${p.orderbook_id})' title="Klicka för att öppna analys">
+                    <div class="dp-rank">${rank}</div>
+                    <div class="dp-main">
+                        <div class="dp-name">${flag} ${p.name}</div>
+                        <div class="dp-meta">${p.short_name||''} · ${p.last_price!=null?p.last_price.toFixed(2)+' '+(p.currency||''):'–'} ${chgStr}</div>
+                    </div>
+                    <div class="dp-score" style="color:${scoreColor}">
+                        <div style="font-size:24px;font-weight:900;line-height:1">${p.composite_score!=null?p.composite_score.toFixed(0):'–'}</div>
+                        <div style="font-size:9px;text-transform:uppercase;letter-spacing:0.5px;font-weight:700;opacity:0.8">${p.models_passing}/${p.models_available} pass</div>
+                    </div>
+                </div>`;
+            }).join('');
+            banner.outerHTML = `<div class="daily-picks-banner">
+                <div class="dpb-hd">
+                    <span style="font-size:28px">🎯</span>
+                    <div>
+                        <div class="dpb-title">Dagens köp-rekommendationer</div>
+                        <div class="dpb-sub">Viktat composite-score över Graham, Buffett, Lynch, Greenblatt, Klarman m.fl. — uppdateras var 3:e minut</div>
+                    </div>
+                    <span class="dpb-live"><span class="live-dot" style="background:#00563B"></span>LIVE</span>
+                </div>
+                <div class="daily-picks-grid">${cards}</div>
+            </div>`;
+        }
+    }
+
+    // ── Top-listor per modell ──
+    const toplistsEl = document.getElementById('dashModelToplists');
+    if (toplistsEl) {
+        const bookModels = d.book_models || [];
+        if (bookModels.length === 0) {
+            toplistsEl.innerHTML = '<div style="padding:16px;color:var(--text-muted);font-size:13px">Ingen modelldata ännu.</div>';
+        } else {
+            // Render kort per modell med "Visa topp 20"-knapp
+            toplistsEl.innerHTML = bookModels.map(m => `
+                <div class="model-toplist-card" id="mtl-${m.key}">
+                    <div class="mtl-head">
+                        <span class="mtl-icon">${m.icon}</span>
+                        <div class="mtl-title-wrap">
+                            <div class="mtl-title">${m.label}</div>
+                            <div class="mtl-desc">${m.desc}</div>
+                        </div>
+                        <button class="mtl-expand" onclick="loadModelTopN('${m.key}')">Visa topp 20 →</button>
+                    </div>
+                    <div class="mtl-list" id="mtl-list-${m.key}">
+                        <div class="mtl-skel">Laddar…</div>
+                    </div>
+                </div>
+            `).join('');
+            // Ladda topp-5 för varje modell
+            bookModels.forEach(m => loadModelTopN(m.key, 5, false));
+        }
+    }
+
     const stats = d.stats || {};
     const ts = document.getElementById('dashTopStats');
     if (ts) {

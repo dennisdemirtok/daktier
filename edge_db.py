@@ -1455,6 +1455,267 @@ def get_trending(db, period="1m", direction="up", limit=50, offset=0, min_owners
     return [dict(r) for r in rows], total
 
 
+# ══════════════════════════════════════════════════════════════════════
+# BOOK MODELS — scoring + toplistor + daily picks
+# ══════════════════════════════════════════════════════════════════════
+
+# Modell-metadata: key, label, description, weight i composite score
+BOOK_MODELS = [
+    {"key": "graham",    "label": "Graham Defensive",    "icon": "📘", "weight": 1.2,
+     "desc": "Den intelligente investeraren — P/E × P/B < 22,5"},
+    {"key": "buffett",   "label": "Buffett Quality Moat","icon": "🏰", "weight": 1.3,
+     "desc": "Hög ROE + låg skuld = kvalitetsbolag"},
+    {"key": "lynch",     "label": "Lynch PEG",           "icon": "🔎", "weight": 1.0,
+     "desc": "P/E i relation till tillväxt"},
+    {"key": "magic",     "label": "Magic Formula",       "icon": "📊", "weight": 1.3,
+     "desc": "Greenblatt: hög avkastning × billigt bolag"},
+    {"key": "klarman",   "label": "Klarman Margin of Safety", "icon": "🛡️", "weight": 1.1,
+     "desc": "Djupvärde — köp under inre värde"},
+    {"key": "divq",      "label": "Utdelningskvalitet",  "icon": "💰", "weight": 0.9,
+     "desc": "Stabil direktavkastning + hållbar balansräkning"},
+    {"key": "trend",     "label": "Trend & Momentum",    "icon": "📈", "weight": 1.0,
+     "desc": "Stinsen-regeln — följ trenden, undvik överköpta lägen"},
+    {"key": "taleb",     "label": "Taleb Barbell (Säker)","icon":"🎯", "weight": 0.7,
+     "desc": "Klassa som säker vs spekulativ"},
+    {"key": "kelly",     "label": "Kelly Sizing",        "icon": "🎲", "weight": 0.8,
+     "desc": "Edge-baserad viktning från Meta Score"},
+    {"key": "owners",    "label": "Ägarmomentum",        "icon": "👥", "weight": 1.0,
+     "desc": "Spiltan-approach — smart money följer kvalitet"},
+]
+
+def _clamp(v, lo=0.0, hi=100.0):
+    if v is None:
+        return None
+    return max(lo, min(hi, v))
+
+def _score_book_models(s):
+    """Returnerar dict {model_key: 0-100 score (eller None)} + composite.
+
+    s = dict-liknande stock-rad från stocks-tabellen.
+    """
+    g = s.get
+    pe = g("pe_ratio")
+    pb = g("price_book_ratio")
+    ev = g("ev_ebit_ratio")
+    dy = g("direct_yield")
+    roe = g("return_on_equity")
+    roce = g("return_on_capital_employed")
+    de = g("debt_to_equity_ratio")
+    nd = g("net_debt_ebitda_ratio")
+    vol = g("volatility")
+    rsi = g("rsi14")
+    sma200 = g("sma200")
+    own_1m = g("owners_change_1m")
+    own_1y = g("owners_change_1y")
+    meta = g("meta_score") if "meta_score" in (s if isinstance(s, dict) else {}) else None
+
+    scores = {}
+
+    # Graham: P/E*P/B, bäst när lågt (< 22.5 enligt Graham)
+    if pe is not None and pb is not None and pe > 0 and pb > 0:
+        prod = pe * pb
+        # 100 vid prod=0, 50 vid prod=22.5, 0 vid prod>=60
+        scores["graham"] = _clamp(100 - (prod / 0.6))
+    else:
+        scores["graham"] = None
+
+    # Buffett: ROE + låg skuld
+    if roe is not None:
+        roe_pct = roe * 100
+        roe_score = _clamp(roe_pct * 4)  # 25% ROE = 100 poäng
+        # Skuldstraff: D/E > 0.5 drar ned
+        if de is not None and de > 0.5:
+            roe_score *= max(0.3, 1 - (de - 0.5) * 0.5)
+        # ND/EBITDA > 3 drar ned ytterligare
+        if nd is not None and nd > 3:
+            roe_score *= max(0.3, 1 - (nd - 3) * 0.15)
+        scores["buffett"] = _clamp(roe_score)
+    else:
+        scores["buffett"] = None
+
+    # Lynch PEG: P/E / (ägartillväxt som proxy för resultattillväxt)
+    if pe is not None and own_1y is not None and own_1y > 0:
+        growth_pct = own_1y * 100
+        peg = pe / growth_pct
+        # PEG 0.5 = 100, PEG 1 = 75, PEG 1.5 = 50, PEG 3 = 0
+        scores["lynch"] = _clamp(100 - (peg - 0.5) * 40)
+    else:
+        scores["lynch"] = None
+
+    # Magic Formula: EY + ROCE
+    if ev is not None and ev > 0 and roce is not None:
+        ey = 1 / ev
+        combo = (ey + roce) * 100  # båda som procent
+        # 30% combo = 100 poäng, 0% = 0
+        scores["magic"] = _clamp(combo * 3.3)
+    else:
+        scores["magic"] = None
+
+    # Klarman: lågt P/B och/eller lågt EV/EBIT
+    pb_score = None
+    if pb is not None and pb > 0:
+        # P/B 0.5 = 100, P/B 1 = 75, P/B 2 = 25, P/B 4 = 0
+        pb_score = _clamp(100 - (pb - 0.5) * 28)
+    ev_score = None
+    if ev is not None and ev > 0:
+        # EV/EBIT 4 = 100, 8 = 75, 15 = 25, 25 = 0
+        ev_score = _clamp(100 - (ev - 4) * 4.8)
+    if pb_score is not None or ev_score is not None:
+        parts = [x for x in (pb_score, ev_score) if x is not None]
+        scores["klarman"] = sum(parts) / len(parts)
+    else:
+        scores["klarman"] = None
+
+    # Utdelningskvalitet
+    if dy is not None and dy > 0:
+        dy_pct = dy * 100
+        base = _clamp(dy_pct * 20)  # 5% DY = 100
+        # Straffa svag ROE
+        if roe is not None and roe * 100 < 10:
+            base *= 0.7
+        # Straffa hög skuld
+        if de is not None and de > 1:
+            base *= 0.7
+        scores["divq"] = _clamp(base)
+    else:
+        scores["divq"] = None
+
+    # Trend & Momentum — ovanför SMA200 + hälsosam RSI (40-65)
+    if sma200 is not None:
+        sma_pct = sma200 * 100
+        # 0-20% över = 100, över 50% = straff
+        if sma_pct < 0:
+            trend_base = _clamp(50 + sma_pct * 2)  # negativ dåligt
+        elif sma_pct < 30:
+            trend_base = 60 + sma_pct * 1.3
+        else:
+            trend_base = max(40, 100 - (sma_pct - 30) * 0.8)
+        # RSI-straff
+        if rsi is not None:
+            if rsi > 75:
+                trend_base *= 0.6
+            elif rsi > 65:
+                trend_base *= 0.85
+            elif rsi < 30:
+                trend_base *= 0.8
+        scores["trend"] = _clamp(trend_base)
+    else:
+        scores["trend"] = None
+
+    # Taleb Barbell (säker-sidan scoring — låg vol = högt)
+    if vol is not None:
+        vol_pct = vol * 100
+        # vol 15% = 100, 30% = 60, 50% = 20, 70%+ = 0
+        scores["taleb"] = _clamp(100 - (vol_pct - 15) * 1.6)
+    else:
+        scores["taleb"] = None
+
+    # Kelly — proportionell till meta_score men vi har inte alltid den här
+    if meta is not None:
+        scores["kelly"] = _clamp(meta)
+    else:
+        scores["kelly"] = None
+
+    # Ägarmomentum
+    if own_1m is not None:
+        own_pct = own_1m * 100
+        # 5% = 100, 0% = 50, -5% = 0
+        scores["owners"] = _clamp(50 + own_pct * 10)
+    else:
+        scores["owners"] = None
+
+    # Composite: viktat medel av tillgängliga scores
+    weighted_sum = 0.0
+    weight_sum = 0.0
+    for m in BOOK_MODELS:
+        v = scores.get(m["key"])
+        if v is not None:
+            weighted_sum += v * m["weight"]
+            weight_sum += m["weight"]
+    scores["composite"] = (weighted_sum / weight_sum) if weight_sum > 0 else None
+    # Hur många modeller vi kunde evaluera (signal om datakvalitet)
+    scores["models_available"] = sum(1 for m in BOOK_MODELS if scores.get(m["key"]) is not None)
+
+    return scores
+
+
+def get_model_toplist(db, model="composite", limit=20, min_owners=100, country=""):
+    """Returnerar top N aktier sorterade på en specifik bokmodell."""
+    ph = _ph()
+
+    # Grund-SQL: alla aktier som uppfyller min_owners
+    where = f"WHERE number_of_owners >= {ph}"
+    params = [min_owners]
+    if country:
+        where += f" AND country = {ph}"
+        params.append(country)
+
+    # Måste ha last_price för att vara meningsfull
+    where += " AND last_price IS NOT NULL AND last_price > 0"
+
+    rows = _fetchall(db, f"SELECT * FROM stocks {where}", params)
+
+    scored = []
+    for r in rows:
+        d = dict(r)
+        sc = _score_book_models(d)
+        v = sc.get(model)
+        if v is None:
+            continue
+        d["model_score"] = round(v, 1)
+        d["composite_score"] = round(sc["composite"], 1) if sc.get("composite") is not None else None
+        d["models_available"] = sc.get("models_available", 0)
+        scored.append(d)
+
+    # Sortera på modell-score desc, kräver minst 3 tillgängliga modeller för stabilitet
+    scored = [s for s in scored if s["models_available"] >= 3]
+    scored.sort(key=lambda x: x["model_score"], reverse=True)
+
+    return scored[:limit]
+
+
+def get_daily_picks(db, limit=5, min_owners=200, min_composite=68, min_models=6):
+    """Dagens köp-rekommendationer baserat på composite book score.
+
+    Kräver minst `min_models` modeller med data + composite >= `min_composite`.
+    """
+    rows = _fetchall(
+        db,
+        f"SELECT * FROM stocks WHERE number_of_owners >= {_ph()} AND last_price IS NOT NULL AND last_price > 0",
+        [min_owners],
+    )
+
+    picks = []
+    for r in rows:
+        d = dict(r)
+        sc = _score_book_models(d)
+        comp = sc.get("composite")
+        avail = sc.get("models_available", 0)
+        if comp is None or avail < min_models:
+            continue
+        if comp < min_composite:
+            continue
+        # Räkna hur många modeller som "passar" (score >= 65)
+        pass_count = sum(1 for m in BOOK_MODELS if (sc.get(m["key"]) or 0) >= 65)
+        d["composite_score"] = round(comp, 1)
+        d["models_available"] = avail
+        d["models_passing"] = pass_count
+        d["model_scores"] = {m["key"]: round(sc[m["key"]], 1) if sc.get(m["key"]) is not None else None for m in BOOK_MODELS}
+        picks.append(d)
+
+    picks.sort(key=lambda x: (x["composite_score"], x["models_passing"]), reverse=True)
+    return picks[:limit]
+
+
+def enrich_with_book_composite(db, stocks):
+    """Tar en lista av stock-dicts och lägger till book_composite_score i varje."""
+    for s in stocks:
+        sc = _score_book_models(s)
+        s["book_composite"] = round(sc["composite"], 1) if sc.get("composite") is not None else None
+        s["book_models_available"] = sc.get("models_available", 0)
+    return stocks
+
+
 def get_hot_movers(db, direction="up", lookback=1, min_owners=100, limit=50, offset=0, country="", mode="daily"):
     """Hot Movers — ägarförändring.
 

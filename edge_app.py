@@ -22,6 +22,7 @@ from edge_db import search_stocks, get_trending, search_insiders, get_stats, get
 from edge_db import fetch_owner_history, get_maturity_scores, get_hot_movers
 from edge_db import calculate_dsm_score, compute_ace_scores, compute_magic_scores, calculate_edge_score
 from edge_db import _ph
+from edge_db import BOOK_MODELS, get_model_toplist, get_daily_picks, enrich_with_book_composite, _score_book_models
 
 app = Flask(__name__)
 
@@ -371,6 +372,30 @@ def api_dashboard():
     except Exception as e:
         print(f"[dashboard] today section failed: {e}", file=sys.stderr)
 
+    # Dagens köp-rekommendationer (top 3 från composite)
+    daily_picks_slim = []
+    try:
+        db_picks = get_db()
+        picks = get_daily_picks(db_picks, limit=3, min_owners=200, min_composite=68, min_models=6)
+        db_picks.close()
+        for s in picks:
+            daily_picks_slim.append({
+                "orderbook_id": s.get("orderbook_id"),
+                "name": s.get("name"),
+                "short_name": s.get("short_name"),
+                "country": s.get("country"),
+                "last_price": s.get("last_price"),
+                "currency": s.get("currency"),
+                "composite_score": s.get("composite_score"),
+                "models_available": s.get("models_available"),
+                "models_passing": s.get("models_passing"),
+                "one_day_change_pct": s.get("one_day_change_pct"),
+                "pe_ratio": s.get("pe_ratio"),
+                "direct_yield": s.get("direct_yield"),
+            })
+    except Exception as e:
+        print(f"[dashboard] daily picks failed: {e}", file=sys.stderr)
+
     db.close()
 
     macro = _fetch_macro_indicators()
@@ -385,6 +410,8 @@ def api_dashboard():
         },
         "macro": macro,
         "model_signals": model_signals,
+        "daily_picks": daily_picks_slim,
+        "book_models": [{"key": m["key"], "label": m["label"], "icon": m["icon"], "desc": m["desc"]} for m in BOOK_MODELS],
         "today": {
             "top_se_gainer": top_se_gainer,
             "top_se_loser": top_se_loser,
@@ -512,6 +539,129 @@ def api_hot_movers():
     return jsonify(result)
 
 
+@app.route("/api/book-models")
+def api_book_models():
+    """Metadata om alla tillgängliga bokmodeller."""
+    return jsonify({"models": BOOK_MODELS})
+
+
+@app.route("/api/model-toplist")
+def api_model_toplist():
+    """
+    Topplista per bokmodell.
+
+    Params:
+      model      - modell-key (graham, buffett, lynch, magic, klarman,
+                   divq, trend, taleb, kelly, owners, composite)
+      limit      - antal (default 20)
+      min_owners - minsta ägare (default 100)
+      country    - filtrera land
+    """
+    model = request.args.get("model", "composite")
+    ck = f"model_toplist|{request.query_string.decode()}"
+    cached, hit = _cached_response(ck, ttl=300)  # 5 min
+    if hit:
+        return jsonify(cached)
+
+    db = get_db()
+    stocks = get_model_toplist(
+        db,
+        model=model,
+        limit=int(request.args.get("limit", 20)),
+        min_owners=int(request.args.get("min_owners", 100)),
+        country=request.args.get("country", ""),
+    )
+    db.close()
+
+    # Plocka ut vilka fält frontend behöver (håll payload liten)
+    slim = []
+    for s in stocks:
+        slim.append({
+            "orderbook_id": s.get("orderbook_id"),
+            "name": s.get("name"),
+            "short_name": s.get("short_name"),
+            "country": s.get("country"),
+            "market_place": s.get("market_place"),
+            "last_price": s.get("last_price"),
+            "currency": s.get("currency"),
+            "number_of_owners": s.get("number_of_owners"),
+            "pe_ratio": s.get("pe_ratio"),
+            "price_book_ratio": s.get("price_book_ratio"),
+            "direct_yield": s.get("direct_yield"),
+            "return_on_equity": s.get("return_on_equity"),
+            "one_month_change_pct": s.get("one_month_change_pct"),
+            "ytd_change_pct": s.get("ytd_change_pct"),
+            "model_score": s.get("model_score"),
+            "composite_score": s.get("composite_score"),
+            "models_available": s.get("models_available"),
+        })
+
+    result = {"model": model, "stocks": slim, "count": len(slim)}
+    _set_cache(ck, result)
+    return jsonify(result)
+
+
+@app.route("/api/daily-picks")
+def api_daily_picks():
+    """
+    Dagens köp-rekommendationer — topp-kandidater med högst composite score.
+
+    Params:
+      limit          - antal (default 5)
+      min_owners     - minsta ägare (default 200)
+      min_composite  - minsta composite (default 68)
+      min_models     - minsta antal modeller med data (default 6)
+      country        - filtrera land
+    """
+    ck = f"daily_picks|{request.query_string.decode()}"
+    # Kort cache så triggers kan dyka upp under dagen när priser rör sig
+    cached, hit = _cached_response(ck, ttl=180)  # 3 min
+    if hit:
+        return jsonify(cached)
+
+    db = get_db()
+    picks = get_daily_picks(
+        db,
+        limit=int(request.args.get("limit", 5)),
+        min_owners=int(request.args.get("min_owners", 200)),
+        min_composite=float(request.args.get("min_composite", 68)),
+        min_models=int(request.args.get("min_models", 6)),
+    )
+    db.close()
+
+    # Filtrera land om angivet
+    country = request.args.get("country", "")
+    if country:
+        picks = [p for p in picks if p.get("country") == country]
+
+    slim = []
+    for s in picks:
+        slim.append({
+            "orderbook_id": s.get("orderbook_id"),
+            "name": s.get("name"),
+            "short_name": s.get("short_name"),
+            "country": s.get("country"),
+            "market_place": s.get("market_place"),
+            "last_price": s.get("last_price"),
+            "currency": s.get("currency"),
+            "number_of_owners": s.get("number_of_owners"),
+            "pe_ratio": s.get("pe_ratio"),
+            "direct_yield": s.get("direct_yield"),
+            "return_on_equity": s.get("return_on_equity"),
+            "one_day_change_pct": s.get("one_day_change_pct"),
+            "one_month_change_pct": s.get("one_month_change_pct"),
+            "ytd_change_pct": s.get("ytd_change_pct"),
+            "composite_score": s.get("composite_score"),
+            "models_available": s.get("models_available"),
+            "models_passing": s.get("models_passing"),
+            "model_scores": s.get("model_scores"),
+        })
+
+    result = {"picks": slim, "count": len(slim), "generated_at": _time.time()}
+    _set_cache(ck, result)
+    return jsonify(result)
+
+
 @app.route("/api/insiders")
 def api_insiders():
     """
@@ -581,6 +731,13 @@ def api_signals():
         signal_filter=request.args.get("signal", ""),
         action_filter=request.args.get("action", ""),
     )
+
+    # Berika med book composite så frontend kan visa kolumn + rangordna
+    try:
+        enrich_with_book_composite(db, signals)
+    except Exception as e:
+        print(f"[signals] composite enrich failed: {e}", file=sys.stderr)
+
     db.close()
 
     result = {
