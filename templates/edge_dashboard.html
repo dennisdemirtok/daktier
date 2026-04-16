@@ -3148,15 +3148,19 @@ function renderModelToplistRows(el, stocks, limit, expandView) {
 const _picksLookup = {};
 
 async function _openPickStock(orderbookId) {
-    // Slå upp i lookup eller hämta via /api/stocks
-    let s = _picksLookup[orderbookId];
-    if (!s) {
-        try {
-            const r = await fetch(`/api/stocks?limit=1&offset=0&q=${orderbookId}`);
-            const d = await r.json();
-            if (d.stocks && d.stocks.length) s = d.stocks[0];
-        } catch(e) {}
-    }
+    // Hämta FULL aktiedata via dedikerad endpoint (annars saknar drawer fundamentala nyckeltal)
+    try {
+        const r = await fetch(`/api/stock/${orderbookId}`);
+        if (r.ok) {
+            const s = await r.json();
+            if (s && s.orderbook_id) {
+                openDrawer(s);
+                return;
+            }
+        }
+    } catch(e) { console.warn('stock detail fetch failed', e); }
+    // Fallback: slim data från cachen
+    const s = _picksLookup[orderbookId];
     if (s) openDrawer(s);
 }
 
@@ -3424,7 +3428,7 @@ function renderDashboardContent(d) {
                     <span style="font-size:28px">🎯</span>
                     <div>
                         <div class="dpb-title">Dagens köp-rekommendationer</div>
-                        <div class="dpb-sub">Bolag där 6+ av 10 bok-modeller säger köp. Composite ≥ 68/100. Inte baserat på prisfall — utan fundamentalt undervärderat enligt Graham/Buffett/Lynch/Greenblatt/Klarman m.fl. Uppdateras var 3:e minut.</div>
+                        <div class="dpb-sub">Bolag där 7+ av 10 bok-modeller säger köp. Composite ≥ 70/100. Inte baserat på prisfall — utan fundamentalt undervärderat enligt Graham/Buffett/Lynch/Greenblatt/Klarman m.fl. Varje modell kräver sin kritiska datapunkt (t.ex. Buffett kräver skulddata). Uppdateras var 3:e minut.</div>
                     </div>
                     <span class="dpb-live"><span class="live-dot" style="background:#00563B"></span>LIVE</span>
                 </div>

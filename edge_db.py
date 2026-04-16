@@ -1512,15 +1512,18 @@ def _score_book_models(s):
     scores = {}
 
     # Graham: P/E*P/B, bäst när lågt (< 22.5 enligt Graham)
-    if pe is not None and pb is not None and pe > 0 and pb > 0:
+    # Sanity: orimligt låga tal (P/E < 2 eller P/B < 0.1) är oftast datafel/one-offs.
+    if (pe is not None and pb is not None
+        and 2 <= pe <= 80 and 0.1 <= pb <= 20):
         prod = pe * pb
         # 100 vid prod=0, 50 vid prod=22.5, 0 vid prod>=60
         scores["graham"] = _clamp(100 - (prod / 0.6))
     else:
         scores["graham"] = None
 
-    # Buffett: ROE + låg skuld
-    if roe is not None:
+    # Buffett: ROE + LÅG SKULD — kräver både lönsamhet OCH att skuldläget går att verifiera
+    # Utan minst en av D/E eller ND/EBITDA kan vi inte uttala oss om "quality moat".
+    if roe is not None and (de is not None or nd is not None):
         roe_pct = roe * 100
         roe_score = _clamp(roe_pct * 4)  # 25% ROE = 100 poäng
         # Skuldstraff: D/E > 0.5 drar ned
@@ -1529,12 +1532,15 @@ def _score_book_models(s):
         # ND/EBITDA > 3 drar ned ytterligare
         if nd is not None and nd > 3:
             roe_score *= max(0.3, 1 - (nd - 3) * 0.15)
+        # Extra: mycket hög ROE UTAN låg skuld är förmodligen hävstångsdriven → dämpa
+        if roe_pct > 40 and (de is None or de > 1.0) and (nd is None or nd > 2):
+            roe_score *= 0.7
         scores["buffett"] = _clamp(roe_score)
     else:
         scores["buffett"] = None
 
-    # Lynch PEG: P/E / (ägartillväxt som proxy för resultattillväxt)
-    if pe is not None and own_1y is not None and own_1y > 0:
+    # Lynch PEG: P/E / tillväxt. Sanity: P/E 2–80, tillväxt > 3% (annars inte meningsfull)
+    if pe is not None and own_1y is not None and 2 <= pe <= 80 and own_1y > 0.03:
         growth_pct = own_1y * 100
         peg = pe / growth_pct
         # PEG 0.5 = 100, PEG 1 = 75, PEG 1.5 = 50, PEG 3 = 0
@@ -1542,8 +1548,8 @@ def _score_book_models(s):
     else:
         scores["lynch"] = None
 
-    # Magic Formula: EY + ROCE
-    if ev is not None and ev > 0 and roce is not None:
+    # Magic Formula: EY + ROCE. Sanity: EV/EBIT 2–50 (annars outlier/datafel)
+    if ev is not None and 2 <= ev <= 50 and roce is not None and -0.5 <= roce <= 2:
         ey = 1 / ev
         combo = (ey + roce) * 100  # båda som procent
         # 30% combo = 100 poäng, 0% = 0
@@ -1551,13 +1557,13 @@ def _score_book_models(s):
     else:
         scores["magic"] = None
 
-    # Klarman: lågt P/B och/eller lågt EV/EBIT
+    # Klarman: lågt P/B och/eller lågt EV/EBIT — kräver minst en rimlig mätpunkt
     pb_score = None
-    if pb is not None and pb > 0:
+    if pb is not None and 0.1 <= pb <= 20:
         # P/B 0.5 = 100, P/B 1 = 75, P/B 2 = 25, P/B 4 = 0
         pb_score = _clamp(100 - (pb - 0.5) * 28)
     ev_score = None
-    if ev is not None and ev > 0:
+    if ev is not None and 2 <= ev <= 50:
         # EV/EBIT 4 = 100, 8 = 75, 15 = 25, 25 = 0
         ev_score = _clamp(100 - (ev - 4) * 4.8)
     if pb_score is not None or ev_score is not None:
@@ -1566,10 +1572,16 @@ def _score_book_models(s):
     else:
         scores["klarman"] = None
 
-    # Utdelningskvalitet
-    if dy is not None and dy > 0:
+    # Utdelningskvalitet — kräver DY OCH minst en hållbarhetssignal (ROE eller D/E)
+    # Annars kan vi inte skilja hållbar utdelning från "säljer tillgångar för att betala".
+    # Straffa också orimligt hög DY (>15% är ofta utdelningsfälla / datafel).
+    if dy is not None and dy > 0 and (roe is not None or de is not None):
         dy_pct = dy * 100
-        base = _clamp(dy_pct * 20)  # 5% DY = 100
+        # Orimlig DY → klassificera som skräpsignal
+        if dy_pct > 15:
+            base = _clamp(20 - (dy_pct - 15) * 2)  # sjunker snabbt
+        else:
+            base = _clamp(dy_pct * 18)  # 5% DY ≈ 90
         # Straffa svag ROE
         if roe is not None and roe * 100 < 10:
             base *= 0.7
@@ -1826,7 +1838,7 @@ def _build_pick_reasons(stock, scores):
     return reasons
 
 
-def get_books_portfolio_top10(db, limit=10, min_owners=200, min_composite=65, min_models=6, country=""):
+def get_books_portfolio_top10(db, limit=10, min_owners=200, min_composite=65, min_models=7, country=""):
     """Topp-N aktier för 'Böckernas portfölj' — den nya simuleringsmodellen.
 
     Väljer de N aktier som bäst uppfyller kriterierna för samtliga bokmodeller
@@ -1897,7 +1909,7 @@ def get_model_toplist(db, model="composite", limit=20, min_owners=100, country="
     return scored[:limit]
 
 
-def get_daily_picks(db, limit=5, min_owners=200, min_composite=68, min_models=6):
+def get_daily_picks(db, limit=5, min_owners=200, min_composite=70, min_models=7):
     """Dagens köp-rekommendationer baserat på composite book score.
 
     Kräver minst `min_models` modeller med data + composite >= `min_composite`.

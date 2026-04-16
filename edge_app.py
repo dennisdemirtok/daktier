@@ -424,6 +424,35 @@ def api_dashboard():
     return jsonify(out)
 
 
+@app.route("/api/stock/<orderbook_id>")
+def api_stock_detail(orderbook_id):
+    """Hämta en enskild aktie med alla fält — används av drawer vid klick från topplistor/picks."""
+    db = get_db()
+    try:
+        # orderbook_id lagras som TEXT i vissa databaser, INTEGER i andra — matcha båda
+        row = db.execute(
+            f"SELECT * FROM stocks WHERE CAST(orderbook_id AS TEXT) = CAST({_ph()} AS TEXT) LIMIT 1",
+            (str(orderbook_id),)
+        ).fetchone()
+        if not row:
+            return jsonify({"error": "not found"}), 404
+        d = dict(row)
+        # Berika med book composite så drawer kan visa det
+        try:
+            sc = _score_book_models(d)
+            d["book_composite"] = round(sc["composite"], 1) if sc.get("composite") is not None else None
+            d["book_models_available"] = sc.get("models_available", 0)
+            d["book_model_scores"] = {
+                m["key"]: round(sc[m["key"]], 1) if sc.get(m["key"]) is not None else None
+                for m in BOOK_MODELS
+            }
+        except Exception as e:
+            print(f"[stock detail] composite failed: {e}", file=sys.stderr)
+        return jsonify(d)
+    finally:
+        db.close()
+
+
 @app.route("/api/stocks")
 def api_stocks():
     ck = f"stocks|{request.query_string.decode()}"
@@ -625,8 +654,8 @@ def api_daily_picks():
         db,
         limit=int(request.args.get("limit", 5)),
         min_owners=int(request.args.get("min_owners", 200)),
-        min_composite=float(request.args.get("min_composite", 68)),
-        min_models=int(request.args.get("min_models", 6)),
+        min_composite=float(request.args.get("min_composite", 70)),
+        min_models=int(request.args.get("min_models", 7)),
     )
     db.close()
 
