@@ -13,6 +13,7 @@ Datakällor:
 import sys
 import os
 import threading
+import time as _time
 from datetime import datetime
 from flask import Flask, render_template, jsonify, request
 
@@ -23,6 +24,23 @@ from edge_db import calculate_dsm_score, compute_ace_scores, compute_magic_score
 from edge_db import _ph
 
 app = Flask(__name__)
+
+# ── Server-side response cache (fast tab switches) ────────
+_api_cache = {}
+_API_CACHE_TTL = 90  # seconds
+
+def _cached_response(key, ttl=_API_CACHE_TTL):
+    """Return cached (data, True) if fresh, else (None, False)."""
+    entry = _api_cache.get(key)
+    if entry and (_time.time() - entry['ts']) < ttl:
+        return entry['data'], True
+    return None, False
+
+def _set_cache(key, data):
+    _api_cache[key] = {'data': data, 'ts': _time.time()}
+
+def _clear_api_cache():
+    _api_cache.clear()
 
 # ── State ────────────────────────────────────────────────
 state = {
@@ -44,12 +62,18 @@ CLAUDE_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
 
 
 def _is_market_open():
-    """Kolla om börsen är öppen (mån-fre 9:00-17:30 CET)."""
-    now = datetime.now()
+    """Kolla om NÅGON börs är öppen (SE 9:00-17:30 CET, US 15:30-22:00 CET)."""
+    import pytz
+    cet = pytz.timezone('Europe/Stockholm')
+    now = datetime.now(cet)
     if now.weekday() >= 5:
         return False
     from datetime import time as dt_time
-    return dt_time(9, 0) <= now.time() <= dt_time(17, 30)
+    # SE: 9:00-17:30 CET
+    se_open = dt_time(9, 0) <= now.time() <= dt_time(17, 30)
+    # US: 15:30-22:00 CET (9:30-16:00 ET)
+    us_open = dt_time(15, 30) <= now.time() <= dt_time(22, 0)
+    return se_open or us_open
 
 
 def refresh_prices():
@@ -64,6 +88,7 @@ def refresh_prices():
         fetch_all_stocks_from_avanza(db, progress_callback=on_progress)
         state["progress"] = "Priser uppdaterade!"
         state["last_price_update"] = datetime.now().strftime("%Y-%m-%d %H:%M")
+        _clear_api_cache()  # Force fresh data after price update
         print(f"[EDGE] ✓ Priser uppdaterade {state['last_price_update']}")
 
         # ── Ägarhistorik (1 gång per dag) ──
@@ -178,18 +203,11 @@ def api_status():
 
 @app.route("/api/stocks")
 def api_stocks():
-    """
-    Sök och paginera aktier.
+    ck = f"stocks|{request.query_string.decode()}"
+    cached, hit = _cached_response(ck)
+    if hit:
+        return jsonify(cached)
 
-    Params:
-      q       - sökterm (namn, ticker, ISIN)
-      country - landskod (SE, US, NO, DK, FI, etc.)
-      sort    - sorteringsfält (owners, name, change_1d/1w/1m/3m, short, price, market_cap, rsi, pe, yield)
-      order   - asc/desc
-      limit   - antal per sida (default 50)
-      offset  - startposition
-      min_owners - minsta antal ägare (default 0)
-    """
     db = get_db()
     stocks, total = search_stocks(
         db,
@@ -203,26 +221,23 @@ def api_stocks():
     )
     db.close()
 
-    return jsonify({
+    result = {
         "stocks": stocks,
         "total": total,
         "offset": int(request.args.get("offset", 0)),
         "limit": int(request.args.get("limit", 50)),
-    })
+    }
+    _set_cache(ck, result)
+    return jsonify(result)
 
 
 @app.route("/api/trending")
 def api_trending():
-    """
-    Trending aktier — ökar/minskar mest i ägare.
+    ck = f"trending|{request.query_string.decode()}"
+    cached, hit = _cached_response(ck)
+    if hit:
+        return jsonify(cached)
 
-    Params:
-      period    - 1d, 1w, 1m, 3m, ytd, 1y (default 1m)
-      direction - up/down (default up)
-      limit     - antal per sida (default 50)
-      offset    - startposition
-      min_owners - minsta antal ägare (default 10)
-    """
     db = get_db()
     stocks, total = get_trending(
         db,
@@ -234,12 +249,14 @@ def api_trending():
     )
     db.close()
 
-    return jsonify({
+    result = {
         "stocks": stocks,
         "total": total,
         "offset": int(request.args.get("offset", 0)),
         "limit": int(request.args.get("limit", 50)),
-    })
+    }
+    _set_cache(ck, result)
+    return jsonify(result)
 
 
 @app.route("/api/hot-movers")
@@ -255,6 +272,11 @@ def api_hot_movers():
       min_owners - minsta antal ägare (default 100)
       country    - landskod (default alla)
     """
+    ck = f"hotmovers|{request.query_string.decode()}"
+    cached, hit = _cached_response(ck)
+    if hit:
+        return jsonify(cached)
+
     db = get_db()
     stocks, total, date_to, date_from = get_hot_movers(
         db,
@@ -278,14 +300,16 @@ def api_hot_movers():
         pass
     db.close()
 
-    return jsonify({
+    result = {
         "stocks": stocks,
         "total": total,
         "date_from": date_from,
         "date_to": date_to,
         "offset": int(request.args.get("offset", 0)),
         "limit": int(request.args.get("limit", 50)),
-    })
+    }
+    _set_cache(ck, result)
+    return jsonify(result)
 
 
 @app.route("/api/insiders")
@@ -299,6 +323,11 @@ def api_insiders():
       limit  - antal per sida (default 50)
       offset - startposition
     """
+    ck = f"insiders|{request.query_string.decode()}"
+    cached, hit = _cached_response(ck)
+    if hit:
+        return jsonify(cached)
+
     db = get_db()
     txs, total = search_insiders(
         db,
@@ -309,12 +338,14 @@ def api_insiders():
     )
     db.close()
 
-    return jsonify({
+    result = {
         "transactions": txs,
         "total": total,
         "offset": int(request.args.get("offset", 0)),
         "limit": int(request.args.get("limit", 50)),
-    })
+    }
+    _set_cache(ck, result)
+    return jsonify(result)
 
 
 @app.route("/api/signals")
@@ -332,6 +363,11 @@ def api_signals():
       min_score  - minsta edge score (default 0)
       signal     - STRONG_BUY/BUY/HOLD/SELL/STRONG_SELL
     """
+    ck = f"signals|{request.query_string.decode()}"
+    cached, hit = _cached_response(ck)
+    if hit:
+        return jsonify(cached)
+
     db = get_db()
     signals, total = get_signals(
         db,
@@ -347,12 +383,14 @@ def api_signals():
     )
     db.close()
 
-    return jsonify({
+    result = {
         "signals": signals,
         "total": total,
         "offset": int(request.args.get("offset", 0)),
         "limit": int(request.args.get("limit", 50)),
-    })
+    }
+    _set_cache(ck, result)
+    return jsonify(result)
 
 
 @app.route("/api/portfolio")
@@ -1628,7 +1666,7 @@ def _startup():
     db.close()
 
     print("=" * 60)
-    print("  EDGE SIGNALS — Trav-modellen för Börsen")
+    print("  EDGE SIGNALS — DAKTIER")
     print(f"  Aktier i DB: {stats['total_stocks']:,}")
     print(f"  Ägare totalt: {stats['total_owners']:,.0f}")
     print(f"  Blankade: {stats['shorted_stocks']}")

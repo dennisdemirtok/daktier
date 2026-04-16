@@ -9,6 +9,7 @@ fredapi==0.5.1
 requests==2.31.0
 httpx>=0.25.0
 apscheduler==3.10.4
+pytz>=2024.1
 odfpy>=1.4.1
 beautifulsoup4>=4.12.0
 lxml>=4.9.0

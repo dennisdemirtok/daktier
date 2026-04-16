@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Edge Signals — Trav-modellen</title>
+    <title>Edge Signals — DAKTIER</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
         :root {
@@ -250,14 +250,18 @@
 <div class="header">
     <div class="header-left">
         <div class="logo">E</div>
-        <h1>Edge Signals <span>Trav-modellen</span></h1>
+        <h1>Edge Signals <span>— DAKTIER</span></h1>
     </div>
     <div class="header-right">
-        <div class="market-status closed" id="marketStatus">
-            <div class="market-dot closed" id="marketDot"></div>
-            <span id="marketLabel">Marknad stängd</span>
+        <div class="market-status closed" id="marketStatusSE">
+            <div class="market-dot closed" id="marketDotSE"></div>
+            <span id="marketLabelSE">🇸🇪 Stängd</span>
         </div>
-        <span class="update-time" id="updateTime"></span>
+        <div class="market-status closed" id="marketStatusUS">
+            <div class="market-dot closed" id="marketDotUS"></div>
+            <span id="marketLabelUS">🇺🇸 Stängd</span>
+        </div>
+        <span class="update-time" id="liveClock"></span>
         <div class="btn-group">
             <button class="refresh-btn" id="refreshPricesBtn" onclick="doRefreshPrices()">Uppdatera priser</button>
             <button class="refresh-btn btn-insider" id="refreshInsidersBtn" onclick="doRefreshInsiders()">Insiders</button>
@@ -328,35 +332,84 @@ let allLoadedRows = [];
 // Stats cache
 let statsData = null;
 
+// ── Tab data cache (instant tab switching) ──────────────
+const _tabCache = {};
+const CACHE_TTL = 120000; // 2 minutes
+function cacheKey(tab, params) { return tab + '|' + JSON.stringify(params); }
+function getCached(key) {
+    const c = _tabCache[key];
+    if (c && (Date.now() - c.ts) < CACHE_TTL) return c.data;
+    return null;
+}
+function setCache(key, data) { _tabCache[key] = {data, ts: Date.now()}; }
+function invalidateTab(tab) {
+    Object.keys(_tabCache).forEach(k => { if (k.startsWith(tab + '|')) delete _tabCache[k]; });
+}
+
 const FLAGS = {SE:'🇸🇪',US:'🇺🇸',NO:'🇳🇴',DK:'🇩🇰',FI:'🇫🇮',DE:'🇩🇪',FR:'🇫🇷',GB:'🇬🇧',NL:'🇳🇱',IT:'🇮🇹',CH:'🇨🇭',CA:'🇨🇦',JP:'🇯🇵',BE:'🇧🇪',ES:'🇪🇸',PT:'🇵🇹',AT:'🇦🇹',IE:'🇮🇪',HK:'🇭🇰',SG:'🇸🇬'};
 
 // ── Fetch ──────────────────────────────────────────────
+
+// ── Live Clock & Market Hours ──────────────────────────
+function getCETTime() {
+    return new Date(new Date().toLocaleString('en-US', {timeZone: 'Europe/Stockholm'}));
+}
+function getETTime() {
+    return new Date(new Date().toLocaleString('en-US', {timeZone: 'America/New_York'}));
+}
+function isSEMarketOpen() {
+    const now = getCETTime();
+    if (now.getDay() === 0 || now.getDay() === 6) return false;
+    const h = now.getHours(), m = now.getMinutes();
+    const mins = h * 60 + m;
+    return mins >= 540 && mins <= 1050; // 9:00 - 17:30 CET
+}
+function isUSMarketOpen() {
+    const now = getETTime();
+    if (now.getDay() === 0 || now.getDay() === 6) return false;
+    const h = now.getHours(), m = now.getMinutes();
+    const mins = h * 60 + m;
+    return mins >= 570 && mins <= 960; // 9:30 - 16:00 ET
+}
+function isAnyMarketOpen() { return isSEMarketOpen() || isUSMarketOpen(); }
+
+function updateClock() {
+    const now = getCETTime();
+    const time = now.toLocaleTimeString('sv-SE', {hour:'2-digit', minute:'2-digit'});
+    const date = now.toLocaleDateString('sv-SE', {day:'numeric', month:'short'});
+    document.getElementById('liveClock').textContent = time + ' ' + date;
+}
+
+function updateMarketIndicators() {
+    const seOpen = isSEMarketOpen();
+    const usOpen = isUSMarketOpen();
+
+    const seStatus = document.getElementById('marketStatusSE');
+    const seDot = document.getElementById('marketDotSE');
+    const seLabel = document.getElementById('marketLabelSE');
+    seStatus.className = 'market-status ' + (seOpen ? 'open' : 'closed');
+    seDot.className = 'market-dot ' + (seOpen ? 'open' : 'closed');
+    seLabel.textContent = '🇸🇪 ' + (seOpen ? 'Öppen' : 'Stängd');
+
+    const usStatus = document.getElementById('marketStatusUS');
+    const usDot = document.getElementById('marketDotUS');
+    const usLabel = document.getElementById('marketLabelUS');
+    usStatus.className = 'market-status ' + (usOpen ? 'open' : 'closed');
+    usDot.className = 'market-dot ' + (usOpen ? 'open' : 'closed');
+    usLabel.textContent = '🇺🇸 ' + (usOpen ? 'Öppen' : 'Stängd');
+}
+
+// Update clock every second, market status every 30s
+setInterval(updateClock, 1000);
+setInterval(updateMarketIndicators, 30000);
+updateClock();
+updateMarketIndicators();
 
 async function fetchStatus() {
     try {
         const r = await fetch('/api/status');
         statsData = await r.json();
         renderCards();
-        if (statsData.last_stock_update) {
-            const d = new Date(statsData.last_stock_update);
-            document.getElementById('updateTime').textContent =
-                d.toLocaleTimeString('sv-SE', {hour:'2-digit', minute:'2-digit'}) + ' ' +
-                d.toLocaleDateString('sv-SE', {day:'numeric', month:'short'});
-        }
-        // Market status indicator
-        const isOpen = statsData.market_open;
-        const statusEl = document.getElementById('marketStatus');
-        const dotEl = document.getElementById('marketDot');
-        const labelEl = document.getElementById('marketLabel');
-        if (isOpen) {
-            statusEl.className = 'market-status open';
-            dotEl.className = 'market-dot open';
-            labelEl.textContent = 'Auto-uppdatering aktiv';
-        } else {
-            statusEl.className = 'market-status closed';
-            dotEl.className = 'market-dot closed';
-            labelEl.textContent = 'Marknad stängd';
-        }
     } catch(e) { console.error('Status fetch error:', e); }
 }
 
@@ -371,80 +424,56 @@ async function fetchData(append = false) {
     if (append) showLoadMore();
 
     try {
-        let data;
+        let data, url, params, ck, cached, renderFn, dataKey;
+
         if (currentTab === 'signals') {
-            const params = new URLSearchParams({
-                country: signalCountry,
-                sort: sortCol, order: sortOrder,
-                limit: PAGE_SIZE, offset: currentOffset,
-                min_owners: minOwners || 10,
-                signal: signalFilter,
-                action: actionFilter,
-            });
-            data = await (await fetch('/api/signals?' + params)).json();
-            totalResults = data.total;
-            allLoadedRows = allLoadedRows.concat(data.signals);
-            renderSignalsTable();
+            params = {country:signalCountry, sort:sortCol, order:sortOrder, limit:PAGE_SIZE, offset:currentOffset, min_owners:minOwners||10, signal:signalFilter, action:actionFilter};
+            url = '/api/signals?' + new URLSearchParams(params);
+            ck = cacheKey('signals', params);
+            dataKey = 'signals';
+            renderFn = renderSignalsTable;
         } else if (currentTab === 'stocks') {
-            const params = new URLSearchParams({
-                q: searchQuery, country: countryFilter,
-                sort: sortCol, order: sortOrder,
-                limit: PAGE_SIZE, offset: currentOffset,
-                min_owners: minOwners,
-            });
-            data = await (await fetch('/api/stocks?' + params)).json();
-            totalResults = data.total;
-            allLoadedRows = allLoadedRows.concat(data.stocks);
-            renderStocksTable();
+            params = {q:searchQuery, country:countryFilter, sort:sortCol, order:sortOrder, limit:PAGE_SIZE, offset:currentOffset, min_owners:minOwners};
+            url = '/api/stocks?' + new URLSearchParams(params);
+            ck = cacheKey('stocks', params);
+            dataKey = 'stocks';
+            renderFn = renderStocksTable;
         } else if (currentTab === 'hotmovers') {
-            const params = new URLSearchParams({
-                direction: hotDirection, lookback: hotLookback,
-                limit: PAGE_SIZE, offset: currentOffset,
-                min_owners: minOwners || 100,
-                country: hotCountry,
-            });
-            data = await (await fetch('/api/hot-movers?' + params)).json();
-            totalResults = data.total;
-            hotDateFrom = data.date_from;
-            hotDateTo = data.date_to;
-            allLoadedRows = allLoadedRows.concat(data.stocks);
-            renderHotMoversTable();
+            params = {direction:hotDirection, lookback:hotLookback, limit:PAGE_SIZE, offset:currentOffset, min_owners:minOwners||100, country:hotCountry};
+            url = '/api/hot-movers?' + new URLSearchParams(params);
+            ck = cacheKey('hotmovers', params);
+            dataKey = 'stocks';
+            renderFn = () => { hotDateFrom = data.date_from; hotDateTo = data.date_to; renderHotMoversTable(); };
         } else if (currentTab === 'trending') {
-            const params = new URLSearchParams({
-                period: trendPeriod, direction: trendDirection,
-                limit: PAGE_SIZE, offset: currentOffset,
-                min_owners: minOwners || 10,
-            });
-            data = await (await fetch('/api/trending?' + params)).json();
-            totalResults = data.total;
-            allLoadedRows = allLoadedRows.concat(data.stocks);
-            renderTrendingTable();
+            params = {period:trendPeriod, direction:trendDirection, limit:PAGE_SIZE, offset:currentOffset, min_owners:minOwners||10};
+            url = '/api/trending?' + new URLSearchParams(params);
+            ck = cacheKey('trending', params);
+            dataKey = 'stocks';
+            renderFn = renderTrendingTable;
         } else if (currentTab === 'insiders') {
-            const params = new URLSearchParams({
-                q: searchQuery, type: insiderType,
-                limit: PAGE_SIZE, offset: currentOffset,
-            });
-            data = await (await fetch('/api/insiders?' + params)).json();
-            totalResults = data.total;
-            allLoadedRows = allLoadedRows.concat(data.transactions);
-            renderInsidersTable();
+            params = {q:searchQuery, type:insiderType, limit:PAGE_SIZE, offset:currentOffset};
+            url = '/api/insiders?' + new URLSearchParams(params);
+            ck = cacheKey('insiders', params);
+            dataKey = 'transactions';
+            renderFn = renderInsidersTable;
         } else if (currentTab === 'ocf') {
-            const params = new URLSearchParams({
-                q: searchQuery, country: countryFilter || 'SE',
-                sort: sortCol, order: sortOrder,
-                limit: PAGE_SIZE, offset: currentOffset,
-                min_owners: minOwners || 100,
-            });
-            data = await (await fetch('/api/stocks?' + params)).json();
-            totalResults = data.total;
-            allLoadedRows = allLoadedRows.concat(data.stocks);
-            renderOcfTable();
+            params = {q:searchQuery, country:countryFilter||'SE', sort:sortCol, order:sortOrder, limit:PAGE_SIZE, offset:currentOffset, min_owners:minOwners||100};
+            url = '/api/stocks?' + new URLSearchParams(params);
+            ck = cacheKey('ocf', params);
+            dataKey = 'stocks';
+            renderFn = renderOcfTable;
         } else if (currentTab === 'portfolio') {
-            const simData = await (await fetch('/api/simulation')).json();
+            const simCk = cacheKey('portfolio', {});
+            cached = getCached(simCk);
+            const simData = cached || await (await fetch('/api/simulation')).json();
+            if (!cached) setCache(simCk, simData);
             if (simData.active) {
                 renderSimulation(simData);
             } else {
-                data = await (await fetch('/api/portfolio')).json();
+                const pCk = cacheKey('portfolio_start', {});
+                const pCached = getCached(pCk);
+                data = pCached || await (await fetch('/api/portfolio')).json();
+                if (!pCached) setCache(pCk, data);
                 renderPortfolio(data);
                 const startCard = `<div style="background:linear-gradient(135deg,#e6f9f1,#e8eeff);border-radius:var(--radius);padding:24px;margin-bottom:20px;text-align:center;box-shadow:var(--shadow)">
                     <div style="font-size:28px;margin-bottom:8px">🚀</div>
@@ -466,6 +495,17 @@ async function fetchData(append = false) {
         } else if (currentTab === 'aitoplist') {
             await fetchAIToplist();
             return;
+        }
+
+        // Generic cached fetch for table tabs
+        if (url) {
+            cached = getCached(ck);
+            data = cached || await (await fetch(url)).json();
+            if (!cached) setCache(ck, data);
+            totalResults = data.total;
+            allLoadedRows = allLoadedRows.concat(data[dataKey] || []);
+            if (currentTab === 'hotmovers') { hotDateFrom = data.date_from; hotDateTo = data.date_to; }
+            renderFn();
         }
     } catch(e) {
         document.getElementById('content').innerHTML =
@@ -2421,11 +2461,12 @@ async function init() {
     renderFilterBar();
     await fetchData();
 
-    // Auto-refresh: poll varje 60 sekunder
+    // Auto-refresh: poll varje 60s, only when a market is open
     setInterval(async () => {
         await fetchStatus();
-        // Om vi är på en flik som visar live-data, uppdatera
-        if (['signals','portfolio','stocks','trending','ocf'].includes(currentTab)) {
+        if (isAnyMarketOpen() && ['signals','portfolio','stocks','trending','ocf','hotmovers'].includes(currentTab)) {
+            // Invalidate cache for current tab so we get fresh data
+            Object.keys(_tabCache).forEach(k => { if (k.startsWith(currentTab + '|')) delete _tabCache[k]; });
             await fetchData();
         }
     }, 60000);
