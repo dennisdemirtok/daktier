@@ -4,7 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Edge Signals — DAKTIER</title>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet">
     <style>
         :root {
             --green: #00C281;
@@ -30,75 +31,100 @@
             --radius: 12px;
             --surface-low: #f3f4f5;
             --surface-high: #e8e8e8;
+            --sidebar-w: 240px;
+            --header-h: 56px;
         }
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg); color: var(--text); line-height: 1.5; }
+        .material-symbols-outlined { font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24; vertical-align: middle; }
 
         /* ── Header ──── */
-        .header { background: rgba(255,255,255,0.8); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); border-bottom: none; padding: 14px 32px; display: flex; justify-content: space-between; align-items: center; position: sticky; top: 0; z-index: 100; }
-        .header-left { display: flex; align-items: center; gap: 12px; }
-        .logo { width: 32px; height: 32px; background: linear-gradient(135deg, var(--green-dark), var(--green)); border-radius: 8px; display: flex; align-items: center; justify-content: center; color: white; font-weight: 700; font-size: 16px; }
-        .header h1 { font-size: 18px; font-weight: 700; }
-        .header h1 span { color: var(--text-muted); font-weight: 400; font-size: 14px; }
-        .header-right { display: flex; align-items: center; gap: 12px; }
-        .update-time { font-size: 13px; color: var(--text-muted); }
-        .refresh-btn { background: linear-gradient(135deg, var(--green-dark), var(--green)); color: white; border: none; padding: 8px 20px; border-radius: 8px; cursor: pointer; font-family: inherit; font-size: 13px; font-weight: 600; transition: all 0.2s; }
+        .header { background: rgba(255,255,255,0.82); backdrop-filter: blur(24px); -webkit-backdrop-filter: blur(24px); border-bottom: none; padding: 0 32px; display: flex; justify-content: space-between; align-items: center; position: fixed; top: 0; left: 0; right: 0; height: var(--header-h); z-index: 100; }
+        .header-left { display: flex; align-items: center; gap: 20px; }
+        .logo { width: 34px; height: 34px; background: linear-gradient(135deg, var(--green-dark), var(--green)); border-radius: 10px; display: flex; align-items: center; justify-content: center; color: white; font-weight: 800; font-size: 16px; }
+        .header h1 { font-size: 17px; font-weight: 800; letter-spacing: -0.3px; }
+        .header h1 span { color: var(--text-muted); font-weight: 400; font-size: 13px; margin-left: 2px; }
+        .header-center { display: flex; align-items: center; gap: 16px; }
+        .header-right { display: flex; align-items: center; gap: 10px; }
+        .update-time { font-size: 12px; color: var(--text-muted); font-weight: 500; font-variant-numeric: tabular-nums; }
+        .refresh-btn { background: linear-gradient(135deg, var(--green-dark), var(--green)); color: white; border: none; padding: 7px 18px; border-radius: 8px; cursor: pointer; font-family: inherit; font-size: 12px; font-weight: 600; transition: all 0.2s; display: flex; align-items: center; gap: 6px; }
         .refresh-btn:hover { opacity: 0.9; transform: translateY(-1px); }
-        .refresh-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .refresh-btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+        .header-icon-btn { background: none; border: none; padding: 6px; border-radius: 8px; cursor: pointer; color: var(--text-muted); transition: all 0.15s; display: flex; align-items: center; }
+        .header-icon-btn:hover { background: var(--surface-low); color: var(--text); }
+
+        /* ── Sidebar ──── */
+        .sidebar { position: fixed; left: 0; top: var(--header-h); bottom: 0; width: var(--sidebar-w); background: var(--surface-low); display: flex; flex-direction: column; padding: 20px 12px; z-index: 90; overflow-y: auto; transition: transform 0.25s ease; }
+        .sidebar-section-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 1.2px; color: var(--green); padding: 0 12px; margin-bottom: 8px; }
+        .sidebar-sublabel { font-size: 10px; color: var(--text-muted); padding: 0 12px; margin-bottom: 16px; opacity: 0.7; }
+        .sidebar-nav { display: flex; flex-direction: column; gap: 2px; flex: 1; }
+        .sidebar-item { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 10px; font-size: 13px; font-weight: 500; color: var(--text-muted); cursor: pointer; transition: all 0.15s; border: none; background: none; font-family: inherit; text-align: left; width: 100%; }
+        .sidebar-item:hover { background: rgba(255,255,255,0.6); color: var(--text); transform: translateX(2px); }
+        .sidebar-item.active { background: var(--white); color: var(--green-dark); font-weight: 600; box-shadow: 0 1px 4px rgba(0,0,0,0.04); }
+        .sidebar-item .material-symbols-outlined { font-size: 20px; }
+        .sidebar-divider { height: 1px; background: var(--surface-high); margin: 12px 8px; opacity: 0.5; }
+        .sidebar-footer { margin-top: auto; padding: 16px 12px; }
+        .sidebar-footer-card { background: rgba(0,108,70,0.06); border-radius: 12px; padding: 14px; }
+        .sidebar-footer-label { font-size: 10px; font-weight: 700; color: var(--green-dark); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; }
+        .sidebar-footer-btn { width: 100%; padding: 8px; background: linear-gradient(135deg, var(--green-dark), var(--green)); color: white; border: none; border-radius: 8px; font-size: 11px; font-weight: 700; font-family: inherit; cursor: pointer; text-transform: uppercase; letter-spacing: 0.5px; }
 
         /* ── Layout ──── */
-        .container { max-width: 1500px; margin: 0 auto; padding: 20px; }
+        .main-content { margin-left: var(--sidebar-w); padding-top: var(--header-h); min-height: 100vh; transition: margin-left 0.25s ease; }
+        .container { max-width: 1400px; margin: 0 auto; padding: 24px 32px; }
 
         /* ── Summary ──── */
-        .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 24px; }
-        .card { background: var(--white); border-radius: var(--radius); padding: 20px; transition: all 0.2s; border: 1px solid rgba(0,0,0,0.04); }
+        .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 28px; }
+        .card { background: var(--white); border-radius: var(--radius); padding: 20px; transition: all 0.2s; }
         .card:hover { box-shadow: var(--shadow-hover); transform: translateY(-1px); }
-        .card-label { font-size: 10px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.8px; font-weight: 600; }
+        .card-label { font-size: 10px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.8px; font-weight: 700; }
         .card-value { font-size: 28px; font-weight: 800; margin: 4px 0; letter-spacing: -0.5px; }
         .card-sub { font-size: 12px; color: var(--text-sec); }
 
-        /* ── Tabs ──── */
-        .tabs { display: flex; gap: 0; margin-bottom: 20px; border-bottom: none; background: var(--surface-low); border-radius: var(--radius); padding: 4px; }
-        .tab { padding: 8px 18px; background: none; border: none; font-family: inherit; font-size: 13px; font-weight: 500; color: var(--text-muted); cursor: pointer; border-radius: 8px; margin-bottom: 0; transition: all 0.15s; border-bottom: none; }
-        .tab:hover { color: var(--text); background: rgba(255,255,255,0.6); }
-        .tab.active { color: var(--text); background: var(--white); font-weight: 600; box-shadow: 0 1px 3px rgba(0,0,0,0.06); }
+        /* ── Tabs (inside content area) ──── */
+        .tabs { display: flex; gap: 6px; margin-bottom: 20px; padding-bottom: 0; flex-wrap: wrap; }
+        .tab { padding: 7px 16px; background: none; border: none; font-family: inherit; font-size: 13px; font-weight: 500; color: var(--text-muted); cursor: pointer; border-radius: 8px; transition: all 0.15s; white-space: nowrap; }
+        .tab:hover { color: var(--text); background: var(--surface-low); }
+        .tab.active { color: var(--text); background: var(--white); font-weight: 600; box-shadow: 0 1px 4px rgba(0,0,0,0.06); }
 
         /* ── Filter ──── */
-        .filter-bar { display: flex; gap: 10px; align-items: center; margin-bottom: 14px; flex-wrap: wrap; }
-        .search-input { padding: 8px 14px; border: none; border-radius: 8px; font-family: inherit; font-size: 14px; width: 300px; outline: none; transition: all 0.2s; background: var(--surface-low); }
-        .search-input:focus { background: var(--white); box-shadow: 0 0 0 2px rgba(0,194,129,0.2); }
-        .filter-chip { padding: 6px 14px; border: none; border-radius: 8px; font-size: 12px; cursor: pointer; background: var(--surface-low); color: var(--text-sec); transition: all 0.15s; font-family: inherit; }
+        .filter-bar { display: flex; gap: 8px; align-items: center; margin-bottom: 16px; flex-wrap: wrap; }
+        .search-input { padding: 8px 14px; border: none; border-radius: 8px; font-family: inherit; font-size: 13px; width: 280px; outline: none; transition: all 0.2s; background: var(--surface-low); }
+        .search-input:focus { background: var(--white); box-shadow: 0 0 0 2px rgba(0,194,129,0.15); }
+        .filter-chip { padding: 5px 12px; border: none; border-radius: 8px; font-size: 11px; cursor: pointer; background: var(--surface-low); color: var(--text-sec); transition: all 0.15s; font-family: inherit; font-weight: 500; }
         .filter-chip:hover { background: var(--surface-high); color: var(--text); }
         .filter-chip.active { background: var(--green); color: white; }
-        .period-chip { padding: 6px 14px; border: none; border-radius: 8px; font-size: 12px; cursor: pointer; background: var(--surface-low); color: var(--text-sec); transition: all 0.15s; font-family: inherit; }
+        .period-chip { padding: 5px 12px; border: none; border-radius: 8px; font-size: 11px; cursor: pointer; background: var(--surface-low); color: var(--text-sec); transition: all 0.15s; font-family: inherit; font-weight: 500; }
         .period-chip:hover { background: var(--surface-high); color: var(--text); }
         .period-chip.active { background: var(--blue); color: white; }
-        .dir-chip { padding: 6px 14px; border: none; border-radius: 8px; font-size: 12px; cursor: pointer; background: var(--surface-low); transition: all 0.15s; font-family: inherit; }
+        .dir-chip { padding: 5px 12px; border: none; border-radius: 8px; font-size: 11px; cursor: pointer; background: var(--surface-low); transition: all 0.15s; font-family: inherit; font-weight: 500; }
         .dir-chip.up { color: var(--green); }
         .dir-chip.down { color: var(--red); }
         .dir-chip.active.up { background: var(--green); color: white; }
         .dir-chip.active.down { background: var(--red); color: white; }
-        .signal-chip { padding: 6px 14px; border: none; border-radius: 8px; font-size: 12px; cursor: pointer; background: var(--surface-low); transition: all 0.15s; font-family: inherit; color: var(--text-sec); }
+        .signal-chip { padding: 5px 12px; border: none; border-radius: 8px; font-size: 11px; cursor: pointer; background: var(--surface-low); transition: all 0.15s; font-family: inherit; color: var(--text-sec); font-weight: 500; }
         .signal-chip:hover { background: var(--surface-high); color: var(--purple); }
         .signal-chip.active { background: var(--purple); color: white; }
-        .min-owners-select { padding: 5px 10px; border: 1px solid var(--border); border-radius: 8px; font-size: 12px; font-family: inherit; color: var(--text-sec); background: var(--white); cursor: pointer; }
+        .min-owners-select { padding: 5px 10px; border: none; border-radius: 8px; font-size: 11px; font-family: inherit; color: var(--text-sec); background: var(--surface-low); cursor: pointer; font-weight: 500; }
 
         /* ── Table ──── */
-        .table-container { background: var(--white); border-radius: var(--radius); overflow-x: auto; border: 1px solid rgba(0,0,0,0.04); }
+        .table-container { background: var(--white); border-radius: var(--radius); overflow-x: auto; }
         table { width: 100%; border-collapse: collapse; }
         thead { position: relative; z-index: 2; }
-        th { padding: 12px 14px; text-align: left; font-size: 10px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; border-bottom: none; cursor: pointer; user-select: none; background: var(--surface-low); white-space: nowrap; }
+        th { padding: 14px 14px; text-align: left; font-size: 10px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; border-bottom: none; cursor: pointer; user-select: none; background: var(--surface-low); white-space: nowrap; }
+        th:first-child { border-radius: var(--radius) 0 0 0; }
+        th:last-child { border-radius: 0 var(--radius) 0 0; }
         th:hover { color: var(--text); }
-        th.sorted { color: var(--green); }
+        th.sorted { color: var(--green-dark); }
         td { padding: 12px 14px; border-bottom: none; font-size: 13px; }
         tr:last-child td { border-bottom: none; }
-        tr:hover { background: var(--surface-low); }
+        tr:hover { background: rgba(0,0,0,0.015); }
+        tbody tr { transition: background 0.1s; }
         .stock-name { font-weight: 600; color: var(--text); cursor: pointer; transition: color 0.15s; }
-        .stock-name:hover { color: var(--blue); text-decoration: underline; }
-        .stock-ticker { font-size: 11px; color: var(--text-muted); }
+        .stock-name:hover { color: var(--green-dark); }
+        .stock-ticker { font-size: 10px; color: var(--text-muted); }
 
         /* ── Numbers ──── */
-        .num-pos { color: var(--green); font-weight: 600; }
+        .num-pos { color: var(--green-dark); font-weight: 600; }
         .num-neg { color: var(--red); font-weight: 600; }
         .num-zero { color: var(--text-muted); }
 
@@ -111,17 +137,17 @@
         .badge-hold { background: var(--surface-low); color: var(--text-muted); }
 
         /* ── Score Bar ──── */
-        .score-bar { width: 80px; height: 8px; background: #f0f0f0; border-radius: 4px; display: inline-block; vertical-align: middle; position: relative; overflow: hidden; }
-        .score-bar-fill { height: 100%; border-radius: 4px; transition: width 0.3s; }
+        .score-bar { width: 80px; height: 6px; background: var(--surface-high); border-radius: 3px; display: inline-block; vertical-align: middle; position: relative; overflow: hidden; }
+        .score-bar-fill { height: 100%; border-radius: 3px; transition: width 0.3s; }
         .score-value { font-weight: 700; font-size: 14px; min-width: 36px; display: inline-block; }
 
         /* ── Bar ──── */
-        .bar-wrap { width: 70px; height: 6px; background: #f0f0f0; border-radius: 3px; display: inline-block; vertical-align: middle; }
+        .bar-wrap { width: 70px; height: 6px; background: var(--surface-high); border-radius: 3px; display: inline-block; vertical-align: middle; }
         .bar-fill { height: 100%; border-radius: 3px; }
 
         /* ── Component Mini Bars ──── */
         .comp-bars { display: flex; gap: 3px; align-items: center; }
-        .comp-bar { width: 28px; height: 14px; background: #f0f0f0; border-radius: 3px; position: relative; overflow: hidden; cursor: help; }
+        .comp-bar { width: 28px; height: 14px; background: var(--surface-low); border-radius: 3px; position: relative; overflow: hidden; cursor: help; }
         .comp-bar-fill { height: 100%; border-radius: 3px; }
         .comp-label { font-size: 9px; color: var(--text-muted); text-align: center; line-height: 1; margin-top: 1px; }
 
@@ -133,13 +159,13 @@
 
         /* ── Loading ──── */
         .loading-wrap { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 60px 20px; }
-        .loading-spinner { width: 32px; height: 32px; border: 3px solid var(--border); border-top-color: var(--green); border-radius: 50%; animation: spin 0.8s linear infinite; margin-bottom: 12px; }
+        .loading-spinner { width: 28px; height: 28px; border: 3px solid var(--surface-high); border-top-color: var(--green); border-radius: 50%; animation: spin 0.8s linear infinite; margin-bottom: 12px; }
         @keyframes spin { to { transform: rotate(360deg); } }
         .load-more { display: flex; justify-content: center; padding: 20px; }
-        .load-more-spinner { width: 24px; height: 24px; border: 2px solid var(--border); border-top-color: var(--green); border-radius: 50%; animation: spin 0.8s linear infinite; }
+        .load-more-spinner { width: 24px; height: 24px; border: 2px solid var(--surface-high); border-top-color: var(--green); border-radius: 50%; animation: spin 0.8s linear infinite; }
 
         /* ── Footer ──── */
-        .table-footer { text-align: center; color: var(--text-muted); font-size: 12px; padding: 12px; }
+        .table-footer { text-align: center; color: var(--text-muted); font-size: 11px; padding: 14px; font-weight: 500; letter-spacing: 0.3px; text-transform: uppercase; }
 
         /* ── Flags ──── */
         .flag { font-size: 14px; margin-right: 4px; }
@@ -151,7 +177,7 @@
         .info-banner-text strong { color: var(--text); }
 
         /* ── DD Risk ──── */
-        .dd-risk-bar { width: 50px; height: 8px; background: #f0f0f0; border-radius: 4px; display: inline-block; vertical-align: middle; overflow: hidden; }
+        .dd-risk-bar { width: 50px; height: 8px; background: var(--surface-high); border-radius: 4px; display: inline-block; vertical-align: middle; overflow: hidden; }
         .dd-risk-fill { height: 100%; border-radius: 4px; }
         .dd-risk-label { font-size: 10px; display: block; margin-top: 1px; }
 
@@ -164,11 +190,11 @@
         .trend-7d.neutral { color: var(--text-muted); }
 
         /* ── Drawer ──── */
-        .drawer-overlay { position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.3);z-index:200;opacity:0;visibility:hidden;transition:opacity 0.3s,visibility 0.3s; }
+        .drawer-overlay { position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.2);z-index:200;opacity:0;visibility:hidden;transition:opacity 0.3s,visibility 0.3s; }
         .drawer-overlay.open { opacity:1;visibility:visible; }
         .drawer { position:fixed;top:0;right:0;bottom:0;width:520px;max-width:92vw;background:var(--white);z-index:201;box-shadow: -8px 0 32px rgba(25,28,29,0.06);transform:translateX(100%);transition:transform 0.3s ease;overflow-y:auto;display:flex;flex-direction:column; }
         .drawer.open { transform:translateX(0); }
-        .drawer-header { padding:20px 24px;border-bottom: none;background: var(--surface-low);display:flex;justify-content:space-between;align-items:flex-start;position:sticky;top:0;z-index:1; }
+        .drawer-header { padding:20px 24px;border-bottom:none;background:var(--surface-low);display:flex;justify-content:space-between;align-items:flex-start;position:sticky;top:0;z-index:1; }
         .drawer-close { background:none;border:none;font-size:20px;cursor:pointer;color:var(--text-muted);padding:4px 8px;border-radius:6px; }
         .drawer-close:hover { background:var(--bg);color:var(--text); }
         .drawer-body { padding:0 24px 24px;flex:1; }
@@ -181,10 +207,10 @@
         .drawer-item-value { font-size:15px;font-weight:700;margin-top:2px; }
 
         /* ── Market Status ──── */
-        .market-status { display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; padding: 4px 10px; border-radius: 12px; }
-        .market-status.open { background: var(--green-light); color: var(--green-dark); }
-        .market-status.closed { background: var(--surface-low); color: var(--text-muted); }
-        .market-dot { width: 8px; height: 8px; border-radius: 50%; }
+        .market-status { display: flex; align-items: center; gap: 5px; font-size: 10px; font-weight: 700; letter-spacing: 0.5px; text-transform: uppercase; }
+        .market-status.open { color: var(--green-dark); }
+        .market-status.closed { color: var(--text-muted); opacity: 0.5; }
+        .market-dot { width: 6px; height: 6px; border-radius: 50%; }
         .market-dot.open { background: var(--green); animation: pulse 2s infinite; }
         .market-dot.closed { background: var(--text-muted); }
         @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
@@ -194,7 +220,7 @@
         .btn-group .refresh-btn { border-radius: 0; }
         .btn-group .refresh-btn:first-child { border-radius: 8px 0 0 8px; }
         .btn-group .refresh-btn:last-child { border-radius: 0 8px 8px 0; }
-        .btn-insider { background: var(--purple); font-size: 11px; padding: 8px 12px; }
+        .btn-insider { background: var(--purple); font-size: 11px; padding: 7px 12px; }
         .btn-insider:hover { background: #6d28d9; }
 
         /* ── Morning Brief ──── */
@@ -215,7 +241,7 @@
         .auto-rebal-banner { background: linear-gradient(135deg, #ecfdf5, #f0fdf4); border: 1px solid #86efac; border-radius: var(--radius); padding: 12px 16px; margin-bottom: 16px; font-size: 13px; display: flex; align-items: center; gap: 8px; }
 
         /* ── Upload Zone ──── */
-        .upload-zone { border: 2px dashed var(--border); border-radius: var(--radius); padding: 40px; text-align: center; cursor: pointer; transition: all 0.2s; background: var(--white); }
+        .upload-zone { border: 2px dashed var(--surface-high); border-radius: var(--radius); padding: 40px; text-align: center; cursor: pointer; transition: all 0.2s; background: var(--white); }
         .upload-zone:hover, .upload-zone.dragover { border-color: var(--orange); background: var(--orange-light); }
         .upload-zone-icon { font-size: 48px; margin-bottom: 12px; }
         .upload-zone-text { font-size: 14px; color: var(--text-sec); }
@@ -238,61 +264,140 @@
         .consistency-bar { height: 8px; border-radius: 4px; background: #e5e7eb; overflow: hidden; margin-top: 4px; }
         .consistency-bar-fill { height: 100%; border-radius: 4px; background: linear-gradient(90deg, #22c55e, #16a34a); }
 
+        /* ── Mobile ──── */
+        @media (max-width: 1024px) {
+            .sidebar { transform: translateX(-100%); }
+            .sidebar.open { transform: translateX(0); }
+            .main-content { margin-left: 0; }
+            .mobile-menu-btn { display: flex !important; }
+        }
         @media (max-width: 768px) {
-            .container { padding: 12px; }
+            .container { padding: 16px; }
             .cards { grid-template-columns: 1fr 1fr; }
             .search-input { width: 100%; }
             .drawer { width:100vw;max-width:100vw; }
             .brief-grid { grid-template-columns: 1fr; }
+            .header { padding: 0 16px; }
+            .header-center { display: none; }
         }
+        .mobile-menu-btn { display: none; background: none; border: none; cursor: pointer; color: var(--text-muted); padding: 4px; border-radius: 6px; }
+        .mobile-menu-btn:hover { background: var(--surface-low); }
     </style>
 </head>
 <body>
 
-<div class="header">
+<!-- ── Header ──── -->
+<header class="header">
     <div class="header-left">
+        <button class="mobile-menu-btn" onclick="toggleSidebar()">
+            <span class="material-symbols-outlined">menu</span>
+        </button>
         <div class="logo">E</div>
-        <h1>Edge Signals <span>— DAKTIER</span></h1>
+        <h1>Edge Signals <span>DAKTIER</span></h1>
     </div>
-    <div class="header-right">
+    <div class="header-center">
         <div class="market-status closed" id="marketStatusSE">
             <div class="market-dot closed" id="marketDotSE"></div>
-            <span id="marketLabelSE">🇸🇪 Stängd</span>
+            <span id="marketLabelSE">SE: Stängd</span>
         </div>
         <div class="market-status closed" id="marketStatusUS">
             <div class="market-dot closed" id="marketDotUS"></div>
-            <span id="marketLabelUS">🇺🇸 Stängd</span>
-        </div>
-        <span class="update-time" id="liveClock"></span>
-        <div class="btn-group">
-            <button class="refresh-btn" id="refreshPricesBtn" onclick="doRefreshPrices()">Uppdatera priser</button>
-            <button class="refresh-btn btn-insider" id="refreshInsidersBtn" onclick="doRefreshInsiders()">Insiders</button>
+            <span id="marketLabelUS">US: Stängd</span>
         </div>
     </div>
-</div>
+    <div class="header-right">
+        <span class="update-time" id="liveClock"></span>
+        <div class="btn-group">
+            <button class="refresh-btn" id="refreshPricesBtn" onclick="doRefreshPrices()">
+                <span class="material-symbols-outlined" style="font-size:16px">refresh</span>
+                Uppdatera
+            </button>
+            <button class="refresh-btn btn-insider" id="refreshInsidersBtn" onclick="doRefreshInsiders()">Insiders</button>
+        </div>
+        <button class="header-icon-btn" title="Inställningar">
+            <span class="material-symbols-outlined">settings</span>
+        </button>
+    </div>
+</header>
 
+<!-- ── Sidebar ──── -->
+<aside class="sidebar" id="sidebar">
+    <div class="sidebar-section-label">Verktyg</div>
+    <div class="sidebar-sublabel">Edge Signals Analytics</div>
+    <nav class="sidebar-nav">
+        <button class="sidebar-item active" onclick="sidebarNav('signals', this)" data-tab="signals">
+            <span class="material-symbols-outlined">electric_bolt</span>
+            Edge Signals
+        </button>
+        <button class="sidebar-item" onclick="sidebarNav('stocks', this)" data-tab="stocks">
+            <span class="material-symbols-outlined">bar_chart</span>
+            Alla aktier
+        </button>
+        <button class="sidebar-item" onclick="sidebarNav('hotmovers', this)" data-tab="hotmovers">
+            <span class="material-symbols-outlined">local_fire_department</span>
+            Hot Movers
+        </button>
+        <button class="sidebar-item" onclick="sidebarNav('trending', this)" data-tab="trending">
+            <span class="material-symbols-outlined">trending_up</span>
+            Trending
+        </button>
+        <button class="sidebar-item" onclick="sidebarNav('insiders', this)" data-tab="insiders">
+            <span class="material-symbols-outlined">person_search</span>
+            Insiders
+        </button>
+        <div class="sidebar-divider"></div>
+        <button class="sidebar-item" onclick="sidebarNav('ocf', this)" data-tab="ocf">
+            <span class="material-symbols-outlined">account_balance</span>
+            Kassaflöde
+        </button>
+        <button class="sidebar-item" onclick="sidebarNav('portfolio', this)" data-tab="portfolio">
+            <span class="material-symbols-outlined">monitoring</span>
+            Simulering
+        </button>
+        <button class="sidebar-item" onclick="sidebarNav('myportfolio', this)" data-tab="myportfolio">
+            <span class="material-symbols-outlined">folder_special</span>
+            Min Portfölj
+        </button>
+        <div class="sidebar-divider"></div>
+        <button class="sidebar-item" onclick="sidebarNav('aitoplist', this)" data-tab="aitoplist">
+            <span class="material-symbols-outlined">smart_toy</span>
+            AI Topplista
+        </button>
+    </nav>
+    <div class="sidebar-footer">
+        <div class="sidebar-footer-card">
+            <div class="sidebar-footer-label">Edge Pro</div>
+            <div style="font-size:11px;color:var(--text-sec);margin-bottom:8px">Realtidsdata & AI-analys</div>
+            <button class="sidebar-footer-btn">Uppgradera</button>
+        </div>
+    </div>
+</aside>
+
+<!-- ── Main Content ──── -->
+<div class="main-content">
 <div class="container">
     <div class="cards" id="cards"></div>
 
     <div class="tabs">
-        <button class="tab active" onclick="switchTab('signals', this)">⚡ Edge Signals</button>
-        <button class="tab" onclick="switchTab('stocks', this)">📊 Alla aktier</button>
-        <button class="tab" onclick="switchTab('hotmovers', this)">🔥 Hot Movers</button>
-        <button class="tab" onclick="switchTab('trending', this)">📈 Trending</button>
-        <button class="tab" onclick="switchTab('insiders', this)">🔍 Insiders</button>
-        <button class="tab" onclick="switchTab('ocf', this)">💰 Kassaflöde</button>
-        <button class="tab" onclick="switchTab('portfolio', this)">🎯 Simulering</button>
-        <button class="tab" onclick="switchTab('myportfolio', this)">📁 Min Portfölj</button>
-        <button class="tab" onclick="switchTab('aitoplist', this)">🤖 AI Topplista</button>
+        <button class="tab active" onclick="switchTab('signals', this)">Edge Signals</button>
+        <button class="tab" onclick="switchTab('stocks', this)">Alla aktier</button>
+        <button class="tab" onclick="switchTab('hotmovers', this)">Hot Movers</button>
+        <button class="tab" onclick="switchTab('trending', this)">Trending</button>
+        <button class="tab" onclick="switchTab('insiders', this)">Insiders</button>
+        <button class="tab" onclick="switchTab('ocf', this)">Kassaflöde</button>
+        <button class="tab" onclick="switchTab('portfolio', this)">Simulering</button>
+        <button class="tab" onclick="switchTab('myportfolio', this)">Min Portfölj</button>
+        <button class="tab" onclick="switchTab('aitoplist', this)">AI Topplista</button>
     </div>
 
     <div class="filter-bar" id="filterBar"></div>
     <div id="content">
         <div class="loading-wrap">
             <div class="loading-spinner"></div>
-            <p style="color:var(--text-muted)">Laddar data...</p>
+            <p style="color:var(--text-muted);font-size:13px">Laddar data...</p>
         </div>
     </div>
+</div>
 </div>
 
 <div class="drawer-overlay" id="drawerOverlay" onclick="closeDrawer()"></div>
@@ -391,14 +496,14 @@ function updateMarketIndicators() {
     const seLabel = document.getElementById('marketLabelSE');
     seStatus.className = 'market-status ' + (seOpen ? 'open' : 'closed');
     seDot.className = 'market-dot ' + (seOpen ? 'open' : 'closed');
-    seLabel.textContent = '🇸🇪 ' + (seOpen ? 'Öppen' : 'Stängd');
+    seLabel.textContent = 'SE: ' + (seOpen ? 'Öppen' : 'Stängd');
 
     const usStatus = document.getElementById('marketStatusUS');
     const usDot = document.getElementById('marketDotUS');
     const usLabel = document.getElementById('marketLabelUS');
     usStatus.className = 'market-status ' + (usOpen ? 'open' : 'closed');
     usDot.className = 'market-dot ' + (usOpen ? 'open' : 'closed');
-    usLabel.textContent = '🇺🇸 ' + (usOpen ? 'Öppen' : 'Stängd');
+    usLabel.textContent = 'US: ' + (usOpen ? 'Öppen' : 'Stängd');
 }
 
 // Update clock every second, market status every 30s
@@ -713,13 +818,18 @@ function renderFilterBar() {
 
 function switchTab(tab, el) {
     currentTab = tab;
+    // Update tabs (content area)
     document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
     if (el) { el.classList.add('active'); }
     else {
-        const tabMap = {portfolio:'🎯 Simulering',signals:'⚡ Edge Signals',stocks:'📊 Alla aktier',ocf:'💰 Kassaflöde',myportfolio:'📁 Min Portfölj',aitoplist:'🤖 AI Topplista',hotmovers:'🔥 Hot Movers',trending:'📈 Trending',insiders:'🔍 Insiders'};
+        const tabMap = {portfolio:'Simulering',signals:'Edge Signals',stocks:'Alla aktier',ocf:'Kassaflöde',myportfolio:'Min Portfölj',aitoplist:'AI Topplista',hotmovers:'Hot Movers',trending:'Trending',insiders:'Insiders'};
         const lbl = tabMap[tab];
         if (lbl) document.querySelectorAll('.tab').forEach(t => { if (t.textContent.trim() === lbl) t.classList.add('active'); });
     }
+    // Update sidebar
+    document.querySelectorAll('.sidebar-item').forEach(s => {
+        s.classList.toggle('active', s.dataset.tab === tab);
+    });
     searchQuery = '';
 
     if (tab === 'signals') { sortCol = 'meta'; sortOrder = 'desc'; }
@@ -731,6 +841,18 @@ function switchTab(tab, el) {
 
     renderFilterBar();
     fetchData();
+}
+
+function sidebarNav(tab, el) {
+    switchTab(tab);
+    // Close sidebar on mobile
+    if (window.innerWidth <= 1024) {
+        document.getElementById('sidebar').classList.remove('open');
+    }
+}
+
+function toggleSidebar() {
+    document.getElementById('sidebar').classList.toggle('open');
 }
 
 // ── Filter Actions ──────────────────────────────────
