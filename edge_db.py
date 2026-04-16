@@ -40,12 +40,46 @@ FI_INSIDER_URL = "https://marknadssok.fi.se/publiceringsklient/sv-SE/Search/Sear
 
 _tables_created = False
 
+
+class PgConnectionWrapper:
+    """Wraps psycopg2 connection so db.execute() works like SQLite.
+
+    Returns RealDictCursor rows (dict-like) and supports .fetchone()/.fetchall()
+    directly on the result, matching SQLite's conn.execute() behavior.
+    """
+    def __init__(self, conn):
+        self._conn = conn
+
+    def execute(self, sql, params=None):
+        cur = self._conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+        cur.execute(sql, params)
+        return cur
+
+    def commit(self):
+        self._conn.commit()
+
+    def close(self):
+        self._conn.close()
+
+    def cursor(self, **kwargs):
+        return self._conn.cursor(**kwargs)
+
+    @property
+    def autocommit(self):
+        return self._conn.autocommit
+
+    @autocommit.setter
+    def autocommit(self, val):
+        self._conn.autocommit = val
+
+
 def get_db():
     """Get a database connection (creates tables if needed on first call)."""
     global _tables_created
     if _use_postgres():
-        db = psycopg2.connect(DATABASE_URL, connect_timeout=5)
-        db.autocommit = False
+        raw = psycopg2.connect(DATABASE_URL, connect_timeout=5)
+        raw.autocommit = False
+        db = PgConnectionWrapper(raw)
     else:
         db = sqlite3.connect(DB_PATH)
         db.row_factory = sqlite3.Row
@@ -58,16 +92,8 @@ def get_db():
 
 
 def _exec(db, sql, params=None):
-    """Execute SQL with backend-appropriate placeholder."""
-    if _use_postgres():
-        cur = db.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-    else:
-        cur = db.cursor()
-    if params:
-        cur.execute(sql, params)
-    else:
-        cur.execute(sql)
-    return cur
+    """Execute SQL with backend-appropriate cursor."""
+    return db.execute(sql, params) if params else db.execute(sql)
 
 
 def _fetchone(db, sql, params=None):

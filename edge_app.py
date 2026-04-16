@@ -1496,9 +1496,13 @@ Score-guide: 80-100=STARK_KOP, 60-79=KOP, 40-59=NEUTRAL, 20-39=SALJ, 0-19=STARK_
 
             for item in parsed.get("scores", []):
                 matching = next((s for s in signals if s["name"] == item["name"]), {})
-                db.execute(f"""INSERT OR REPLACE INTO ai_scores
+                db.execute(f"""INSERT INTO ai_scores
                     (orderbook_id, stock_name, ai_score, ai_signal, ai_summary, meta_score, edge_score, model_agreement, analysis_date)
-                    VALUES ({_ph(9)})""",
+                    VALUES ({_ph(9)})
+                    ON CONFLICT (stock_name, analysis_date) DO UPDATE SET
+                    orderbook_id=EXCLUDED.orderbook_id, ai_score=EXCLUDED.ai_score, ai_signal=EXCLUDED.ai_signal,
+                    ai_summary=EXCLUDED.ai_summary, meta_score=EXCLUDED.meta_score, edge_score=EXCLUDED.edge_score,
+                    model_agreement=EXCLUDED.model_agreement""",
                     (matching.get("orderbook_id"), item["name"], item.get("ai_score", 0), item.get("ai_signal", ""),
                      item.get("summary", ""), matching.get("meta_score", 0), matching.get("edge_score", 0),
                      matching.get("model_agreement", 0), today))
