@@ -1533,21 +1533,39 @@ def _score_book_models(s):
     else:
         scores["graham"] = None
 
-    # Buffett: ROE + LÅG SKULD — kräver både lönsamhet OCH verifierbar skuld.
-    # Kalibrering: 40% ROE = 100, 20% ROE = 50, 10% ROE = 25, <5% ROE = 0.
-    if roe is not None and (de is not None or nd is not None):
+    # Buffett Quality — kräver LÖNSAMHET + HÖG ROE + VERIFIERBAR LÅG SKULD.
+    # Förlustbolag (P/E ≤ 0) diskvalificeras — Buffett köper inga "turnaround"-förhoppningar.
+    # För full 100-poäng krävs ROE ≥ 35% OCH D/E < 0.3 OCH ND/EBITDA < 2 (verifierade).
+    # Cap på 90 för alla utom exceptionella kombos → undviker kluster vid 100.
+    if (roe is not None and pe is not None
+        and 3 <= pe <= 50          # måste vara lönsam, men inte extrem bubbla
+        and roe >= 0.10             # Buffett: minst 10% ROE (helst 15%+)
+        and (de is not None or nd is not None)):
         roe_pct = roe * 100
-        roe_score = _clamp(roe_pct * 2.5)  # 40% ROE = 100 (strängare än tidigare)
-        # Skuldstraff: D/E > 0.5 drar ned
+        # Kalibrerad kurva: 15% = 50, 25% = 75, 35% = 90, 50%+ = 95
+        if roe_pct < 15:
+            base = roe_pct * 3.3          # 10%=33, 15%=50
+        elif roe_pct < 25:
+            base = 50 + (roe_pct - 15) * 2.5   # 15=50, 25=75
+        elif roe_pct < 35:
+            base = 75 + (roe_pct - 25) * 1.5   # 25=75, 35=90
+        else:
+            base = min(95, 90 + (roe_pct - 35) * 0.3)  # 35=90, 50+=95
+        # Skuldstraff: D/E > 0.5 drar ned kraftigt
         if de is not None and de > 0.5:
-            roe_score *= max(0.3, 1 - (de - 0.5) * 0.5)
-        # ND/EBITDA > 3 drar ned ytterligare
+            base *= max(0.3, 1 - (de - 0.5) * 0.6)
         if nd is not None and nd > 3:
-            roe_score *= max(0.3, 1 - (nd - 3) * 0.15)
-        # Extra: mycket hög ROE UTAN låg skuld är förmodligen hävstångsdriven → dämpa
-        if roe_pct > 40 and (de is None or de > 1.0) and (nd is None or nd > 2):
-            roe_score *= 0.7
-        scores["buffett"] = _clamp(roe_score)
+            base *= max(0.3, 1 - (nd - 3) * 0.2)
+        # Hävstångs-varning: hög ROE utan verifierat låg skuld → misstänkt finansiell ingenjörskonst
+        if roe_pct > 30 and (de is None or de > 1.0) and (nd is None or nd > 2.5):
+            base *= 0.65
+        # Topp-bonus: exceptionell kombo får 100 — men KRÄVER alla tre verifierade
+        if roe_pct >= 35 and de is not None and de < 0.3 and nd is not None and nd < 2:
+            base = min(100, base + 8)
+        # Extra straff på mycket hög P/E (Buffett betalar inte P/E 40+ för kvalitet)
+        if pe > 30:
+            base *= max(0.6, 1 - (pe - 30) * 0.03)  # P/E 40 → 0.7x, P/E 50 → 0.4x
+        scores["buffett"] = _clamp(base)
     else:
         scores["buffett"] = None
 
@@ -1601,21 +1619,38 @@ def _score_book_models(s):
     else:
         scores["klarman"] = None
 
-    # Utdelningskvalitet — kräver DY OCH minst en hållbarhetssignal (ROE eller D/E)
-    # Annars kan vi inte skilja hållbar utdelning från "säljer tillgångar för att betala".
-    # Straffa också orimligt hög DY (>15% är ofta utdelningsfälla / datafel).
-    if dy is not None and dy > 0 and (roe is not None or de is not None):
+    # Utdelningskvalitet — kräver LÖNSAMHET (P/E > 0) + DY + hållbarhetsbevis.
+    # Bogle/Graham: utdelning är bra men BARA från lönsam verksamhet med rimlig utdelningsandel.
+    # 3% DY ≈ 50, 5% ≈ 70, 7% ≈ 85, 10% ≈ 95 — inte 100 vid 5% som tidigare.
+    # DY > 10% utan motsvarande lönsamhet = utdelningsfälla.
+    if (dy is not None and dy > 0 and pe is not None and pe > 0
+        and (roe is not None or de is not None)):
         dy_pct = dy * 100
-        # Orimlig DY → klassificera som skräpsignal
+        # Orimlig DY → utdelningsfälla
         if dy_pct > 15:
-            base = _clamp(20 - (dy_pct - 15) * 2)  # sjunker snabbt
+            base = _clamp(15 - (dy_pct - 15) * 2)
+        elif dy_pct > 10:
+            # Bonus-zon men tydlig gräns — 10% = 95, 15% = 30
+            base = 95 - (dy_pct - 10) * 13
+        elif dy_pct >= 3:
+            # Sweet spot: 3% = 50, 5% = 70, 7% = 85, 10% = 95
+            base = 50 + (dy_pct - 3) * 9
         else:
-            base = _clamp(dy_pct * 18)  # 5% DY ≈ 90
-        # Straffa svag ROE
-        if roe is not None and roe * 100 < 10:
-            base *= 0.7
-        # Straffa hög skuld
+            # Låg DY (< 3%) får låg poäng oavsett
+            base = dy_pct * 16  # 2% = 32, 1% = 16
+        # Straffa svag ROE (betalar utdelning utan lönsamhet = dåligt)
+        if roe is not None:
+            if roe * 100 < 5:
+                base *= 0.4
+            elif roe * 100 < 10:
+                base *= 0.7
+        # Straffa hög skuld (utdelning finansierad av lån)
         if de is not None and de > 1:
+            base *= 0.6
+        elif de is not None and de > 0.7:
+            base *= 0.85
+        # Straffa hög P/E + hög DY (kombinationen ovanlig → data-anomali)
+        if pe > 25 and dy_pct > 5:
             base *= 0.7
         scores["divq"] = _clamp(base)
     else:
@@ -1701,8 +1736,44 @@ def _score_book_models(s):
             weighted_sum += v * m["weight"]
             weight_sum += m["weight"]
     scores["composite"] = (weighted_sum / weight_sum) if weight_sum > 0 else None
-    # Hur många modeller vi kunde evaluera (signal om datakvalitet)
     scores["models_available"] = sum(1 for m in BOOK_MODELS if scores.get(m["key"]) is not None)
+
+    # ══════════════════════════════════════════════════════════
+    # POST-PROCESSING CAPS — undvik 100-poäng-kluster i topplistor.
+    #
+    # 100-poäng reserveras för bolag där ÄVEN composite bekräftar kvaliteten.
+    # Utan detta tenderar små-/niche-bolag med extrema enskilda metrics (ex
+    # biotech med engångsvinst = ROE 100%) att dyka upp överst fastän de
+    # inte är genuint "bästa" enligt flera böcker.
+    #
+    # Regel:
+    #   composite >= 82 → tillåt 100 (exceptionell all-round-signal)
+    #   composite 70-82 → cap på 95
+    #   composite 60-70 → cap på 90
+    #   composite < 60  → cap på 85 (misstänkt enskild metric)
+    # ══════════════════════════════════════════════════════════
+    comp = scores.get("composite")
+    if comp is not None:
+        if comp >= 82:
+            model_cap = 100
+        elif comp >= 70:
+            model_cap = 95
+        elif comp >= 60:
+            model_cap = 90
+        else:
+            model_cap = 85
+        for key in ("graham", "buffett", "lynch", "magic", "klarman",
+                    "divq", "trend", "taleb", "kelly", "owners"):
+            if scores.get(key) is not None:
+                scores[key] = min(scores[key], model_cap)
+        # Räkna om composite med cappade värden så de stämmer överens
+        weighted_sum = 0.0; weight_sum = 0.0
+        for m in BOOK_MODELS:
+            v = scores.get(m["key"])
+            if v is not None:
+                weighted_sum += v * m["weight"]
+                weight_sum += m["weight"]
+        scores["composite"] = (weighted_sum / weight_sum) if weight_sum > 0 else None
 
     return scores
 
@@ -2222,18 +2293,29 @@ def get_books_portfolio_top10(db, limit=10, min_owners=200, min_composite=65, mi
 
 
 def get_model_toplist(db, model="composite", limit=20, min_owners=100, country=""):
-    """Returnerar top N aktier sorterade på en specifik bokmodell."""
+    """Returnerar top N aktier sorterade på en specifik bokmodell.
+
+    Tillämpar universell data-kvalitetsfilter per modell:
+    - Kvalitets-/lönsamhetsmodeller (buffett, divq, lynch) kräver P/E > 0
+      eftersom förlustbolag inte kan ranka som 'kvalitet'.
+    - Sortering bryts vid lika poäng med composite som secondary sort.
+    """
     ph = _ph()
 
-    # Grund-SQL: alla aktier som uppfyller min_owners
+    # Grund-SQL: alla aktier som uppfyller min_owners + likviditet
     where = f"WHERE number_of_owners >= {ph}"
     params = [min_owners]
     if country:
         where += f" AND country = {ph}"
         params.append(country)
 
-    # Måste ha last_price för att vara meningsfull
     where += " AND last_price IS NOT NULL AND last_price > 0"
+
+    # Modell-specifika datakrav i SQL (snabbare än att filtrera i Python)
+    profitability_models = ("buffett", "divq", "lynch", "magic", "graham", "klarman")
+    if model in profitability_models:
+        # Kräv positiv P/E — förlustbolag diskvalificeras från kvalitetsmodeller
+        where += " AND pe_ratio IS NOT NULL AND pe_ratio > 0 AND pe_ratio <= 80"
 
     rows = _fetchall(db, f"SELECT * FROM stocks {where}", params)
 
@@ -2249,9 +2331,10 @@ def get_model_toplist(db, model="composite", limit=20, min_owners=100, country="
         d["models_available"] = sc.get("models_available", 0)
         scored.append(d)
 
-    # Sortera på modell-score desc, kräver minst 3 tillgängliga modeller för stabilitet
+    # Kräv minst 3 tillgängliga modeller för stabilitet
     scored = [s for s in scored if s["models_available"] >= 3]
-    scored.sort(key=lambda x: x["model_score"], reverse=True)
+    # Sort primär: modell-score desc. Secondary: composite desc (bryter ties vid 100)
+    scored.sort(key=lambda x: (x["model_score"], x.get("composite_score") or 0), reverse=True)
 
     return scored[:limit]
 
