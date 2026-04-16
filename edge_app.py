@@ -1881,8 +1881,29 @@ def api_analyze_stock():
     """AI-analys av en aktie via Claude API — returnerar score 0-100 + förklaring."""
     import httpx
 
-    data = request.json
-    if not data or not data.get("name"):
+    data = request.json or {}
+
+    # Om orderbook_id finns — hämta FULL aktiedata från DB med korrekta kolumnnamn.
+    # (Tidigare version litade på fält som klienten skickade in, men flera mappningar
+    # var fel: pb_ratio vs price_book_ratio, dividend_yield vs direct_yield, etc.)
+    orderbook_id = data.get("orderbook_id")
+    if orderbook_id:
+        db = get_db()
+        try:
+            row = db.execute(
+                f"SELECT * FROM stocks WHERE CAST(orderbook_id AS TEXT) = CAST({_ph()} AS TEXT) LIMIT 1",
+                (str(orderbook_id),)
+            ).fetchone()
+            if row:
+                stock_full = dict(row)
+                # Slå ihop: DB-data som bas, payload får override vid behov (t.ex. meta_score)
+                for k, v in stock_full.items():
+                    if k not in data or data.get(k) in (None, "", "-"):
+                        data[k] = v
+        finally:
+            db.close()
+
+    if not data.get("name"):
         return jsonify({"error": "Ingen aktiedata skickad"}), 400
 
     # Hjälpfunktion: Avanza lagrar procent-nyckeltal som decimaler (0.34 = 34%)
@@ -1895,68 +1916,130 @@ def api_analyze_stock():
         except (ValueError, TypeError):
             return '-'
 
-    # Bygg prompt med alla relevanta nyckeltal
+    def num(key, fmt="{:.2f}"):
+        v = data.get(key)
+        if v is None or v == '-':
+            return '-'
+        try:
+            return fmt.format(float(v))
+        except (ValueError, TypeError):
+            return '-'
+
+    def bignum(key):
+        """Formatera stora tal (omsättning, börsvärde) läsligt."""
+        v = data.get(key)
+        if v is None or v == '-':
+            return '-'
+        try:
+            f = float(v)
+            if abs(f) >= 1e9:
+                return f"{f/1e9:.2f} Md"
+            if abs(f) >= 1e6:
+                return f"{f/1e6:.1f} M"
+            if abs(f) >= 1e3:
+                return f"{f/1e3:.1f} k"
+            return f"{f:.0f}"
+        except (ValueError, TypeError):
+            return '-'
+
+    # Kör server-side bok-modell-scoring så Claude får EXAKT samma resultat
+    # som frontend visar i drawer
+    try:
+        bm_scores = _score_book_models(data)
+    except Exception:
+        bm_scores = {}
+
+    def bm_row(key, label, icon):
+        s = bm_scores.get(key)
+        if s is None:
+            return f"  {icon} {label}: ❔ saknar data"
+        status = "✅ Pass" if s >= 65 else ("⚠️ Varning" if s >= 50 else "❌ Fail")
+        return f"  {icon} {label}: {status} ({s:.0f}/100)"
+
+    book_models_text = "\n".join([
+        bm_row("graham",  "Graham Defensive",       "📘"),
+        bm_row("buffett", "Buffett Quality Moat",   "🏰"),
+        bm_row("lynch",   "Lynch PEG",              "🔎"),
+        bm_row("magic",   "Magic Formula",          "📊"),
+        bm_row("klarman", "Klarman Margin of Safety","🛡️"),
+        bm_row("divq",    "Utdelningskvalitet",     "💰"),
+        bm_row("trend",   "Trend & Momentum",       "📈"),
+        bm_row("taleb",   "Taleb Barbell",          "🎯"),
+        bm_row("kelly",   "Kelly Sizing",           "🎲"),
+        bm_row("owners",  "Ägarmomentum",           "👥"),
+    ])
+    composite = bm_scores.get("composite")
+    avail = bm_scores.get("models_available", 0)
+    passing = sum(1 for k in ("graham","buffett","lynch","magic","klarman","divq","trend","taleb","kelly","owners")
+                  if (bm_scores.get(k) or 0) >= 65)
+
+    # Bygg prompt med alla relevanta nyckeltal — använder KORREKTA kolumnnamn
     prompt = f"""Du är en erfaren aktieanalytiker. Analysera följande nyckeltal för aktien och ge en bedömning.
 
 **Aktie: {data.get('name', 'Okänd')}**
-Pris: {data.get('last_price', '-')} SEK
-Land: {data.get('country', '-')}
+Pris: {num('last_price')} {data.get('currency','SEK')}
+Land: {data.get('country', '-')}  |  Sektor: {data.get('sector','-')}
 
 📊 VÄRDERING:
-- P/E-tal: {data.get('pe_ratio', '-')}
-- P/S-tal: {data.get('ps_ratio', '-')}
-- P/B-tal: {data.get('pb_ratio', '-')}
-- EV/EBIT: {data.get('ev_ebit_ratio', '-')}
-- EV/Sales: {data.get('ev_sales_ratio', '-')}
-- Direktavkastning: {pct('dividend_yield')}%
+- P/E-tal: {num('pe_ratio')}
+- P/B-tal: {num('price_book_ratio')}
+- EV/EBIT: {num('ev_ebit_ratio')}
+- Direktavkastning: {pct('direct_yield')}%
+- EPS: {num('eps')}
+- Eget kapital/aktie: {num('equity_per_share')}
+- Utdelning/aktie: {num('dividend_per_share')}
 
-💰 LÖNSAMHET:
-- ROCE: {pct('return_on_capital_employed')}%
+💰 LÖNSAMHET & STORLEK:
 - ROE: {pct('return_on_equity')}%
-- Vinstmarginal: {pct('net_margin')}%
-- Bruttomarginal: {pct('gross_margin')}%
-- Omsättning: {data.get('sales', '-')}
-- Nettovinst: {data.get('net_profit', '-')}
-- Operativt kassaflöde: {data.get('operating_cash_flow', '-')}
+- ROA: {pct('return_on_assets')}%
+- ROCE: {pct('return_on_capital_employed')}%
+- Omsättning: {bignum('sales')}
+- Nettoresultat: {bignum('net_profit')}
+- Operativt kassaflöde: {bignum('operating_cash_flow')}
+- Börsvärde: {bignum('market_capitalization') if data.get('market_capitalization') else bignum('market_cap')}
 
-📉 RISK:
-- Skuldsättningsgrad (D/E): {data.get('debt_to_equity_ratio', '-')}
-- Beta: {data.get('beta', '-')}
-- Volatilitet: {data.get('volatility', '-')}
-- Blankningsandel: {pct('short_percent')}%
-- DD-risk: {data.get('dd_risk', '-')}
+📉 RISK & SKULDSÄTTNING:
+- Skuldsättningsgrad (D/E): {num('debt_to_equity_ratio', '{:.2f}')}
+- ND/EBITDA: {num('net_debt_ebitda_ratio', '{:.2f}')}
+- Beta: {num('beta', '{:.2f}')}
+- Volatilitet: {pct('volatility')}%
+- Blankningsandel: {pct('short_selling_ratio')}%
 
 📈 TEKNISKT:
-- RSI (14): {data.get('rsi14', '-')}
-- MACD histogram: {data.get('macd_histogram', '-')}
-- SMA 20: {data.get('sma20', '-')}
-- SMA 50: {data.get('sma50', '-')}
-- SMA 200: {data.get('sma200', '-')}
-- Bollinger bredd: {data.get('bollinger_width', '-')}
+- RSI (14): {num('rsi14', '{:.0f}')}
+- MACD histogram: {num('macd_histogram', '{:.3f}')}
+- Pris vs SMA 20: {pct('sma20')}%
+- Pris vs SMA 50: {pct('sma50')}%
+- Pris vs SMA 200: {pct('sma200')}%
+- Bollinger-bredd: {pct('bollinger_distance_upper_to_lower')}%
 
-👥 ÄGARE:
+👥 ÄGARE (Avanza):
 - Antal ägare: {data.get('number_of_owners', '-')}
-- Ägarförändring 7d: {pct('owners_7d_change')}%
-- Ägarförändring 30d: {pct('owners_30d_change')}%
-- Ägarförändring 90d: {pct('owners_90d_change')}%
+- Ägarförändring 1v: {pct('owners_change_1w')}%
+- Ägarförändring 1m: {pct('owners_change_1m')}%
+- Ägarförändring 3m: {pct('owners_change_3m')}%
+- Ägarförändring YTD: {pct('owners_change_ytd')}%
+- Ägarförändring 1y: {pct('owners_change_1y')}%
 
-💹 PRISFÖRÄNDRING:
-- 7 dagar: {pct('one_week_change')}%
-- 1 månad: {pct('one_month_change')}%
-- 3 månader: {pct('three_months_change')}%
-- YTD: {pct('ytd_change')}%
-- 1 år: {pct('one_year_change')}%
+💹 PRISUTVECKLING:
+- 1 dag: {pct('one_day_change_pct')}%
+- 1 vecka: {pct('one_week_change_pct')}%
+- 1 månad: {pct('one_month_change_pct')}%
+- 3 månader: {pct('three_months_change_pct')}%
+- YTD: {pct('ytd_change_pct')}%
+- 1 år: {pct('one_year_change_pct')}%
+- 3 år: {pct('three_years_change_pct')}%
 
-🏇 MODELLSCORES:
-- Edge (Trav): {data.get('edge_score', '-')}
-- DSM: {data.get('dsm_score', '-')}
-- ACE: {data.get('ace_score', '-')}
-- Magic: {data.get('magic_score', '-')}
-- Meta Score: {data.get('meta_score', '-')}
+🏇 MODELLSCORES (interna):
+- Edge (Trav): {num('edge_score', '{:.0f}')}
+- DSM: {num('dsm_score', '{:.0f}')}
+- ACE: {num('ace_score', '{:.0f}')}
+- Magic: {num('magic_score', '{:.0f}')}
+- Meta Score: {num('meta_score', '{:.0f}')}
 
-📚 BOKMODELLER (Graham, Buffett, Lynch, Greenblatt, Klarman, Bogle, Taleb, Kelly m.fl.):
-{_format_book_models(data.get('book_models', []))}
-Sammanfattning bokmodeller: {data.get('book_models_summary', 'ej evaluerat')}
+📚 BOKMODELLER (Graham, Buffett, Lynch, Greenblatt, Klarman, Bogle, Stinsen, Taleb, Kelly, Spiltan):
+{book_models_text}
+Composite: {(f"{composite:.0f}/100 — {passing}/{avail} modeller passerar (≥65)") if composite is not None else "ej evaluerat — för lite data"}
 
 VÄG IN ALLA modeller ovan i din analys — både de kvantitativa scores (Edge/DSM/ACE/Magic/Meta)
 och de klassiska bokmodellerna. Notera särskilt konsensus eller motstridiga signaler mellan dem.

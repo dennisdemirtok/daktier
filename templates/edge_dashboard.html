@@ -2098,40 +2098,15 @@ async function analyzeStock() {
         const bookPass = bookModels.filter(m => m.verdict === 'Pass').length;
         const bookFail = bookModels.filter(m => m.verdict === 'Fail').length;
 
+        // Skicka orderbook_id — backend slår upp aktien i DB med KORREKTA kolumnnamn
+        // (tidigare skickade vi in fält med felaktig namnmappning → Claude såg tomma värden).
         const payload = {
-            name: s.name, country: s.country, last_price: s.last_price,
-            pe_ratio: s.pe_ratio, ps_ratio: s.price_sales_ratio, pb_ratio: s.price_to_book_value,
-            ev_ebit_ratio: s.ev_ebit_ratio, ev_sales_ratio: s.ev_sales_ratio,
-            dividend_yield: s.dividend_yield, direct_yield: s.direct_yield,
-            return_on_capital_employed: s.return_on_capital_employed,
-            return_on_equity: s.return_on_equity,
-            net_margin: s.net_margin, gross_margin: s.gross_margin,
-            sales: s.sales, net_profit: s.net_profit,
-            operating_cash_flow: s.operating_cash_flow,
-            debt_to_equity_ratio: s.debt_to_equity_ratio,
-            net_debt_ebitda_ratio: s.net_debt_ebitda_ratio,
-            beta: s.beta, volatility: s.volatility,
-            short_percent: s.short_percent_of_capital, dd_risk: s.dd_risk,
-            rsi14: s.rsi14, macd_histogram: s.macd_histogram,
-            sma20: s.sma20, sma50: s.sma50, sma200: s.sma200,
-            bollinger_width: s.bollinger_distance_upper_to_lower,
-            number_of_owners: s.number_of_owners,
-            owners_7d_change: s.seven_days_change_pct,
-            owners_30d_change: s.thirty_days_change_pct,
-            owners_90d_change: s.three_months_change_pct,
-            owners_change_1m: s.owners_change_1m,
-            owners_change_1y: s.owners_change_1y,
-            one_week_change: s.one_week_change_pct,
-            one_month_change: s.one_month_change_pct,
-            three_months_change: s.three_months_change_pct,
-            ytd_change: s.year_to_date_change_pct,
-            one_year_change: s.one_year_change_pct,
+            orderbook_id: s.orderbook_id,
+            name: s.name,
+            // Interna modellscores som inte finns i stocks-tabellen:
             edge_score: s.edge_score, dsm_score: s.dsm_score,
             ace_score: s.ace_score, magic_score: s.magic_score,
             meta_score: s.meta_score,
-            // Bokmodeller: Graham, Buffett, Lynch, Greenblatt, Klarman, Taleb, Kelly m.fl.
-            book_models: bookModels,
-            book_models_summary: `${bookPass}/${bookModels.length} pass, ${bookFail} fail`,
         };
 
         const resp = await fetch('/api/analyze-stock', {
