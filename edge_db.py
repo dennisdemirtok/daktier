@@ -1513,19 +1513,31 @@ def _score_book_models(s):
 
     # Graham: P/E*P/B, bäst när lågt (< 22.5 enligt Graham)
     # Sanity: orimligt låga tal (P/E < 2 eller P/B < 0.1) är oftast datafel/one-offs.
+    # Kräv BÅDA under Grahams individuella gränser (P/E<15 OCH P/B<1.5) för passerande poäng.
     if (pe is not None and pb is not None
         and 2 <= pe <= 80 and 0.1 <= pb <= 20):
         prod = pe * pb
-        # 100 vid prod=0, 50 vid prod=22.5, 0 vid prod>=60
-        scores["graham"] = _clamp(100 - (prod / 0.6))
+        # Konjunktiv: båda kriterier delvis uppfyllda — geometriskt medel
+        # P/E 10 = 100, 15 = 75, 22.5 = 50, 35 = 0
+        pe_score = _clamp(100 - (pe - 8) * 6)
+        # P/B 1 = 100, 1.5 = 75, 2.25 = 50, 4 = 0
+        pb_component = _clamp(100 - (pb - 0.75) * 30)
+        # Geometric mean — kräver att BÅDA är hyfsade
+        base = (pe_score * pb_component) ** 0.5
+        # Grahams produktregel som bonus/straff
+        if prod <= 22.5:
+            base = min(100, base * 1.1)  # liten bonus om produkten klarar gränsen
+        elif prod > 40:
+            base *= 0.7  # straffa om produkten är klart över
+        scores["graham"] = _clamp(base)
     else:
         scores["graham"] = None
 
-    # Buffett: ROE + LÅG SKULD — kräver både lönsamhet OCH att skuldläget går att verifiera
-    # Utan minst en av D/E eller ND/EBITDA kan vi inte uttala oss om "quality moat".
+    # Buffett: ROE + LÅG SKULD — kräver både lönsamhet OCH verifierbar skuld.
+    # Kalibrering: 40% ROE = 100, 20% ROE = 50, 10% ROE = 25, <5% ROE = 0.
     if roe is not None and (de is not None or nd is not None):
         roe_pct = roe * 100
-        roe_score = _clamp(roe_pct * 4)  # 25% ROE = 100 poäng
+        roe_score = _clamp(roe_pct * 2.5)  # 40% ROE = 100 (strängare än tidigare)
         # Skuldstraff: D/E > 0.5 drar ned
         if de is not None and de > 0.5:
             roe_score *= max(0.3, 1 - (de - 0.5) * 0.5)
@@ -1539,36 +1551,53 @@ def _score_book_models(s):
     else:
         scores["buffett"] = None
 
-    # Lynch PEG: P/E / tillväxt. Sanity: P/E 2–80, tillväxt > 3% (annars inte meningsfull)
-    if pe is not None and own_1y is not None and 2 <= pe <= 80 and own_1y > 0.03:
+    # Lynch PEG: P/E / tillväxt. Sanity: P/E 2–80, tillväxt > 5% (annars inte meningsfull tillväxt)
+    # Lynch vill se RIKTIG tillväxt (>10% ideal). Striktare gräns.
+    if pe is not None and own_1y is not None and 2 <= pe <= 80 and own_1y > 0.05:
         growth_pct = own_1y * 100
         peg = pe / growth_pct
-        # PEG 0.5 = 100, PEG 1 = 75, PEG 1.5 = 50, PEG 3 = 0
-        scores["lynch"] = _clamp(100 - (peg - 0.5) * 40)
+        # PEG 0.5 = 100, PEG 1.0 = 65, PEG 1.5 = 30, PEG 2.5+ = 0
+        scores["lynch"] = _clamp(100 - (peg - 0.5) * 50)
     else:
         scores["lynch"] = None
 
-    # Magic Formula: EY + ROCE. Sanity: EV/EBIT 2–50 (annars outlier/datafel)
+    # Magic Formula (Greenblatt): BÅDA krävs — billigt (låg EV/EBIT) OCH kvalitet (hög ROCE).
+    # Summera INTE — en aktie med fantastisk ROCE men dyr (EV/EBIT 35) ska INTE toppa listan.
+    # Sanity: EV/EBIT 2–50 (annars outlier/datafel), ROCE -50 till +200%.
     if ev is not None and 2 <= ev <= 50 and roce is not None and -0.5 <= roce <= 2:
-        ey = 1 / ev
-        combo = (ey + roce) * 100  # båda som procent
-        # 30% combo = 100 poäng, 0% = 0
-        scores["magic"] = _clamp(combo * 3.3)
+        # EV/EBIT-komponent: 5 = 100, 8 = 80, 12 = 50, 20 = 0
+        ey_score = _clamp(100 - (ev - 5) * 6.5)
+        # ROCE-komponent: 25% = 100, 15% = 60, 10% = 35, 5% = 10, <0 = 0
+        roce_pct = roce * 100
+        if roce_pct < 0:
+            roce_score = 0
+        else:
+            roce_score = _clamp(roce_pct * 4)
+        # Konjunktiv: geometric mean — behöver båda för att toppa
+        # NVIDIA: EV/EBIT 37 → ey_score 0, ROCE 74% → roce_score 100, geometric = 0 ✓
+        # Bra Greenblatt: EV/EBIT 7 (ey_score 87) × ROCE 20% (roce_score 80) = 83 ✓
+        scores["magic"] = _clamp((ey_score * roce_score) ** 0.5)
     else:
         scores["magic"] = None
 
-    # Klarman: lågt P/B och/eller lågt EV/EBIT — kräver minst en rimlig mätpunkt
+    # Klarman: djupvärde — kräver lågt P/B OCH lågt EV/EBIT (INTE bara ett av dem).
+    # "Margin of safety" kräver att flera värdemätare bekräftar — geometric mean.
     pb_score = None
     if pb is not None and 0.1 <= pb <= 20:
-        # P/B 0.5 = 100, P/B 1 = 75, P/B 2 = 25, P/B 4 = 0
-        pb_score = _clamp(100 - (pb - 0.5) * 28)
-    ev_score = None
+        # P/B 0.6 = 100, 1.0 = 75, 1.5 = 40, 2.5 = 0
+        pb_score = _clamp(100 - (pb - 0.6) * 40)
+    ev_score_k = None
     if ev is not None and 2 <= ev <= 50:
-        # EV/EBIT 4 = 100, 8 = 75, 15 = 25, 25 = 0
-        ev_score = _clamp(100 - (ev - 4) * 4.8)
-    if pb_score is not None or ev_score is not None:
-        parts = [x for x in (pb_score, ev_score) if x is not None]
-        scores["klarman"] = sum(parts) / len(parts)
+        # EV/EBIT 5 = 100, 8 = 75, 12 = 40, 20 = 0
+        ev_score_k = _clamp(100 - (ev - 5) * 6.5)
+    if pb_score is not None and ev_score_k is not None:
+        # Båda tillgängliga — geometric mean så att en dålig drar ned
+        scores["klarman"] = _clamp((pb_score * ev_score_k) ** 0.5)
+    elif pb_score is not None:
+        # Bara P/B — dämpad (saknar bekräftelse)
+        scores["klarman"] = _clamp(pb_score * 0.7)
+    elif ev_score_k is not None:
+        scores["klarman"] = _clamp(ev_score_k * 0.7)
     else:
         scores["klarman"] = None
 
@@ -1592,33 +1621,46 @@ def _score_book_models(s):
     else:
         scores["divq"] = None
 
-    # Trend & Momentum — ovanför SMA200 + hälsosam RSI (40-65)
+    # Trend & Momentum — ovanför SMA200 + hälsosam RSI (40-65).
+    # Kräv RSI för full poäng så att vi inte toppar på ren pris-trend utan hälsokontroll.
     if sma200 is not None:
         sma_pct = sma200 * 100
-        # 0-20% över = 100, över 50% = straff
-        if sma_pct < 0:
-            trend_base = _clamp(50 + sma_pct * 2)  # negativ dåligt
+        # 15% över 200-dagars = sweet spot. För lite eller för mycket = straff.
+        if sma_pct < -5:
+            trend_base = _clamp(40 + sma_pct * 2)  # negativ dåligt
+        elif sma_pct < 15:
+            trend_base = 55 + sma_pct * 2.3  # 0=55, 15=89.5
         elif sma_pct < 30:
-            trend_base = 60 + sma_pct * 1.3
+            trend_base = 90 - (sma_pct - 15) * 0.3  # 15=90, 30=85
         else:
-            trend_base = max(40, 100 - (sma_pct - 30) * 0.8)
+            trend_base = max(30, 85 - (sma_pct - 30) * 1.2)  # Över 30% = överhettat
         # RSI-straff
         if rsi is not None:
             if rsi > 75:
-                trend_base *= 0.6
+                trend_base *= 0.5
             elif rsi > 65:
-                trend_base *= 0.85
-            elif rsi < 30:
                 trend_base *= 0.8
+            elif rsi < 30:
+                trend_base *= 0.75
+        else:
+            # Utan RSI kan vi inte verifiera "hälsosam" trend → dämpa toppen
+            trend_base *= 0.85
         scores["trend"] = _clamp(trend_base)
     else:
         scores["trend"] = None
 
-    # Taleb Barbell (säker-sidan scoring — låg vol = högt)
+    # Taleb Barbell (säker-sidan scoring — låg vol = högt).
+    # Sweet spot 12-18% vol. Under 8% är ofta illikvid / låg datakvalitet.
     if vol is not None:
         vol_pct = vol * 100
-        # vol 15% = 100, 30% = 60, 50% = 20, 70%+ = 0
-        scores["taleb"] = _clamp(100 - (vol_pct - 15) * 1.6)
+        if vol_pct < 8:
+            # Misstänkt låg volatilitet — kan vara illikvid
+            base = 70 + vol_pct * 2.5  # 0%=70, 8%=90
+        elif vol_pct < 18:
+            base = 95 - (vol_pct - 12) * 1.0  # 12%=95, 18%=89
+        else:
+            base = _clamp(90 - (vol_pct - 18) * 2.2)  # 30%=63, 50%=20
+        scores["taleb"] = _clamp(base)
     else:
         scores["taleb"] = None
 
@@ -1628,11 +1670,25 @@ def _score_book_models(s):
     else:
         scores["kelly"] = None
 
-    # Ägarmomentum
+    # Ägarmomentum — Spiltan-approach. Kräv helst BÅDA 1m OCH 1y för robusthet.
+    # Undvik att en enstaka månads-spike toppar listan utan bekräftelse från årstrenden.
     if own_1m is not None:
-        own_pct = own_1m * 100
-        # 5% = 100, 0% = 50, -5% = 0
-        scores["owners"] = _clamp(50 + own_pct * 10)
+        own_pct_m = own_1m * 100
+        # 1m: 3% = 80, 5% = 95, 0% = 50, -5% = 10
+        m_score = _clamp(50 + own_pct_m * 9)
+        if own_1y is not None:
+            own_pct_y = own_1y * 100
+            # 1y: 15% = 95, 25%+ = 100, 0% = 50, -15% = 10
+            y_score = _clamp(50 + own_pct_y * 3)
+            # Viktat: månad 60% (färskast), år 40% (verifierar)
+            base = m_score * 0.6 + y_score * 0.4
+            # Om 1m är starkt men 1y är svagt → misstänkt spike
+            if own_pct_m > 3 and own_pct_y < 0:
+                base *= 0.7
+        else:
+            # Bara 1m — dämpa toppen (saknar bekräftelse)
+            base = m_score * 0.85
+        scores["owners"] = _clamp(base)
     else:
         scores["owners"] = None
 
@@ -1649,6 +1705,113 @@ def _score_book_models(s):
     scores["models_available"] = sum(1 for m in BOOK_MODELS if scores.get(m["key"]) is not None)
 
     return scores
+
+
+def _detect_trigger_reason(stock, scores):
+    """Identifierar VAD som triggar köprekommendationen NU — "why now".
+
+    Letar efter kortsiktiga händelser (pris ned + fundamenta håller, momentum-rally,
+    ägar-acceleration, RSI oversold med kvalitet, etc.) som gör att aktien är
+    intressant idag snarare än för tre månader sedan.
+
+    Returnerar dict eller None.
+    """
+    g = stock.get
+    d1 = g("one_day_change_pct")
+    w1 = g("one_week_change_pct")
+    m1 = g("one_month_change_pct")
+    m3 = g("three_month_change_pct")
+    rsi = g("rsi14")
+    sma200 = g("sma200")
+    own_1m = g("owners_change_1m")
+    own_3m = g("owners_change_3m") if "owners_change_3m" in (stock if isinstance(stock, dict) else {}) else None
+    comp = scores.get("composite")
+    magic = scores.get("magic")
+    klarman = scores.get("klarman")
+    graham = scores.get("graham")
+    buffett = scores.get("buffett")
+
+    # 1) Rea på kvalitet: pris ned senaste månaden MEN fundamenta/värde starka
+    if m1 is not None and m1 < -5 and comp is not None and comp >= 70:
+        quality = max(buffett or 0, magic or 0)
+        if quality >= 70:
+            return {
+                "icon": "💎", "kind": "rea",
+                "title": "Rea på kvalitet",
+                "text": f"Pris {m1:+.1f}% senaste månaden men värde/kvalitet håller (composite {comp:.0f}, kvalitet {quality:.0f}). Nu billigare än nyligen.",
+            }
+
+    # 2) Värde-trigger: P/E+P/B+EV/EBIT nyss tryckta till köpzonen (värdemodeller stark + pris ned)
+    value_avg_parts = [x for x in [graham, klarman, magic] if x is not None]
+    value_avg = sum(value_avg_parts) / len(value_avg_parts) if value_avg_parts else 0
+    if value_avg >= 70 and w1 is not None and w1 < -3:
+        return {
+            "icon": "💸", "kind": "value_trigger",
+            "title": "Värde-trigger",
+            "text": f"Priset ned {w1:+.1f}% senaste veckan — värdemodellerna signalerar undervärderat (snitt {value_avg:.0f}).",
+        }
+
+    # 3) Momentum med bas: stark månad + ägare följer med
+    if m1 is not None and m1 > 8:
+        if own_1m is not None and own_1m > 0.015:
+            return {
+                "icon": "🚀", "kind": "momentum",
+                "title": "Momentum + smart money",
+                "text": f"Upp {m1:+.0f}% senaste månaden och ägare ökar {own_1m*100:+.1f}% — accelererande intresse.",
+            }
+        if comp is not None and comp >= 70:
+            return {
+                "icon": "🚀", "kind": "momentum",
+                "title": "Momentum",
+                "text": f"Upp {m1:+.0f}% senaste månaden — stark kvalitet i botten (composite {comp:.0f}).",
+            }
+
+    # 4) Oversold med kvalitet: RSI lågt men fundamenta bra → potentiell studs
+    if rsi is not None and rsi < 35 and comp is not None and comp >= 70:
+        return {
+            "icon": "⚡", "kind": "oversold",
+            "title": "Översåld — studspotential",
+            "text": f"RSI {rsi:.0f} (översåld) men composite {comp:.0f} — fundamenta intakt, teknisk studs trolig.",
+        }
+
+    # 5) Ägar-spike: ägare ökar snabbt senaste månaden
+    if own_1m is not None and own_1m > 0.03:
+        return {
+            "icon": "👥", "kind": "ownership",
+            "title": "Ägarna strömmar in",
+            "text": f"+{own_1m*100:.1f}% nya ägare senaste månaden — smart money accelererar.",
+        }
+
+    # 6) Tekniskt genombrott: precis korsat SMA200 uppåt
+    if sma200 is not None and 0 <= sma200 * 100 < 5 and m1 is not None and m1 > 2:
+        return {
+            "icon": "📈", "kind": "breakout",
+            "title": "Tekniskt genombrott",
+            "text": f"Precis över 200-dagars ({sma200*100:+.1f}%) — långsiktig vändning bekräftas.",
+        }
+
+    # 7) Dagens rörelse: stark dag i rätt riktning
+    if d1 is not None and d1 < -2 and comp is not None and comp >= 70:
+        return {
+            "icon": "💸", "kind": "daily_drop",
+            "title": "Dagens nedgång = köpläge?",
+            "text": f"Idag {d1:+.1f}% — fundamenta oförändrade (composite {comp:.0f}). Kortsiktig reaktion, inte strukturell.",
+        }
+
+    # 8) Fallback: ren värderingssignal utan pris-trigger
+    if comp is not None and comp >= 75:
+        strongest = max(
+            [(k, v) for k, v in scores.items() if k not in ("composite", "models_available") and v is not None],
+            key=lambda kv: kv[1], default=(None, None)
+        )
+        if strongest[0]:
+            return {
+                "icon": "⭐", "kind": "stable_value",
+                "title": "Stabil kvalitet över tröskel",
+                "text": f"Composite {comp:.0f} — ingen akut pris-trigger men modellerna står still på köpsignal.",
+            }
+
+    return None
 
 
 def _build_pick_reasons(stock, scores):
@@ -1819,6 +1982,18 @@ def _build_pick_reasons(stock, scores):
     comp = scores.get("composite")
     avail = scores.get("models_available", 0)
     passing = sum(1 for m in BOOK_MODELS if (scores.get(m["key"]) or 0) >= 65)
+
+    # Trigger ("why now") — placeras direkt efter summary så användaren ser den först
+    trigger = _detect_trigger_reason(stock, scores)
+    trigger_reason = None
+    if trigger is not None:
+        trigger_reason = {
+            "icon": trigger["icon"], "model": "_trigger", "title": trigger["title"],
+            "text": trigger["text"],
+            "strength": "strong", "score": None,
+            "is_trigger": True, "trigger_kind": trigger["kind"],
+        }
+
     if comp is not None:
         if comp >= 85:
             verdict = "Extremt stark signal"
@@ -1834,7 +2009,12 @@ def _build_pick_reasons(stock, scores):
             "strength": "strong" if comp >= 80 else "good", "score": round(comp, 0),
             "is_summary": True,
         }
-        return [summary] + reasons
+        out = [summary]
+        if trigger_reason is not None:
+            out.append(trigger_reason)
+        return out + reasons
+    if trigger_reason is not None:
+        return [trigger_reason] + reasons
     return reasons
 
 
@@ -1937,6 +2117,10 @@ def get_daily_picks(db, limit=5, min_owners=200, min_composite=70, min_models=7)
         d["models_passing"] = pass_count
         d["model_scores"] = {m["key"]: round(sc[m["key"]], 1) if sc.get(m["key"]) is not None else None for m in BOOK_MODELS}
         d["reasons"] = _build_pick_reasons(d, sc)
+        # "Why now"-trigger direkt på pick-objektet (används av banner-UI)
+        trig = _detect_trigger_reason(d, sc)
+        if trig is not None:
+            d["trigger"] = trig
         picks.append(d)
 
     picks.sort(key=lambda x: (x["composite_score"], x["models_passing"]), reverse=True)
