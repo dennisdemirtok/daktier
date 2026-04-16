@@ -1508,6 +1508,81 @@ def _is_pref_share(name):
     return False
 
 
+def _value_trap_score(s):
+    """Värdefälle-detektor (0-100).
+
+    Signaturen: "för bra för att vara sant" värderingstal + extrem ROE/ROCE
+    (cyklisk peak) + negativt prisbeteende över flera tidsramar = marknaden
+    diskonterar redan att de fantastiska TTM-siffrorna är en topp som
+    kommer att normaliseras. Graham varnade explicit för detta
+    (Intelligent Investor kap 14: använd 7-årssnitt av vinsten, inte
+    peak-year TTM).
+
+    Klassiska exempel: äggproducenter efter fågelinfluensa, råvarubolag
+    efter prisspik, cykliska industribolag sent i cykeln.
+
+    Högre score = högre risk för värdefälla.
+    """
+    g = s.get
+    pe = g("pe_ratio")
+    ev = g("ev_ebit_ratio")
+    roe = g("return_on_equity")
+    roce = g("return_on_capital_employed")
+    sma200 = g("sma200")
+    rsi = g("rsi14")
+    c_1m = g("one_month_change_pct")
+    c_6m = g("six_months_change_pct")
+    c_1y = g("one_year_change_pct")
+
+    pts = 0.0
+    # 1. "För billig"-koincidens: BÅDA P/E < 8 OCH EV/EBIT < 5 (~30p)
+    if pe is not None and ev is not None and 0 < pe < 8 and 0 < ev < 5:
+        pts += 30
+    elif pe is not None and 0 < pe < 6:
+        pts += 15  # extremt P/E ensamt räcker delvis
+    elif ev is not None and 0 < ev < 4:
+        pts += 15
+
+    # 2. Cyklisk peak-ROE (~20p): ROE eller ROCE över 30% är sällan uthålligt
+    peak_quality = False
+    if roe is not None and roe > 0.30:
+        pts += 12
+        peak_quality = True
+    if roce is not None and roce > 0.30:
+        pts += 10
+        peak_quality = True
+
+    # 3. Fallande pris — marknaden VET något som TTM inte visar (~40p total)
+    if c_1y is not None and c_1y < -15:
+        pts += 18
+    elif c_1y is not None and c_1y < -8:
+        pts += 10
+    if c_6m is not None and c_6m < -10:
+        pts += 12
+    elif c_6m is not None and c_6m < -5:
+        pts += 6
+    if c_1m is not None and c_1m < -5:
+        pts += 6  # fortfarande fallande
+
+    # 4. Teknisk bekräftelse (~15p)
+    if sma200 is not None and sma200 < -15:
+        pts += 10
+    elif sma200 is not None and sma200 < -8:
+        pts += 5
+    if rsi is not None and rsi < 40:
+        pts += 5
+
+    # Regularisering: kräv MINST en värde-indikator + MINST en negativ
+    # pris-indikator. Utan båda är det inte en "fälle"-signatur.
+    has_value_signal = (pe is not None and 0 < pe < 10) or (ev is not None and 0 < ev < 6)
+    has_negative_price = (c_1y is not None and c_1y < -8) or (c_6m is not None and c_6m < -5) \
+                         or (sma200 is not None and sma200 < -8)
+    if not (has_value_signal and has_negative_price):
+        return 0.0
+
+    return max(0.0, min(100.0, pts))
+
+
 def _score_book_models(s):
     """Returnerar dict {model_key: 0-100 score (eller None)} + composite.
 
@@ -1769,6 +1844,27 @@ def _score_book_models(s):
     else:
         scores["owners"] = None
 
+    # ══════════════════════════════════════════════════════════
+    # VÄRDEFÄLLE-STRAFF — skydd mot cyklisk peak-earnings-fälla.
+    #
+    # Extrema värderingstal + extrem ROE/ROCE + fallande pris = marknaden
+    # prissätter redan att TTM är en topp (bird-flu-boom, råvaruprisspik
+    # etc). Graham krävde 7-årssnitt av vinsten för defensiv investering —
+    # vi har inte historisk EPS men vi kan upptäcka signaturen via den
+    # samtidiga förekomsten av de tre felen.
+    #
+    # Straffet applicerar endast på TTM-baserade värdemodeller som luras
+    # av topp-earnings (Graham, Buffett, Magic, Klarman). Övriga orörda.
+    # ══════════════════════════════════════════════════════════
+    trap_score = _value_trap_score(s)
+    scores["value_trap_score"] = round(trap_score, 1) if trap_score > 0 else 0
+    if trap_score >= 40:
+        # Straff-skala: 40p trap → -10% av score, 80p → -30%, 100p → -40%
+        penalty_pct = min(0.40, (trap_score - 30) * 0.006)
+        for key in ("graham", "buffett", "magic", "klarman"):
+            if scores.get(key) is not None:
+                scores[key] = _clamp(scores[key] * (1 - penalty_pct))
+
     # Composite: viktat medel av tillgängliga scores
     weighted_sum = 0.0
     weight_sum = 0.0
@@ -1958,6 +2054,38 @@ def _build_pick_reasons(stock, scores):
         if score >= 85: return "strong"
         if score >= 70: return "good"
         return "ok"
+
+    # Värdefälle-varning — visa ÖVERST så användaren ser det direkt
+    trap = scores.get("value_trap_score") or 0
+    if trap >= 40:
+        c_1y = g("one_year_change_pct")
+        c_6m = g("six_months_change_pct")
+        price_detail_parts = []
+        if c_1y is not None:
+            price_detail_parts.append(f"1Y {c_1y:+.0f}%")
+        if c_6m is not None:
+            price_detail_parts.append(f"6M {c_6m:+.0f}%")
+        peak_parts = []
+        if pe is not None and 0 < pe < 8:
+            peak_parts.append(f"P/E {pe:.1f}")
+        if ev is not None and 0 < ev < 5:
+            peak_parts.append(f"EV/EBIT {ev:.1f}")
+        if roe is not None and roe > 0.30:
+            peak_parts.append(f"ROE {roe*100:.0f}%")
+        if roce is not None and roce > 0.30:
+            peak_parts.append(f"ROCE {roce*100:.0f}%")
+        strength = "strong" if trap >= 70 else ("good" if trap >= 55 else "ok")
+        text_parts = []
+        if peak_parts:
+            text_parts.append("peak-siffror " + " · ".join(peak_parts))
+        if price_detail_parts:
+            text_parts.append("men pris " + " / ".join(price_detail_parts))
+        text = ". ".join(text_parts) + ". Marknaden diskonterar sannolikt att TTM är en topp."
+        reasons.append({
+            "icon": "🚩", "model": "_value_trap", "title": "Värdefälle-varning",
+            "text": text,
+            "strength": strength, "score": round(trap, 0),
+        })
 
     # Graham
     s = scores.get("graham")

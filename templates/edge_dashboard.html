@@ -2511,6 +2511,78 @@ function evaluateBookModels(s) {
     return out;
 }
 
+// Värdefälle-detektor — matchar backend `_value_trap_score` i edge_db.py.
+// Extrema värderingstal + extrem ROE/ROCE + fallande pris = TTM är sannolikt
+// peak-earnings och marknaden prissätter normalisering. Graham varnade
+// explicit: använd 7-årssnitt, inte peak-year TTM.
+function calculateValueTrapScore(s) {
+    const pe = s.pe_ratio, ev = s.ev_ebit_ratio;
+    const roe = s.return_on_equity, roce = s.return_on_capital_employed;
+    const sma200 = s.sma200, rsi = s.rsi14;
+    const c1m = s.one_month_change_pct, c6m = s.six_months_change_pct, c1y = s.one_year_change_pct;
+
+    let pts = 0;
+    // "För billig"-koincidens
+    if (pe != null && ev != null && pe > 0 && pe < 8 && ev > 0 && ev < 5) pts += 30;
+    else if (pe != null && pe > 0 && pe < 6) pts += 15;
+    else if (ev != null && ev > 0 && ev < 4) pts += 15;
+
+    // Cyklisk peak
+    if (roe != null && roe > 0.30) pts += 12;
+    if (roce != null && roce > 0.30) pts += 10;
+
+    // Fallande pris
+    if (c1y != null && c1y < -15) pts += 18;
+    else if (c1y != null && c1y < -8) pts += 10;
+    if (c6m != null && c6m < -10) pts += 12;
+    else if (c6m != null && c6m < -5) pts += 6;
+    if (c1m != null && c1m < -5) pts += 6;
+
+    // Teknisk
+    if (sma200 != null && sma200 < -15) pts += 10;
+    else if (sma200 != null && sma200 < -8) pts += 5;
+    if (rsi != null && rsi < 40) pts += 5;
+
+    // Kräv BÅDA värde-signal och negativ pris-signal
+    const hasValue = (pe != null && pe > 0 && pe < 10) || (ev != null && ev > 0 && ev < 6);
+    const hasNegPrice = (c1y != null && c1y < -8) || (c6m != null && c6m < -5) || (sma200 != null && sma200 < -8);
+    if (!hasValue || !hasNegPrice) return 0;
+
+    return Math.max(0, Math.min(100, pts));
+}
+
+function renderValueTrapBanner(s) {
+    const trap = calculateValueTrapScore(s);
+    if (trap < 40) return '';
+    const pe = s.pe_ratio, ev = s.ev_ebit_ratio;
+    const roe = s.return_on_equity, roce = s.return_on_capital_employed;
+    const c1y = s.one_year_change_pct, c6m = s.six_months_change_pct;
+    const peakParts = [];
+    if (pe != null && pe > 0 && pe < 8) peakParts.push(`P/E ${pe.toFixed(1)}`);
+    if (ev != null && ev > 0 && ev < 5) peakParts.push(`EV/EBIT ${ev.toFixed(1)}`);
+    if (roe != null && roe > 0.30) peakParts.push(`ROE ${(roe*100).toFixed(0)}%`);
+    if (roce != null && roce > 0.30) peakParts.push(`ROCE ${(roce*100).toFixed(0)}%`);
+    const priceParts = [];
+    if (c1y != null) priceParts.push(`1Y ${c1y >= 0 ? '+' : ''}${c1y.toFixed(0)}%`);
+    if (c6m != null) priceParts.push(`6M ${c6m >= 0 ? '+' : ''}${c6m.toFixed(0)}%`);
+    const severity = trap >= 70 ? 'hög' : (trap >= 55 ? 'måttlig' : 'låg');
+    const bg = trap >= 70 ? '#fef2f2' : '#fff7ed';
+    const border = trap >= 70 ? '#ef4444' : '#f59e0b';
+    const titleColor = trap >= 70 ? '#991b1b' : '#92400e';
+    return `
+        <div style="background:${bg};border-left:4px solid ${border};border-radius:10px;padding:12px 14px;margin-bottom:10px">
+            <div style="display:flex;align-items:center;gap:8px;font-weight:800;color:${titleColor};font-size:13px">
+                🚩 Värdefälle-varning (${severity} risk · ${trap.toFixed(0)}/100)
+            </div>
+            <div style="font-size:12px;color:#3f3f46;line-height:1.5;margin-top:4px">
+                <strong>Peak-siffror:</strong> ${peakParts.join(' · ') || '—'}
+                ${priceParts.length ? `<br><strong>Men pris:</strong> ${priceParts.join(' / ')}` : ''}
+                <br>Marknaden diskonterar sannolikt att TTM är en topp. Graham krävde 7-årssnitt av vinsten i denna situation.
+            </div>
+        </div>
+    `;
+}
+
 function renderBookModelSection(s) {
     const models = evaluateBookModels(s);
     if (!models.length) return '';
@@ -2520,6 +2592,7 @@ function renderBookModelSection(s) {
     const failCount = models.filter(m => m.v.cls === 'v-fail').length;
     const total = models.length;
     const passPct = (passCount / total) * 100;
+    const valueTrapBanner = renderValueTrapBanner(s);
 
     let verdict, verdictColor;
     if (passCount >= total * 0.6) { verdict = 'Stark bokmodell-konsensus'; verdictColor = 'var(--green-dark)'; }
@@ -2542,6 +2615,7 @@ function renderBookModelSection(s) {
 
     return `<div class="drawer-section">
         <div class="drawer-section-title">📚 Bokmodeller (från böckerna)</div>
+        ${valueTrapBanner}
         <div style="background:linear-gradient(135deg,#f5f3ff,#ede9fe);border-radius:12px;padding:14px 16px;margin-bottom:10px">
             <div style="display:flex;align-items:center;gap:14px">
                 <div>
