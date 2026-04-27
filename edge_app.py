@@ -2724,7 +2724,47 @@ def api_refresh_historical():
 
 @app.route("/api/refresh-historical/status")
 def api_refresh_historical_status():
-    return jsonify(_hist_sync_state)
+    """Returnerar både pågående sync OCH täcknings-stats över DB:n."""
+    out = dict(_hist_sync_state) if _hist_sync_state else {}
+    db = get_db()
+    try:
+        from edge_db import _fetchone, _ph
+        # Total täckning
+        ann = _fetchone(db, "SELECT COUNT(DISTINCT orderbook_id) as n FROM historical_annual")
+        qtr = _fetchone(db, "SELECT COUNT(DISTINCT orderbook_id) as n FROM historical_quarterly")
+        log = _fetchone(db, "SELECT COUNT(*) as n FROM historical_fetch_log")
+        log_ok = _fetchone(db,
+            "SELECT COUNT(*) as n FROM historical_fetch_log WHERE last_fetch_status = 'ok'")
+        log_err = _fetchone(db,
+            "SELECT COUNT(*) as n FROM historical_fetch_log WHERE last_fetch_status != 'ok'")
+        total_stocks = _fetchone(db, "SELECT COUNT(*) as n FROM stocks WHERE last_price > 0")
+        last_log = _fetchone(db,
+            "SELECT MAX(last_fetch_at) as t FROM historical_fetch_log")
+
+        def _n(r):
+            if not r: return 0
+            try: return r["n"] or 0
+            except (KeyError, IndexError): return 0
+        def _t(r, k):
+            if not r: return None
+            try: return r[k]
+            except (KeyError, IndexError): return None
+
+        out["coverage"] = {
+            "annual_stocks": _n(ann),
+            "quarterly_stocks": _n(qtr),
+            "fetch_log_total": _n(log),
+            "fetch_log_ok": _n(log_ok),
+            "fetch_log_errors": _n(log_err),
+            "total_stocks_with_price": _n(total_stocks),
+            "last_fetch_at": _t(last_log, "t"),
+            "coverage_pct": round(100.0 * _n(ann) / max(_n(total_stocks), 1), 1),
+        }
+    except Exception as e:
+        out["coverage_error"] = str(e)
+    finally:
+        db.close()
+    return jsonify(out)
 
 
 @app.route("/api/watchlist/near-buy-zone")
