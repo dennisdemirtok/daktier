@@ -929,56 +929,14 @@ async function doRefreshInsiders() {
 // ── Render Cards ──────────────────────────────────────
 
 function renderCards() {
-    if (!statsData) return;
-    const s = statsData;
-    const se = s.countries?.SE || 0;
-    const intl = s.total_stocks - se;
-    const tg = s.top_gainer || {};
-    const tl = s.top_loser || {};
-
-    // Dessa stats dupliceras på Dashboard-tabben — dölj dem där samma info
-    // redan finns tydligare, eller där de bara tar utrymme från huvudinnehållet.
+    // Stat-stripen i toppen är permanent dold — dashboarden har sin egen
+    // "Marknadsöversikt"-sektion som visar samma data, och på övriga flikar
+    // är det bara visuellt brus som tar utrymme från huvudinnehållet.
     const cardsEl = document.getElementById('cards');
-    const hideOn = ['trending', 'hotmovers', 'dashboard'];
-    if (hideOn.includes(currentTab)) {
+    if (cardsEl) {
         cardsEl.style.display = 'none';
         cardsEl.innerHTML = '';
-        return;
     }
-    cardsEl.style.display = '';
-
-    cardsEl.innerHTML = `
-        <div class="card">
-            <div class="card-label">Aktier i databasen</div>
-            <div class="card-value">${(s.total_stocks||0).toLocaleString('sv')}</div>
-            <div class="card-sub">${se} SE + ${intl} internationella</div>
-        </div>
-        <div class="card">
-            <div class="card-label">Avanza-ägare</div>
-            <div class="card-value">${((s.total_owners||0)/1e6).toFixed(1)}M</div>
-            <div class="card-sub">Retail-investerare</div>
-        </div>
-        <div class="card">
-            <div class="card-label">Blankade aktier</div>
-            <div class="card-value">${s.shorted_stocks||0}</div>
-            <div class="card-sub">Med kort position</div>
-        </div>
-        <div class="card">
-            <div class="card-label">Insider-transaktioner</div>
-            <div class="card-value">${s.insider_transactions||0}</div>
-            <div class="card-sub">Senaste 90 dagarna</div>
-        </div>
-        <div class="card">
-            <div class="card-label">Trending Up</div>
-            <div class="card-value" style="font-size:16px;color:var(--green)">${tg.name||'-'}</div>
-            <div class="card-sub">${tg.change ? (tg.change>0?'+':'')+(tg.change*100).toFixed(1)+'% ägare/30d' : ''}</div>
-        </div>
-        <div class="card">
-            <div class="card-label">Trending Down</div>
-            <div class="card-value" style="font-size:16px;color:var(--red)">${tl.name||'-'}</div>
-            <div class="card-sub">${tl.change ? (tl.change*100).toFixed(1)+'% ägare/30d' : ''}</div>
-        </div>
-    `;
 }
 
 // Ska köras varje gång man byter tabb — så kort-synligheten uppdateras
