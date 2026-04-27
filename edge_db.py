@@ -3652,6 +3652,142 @@ def get_borsdata_history_as_annual(db, isin, max_years=10):
     return out
 
 
+def compute_piotroski_fscore(db, isin):
+    """Piotroski F-Score (1-9) från Börsdata-årsrapporter (senaste 2 år).
+
+    9 binära kriterier baserat på Piotroski (2000) "Value Investing: The Use
+    of Historical Financial Statement Information". Akademiskt validerad —
+    bolag med F-Score >= 7 har historiskt slagit marknaden signifikant.
+
+    Lönsamhet (4):
+      1. Positiv nettovinst (NI > 0)
+      2. Positivt operativt kassaflöde (OCF > 0)
+      3. ROA-förbättring YoY (ROA_t > ROA_t-1)
+      4. Earnings quality: OCF > NI (kassaflödet bekräftar vinsten)
+
+    Soliditet (3):
+      5. Långfristig skuld/Assets minskad YoY
+      6. Current ratio förbättrad YoY
+      7. Ingen aktieutspädning (shares ute oförändrat eller minskat)
+
+    Effektivitet (2):
+      8. Bruttomarginal förbättrad YoY
+      9. Asset turnover förbättrad YoY (revenues/assets)
+
+    Returnerar dict med {score, max, details (dict per kriterium), year, year_prev}
+    eller None om data saknas.
+    """
+    if not isin:
+        return None
+    ph = _ph()
+    try:
+        rows = _fetchall(db,
+            f"SELECT period_year, net_profit, operating_cash_flow, "
+            f"total_assets, current_assets, current_liabilities, "
+            f"non_current_liabilities, shares_outstanding, revenues, "
+            f"gross_income "
+            f"FROM borsdata_reports "
+            f"WHERE isin = {ph} AND report_type = {ph} "
+            f"ORDER BY period_year DESC LIMIT 2",
+            (isin, "year"))
+    except Exception:
+        return None
+    if not rows or len(rows) < 2:
+        return None
+
+    cur = dict(rows[0])
+    prev = dict(rows[1])
+
+    # Hjälp-fns för säker division
+    def _safe(num, den):
+        if num is None or den is None or den == 0:
+            return None
+        return num / den
+
+    score = 0
+    details = {}
+
+    # 1. Positiv NI
+    ni_cur = cur.get("net_profit")
+    pos_ni = bool(ni_cur is not None and ni_cur > 0)
+    if pos_ni: score += 1
+    details["positive_net_income"] = pos_ni
+
+    # 2. Positivt OCF
+    ocf_cur = cur.get("operating_cash_flow")
+    pos_ocf = bool(ocf_cur is not None and ocf_cur > 0)
+    if pos_ocf: score += 1
+    details["positive_operating_cf"] = pos_ocf
+
+    # 3. ROA-förbättring
+    roa_cur = _safe(ni_cur, cur.get("total_assets"))
+    roa_prev = _safe(prev.get("net_profit"), prev.get("total_assets"))
+    roa_imp = bool(roa_cur is not None and roa_prev is not None and roa_cur > roa_prev)
+    if roa_imp: score += 1
+    details["roa_improved"] = roa_imp
+    if roa_cur is not None: details["roa_current"] = round(roa_cur * 100, 2)
+    if roa_prev is not None: details["roa_previous"] = round(roa_prev * 100, 2)
+
+    # 4. OCF > NI (earnings quality)
+    quality = bool(ocf_cur is not None and ni_cur is not None and ocf_cur > ni_cur)
+    if quality: score += 1
+    details["ocf_gt_ni"] = quality
+
+    # 5. Långfristig skuld/Assets minskad
+    ltd_ratio_cur = _safe(cur.get("non_current_liabilities"), cur.get("total_assets"))
+    ltd_ratio_prev = _safe(prev.get("non_current_liabilities"), prev.get("total_assets"))
+    debt_imp = bool(ltd_ratio_cur is not None and ltd_ratio_prev is not None
+                    and ltd_ratio_cur < ltd_ratio_prev)
+    if debt_imp: score += 1
+    details["ltd_to_assets_decreased"] = debt_imp
+
+    # 6. Current ratio förbättrad
+    cr_cur = _safe(cur.get("current_assets"), cur.get("current_liabilities"))
+    cr_prev = _safe(prev.get("current_assets"), prev.get("current_liabilities"))
+    cr_imp = bool(cr_cur is not None and cr_prev is not None and cr_cur > cr_prev)
+    if cr_imp: score += 1
+    details["current_ratio_improved"] = cr_imp
+    if cr_cur is not None: details["current_ratio"] = round(cr_cur, 2)
+
+    # 7. Ingen aktieutspädning (tillåt 1% rundningsfel)
+    so_cur = cur.get("shares_outstanding")
+    so_prev = prev.get("shares_outstanding")
+    no_dilution = bool(so_cur is not None and so_prev is not None
+                       and so_cur <= so_prev * 1.01)
+    if no_dilution: score += 1
+    details["no_dilution"] = no_dilution
+
+    # 8. Bruttomarginal förbättrad
+    gm_cur = _safe(cur.get("gross_income"), cur.get("revenues"))
+    gm_prev = _safe(prev.get("gross_income"), prev.get("revenues"))
+    gm_imp = bool(gm_cur is not None and gm_prev is not None and gm_cur > gm_prev)
+    if gm_imp: score += 1
+    details["gross_margin_improved"] = gm_imp
+    if gm_cur is not None: details["gross_margin_current"] = round(gm_cur * 100, 2)
+
+    # 9. Asset turnover förbättrad
+    at_cur = _safe(cur.get("revenues"), cur.get("total_assets"))
+    at_prev = _safe(prev.get("revenues"), prev.get("total_assets"))
+    at_imp = bool(at_cur is not None and at_prev is not None and at_cur > at_prev)
+    if at_imp: score += 1
+    details["asset_turnover_improved"] = at_imp
+
+    # Beräkna hur många kriterier som hade tillräckligt med data för bedömning
+    # (för transparens — om data saknas blir kriteriet False, inte missing)
+    return {
+        "score": score,
+        "max": 9,
+        "details": details,
+        "year": cur.get("period_year"),
+        "year_prev": prev.get("period_year"),
+        "interpretation": (
+            "strong" if score >= 7 else
+            "moderate" if score >= 5 else
+            "weak"
+        ),
+    }
+
+
 def get_borsdata_latest(db, isin, report_type="year"):
     """Hämta senaste Börsdata-rapport för ett bolag (cache 10 min)."""
     if not isin:

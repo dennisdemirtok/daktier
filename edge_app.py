@@ -658,6 +658,15 @@ def api_stock_detail(orderbook_id):
                         d["historical_source"] = "borsdata"
                 except Exception as e:
                     print(f"[stock detail] borsdata fallback: {e}", file=sys.stderr)
+            # Piotroski F-Score (kräver Börsdata >=2 års rapporter)
+            if d.get("isin"):
+                try:
+                    from edge_db import compute_piotroski_fscore
+                    fscore = compute_piotroski_fscore(db, d["isin"])
+                    if fscore:
+                        d["f_score"] = fscore
+                except Exception as e:
+                    print(f"[stock detail] f-score: {e}", file=sys.stderr)
         except Exception as e:
             print(f"[stock detail] hist failed: {e}", file=sys.stderr)
         # Berika med book composite så drawer kan visa det
@@ -5189,6 +5198,7 @@ DEL 9 — DAGENS DB-SNAPSHOT (uppdateras var 5 min)
     def generate():
         nonlocal MODEL
         rate_limit_retries = 0
+        validation_retry_used = False  # max 1 retry på sentiment-violation (block-mode)
         try:
             for _iter in range(8):  # max 8 iterationer (multi-tool)
                 payload = {
@@ -5352,19 +5362,74 @@ DEL 9 — DAGENS DB-SNAPSHOT (uppdateras var 5 min)
                         messages.append({"role": "user", "content": tool_results})
                     continue
 
-                # end_turn → vi är klara. v2.2 Gate 2 — validera output mot
-                # förbjudna sentiment-mönster och rapportera överträdelser.
+                # end_turn → vi är klara. v2.2/2.3 Gate 2 — BLOCK-MODE validering:
+                # validera output FÖRE den anses slutgiltig. Vid violation:
+                #   1. Emit validation_failed (frontend rensar och visar retry-banner)
+                #   2. Bygg correction-prompt med specifika regelbrott
+                #   3. Re-loop med extra user-meddelande, ny LLM-runda
+                #   4. Max 1 retry → om fortfarande violation, emit blocked-rapport
                 full_text = "\n".join([
                     b.get("text", "") for b in accumulator_blocks
                     if b and b.get("type") == "text"
                 ])
                 v22_violations = _validate_v22_sentiment(full_text)
+
+                if v22_violations and not validation_retry_used:
+                    # FIRST violation → retry once
+                    validation_retry_used = True
+                    yield _sse({
+                        "type": "validation_failed",
+                        "count": len(v22_violations),
+                        "violations": v22_violations[:5],
+                        "retrying": True,
+                        "message": "Output blockerad — regenererar utan regelbrott...",
+                    })
+                    # Bygg correction-prompt med konkret feedback
+                    violation_lines = []
+                    for v in v22_violations[:8]:  # max 8 för att hålla prompt kort
+                        rule = v.get("rule", "okänd regel")
+                        sample = v.get("sample", "")
+                        violation_lines.append(f"  - {rule}: \"{sample}\"")
+                    correction_msg = (
+                        f"⛔ DIN FÖREGÅENDE ANALYS BLOCKERADES (Gate 2 — sentiment-violations).\n\n"
+                        f"Detekterade regelbrott ({len(v22_violations)} st):\n"
+                        + "\n".join(violation_lines) + "\n\n"
+                        f"GENERERA OM hela analysen utan dessa regelbrott. Specifikt:\n"
+                        f"• Använd ALDRIG namn på enskilda investerare som källa "
+                        f"(Burry, Buffett, Ackman, Klarman m.fl.)\n"
+                        f"• Använd ALDRIG investmentbanker som åsiktsförstärkare "
+                        f"(Stifel, Goldman, MS, JPM)\n"
+                        f"• Använd ALDRIG forum-citat (Reddit, Seeking Alpha, Motley Fool)\n"
+                        f"• Använd ALDRIG disclaimers som \"sentiment-hygien\" eller "
+                        f"\"KONTEXT, ej signal\" — de är tecken på regelbrott\n"
+                        f"• \"Smart money\" får ENDAST användas om institutionell data "
+                        f"(13F, fond-rapporter); ALDRIG om Avanza-retail-ägare\n"
+                        f"• Earnings revision: använd ALLTID surprise-proxy från quarterly EPS "
+                        f"(YoY-acceleration), aldrig \"data saknas\"\n\n"
+                        f"Skriv hela analysen igen från början, kort och saklig, baserat på "
+                        f"verifierbara nyckeltal från dina tools."
+                    )
+                    # Append last assistant turn + correction user message
+                    asst_content = [b for b in accumulator_blocks if b]
+                    if asst_content:
+                        messages.append({"role": "assistant", "content": asst_content})
+                    messages.append({"role": "user", "content": correction_msg})
+                    # Loopa om — nästa iteration kör ny LLM-rund
+                    continue
+
+                # Antingen passerade validatorn, eller retry användes redan
                 yield _sse({"type": "usage", **usage_info})
                 if v22_violations:
-                    yield _sse({"type": "v22_violation",
-                               "count": len(v22_violations),
-                               "violations": v22_violations[:5]})
-                yield _sse({"type": "done", "model": MODEL})
+                    # BLOCKED — retry också misslyckades
+                    yield _sse({
+                        "type": "validation_blocked",
+                        "count": len(v22_violations),
+                        "violations": v22_violations[:5],
+                        "message": "⛔ Output blockerad efter retry — regelbrotten kvarstår.",
+                    })
+                yield _sse({"type": "done", "model": MODEL,
+                           "validated": not v22_violations,
+                           "retry_used": validation_retry_used})
                 return
 
             # Max iterations nådda

@@ -3204,6 +3204,92 @@ function renderHistoricalSection(s) {
     </div>`;
 }
 
+function renderFScoreSection(s) {
+    const f = s.f_score;
+    if (!f || typeof f.score !== 'number') return '';
+    const score = f.score;
+    const max = f.max || 9;
+    const interp = f.interpretation || (score >= 7 ? 'strong' : score >= 5 ? 'moderate' : 'weak');
+    const d = f.details || {};
+
+    // Färgkodning
+    const interpStyle = {
+        strong:   { bg: 'linear-gradient(135deg,#bbf7d0,#86efac)', color: '#065f46', label: 'Stark' },
+        moderate: { bg: 'linear-gradient(135deg,#fef3c7,#fde68a)', color: '#92400e', label: 'Medel' },
+        weak:     { bg: 'linear-gradient(135deg,#fee2e2,#fca5a5)', color: '#7f1d1d', label: 'Svag' },
+    }[interp] || { bg: 'linear-gradient(135deg,#f3f4f6,#e5e7eb)', color: '#374151', label: '–' };
+
+    // Tydlig grupp-uppdelning enligt Piotroski (2000)
+    const groups = [
+        {
+            title: 'Lönsamhet (4 punkter)',
+            items: [
+                ['Positiv nettovinst', d.positive_net_income],
+                ['Positivt operativt kassaflöde', d.positive_operating_cf],
+                ['ROA förbättrad YoY', d.roa_improved,
+                 (d.roa_current != null && d.roa_previous != null)
+                    ? `${d.roa_previous.toFixed(1)}% → ${d.roa_current.toFixed(1)}%` : null],
+                ['OCF > nettovinst (kvalitet)', d.ocf_gt_ni],
+            ]
+        },
+        {
+            title: 'Soliditet (3 punkter)',
+            items: [
+                ['Långfr. skuld/Tillgångar minskat', d.ltd_to_assets_decreased],
+                ['Current ratio förbättrat', d.current_ratio_improved,
+                 d.current_ratio != null ? `nu ${d.current_ratio.toFixed(2)}` : null],
+                ['Ingen aktieutspädning', d.no_dilution],
+            ]
+        },
+        {
+            title: 'Effektivitet (2 punkter)',
+            items: [
+                ['Bruttomarginal förbättrad', d.gross_margin_improved,
+                 d.gross_margin_current != null ? `nu ${d.gross_margin_current.toFixed(1)}%` : null],
+                ['Asset turnover förbättrad', d.asset_turnover_improved],
+            ]
+        },
+    ];
+
+    function row([label, passed, extra]) {
+        const icon = passed ? '✅' : '❌';
+        const color = passed ? '#059669' : '#9ca3af';
+        const extraSpan = extra ? `<span style="color:#6b7280;font-size:11px;margin-left:6px">${extra}</span>` : '';
+        return `<div style="display:flex;align-items:center;gap:6px;font-size:12px;color:${color};padding:3px 0">
+            ${icon} ${label}${extraSpan}
+        </div>`;
+    }
+
+    return `<div class="drawer-section" style="background:${interpStyle.bg};border-radius:12px;padding:14px 16px">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:10px">
+            <div>
+                <div class="drawer-section-title" style="margin:0;color:${interpStyle.color}">📐 Piotroski F-Score</div>
+                <div style="font-size:11px;color:${interpStyle.color};opacity:0.85;margin-top:2px">
+                    Baserat på Börsdata-rapport ${f.year_prev}→${f.year}
+                </div>
+            </div>
+            <div style="text-align:right">
+                <div style="font-size:32px;font-weight:800;color:${interpStyle.color};line-height:1">
+                    ${score}<span style="font-size:18px;opacity:0.6">/${max}</span>
+                </div>
+                <div style="font-size:11px;font-weight:700;color:${interpStyle.color};text-transform:uppercase;margin-top:2px">
+                    ${interpStyle.label}
+                </div>
+            </div>
+        </div>
+        ${groups.map(g => `
+            <div style="margin-top:10px">
+                <div style="font-size:10px;font-weight:700;color:${interpStyle.color};opacity:0.8;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px">${g.title}</div>
+                ${g.items.map(row).join('')}
+            </div>
+        `).join('')}
+        <div style="font-size:10px;color:${interpStyle.color};opacity:0.7;margin-top:10px;font-style:italic;line-height:1.4">
+            Akademisk bas: Piotroski (2000). Bolag med F-Score ≥ 7 har historiskt slagit marknaden signifikant.
+            ≥ 5 = ok finansiell hälsa. ≤ 3 = varningssignal.
+        </div>
+    </div>`;
+}
+
 function openDrawer(s) {
     if (!s) return;
     _currentDrawerStock = s;
@@ -3588,6 +3674,9 @@ function openDrawer(s) {
 
     // ── 10-års HISTORIK (Avanza /analysis) ──
     html += renderHistoricalSection(s);
+
+    // ── PIOTROSKI F-SCORE (Börsdata) ──
+    html += renderFScoreSection(s);
 
     // ── AI ANALYS-KNAPP ──
     html += `<div class="drawer-section">
@@ -4218,7 +4307,7 @@ function renderAgentTurn(h, idx) {
         if (usage.cache_read_input_tokens > 0) footParts.push(`⚡ ${(usage.cache_read_input_tokens).toLocaleString('sv')} tokens från cache`);
         if (usage.output_tokens) footParts.push(`📤 ${usage.output_tokens} tokens svar`);
         if (footParts.length) footer = `<div class="agent-foot">${footParts.join(' · ')}</div>`;
-        // v2.2 Gate 2 — visa förbjudna sentiment-mönster om upptäckta
+        // v2.2 Gate 2 (legacy warn-mode) — visa förbjudna sentiment-mönster
         if (h.v22_violations && h.v22_violations.length) {
             const list = h.v22_violations.map(v => `<li><strong>${v.rule}:</strong> "${escapeHtml(v.sample)}"</li>`).join('');
             footer += `<div style="background:#fee2e2;color:#991b1b;border-radius:8px;padding:8px 12px;margin-top:8px;font-size:11px">
@@ -4226,6 +4315,29 @@ function renderAgentTurn(h, idx) {
                 <ul style="margin:4px 0 0 16px;padding:0">${list}</ul>
                 <div style="margin-top:4px;font-size:10px;font-style:italic">Disclaimer-prefix räddar inte regeln. Slutsatsen ska INTE förlita sig på dessa källor.</div>
             </div>`;
+        }
+        // BLOCK-MODE: retry pågår just nu (förra försöket blockerades, agent regenererar)
+        if (h.validation_retry && !text) {
+            const list = h.validation_retry.violations.map(v => `<li><strong>${v.rule}:</strong> "${escapeHtml(v.sample)}"</li>`).join('');
+            footer += `<div style="background:#fef3c7;color:#92400e;border-radius:8px;padding:8px 12px;margin-top:8px;font-size:11px;border-left:3px solid #f59e0b">
+                <strong>⚠ ${h.validation_retry.message}</strong>
+                <ul style="margin:4px 0 0 16px;padding:0">${list}</ul>
+                <div style="margin-top:4px;font-size:10px;font-style:italic">Agent skriver om analysen utan dessa regelbrott...</div>
+            </div>`;
+        }
+        // BLOCK-MODE: retry också misslyckades — output blockerad permanent
+        if (h.validation_blocked) {
+            const list = h.validation_blocked.violations.map(v => `<li><strong>${v.rule}:</strong> "${escapeHtml(v.sample)}"</li>`).join('');
+            footer += `<div style="background:#fee2e2;color:#7f1d1d;border-radius:8px;padding:10px 12px;margin-top:8px;font-size:11px;border:2px solid #dc2626">
+                <strong>${h.validation_blocked.message}</strong>
+                <ul style="margin:4px 0 0 16px;padding:0">${list}</ul>
+                <div style="margin-top:4px;font-size:10px;font-style:italic">Agenten lyckades inte producera giltig output efter 1 retry. Försök ställa om frågan eller kör en ny analys.</div>
+            </div>`;
+        }
+        // PASS-indikator när validatorn passerat utan retry
+        if (h.model && !h.v22_violations && !h.validation_retry && !h.validation_blocked && h.validated !== false) {
+            // Subtil — kan tas bort om för noisy
+            // footer += `<div style="font-size:10px;color:#059669;margin-top:6px">✓ Sentiment-validatorn passerade</div>`;
         }
 
         return `<div class="agent-msg ai">
@@ -4429,8 +4541,26 @@ function handleAgentSSE(ev, turn) {
     if (!ev || !ev.type) return;
     switch (ev.type) {
         case 'v22_violation':
-            // Visa varning post-stream om förbjudna sentiment-mönster hittades
+            // Legacy event (warn-mode) — behållen för bakåtkompabilitet
             turn.v22_violations = ev.violations || [];
+            break;
+        case 'validation_failed':
+            // BLOCK-MODE: agent retry:ar nu. Rensa förra outputen och visa banner.
+            turn.content = ''; // wipa första försöket
+            turn.tools = (turn.tools || []).filter(t => t.status === 'done' || t.status === 'error'); // behåll tool-historik
+            turn.validation_retry = {
+                violations: ev.violations || [],
+                count: ev.count || 0,
+                message: ev.message || 'Output blockerad — regenererar...',
+            };
+            break;
+        case 'validation_blocked':
+            // Retry också misslyckades
+            turn.validation_blocked = {
+                violations: ev.violations || [],
+                count: ev.count || 0,
+                message: ev.message || '⛔ Output blockerad efter retry.',
+            };
             break;
         case 'text_delta':
             turn.content = (turn.content || '') + (ev.text || '');
