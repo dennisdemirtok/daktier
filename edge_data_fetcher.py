@@ -49,11 +49,20 @@ class EdgeDataFetcher:
         self._persisted = self._load_persisted()
 
         self._session = requests.Session()
+        # Browser-mimik headers — Avanza har anti-bot-detektering som kan
+        # blocka om Accept eller Referer saknas (gäller särskilt från
+        # icke-svenska IP:er som Railway).
         self._session.headers.update({
             "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
                           "AppleWebKit/537.36 (KHTML, like Gecko) "
                           "Chrome/120.0.0.0 Safari/537.36",
+            "Accept": "application/json, text/plain, */*",
             "Accept-Language": "sv-SE,sv;q=0.9,en;q=0.8",
+            "Origin": "https://www.avanza.se",
+            "Referer": "https://www.avanza.se/aktier/om-aktien.html",
+            "sec-ch-ua": '"Not_A Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"',
+            "sec-ch-ua-mobile": "?0",
+            "sec-ch-ua-platform": '"macOS"',
         })
 
     # ──────────────────────────────────────────────────────────────
@@ -574,6 +583,178 @@ class EdgeDataFetcher:
         # Aktier som saknar avanza_id i mappningen ignoreras.
         # Lägg till manuellt i data/avanza_id_map.json vid behov.
         return None
+
+    # ──────────────────────────────────────────────────────────────
+    #  HISTORICAL FINANCIALS (Avanza /analysis endpoint)
+    # ──────────────────────────────────────────────────────────────
+
+    def fetch_avanza_analysis(self, orderbook_id):
+        """Hämta 10 års strukturerad historik från Avanza /analysis-endpoint.
+
+        Returnerar en parsad dict med:
+          annual:   [{year, eps, sales, net_profit, profit_margin, roe, pe, pb,
+                      ps, ev_ebit, equity_per_share, turnover_per_share,
+                      net_debt_ebitda, debt_to_equity, total_assets,
+                      total_liabilities, dividend_per_share, direct_yield,
+                      dividend_payout_ratio, report_date}]
+          quarterly: samma fält per kvartal (10 kvartal)
+          raw: full API-respons (för debug)
+
+        Returnerar None vid fel.
+        """
+        oid = str(orderbook_id)
+        cache_key = f"avanza_analysis_{oid}"
+        # 7 dagars cache — kvartalsrapporter är sällanhändelser
+        if self._is_cached(cache_key, 86400 * 7):
+            return self._cache[cache_key]
+
+        try:
+            url = f"https://www.avanza.se/_api/market-guide/stock/{oid}/analysis"
+            resp = self._session.get(url, timeout=15)
+            if resp.status_code != 200:
+                print(f"[EDGE] /analysis {oid}: HTTP {resp.status_code} body={resp.text[:200]}")
+                return None
+            raw = resp.json()
+            # Skip om svaret är tomt (ETF, certifikat, etc.)
+            if not raw or not isinstance(raw, dict):
+                print(f"[EDGE] /analysis {oid}: tomt/invalidt JSON-svar")
+                return None
+            # Kolla om alla data-block är tomma → no_data
+            data_blocks = ["companyKeyRatiosByYear", "companyFinancialsByYear", "stockKeyRatiosByYear"]
+            has_any_data = any(
+                raw.get(b) and any(v for v in (raw[b].values() if isinstance(raw[b], dict) else []))
+                for b in data_blocks
+            )
+            if not has_any_data:
+                # Tomt men giltigt svar — bolaget har ingen historisk fundamental data
+                return None
+        except Exception as e:
+            print(f"[EDGE] /analysis {oid} exception: {type(e).__name__}: {e}")
+            return None
+
+        parsed = self._parse_avanza_analysis(raw)
+        parsed["raw"] = raw
+        parsed["orderbook_id"] = int(oid) if oid.isdigit() else oid
+        self._set_cache(cache_key, parsed)
+        return parsed
+
+    @staticmethod
+    def _parse_avanza_analysis(raw):
+        """Parsa /analysis-respons till flat lista per år + kvartal."""
+        def _series(block, metric):
+            """Plocka ut en serie som dict {year: value} eller {(year,q): value}."""
+            data = (raw.get(block) or {}).get(metric) or []
+            return data
+
+        def _index_by_year(series):
+            out = {}
+            for item in series:
+                y = item.get("financialYear")
+                if y is not None:
+                    out[y] = {"value": item.get("value"), "date": item.get("date")}
+            return out
+
+        def _index_by_quarter(series):
+            out = {}
+            for item in series:
+                y = item.get("financialYear")
+                q = item.get("reportType")
+                if y is not None and q:
+                    out[(y, q)] = {"value": item.get("value"), "date": item.get("date")}
+            return out
+
+        # Annual — använder companyKeyRatiosByYear för EPS/ROE, companyFinancialsByYear för sales/netProfit, stockKeyRatiosByYear för PE/PB
+        eps_y = _index_by_year(_series("companyKeyRatiosByYear", "earningsPerShare"))
+        sales_y = _index_by_year(_series("companyFinancialsByYear", "sales"))
+        np_y = _index_by_year(_series("companyFinancialsByYear", "netProfit"))
+        margin_y = _index_by_year(_series("companyFinancialsByYear", "profitMargin"))
+        ta_y = _index_by_year(_series("companyFinancialsByYear", "totalAssets"))
+        tl_y = _index_by_year(_series("companyFinancialsByYear", "totalLiabilities"))
+        de_y = _index_by_year(_series("companyFinancialsByYear", "debtToEquityRatio"))
+        eq_y = _index_by_year(_series("companyKeyRatiosByYear", "equityPerShare"))
+        tps_y = _index_by_year(_series("companyKeyRatiosByYear", "turnoverPerShare"))
+        nd_y = _index_by_year(_series("companyKeyRatiosByYear", "netDebtEbitdaRatio"))
+        roe_y = _index_by_year(_series("companyKeyRatiosByYear", "returnOnEquityRatio"))
+        pe_y = _index_by_year(_series("stockKeyRatiosByYear", "priceEarningsRatio"))
+        pb_y = _index_by_year(_series("stockKeyRatiosByYear", "priceBookRatio"))
+        ps_y = _index_by_year(_series("stockKeyRatiosByYear", "priceSalesRatio"))
+        ev_y = _index_by_year(_series("stockKeyRatiosByYear", "evEbitRatio"))
+        div_y = _index_by_year(_series("dividendsByYear", "dividendPerShare"))
+        dy_y = _index_by_year(_series("dividendsByYear", "directYieldRatio"))
+        payout_y = _index_by_year(_series("dividendsByYear", "dividendPayoutRatio"))
+
+        all_years = sorted(set().union(
+            eps_y, sales_y, np_y, roe_y, pe_y, pb_y, div_y
+        ))
+        annual = []
+        for y in all_years:
+            def _v(d):
+                return d.get(y, {}).get("value")
+            def _d(d):
+                return d.get(y, {}).get("date")
+            row = {
+                "year": y,
+                "report_date": _d(eps_y) or _d(np_y) or _d(div_y),
+                "eps": _v(eps_y),
+                "sales": _v(sales_y),
+                "net_profit": _v(np_y),
+                "profit_margin": _v(margin_y),
+                "total_assets": _v(ta_y),
+                "total_liabilities": _v(tl_y),
+                "debt_to_equity": _v(de_y),
+                "equity_per_share": _v(eq_y),
+                "turnover_per_share": _v(tps_y),
+                "net_debt_ebitda": _v(nd_y),
+                "return_on_equity": _v(roe_y),
+                "pe_ratio": _v(pe_y),
+                "pb_ratio": _v(pb_y),
+                "ps_ratio": _v(ps_y),
+                "ev_ebit": _v(ev_y),
+                "dividend_per_share": _v(div_y),
+                "direct_yield": _v(dy_y),
+                "dividend_payout_ratio": _v(payout_y),
+            }
+            annual.append(row)
+
+        # Quarterly — endast de mest relevanta fälten
+        eps_q = _index_by_quarter(_series("companyKeyRatiosByQuarter", "earningsPerShare"))
+        sales_q = _index_by_quarter(_series("companyFinancialsByQuarter", "sales"))
+        np_q = _index_by_quarter(_series("companyFinancialsByQuarter", "netProfit"))
+        margin_q = _index_by_quarter(_series("companyFinancialsByQuarter", "profitMargin"))
+        roe_q = _index_by_quarter(_series("companyKeyRatiosByQuarter", "returnOnEquityRatio"))
+        eq_q = _index_by_quarter(_series("companyKeyRatiosByQuarter", "equityPerShare"))
+        pe_q = _index_by_quarter(_series("stockKeyRatiosByQuarter", "priceEarningsRatio"))
+        pb_q = _index_by_quarter(_series("stockKeyRatiosByQuarter", "priceBookRatio"))
+        ev_q = _index_by_quarter(_series("stockKeyRatiosByQuarter", "evEbitRatio"))
+
+        all_q = sorted(set().union(eps_q, sales_q, np_q, roe_q, pe_q, pb_q))
+        quarterly = []
+        for key in all_q:
+            y, q = key
+            def _vq(d):
+                return d.get(key, {}).get("value")
+            def _dq(d):
+                return d.get(key, {}).get("date")
+            row = {
+                "year": y,
+                "quarter": q,
+                "report_date": _dq(eps_q) or _dq(np_q),
+                "eps": _vq(eps_q),
+                "sales": _vq(sales_q),
+                "net_profit": _vq(np_q),
+                "profit_margin": _vq(margin_q),
+                "return_on_equity": _vq(roe_q),
+                "equity_per_share": _vq(eq_q),
+                "pe_ratio": _vq(pe_q),
+                "pb_ratio": _vq(pb_q),
+                "ev_ebit": _vq(ev_q),
+            }
+            quarterly.append(row)
+
+        return {
+            "annual": annual,
+            "quarterly": quarterly,
+        }
 
     def _ticker_to_search_name(self, ticker):
         """Konvertera Yahoo-ticker till sökbart namn."""

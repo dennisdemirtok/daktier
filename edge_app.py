@@ -2903,6 +2903,54 @@ def api_refresh_historical():
     return jsonify({"status": "started", "tier": tier})
 
 
+@app.route("/api/debug/avanza-test")
+def api_debug_avanza_test():
+    """Diagnostisk endpoint — testar EN Avanza-fetch och returnerar raw status.
+    Hjälper avgöra om Railway blir geo-blockad eller om headers behöver justeras."""
+    import requests as _r
+    oid = request.args.get("oid", "5247")  # Investor B default
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Accept-Language": "sv-SE,sv;q=0.9,en;q=0.8",
+        "Accept": "application/json, text/plain, */*",
+        "Referer": f"https://www.avanza.se/aktier/om-aktien.html/{oid}/",
+        "Origin": "https://www.avanza.se",
+    }
+    out = {"oid": oid}
+    try:
+        r = _r.get(f"https://www.avanza.se/_api/market-guide/stock/{oid}/analysis",
+                   headers=headers, timeout=15)
+        out["status_code"] = r.status_code
+        out["response_size"] = len(r.text)
+        out["body_prefix"] = r.text[:500]
+        out["headers"] = dict(r.headers)
+        try:
+            j = r.json()
+            out["json_keys"] = list(j.keys()) if isinstance(j, dict) else None
+            if isinstance(j, dict) and j.get("companyKeyRatiosByYear"):
+                yr = j["companyKeyRatiosByYear"]
+                if isinstance(yr, dict):
+                    out["sample_eps_count"] = len((yr.get("earningsPerShare") or []))
+        except Exception as je:
+            out["json_error"] = str(je)
+    except Exception as e:
+        out["error"] = str(e)
+    return jsonify(out)
+
+
+@app.route("/api/refresh-historical/reset", methods=["POST"])
+def api_refresh_historical_reset():
+    """Rensa fetch_log så bootstrapen kan köras om från noll.
+    Används när Railway-syncen failat och vi vill testa igen efter fix."""
+    db = get_db()
+    try:
+        db.execute("DELETE FROM historical_fetch_log")
+        db.commit()
+        return jsonify({"status": "reset", "message": "fetch_log rensad"})
+    finally:
+        db.close()
+
+
 @app.route("/api/refresh-historical/status")
 def api_refresh_historical_status():
     """Returnerar både pågående sync OCH täcknings-stats över DB:n."""
