@@ -3001,6 +3001,62 @@ def api_refresh_historical_reset():
         db.close()
 
 
+@app.route("/api/borsdata/sync", methods=["POST"])
+def api_borsdata_sync():
+    """Synkar Börsdata-data (riktig FCF/EBIT/skuld) för svenska bolag.
+
+    Body: {limit: int, max_age_days: int}
+    """
+    body = request.json if request.is_json else {}
+    limit = body.get("limit")
+    max_age = body.get("max_age_days", 7)
+
+    def _run():
+        from edge_db import sync_borsdata_reports
+        db = get_db()
+        try:
+            res = sync_borsdata_reports(db, limit=limit, max_age_days=max_age)
+            print(f"[Börsdata] Sync klar: {res}")
+        finally:
+            db.close()
+
+    threading.Thread(target=_run, daemon=True).start()
+    return jsonify({"status": "started", "limit": limit})
+
+
+@app.route("/api/borsdata/status")
+def api_borsdata_status():
+    """Returnerar hur många bolag har Börsdata-data."""
+    db = get_db()
+    try:
+        from edge_db import _fetchone
+        n_total = _fetchone(db, "SELECT COUNT(DISTINCT isin) as n FROM borsdata_reports")
+        n_year = _fetchone(db, "SELECT COUNT(*) as n FROM borsdata_reports WHERE report_type = 'year'")
+        n_q = _fetchone(db, "SELECT COUNT(*) as n FROM borsdata_reports WHERE report_type = 'quarter'")
+        last = _fetchone(db, "SELECT MAX(fetched_at) as t FROM borsdata_reports")
+        n_se = _fetchone(db,
+            "SELECT COUNT(DISTINCT s.orderbook_id) as n FROM stocks s "
+            "JOIN borsdata_reports b ON s.isin = b.isin "
+            "WHERE s.country = 'SE'")
+    finally:
+        db.close()
+    def _n(r):
+        if not r: return 0
+        try: return r["n"] or 0
+        except (KeyError, IndexError): return 0
+    def _t(r, k):
+        if not r: return None
+        try: return r[k]
+        except (KeyError, IndexError): return None
+    return jsonify({
+        "borsdata_companies_total": _n(n_total),
+        "annual_reports": _n(n_year),
+        "quarterly_reports": _n(n_q),
+        "last_fetch": _t(last, "t"),
+        "swedish_stocks_with_borsdata": _n(n_se),
+    })
+
+
 @app.route("/api/refresh-historical/status")
 def api_refresh_historical_status():
     """Returnerar både pågående sync OCH täcknings-stats över DB:n."""

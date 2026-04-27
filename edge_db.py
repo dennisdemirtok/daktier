@@ -380,6 +380,42 @@ def _create_tables(db):
                 fetched_at TEXT,
                 PRIMARY KEY (period, period_type)
             );
+
+            CREATE TABLE IF NOT EXISTS borsdata_reports (
+                isin TEXT NOT NULL,
+                ins_id INTEGER NOT NULL,
+                report_type TEXT NOT NULL,
+                period_year INTEGER NOT NULL,
+                period_q INTEGER,
+                report_end_date TEXT,
+                currency TEXT,
+                operating_cash_flow DOUBLE PRECISION,
+                free_cash_flow DOUBLE PRECISION,
+                investing_cash_flow DOUBLE PRECISION,
+                operating_income DOUBLE PRECISION,
+                net_profit DOUBLE PRECISION,
+                eps DOUBLE PRECISION,
+                revenues DOUBLE PRECISION,
+                total_assets DOUBLE PRECISION,
+                total_equity DOUBLE PRECISION,
+                total_liabilities DOUBLE PRECISION,
+                cash_and_equivalents DOUBLE PRECISION,
+                net_debt DOUBLE PRECISION,
+                shares_outstanding DOUBLE PRECISION,
+                dividend DOUBLE PRECISION,
+                stock_price_avg DOUBLE PRECISION,
+                fetched_at TEXT,
+                PRIMARY KEY (isin, report_type, period_year, period_q)
+            );
+
+            CREATE TABLE IF NOT EXISTS borsdata_instrument_map (
+                isin TEXT PRIMARY KEY,
+                ins_id INTEGER NOT NULL,
+                ticker TEXT,
+                name TEXT,
+                market_id INTEGER,
+                fetched_at TEXT
+            );
         """)
         # Indexes
         for idx_sql in [
@@ -401,6 +437,8 @@ def _create_tables(db):
             "CREATE INDEX IF NOT EXISTS idx_hist_quarterly_oid ON historical_quarterly(orderbook_id)",
             "CREATE INDEX IF NOT EXISTS idx_hist_fetch_log_at ON historical_fetch_log(last_fetch_at)",
             "CREATE INDEX IF NOT EXISTS idx_macro_period_type ON macro_history(period_type, period DESC)",
+            "CREATE INDEX IF NOT EXISTS idx_borsdata_isin ON borsdata_reports(isin)",
+            "CREATE INDEX IF NOT EXISTS idx_borsdata_period ON borsdata_reports(report_type, period_year DESC)",
         ]:
             cur.execute(idx_sql)
         cur.close()
@@ -668,6 +706,47 @@ def _create_tables(db):
             CREATE INDEX IF NOT EXISTS idx_hist_quarterly_oid ON historical_quarterly(orderbook_id);
             CREATE INDEX IF NOT EXISTS idx_hist_fetch_log_at ON historical_fetch_log(last_fetch_at);
             CREATE INDEX IF NOT EXISTS idx_macro_period_type ON macro_history(period_type, period DESC);
+
+            -- Börsdata-data per bolag och period (riktig FCF, EBIT, nettoskuld m.m.)
+            CREATE TABLE IF NOT EXISTS borsdata_reports (
+                isin TEXT NOT NULL,
+                ins_id INTEGER NOT NULL,
+                report_type TEXT NOT NULL,  -- 'year' | 'quarter' | 'r12' (TTM)
+                period_year INTEGER NOT NULL,
+                period_q INTEGER,  -- NULL för år, 1-4 för kvartal
+                report_end_date TEXT,
+                currency TEXT,
+                operating_cash_flow REAL,
+                free_cash_flow REAL,
+                investing_cash_flow REAL,
+                operating_income REAL,
+                net_profit REAL,
+                eps REAL,
+                revenues REAL,
+                total_assets REAL,
+                total_equity REAL,
+                total_liabilities REAL,
+                cash_and_equivalents REAL,
+                net_debt REAL,
+                shares_outstanding REAL,
+                dividend REAL,
+                stock_price_avg REAL,
+                fetched_at TEXT,
+                PRIMARY KEY (isin, report_type, period_year, period_q)
+            );
+
+            -- Mappnings-cache Avanza orderbook_id → Börsdata insId via ISIN
+            CREATE TABLE IF NOT EXISTS borsdata_instrument_map (
+                isin TEXT PRIMARY KEY,
+                ins_id INTEGER NOT NULL,
+                ticker TEXT,
+                name TEXT,
+                market_id INTEGER,
+                fetched_at TEXT
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_borsdata_isin ON borsdata_reports(isin);
+            CREATE INDEX IF NOT EXISTS idx_borsdata_period ON borsdata_reports(report_type, period_year DESC);
         """)
         db.commit()
         _ensure_smart_score_columns(db)
@@ -2332,6 +2411,32 @@ def _attach_hist_bulk(db, stock_dicts):
     for r in rows:
         by_oid.setdefault(r["orderbook_id"], []).append(dict(r))
 
+    # Börsdata: bulk-attacha senaste år-rapport per short_name
+    # (Avanza saknar ISIN, vi matchar via Avanza.short_name = Börsdata.ticker
+    # via mappnings-tabellen borsdata_instrument_map)
+    short_names = list({d.get("short_name") for d in stock_dicts
+                        if isinstance(d, dict) and d.get("short_name")})
+    borsdata_by_short = {}
+    if short_names:
+        try:
+            sn_placeholders = ",".join([ph] * len(short_names))
+            bd_rows = _fetchall(db,
+                f"SELECT b.*, m.ticker FROM borsdata_reports b "
+                f"JOIN borsdata_instrument_map m ON b.isin = m.isin "
+                f"WHERE m.ticker IN ({sn_placeholders}) "
+                f"AND b.report_type = 'year' "
+                f"ORDER BY m.ticker, b.period_year DESC", short_names)
+            for r in bd_rows:
+                ticker = r["ticker"]
+                if ticker not in borsdata_by_short:
+                    borsdata_by_short[ticker] = dict(r)
+        except Exception:
+            pass
+
+    for d in stock_dicts:
+        if isinstance(d, dict) and d.get("short_name") and d["short_name"] in borsdata_by_short:
+            d["_borsdata_latest"] = borsdata_by_short[d["short_name"]]
+
     # v2.2/v2.3: quarterly EPS + ROE för earnings revision-proxy och Quality-trend
     quarterly_by_oid = {}
     roe_quarters_by_oid = {}
@@ -2839,6 +2944,160 @@ def _fx_rate(from_currency, to_currency="SEK"):
     return 1.0
 
 
+# ──────────────────────────────────────────────────────────────
+# Börsdata-integration (riktig FCF/EBIT/SBC/skuld för nordiska bolag)
+# ──────────────────────────────────────────────────────────────
+
+_BORSDATA_CACHE = {}  # isin → senaste-året-data (for fast scoring)
+_BORSDATA_CACHE_TS = 0
+_BORSDATA_CACHE_TTL = 600  # 10 min
+
+
+def sync_borsdata_reports(db, limit=None, max_age_days=7):
+    """Synkar Börsdata-rapporter för svenska/nordiska bolag i vår DB.
+    Mappar via ISIN: bolag som finns i båda Avanza och Börsdata.
+
+    Returnerar {synced, skipped, errors, total}.
+    """
+    try:
+        from borsdata_fetcher import (
+            fetch_all_instruments, fetch_reports, extract_v21_metrics,
+            BORSDATA_KEY,
+        )
+    except ImportError:
+        return {"error": "borsdata_fetcher saknas"}
+    if not BORSDATA_KEY:
+        return {"error": "BORSDATA_API_KEY saknas i miljön"}
+
+    ph = _ph()
+    cutoff = (datetime.now() - timedelta(days=max_age_days)).isoformat()
+    now_iso = datetime.now().isoformat()
+
+    # Hämta Avanza-bolag (matchar via short_name = Börsdata ticker)
+    avz_rows = _fetchall(db,
+        f"SELECT orderbook_id, isin, short_name, name, country FROM stocks "
+        f"WHERE short_name IS NOT NULL AND short_name != '' AND last_price > 0 "
+        f"AND number_of_owners >= 100")
+    # Mappa via short_name eftersom ISIN är tomt i Avanza-data
+    avz_by_short = {r["short_name"]: r for r in avz_rows}
+
+    # Hämta Börsdata-instruments
+    print(f"[Börsdata] Hämtar instrumentlista...")
+    instruments = fetch_all_instruments()
+    # Börsdata ticker matchar Avanza short_name (t.ex. "INVE B")
+    bd_by_ticker = {i["ticker"]: i for i in instruments if i.get("ticker")}
+
+    # Matcha på ticker = short_name. ISIN i borsdata används som primary key i DB
+    matched = []
+    for short_name, avz in avz_by_short.items():
+        bd = bd_by_ticker.get(short_name)
+        if bd and bd.get("isin"):
+            matched.append((bd["isin"], bd, avz))
+
+    print(f"[Börsdata] Matchade {len(matched)} bolag (av {len(avz_by_short)} Avanza-bolag + {len(bd_by_ticker)} Börsdata-tickers)")
+
+    if limit:
+        matched = matched[:limit]
+
+    synced = 0
+    skipped = 0
+    errors = 0
+
+    # Spara mappnings-cache
+    for isin, bd_inst, _ in matched:
+        ins_id = bd_inst.get("insId")
+        try:
+            db.execute(
+                f"INSERT OR REPLACE INTO borsdata_instrument_map "
+                f"(isin, ins_id, ticker, name, market_id, fetched_at) "
+                f"VALUES ({ph}, {ph}, {ph}, {ph}, {ph}, {ph})",
+                (isin, ins_id, bd_inst.get("ticker"), bd_inst.get("name"),
+                 bd_inst.get("marketId"), now_iso))
+        except Exception as e:
+            print(f"[Börsdata] map-insert fel: {e}")
+    db.commit()
+
+    for i, (isin, bd_inst, avz) in enumerate(matched):
+        ins_id = bd_inst.get("insId")
+        if i % 50 == 0:
+            print(f"[Börsdata] {i}/{len(matched)} ({avz['name']})")
+
+        # Skippa om vi har färska data
+        last = _fetchone(db,
+            f"SELECT MAX(fetched_at) as t FROM borsdata_reports WHERE isin = {ph}", (isin,))
+        if last:
+            try:
+                last_t = last["t"]
+                if last_t and last_t > cutoff:
+                    skipped += 1
+                    continue
+            except (KeyError, IndexError):
+                pass
+
+        try:
+            # Hämta år + kvartal (ger oss både årlig + quarterly)
+            for report_type in ("year", "quarter"):
+                reports = fetch_reports(ins_id, report_type)
+                for r in reports:
+                    metrics = extract_v21_metrics(r)
+                    period_year = r.get("year")
+                    period_q = r.get("period") if report_type == "quarter" else None
+                    # period 5 = full år, period 1-4 = kvartal
+                    if report_type == "quarter" and period_q in (None, 5):
+                        continue
+
+                    db.execute(
+                        f"INSERT OR REPLACE INTO borsdata_reports "
+                        f"(isin, ins_id, report_type, period_year, period_q, "
+                        f"report_end_date, currency, operating_cash_flow, free_cash_flow, "
+                        f"investing_cash_flow, operating_income, net_profit, eps, revenues, "
+                        f"total_assets, total_equity, total_liabilities, cash_and_equivalents, "
+                        f"net_debt, shares_outstanding, dividend, stock_price_avg, fetched_at) "
+                        f"VALUES ({', '.join([ph]*23)})",
+                        (isin, ins_id, report_type, period_year, period_q,
+                         metrics.get("report_end_date"), metrics.get("currency"),
+                         metrics.get("operating_cash_flow"), metrics.get("free_cash_flow"),
+                         metrics.get("investing_cash_flow"), metrics.get("operating_income"),
+                         metrics.get("net_profit"), metrics.get("earnings_per_share"),
+                         metrics.get("revenues"), metrics.get("total_assets"),
+                         metrics.get("total_equity"), metrics.get("total_liabilities"),
+                         metrics.get("cash_and_equivalents"), metrics.get("net_debt"),
+                         metrics.get("shares_outstanding"), metrics.get("dividend"),
+                         metrics.get("stock_price_avg"), now_iso))
+            synced += 1
+        except Exception as e:
+            print(f"[Börsdata] {avz['name']}: {e}")
+            errors += 1
+        if synced % 100 == 0 and synced > 0:
+            db.commit()
+
+    db.commit()
+    return {"synced": synced, "skipped": skipped, "errors": errors, "total": len(matched)}
+
+
+def get_borsdata_latest(db, isin, report_type="year"):
+    """Hämta senaste Börsdata-rapport för ett bolag (cache 10 min)."""
+    if not isin:
+        return None
+    global _BORSDATA_CACHE_TS
+    now = time.time()
+    cache_key = (isin, report_type)
+    if (now - _BORSDATA_CACHE_TS) > _BORSDATA_CACHE_TTL:
+        _BORSDATA_CACHE.clear()
+        _BORSDATA_CACHE_TS = now
+    if cache_key in _BORSDATA_CACHE:
+        return _BORSDATA_CACHE[cache_key]
+
+    ph = _ph()
+    row = _fetchone(db,
+        f"SELECT * FROM borsdata_reports WHERE isin = {ph} AND report_type = {ph} "
+        f"ORDER BY period_year DESC, period_q DESC LIMIT 1",
+        (isin, report_type))
+    result = dict(row) if row else None
+    _BORSDATA_CACHE[cache_key] = result
+    return result
+
+
 def _market_cap_native(s):
     """Returnerar market_cap i bolagets nativa valuta.
 
@@ -2891,25 +3150,59 @@ _SECTOR_SBC_PROXY = {
 
 
 def _score_fcf_yield(s, classification):
-    """FCF Yield Score (v2.1 Patch 2).
+    """FCF Yield Score — Börsdata-data om tillgänglig, annars sektor-proxy.
 
-    Korrekt formel:
-        FCF = OCF − CapEx
-        FCF (SBC-justerad) = FCF − SBC      (obligatorisk för tech/asset_light)
-        EV = MarketCap + TotalDebt − Cash    (vi approximerar via debt_to_equity)
-        FCF Yield = FCF (SBC-adj) / EV
-
-    Eftersom Avanza inte levererar CapEx eller SBC separat, använder vi
-    sektor-baserade proxies. Detta är dämpat jämfört med v2 (som använde
-    rå OCF / MarketCap och därför överskattade tech-bolag dramatiskt).
-
-    För Microsoft-fallet:
-        v2:      OCF $160B / MCap $2,8T = 5.7% → score 60   (felaktigt högt)
-        v2.1:   FCF SBC-adj ~$70-80B / EV ~$3,1T = 2.3-2.6% → score 25-30
+    Med Börsdata: riktig FCF (OCF − investing CF), riktig nettoskuld → riktig EV.
+    Utan Börsdata: OCF − sektor-CapEx-proxy, EV = MCap × (1 + 0.5 × D/E).
     """
+    # ── Försök hämta riktiga Börsdata-värden via ISIN ──
+    bd = s.get("_borsdata_latest")  # förladdad i bulk-attach
+    if bd:
+        fcf_real = bd.get("free_cash_flow")
+        net_debt = bd.get("net_debt") or 0
+        cash = bd.get("cash_and_equivalents") or 0
+        market_cap = _market_cap_native(s)
+        if fcf_real is not None and market_cap and market_cap > 0:
+            # SBC saknas i Börsdata-reports — vi approximerar 5% för tech
+            sector = classification.get("sector", "unknown")
+            if sector == "tech" or classification.get("asset_intensity") == "asset_light":
+                sbc_adj = fcf_real * 0.95
+            else:
+                sbc_adj = fcf_real
+            # Riktig EV = MCap + Net Debt (Börsdata net_debt är redan total_debt - cash)
+            ev = market_cap + net_debt
+            if ev <= 0:
+                return None
+            fcf_yield = sbc_adj / ev
+            if fcf_yield > 0.08: base = 100
+            elif fcf_yield > 0.06: base = 80
+            elif fcf_yield > 0.04: base = 60
+            elif fcf_yield > 0.03: base = 40
+            elif fcf_yield > 0.02: base = 20
+            elif fcf_yield > 0.01: base = max(5, fcf_yield * 1000)
+            else: base = 0
+
+            s["_fcf_debug"] = {
+                "source": "borsdata_real",
+                "currency": bd.get("currency", "?"),
+                "market_cap_native": round(market_cap),
+                "free_cash_flow_real": round(fcf_real),
+                "fcf_sbc_adj": round(sbc_adj),
+                "net_debt": round(net_debt),
+                "enterprise_value_real": round(ev),
+                "fcf_yield_on_ev_pct": round(fcf_yield * 100, 2),
+                "score": round(base, 1),
+                "data_quality": {
+                    "fcf_actual_available": True,
+                    "net_debt_actual_available": True,
+                    "ev_actual_available": True,
+                    "sbc_actual_available": False,  # ingen separation i Börsdata
+                },
+            }
+            return _clamp(base)
+
+    # ── Fallback: proxy-version (sektorbaserad CapEx + D/E EV) ──
     ocf = s.get("operating_cash_flow")
-    # v2.1 valuta-fix: använd market_cap i bolagets nativa valuta
-    # (Avanza lagrar mcap i SEK för utländska bolag → skala-mismatch annars)
     market_cap = _market_cap_native(s)
     if not ocf or not market_cap or market_cap <= 0:
         return None
