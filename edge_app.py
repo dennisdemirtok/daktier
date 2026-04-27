@@ -5574,6 +5574,86 @@ def _startup():
         print(f"  ⚠ Kunde inte starta auto-sync: {e}")
         import traceback; traceback.print_exc()
 
+    # ── Bulk-bootstrap för Börsdata-prishistorik (10 år bakåt) ────────
+    # Backtester behöver flera års dagliga priser. Schemalagda jobbet drar
+    # bara inkrementellt från senast vi har, så tom DB → bara dagens priser.
+    # Vi auto-detekterar gles data och kickar igång full 10-års-fetch.
+    # Tar ~1-2h för ~1500 nordiska + ~hundratals globala bolag.
+    try:
+        db = get_db()
+        try:
+            from edge_db import _fetchone, _ph as _ph_fn
+            # Hur många pris-rader har vi totalt?
+            row = _fetchone(db, "SELECT COUNT(*) as n FROM borsdata_prices")
+            n_prices = 0
+            if row:
+                try: n_prices = row["n"] or 0
+                except (IndexError, KeyError): n_prices = 0
+            # Hur många distinkta bolag har minst 100 dagars historik?
+            row2 = _fetchone(db,
+                "SELECT COUNT(*) as n FROM ("
+                "  SELECT isin FROM borsdata_prices "
+                "  GROUP BY isin HAVING COUNT(*) >= 100"
+                ") sub")
+            n_with_hist = 0
+            if row2:
+                try: n_with_hist = row2["n"] or 0
+                except (IndexError, KeyError): n_with_hist = 0
+        finally:
+            db.close()
+
+        # Tröskel: < 200 bolag med >=100 dagars historik = bootstrap behövs
+        BD_BOOTSTRAP_FLAG = "/tmp/.borsdata_bulk_started"  # global lås mellan workers
+        already_started = os.path.exists(BD_BOOTSTRAP_FLAG)
+        if n_with_hist < 200 and not already_started:
+            try:
+                # Touch flag-fil så bara en av 3 workers kör bulk-fetchen
+                with open(BD_BOOTSTRAP_FLAG, "w") as fh:
+                    fh.write(datetime.now().isoformat())
+            except Exception:
+                pass
+            # Verifiera att vi är "vinnaren" (den som skapade filen)
+            print(f"  ⚠ Börsdata-prishistorik gles ({n_prices:,} rader, "
+                  f"{n_with_hist} bolag >=100d) — startar 10-års bulk-fetch i bakgrunden")
+            print(f"     (tar ~1-2h, blockerar inte appen)")
+            from datetime import datetime as _dt, timedelta as _td
+            from_date_10y = (_dt.now() - _td(days=365 * 10)).strftime("%Y-%m-%d")
+
+            def _bulk_borsdata_prices():
+                try:
+                    from edge_db import sync_borsdata_prices
+                    print(f"[BOOTSTRAP] Börsdata bulk-prissync 10y start "
+                          f"{datetime.now().strftime('%Y-%m-%d %H:%M')}")
+                    db_b = get_db()
+                    try:
+                        # max_per_run=None = alla bolag
+                        # from_date = 10 år bakåt, så vi får full historik
+                        res = sync_borsdata_prices(db_b, max_per_run=None,
+                                                    from_date=from_date_10y)
+                        print(f"[BOOTSTRAP] Börsdata bulk-prissync klar: {res}")
+                    finally:
+                        db_b.close()
+                except Exception as e:
+                    print(f"[BOOTSTRAP] Börsdata bulk-prissync fel: {e}")
+                    import traceback; traceback.print_exc()
+                finally:
+                    # Ta bort flaggan så framtida deploys kan re-bootstrappa
+                    # om data raderas. Men efter färdig sync så ändras
+                    # tröskelchecken ovan ändå (n_with_hist >= 200).
+                    try: os.remove(BD_BOOTSTRAP_FLAG)
+                    except Exception: pass
+
+            t = threading.Thread(target=_bulk_borsdata_prices, daemon=True)
+            t.start()
+        elif already_started:
+            print(f"  ⏳ Börsdata bulk-prissync redan igång (annan worker)")
+        else:
+            print(f"  ✓ Börsdata-prishistorik OK ({n_prices:,} rader, "
+                  f"{n_with_hist} bolag >=100d) — använder schemalagd inkrementell sync")
+    except Exception as e:
+        print(f"  ⚠ Börsdata bulk-bootstrap fel: {e}")
+        import traceback; traceback.print_exc()
+
     # ── Warmup-tråd: preloada både DB-caches OCH API-route-caches vid boot.
     # Strategi:
     #   Steg 1: direkta anrop till tunga DB-funktioner (modul-cache fylls)
