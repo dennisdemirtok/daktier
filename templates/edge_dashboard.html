@@ -3894,7 +3894,7 @@ function renderAgentTurn(h, idx) {
         return `<div class="agent-msg ai">
             <div class="agent-avatar ai">E</div>
             <div class="agent-msg-bubble ${isStreaming ? 'streaming' : ''}">
-                ${toolsHtml ? `<div style="margin-bottom:8px">${toolsHtml}</div>` : ''}
+                <div class="agent-tools-container" style="${toolsHtml ? 'margin-bottom:8px' : ''}">${toolsHtml}</div>
                 <div class="agent-md">${md}</div>
                 ${footer}
             </div>
@@ -3993,6 +3993,58 @@ async function agentSend() {
     _agentImage = null;
     renderAgent();
 
+    // ── Hitta strömmnings-bubblans MD-element en gång — sedan in-place mutation
+    // Detta undviker hackandet från full re-render var 100ms. Browsers kan inte
+    // hänga med när 5KB+ HTML byggs om kontinuerligt.
+    const msgsEl = document.getElementById('agentMsgs');
+    const lastMsg = msgsEl ? msgsEl.lastElementChild : null;
+    const streamingMd = lastMsg ? lastMsg.querySelector('.agent-md') : null;
+    const streamingBubble = lastMsg ? lastMsg.querySelector('.agent-msg-bubble') : null;
+    const streamingToolsContainer = (() => {
+        if (!streamingBubble) return null;
+        let c = streamingBubble.querySelector('.agent-tools-container');
+        if (!c) {
+            c = document.createElement('div');
+            c.className = 'agent-tools-container';
+            c.style.marginBottom = '8px';
+            streamingBubble.insertBefore(c, streamingBubble.firstChild);
+        }
+        return c;
+    })();
+
+    let scheduledRaf = null;
+    function scheduleStreamRender() {
+        if (scheduledRaf) return;
+        scheduledRaf = requestAnimationFrame(() => {
+            scheduledRaf = null;
+            // 1) Markdown — bara skriv om om innehållet ändrats
+            if (streamingMd && assistantTurn.content) {
+                const newHtml = formatAgentText(assistantTurn.content);
+                if (streamingMd.innerHTML !== newHtml) {
+                    streamingMd.innerHTML = newHtml;
+                }
+            }
+            // 2) Tool-pills
+            if (streamingToolsContainer) {
+                const html = (assistantTurn.tools || []).map(t => {
+                    const meta = TOOL_LABELS[t.name] || { icon: '⚙️', label: t.name };
+                    const cls = t.status === 'running' ? 'running' : '';
+                    return `<span class="agent-tool-pill ${cls}">${meta.icon} ${meta.label}</span>`;
+                }).join('');
+                if (streamingToolsContainer.innerHTML !== html) {
+                    streamingToolsContainer.innerHTML = html;
+                }
+            }
+            // 3) Smart scroll: bara om vi är nära botten (annars stör vi läsaren som scrollat upp)
+            if (msgsEl) {
+                const distFromBottom = msgsEl.scrollHeight - (msgsEl.scrollTop + msgsEl.clientHeight);
+                if (distFromBottom < 100) {
+                    msgsEl.scrollTop = msgsEl.scrollHeight;
+                }
+            }
+        });
+    }
+
     _agentAbortController = new AbortController();
     try {
         const r = await fetch('/api/agent/chat/stream', {
@@ -4006,13 +4058,11 @@ async function agentSend() {
         const reader = r.body.getReader();
         const decoder = new TextDecoder();
         let buffer = '';
-        let lastRender = 0;
 
         while (true) {
             const { value, done } = await reader.read();
             if (done) break;
             buffer += decoder.decode(value, { stream: true });
-            // Parse SSE events
             const events = buffer.split('\n\n');
             buffer = events.pop() || '';
             for (const ev of events) {
@@ -4021,21 +4071,19 @@ async function agentSend() {
                 try { data = JSON.parse(ev.slice(5).trim()); } catch { continue; }
                 handleAgentSSE(data, assistantTurn);
             }
-            // Re-render max 10ggr/sek för smooth typing utan att frusta CPU
-            const now = Date.now();
-            if (now - lastRender > 100) {
-                renderAgent();
-                lastRender = now;
-            }
+            // Schemalagd in-place re-render i nästa animation frame
+            scheduleStreamRender();
         }
     } catch (e) {
         if (e.name !== 'AbortError') {
             assistantTurn.content = (assistantTurn.content || '') + '\n\n⚠ Fel: ' + e.message;
         }
     } finally {
+        if (scheduledRaf) { cancelAnimationFrame(scheduledRaf); scheduledRaf = null; }
         assistantTurn.streaming = false;
         _agentLoading = false;
         _agentAbortController = null;
+        // Sista re-render gör full rebuild så footer/usage etc kommer in
         renderAgent();
     }
 }
