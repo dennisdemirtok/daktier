@@ -3122,6 +3122,97 @@ def api_borsdata_sync_kpis():
     return jsonify({"status": "started"})
 
 
+@app.route("/api/backtest/run")
+def api_backtest_run():
+    """Kör backtest av en setup-typ.
+
+    Query: ?setup=trifecta&start_year=2018&max_holdings=15
+    """
+    from backtest import run_backtest, calculate_metrics
+    setup = request.args.get("setup", "trifecta")
+    start_year = int(request.args.get("start_year", 2018))
+    max_h = int(request.args.get("max_holdings", 15))
+    capital = int(request.args.get("capital", 1_000_000))
+
+    ck = f"backtest|{setup}|{start_year}|{max_h}|{capital}"
+    cached, hit = _cached_response(ck, ttl=3600)  # 1h cache
+    if hit:
+        return jsonify(cached)
+
+    db = get_db()
+    try:
+        result = run_backtest(db, setup_filter=setup,
+                              start_year=start_year,
+                              max_holdings=max_h,
+                              initial_capital=capital)
+        metrics = calculate_metrics(result.get("equity_curve", []))
+        payload = {
+            "setup": result.get("setup_filter"),
+            "period": {
+                "start": result.get("start_date"),
+                "end": result.get("end_date"),
+            },
+            "initial_capital": result.get("initial_capital"),
+            "final_value": result.get("final_value"),
+            "total_return_pct": round(result.get("return_pct", 0), 2),
+            "metrics": metrics,
+            "n_trades": result.get("n_trades"),
+            "n_rebalances": result.get("n_rebalances"),
+            "n_holdings_final": result.get("n_holdings_final"),
+            "equity_curve": result.get("equity_curve"),
+        }
+        _set_cache(ck, payload)
+        return jsonify(payload)
+    except Exception as e:
+        import traceback; traceback.print_exc()
+        return jsonify({"error": str(e), "data_available": False}), 500
+    finally:
+        db.close()
+
+
+@app.route("/api/backtest/compare")
+def api_backtest_compare():
+    """Jämför flera setup-typer sida vid sida.
+
+    Query: ?setups=trifecta,quality_full_price,deep_value
+    """
+    from backtest import run_backtest, calculate_metrics
+    setups_str = request.args.get("setups", "trifecta,quality_full_price,deep_value,cigar_butt")
+    setups = [s.strip() for s in setups_str.split(",")]
+    start_year = int(request.args.get("start_year", 2018))
+
+    ck = f"backtest_compare|{setups_str}|{start_year}"
+    cached, hit = _cached_response(ck, ttl=3600)
+    if hit:
+        return jsonify(cached)
+
+    db = get_db()
+    results = []
+    try:
+        for setup in setups:
+            try:
+                result = run_backtest(db, setup_filter=setup,
+                                      start_year=start_year, max_holdings=15)
+                metrics = calculate_metrics(result.get("equity_curve", []))
+                results.append({
+                    "setup": setup,
+                    "final_value": result.get("final_value"),
+                    "total_return_pct": round(result.get("return_pct", 0), 2),
+                    "cagr_pct": round(metrics.get("cagr_pct", 0), 2),
+                    "sharpe_annual": round(metrics.get("sharpe_annual", 0), 2),
+                    "max_drawdown_pct": round(metrics.get("max_drawdown_pct", 0), 2),
+                    "n_trades": result.get("n_trades"),
+                    "equity_curve": result.get("equity_curve"),
+                })
+            except Exception as e:
+                results.append({"setup": setup, "error": str(e)})
+        payload = {"results": results, "start_year": start_year}
+        _set_cache(ck, payload)
+        return jsonify(payload)
+    finally:
+        db.close()
+
+
 @app.route("/api/borsdata/sync-metadata", methods=["POST"])
 def api_borsdata_sync_metadata():
     """Sync sektor + bransch-metadata (en gång)."""
@@ -3754,6 +3845,47 @@ Buy-zone = simulerar vad composite-score blir vid en kursnedgång.
 - "Approaching": rörelse går mot köpzon men ej passerat ännu
 
 ══════════════════════════════════════════════════════════════
+DEL 6.2 — v3 NYA DATAKÄLLOR (Börsdata Pro Plus)
+══════════════════════════════════════════════════════════════
+
+Vi har nu RIKTIG fundamentaldata via Börsdata Pro Plus för:
+- Nordiska bolag (1,300+ matchade)
+- US large-caps (Microsoft, NVIDIA, Apple, Google, Amazon, Tesla, Meta osv.)
+- 10 års årlig + kvartalsvis historik
+- 15,800+ globala bolag totalt tillgängliga
+
+NYA TOOLS:
+- `get_borsdata_history(query, years=10)` — 10 år FULL årlig data:
+  revenues, gross_income, EBIT, net_profit, EPS, OCF, FCF, total_assets,
+  equity, net_debt, intangible_assets m.m. RIKTIG DATA, ingen proxy.
+  Använd när användaren frågar om FCF-utveckling, marginal-trend osv.
+
+- `get_sector_peers(query, limit=10)` — peers i samma sektor (verifierad
+  Börsdata-sektor, INTE keyword-gissning). För 'jämför Microsoft mot peers'.
+
+- `get_backtest(setup, start_year, max_holdings)` — backtest av v2.3-strategi
+  retroaktivt 2018-nu. Returnerar CAGR, Sharpe, max drawdown, n_trades.
+  Använd för 'har Trifecta-strategin presterat historiskt?'.
+
+BÖRSDATA-DATA finns nu i `v2.borsdata`-block i get_full_stock-output:
+  - annual_reports_5y: 5 senaste års-rapporter (riktiga siffror)
+  - quarterly_reports_8q: 8 senaste kvartal
+  - sector_borsdata: VERIFIERAD sektor (använd istället för
+    classification.sector som kan ha keyword-gissat fel)
+  - is_global: True för US, False för nordisk
+
+VIKTIGT NÄR DU SVARAR:
+- Om `borsdata`-block finns → använd RIKTIGA siffror i din analys.
+  Citera FCF, EBIT, net_debt direkt från annual_reports_5y.
+- Om `borsdata`-block saknas (mindre nordiska bolag, exotiska marknader) →
+  fall tillbaka på `_borsdata_latest` eller proxy-värden, men FLAGGA det:
+  "Börsdata-data saknas för [ticker], använder approximations."
+- Sektor-source: om classification.sector_source == "keyword_fallback",
+  nämn att sektor är keyword-gissad (lägre confidence).
+- Backtest-resultat: om användaren frågar om historisk prestanda och
+  pris-data saknas, säg det istället för att hallucinera siffror.
+
+══════════════════════════════════════════════════════════════
 DEL 6.3 — AKTIEAGENT v2.3 KRITISKA REGLER (HÅRDVALIDERAS)
 ══════════════════════════════════════════════════════════════
 
@@ -4127,7 +4259,11 @@ def _agent_search_stocks(db, query, limit=15):
 
 def _agent_get_full_stock(db, query):
     """Hämtar ALLA tillgängliga nyckeltal för EN aktie + composite + book-modeller.
-    Bättre än search_stocks när Claude vill djupanalysera ETT bolag."""
+    Bättre än search_stocks när Claude vill djupanalysera ETT bolag.
+
+    v3: inkluderar nu Börsdata-data när tillgänglig (riktig FCF, EBIT, skuld
+    + sektor från Börsdata istället för keyword-gissning + 10 års reports).
+    """
     from edge_db import _ph, _score_book_models, _attach_hist
     ph = _ph()
     q = f"%{query}%"
@@ -4200,7 +4336,155 @@ def _agent_get_full_stock(db, query):
     }
     out = {k: d.get(k) for k in keep if k in d}
     out["v2"] = v2
+
+    # ── v3: Börsdata-data för djupanalys (riktig FCF/EBIT/skuld + 10 års reports) ──
+    try:
+        ph = _ph()
+        # Hämta via short_name eftersom Avanza saknar ISIN
+        sn = d.get("short_name") or d.get("ticker")
+        if sn:
+            map_row = db.execute(
+                f"SELECT * FROM borsdata_instrument_map WHERE ticker = {ph} OR yahoo_ticker = {ph} LIMIT 1",
+                (sn, sn)
+            ).fetchone()
+            if map_row:
+                bd_isin = map_row["isin"]
+                # Senaste 5 års year-rapporter + sektor
+                year_reports = db.execute(
+                    f"SELECT period_year, revenues, operating_income, net_profit, "
+                    f"operating_cash_flow, free_cash_flow, total_assets, total_equity, "
+                    f"net_debt, eps, dividend "
+                    f"FROM borsdata_reports WHERE isin = {ph} AND report_type = 'year' "
+                    f"ORDER BY period_year DESC LIMIT 5",
+                    (bd_isin,)
+                ).fetchall()
+                # Senaste 8 kvartal
+                q_reports = db.execute(
+                    f"SELECT period_year, period_q, revenues, operating_income, net_profit, "
+                    f"operating_cash_flow, free_cash_flow, eps "
+                    f"FROM borsdata_reports WHERE isin = {ph} AND report_type = 'quarter' "
+                    f"ORDER BY period_year DESC, period_q DESC LIMIT 8",
+                    (bd_isin,)
+                ).fetchall()
+                # Sektor-namn från Börsdata
+                sector_name = None
+                if map_row.get("sector_id"):
+                    sec = db.execute(
+                        f"SELECT name FROM borsdata_sectors WHERE sector_id = {ph}",
+                        (map_row["sector_id"],)
+                    ).fetchone()
+                    sector_name = sec["name"] if sec else None
+
+                out["borsdata"] = {
+                    "data_source": "borsdata_pro_plus",
+                    "isin": bd_isin,
+                    "currency": map_row.get("report_currency"),
+                    "sector_borsdata": sector_name,
+                    "is_global": bool(map_row.get("is_global")),
+                    "annual_reports_5y": [dict(r) for r in year_reports],
+                    "quarterly_reports_8q": [dict(r) for r in q_reports],
+                    "instructions_for_agent": (
+                        "Detta är RIKTIG data från Börsdata Pro Plus — använd FCF, "
+                        "EBIT, net_debt direkt istället för proxies. Sektor är "
+                        "verifierad (inte keyword-gissad)."
+                    ),
+                }
+    except Exception as e:
+        out["borsdata_error"] = str(e)
+
     return out
+
+
+def _agent_get_borsdata_history(db, query, periods=10):
+    """Hämtar full Börsdata-historik (10 år) för djupare analys.
+    Specifikt för att svara på 'hur har FCF utvecklats över 10 år?'.
+    """
+    from edge_db import _ph
+    ph = _ph()
+    q = f"%{query}%"
+
+    # Hitta ISIN via short_name eller name
+    map_row = db.execute(
+        f"SELECT m.* FROM borsdata_instrument_map m "
+        f"WHERE m.ticker LIKE {ph} OR m.yahoo_ticker LIKE {ph} OR m.name LIKE {ph} "
+        f"ORDER BY m.is_global ASC LIMIT 1",
+        (q, q, q)
+    ).fetchone()
+    if not map_row:
+        return {"error": f"Inget Börsdata-bolag matchar '{query}'"}
+
+    bd_isin = map_row["isin"]
+    name = map_row["name"]
+
+    # 10-års year reports
+    rows = db.execute(
+        f"SELECT period_year, revenues, gross_income, operating_income, net_profit, eps, "
+        f"operating_cash_flow, investing_cash_flow, free_cash_flow, "
+        f"total_assets, total_equity, net_debt, shares_outstanding, dividend, "
+        f"stock_price_avg, current_assets, non_current_assets, intangible_assets "
+        f"FROM borsdata_reports WHERE isin = {ph} AND report_type = 'year' "
+        f"ORDER BY period_year DESC LIMIT {ph}",
+        (bd_isin, periods)
+    ).fetchall()
+
+    # Pris-historik (om finns)
+    n_prices = db.execute(
+        f"SELECT COUNT(*) as n, MIN(date) as min_d, MAX(date) as max_d "
+        f"FROM borsdata_prices WHERE isin = {ph}",
+        (bd_isin,)
+    ).fetchone()
+
+    return {
+        "name": name,
+        "isin": bd_isin,
+        "is_global": bool(map_row.get("is_global")),
+        "currency": map_row.get("report_currency"),
+        "annual_history_full": [dict(r) for r in rows],
+        "price_history": {
+            "rows": n_prices["n"] if n_prices else 0,
+            "from": n_prices["min_d"] if n_prices else None,
+            "to": n_prices["max_d"] if n_prices else None,
+        },
+    }
+
+
+def _agent_get_sector_peers(db, query, limit=10):
+    """Hitta sektor-peers via Börsdata-sektor (inte keyword-matchning).
+    Bra för att svara på 'jämför Microsoft mot peers i samma sektor'.
+    """
+    from edge_db import _ph
+    ph = _ph()
+    q = f"%{query}%"
+
+    target = db.execute(
+        f"SELECT m.*, s.name as sector_name FROM borsdata_instrument_map m "
+        f"LEFT JOIN borsdata_sectors s ON m.sector_id = s.sector_id "
+        f"WHERE m.ticker LIKE {ph} OR m.name LIKE {ph} LIMIT 1",
+        (q, q)
+    ).fetchone()
+    if not target or not target.get("sector_id"):
+        return {"error": f"Sektor saknas för {query}"}
+
+    sector_id = target["sector_id"]
+    is_global = target.get("is_global")
+
+    # Peers i samma sektor med data
+    peers = db.execute(
+        f"SELECT m.name, m.ticker, b.revenues, b.operating_income, b.free_cash_flow, "
+        f"b.net_debt, b.total_equity "
+        f"FROM borsdata_instrument_map m "
+        f"JOIN borsdata_reports b ON m.isin = b.isin "
+        f"WHERE m.sector_id = {ph} AND m.is_global = {ph} "
+        f"AND b.report_type = 'year' AND b.period_year = (SELECT MAX(period_year) FROM borsdata_reports WHERE isin = m.isin AND report_type = 'year') "
+        f"ORDER BY b.revenues DESC NULLS LAST LIMIT {ph}",
+        (sector_id, is_global, limit)
+    ).fetchall() if is_global is not None else []
+
+    return {
+        "target": {"name": target["name"], "sector": target.get("sector_name")},
+        "sector_id": sector_id,
+        "peers": [dict(r) for r in peers],
+    }
 
 
 def _agent_get_quarterly_trends(db, query):
@@ -4644,6 +4928,33 @@ def _agent_run_tool(tool_name, tool_input):
                 criterion=tool_input.get("criterion", "composite"),
                 limit=tool_input.get("limit", 10),
                 country=tool_input.get("country", ""))
+        elif tool_name == "get_borsdata_history":
+            res = _agent_get_borsdata_history(db, tool_input.get("query", ""),
+                                                periods=tool_input.get("years", 10))
+        elif tool_name == "get_sector_peers":
+            res = _agent_get_sector_peers(db, tool_input.get("query", ""),
+                                           limit=tool_input.get("limit", 10))
+        elif tool_name == "get_backtest":
+            from backtest import run_backtest, calculate_metrics
+            try:
+                result = run_backtest(db,
+                    setup_filter=tool_input.get("setup", "trifecta"),
+                    start_year=tool_input.get("start_year", 2018),
+                    max_holdings=tool_input.get("max_holdings", 15),
+                    initial_capital=1_000_000)
+                metrics = calculate_metrics(result.get("equity_curve", []))
+                res = {
+                    "setup": result.get("setup_filter"),
+                    "period": f"{result.get('start_date')} → {result.get('end_date')}",
+                    "final_value_sek": result.get("final_value"),
+                    "total_return_pct": result.get("return_pct"),
+                    "cagr_pct": metrics.get("cagr_pct"),
+                    "sharpe_annual": metrics.get("sharpe_annual"),
+                    "max_drawdown_pct": metrics.get("max_drawdown_pct"),
+                    "n_trades": result.get("n_trades"),
+                }
+            except Exception as e:
+                res = {"error": f"Backtest fel: {e}", "data_available": False}
         else:
             return _json.dumps({"error": f"Okänd tool: {tool_name}"}), True
         return _json.dumps(res, ensure_ascii=False, default=str), False
@@ -4693,7 +5004,7 @@ def _agent_tools_definition():
         },
         {
             "name": "get_owner_history",
-            "description": "Veckovis ägarhistorik (52 veckor) för ETT bolag — visar om Avanza-ägarna ackumulerar eller säljer. Smart money-indikator. Bra för 'lockar X smart money?', 'flyr ägarna?'.",
+            "description": "Veckovis ägarhistorik (52 veckor) för ETT bolag. Visar Avanza RETAIL FLOW (NOT smart money — det är insider/13F). Tolka kontextuellt: retail buys the dip = ofta negativ signal.",
             "input_schema": {
                 "type": "object",
                 "properties": {
@@ -4713,6 +5024,44 @@ def _agent_tools_definition():
                     "country": {"type": "string", "description": "Landskod SE/US/DE/etc (tom = alla)", "default": ""},
                 },
                 "required": ["criterion"],
+            },
+        },
+        # ── v3 Börsdata-tools (Pro Plus-data: riktig FCF/EBIT/skuld + sektor) ──
+        {
+            "name": "get_borsdata_history",
+            "description": "Hämta 10 års FULL årlig finansial-historik från Börsdata Pro Plus (revenues, gross_income, EBIT, net_profit, EPS, OCF, FCF, total_assets, equity, net_debt, intangible_assets m.m.). Använd när användaren vill se FCF-utveckling, marginal-förändring eller historiska trender.",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string", "description": "Bolagsnamn eller ticker"},
+                    "years": {"type": "integer", "description": "Antal års-rapporter (default 10)", "default": 10},
+                },
+                "required": ["query"],
+            },
+        },
+        {
+            "name": "get_sector_peers",
+            "description": "Hitta peers i samma sektor via VERIFIERAD Börsdata-sektor (inte keyword-gissning). Bra för 'jämför Microsoft mot peers', 'vilka konkurrenter har bäst FCF i samma sektor'.",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string", "description": "Bolagsnamn eller ticker"},
+                    "limit": {"type": "integer", "description": "Max peers (default 10)", "default": 10},
+                },
+                "required": ["query"],
+            },
+        },
+        {
+            "name": "get_backtest",
+            "description": "Kör backtest av en v2.3-setup retroaktivt 2018-nu (kvartalsvis rebalans, likavikt, 1M SEK startkapital). Returnerar CAGR, Sharpe, max drawdown. Använd för 'har Trifecta-strategin presterat historiskt?'. Kräver att pris-data är synkad.",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "setup": {"type": "string", "description": "trifecta|quality_full_price|deep_value|cigar_butt", "default": "trifecta"},
+                    "start_year": {"type": "integer", "description": "Startår (default 2018)", "default": 2018},
+                    "max_holdings": {"type": "integer", "description": "Max positioner (default 15)", "default": 15},
+                },
+                "required": ["setup"],
             },
         },
         # Anthropic-hosted web search — för forum, Reddit, nyheter, blogginlägg

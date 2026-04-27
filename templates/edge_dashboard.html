@@ -741,6 +741,10 @@
             Min Portfölj
         </button>
         <div class="sidebar-divider"></div>
+        <button class="sidebar-item" onclick="sidebarNav('backtest', this)" data-tab="backtest">
+            <span class="material-symbols-outlined">analytics</span>
+            Backtest
+        </button>
         <button class="sidebar-item" onclick="sidebarNav('aitoplist', this)" data-tab="aitoplist">
             <span class="material-symbols-outlined">smart_toy</span>
             AI Topplista
@@ -996,6 +1000,9 @@ async function fetchData(append = false) {
         } else if (currentTab === 'agent') {
             renderAgent();
             return;
+        } else if (currentTab === 'backtest') {
+            renderBacktest();
+            return;
         }
 
         // Generic cached fetch for table tabs
@@ -1213,6 +1220,7 @@ const TAB_META = {
     myportfolio: { title: 'Min Portfölj',    sub: 'Ditt bevakade innehav' },
     aitoplist:   { title: 'AI Topplista',    sub: 'AI-rankning av alla bolag' },
     agent:       { title: 'AI Agent',         sub: 'Chatta med Claude Opus över hela databasen' },
+    backtest:    { title: 'Backtest',         sub: 'Hur har v2.3-strategierna presterat historiskt?' },
 };
 
 // NOTE: Live-läge borttaget — vi uppdaterar inte owner-snapshots löpande, så auto-refresh-timer avvecklad.
@@ -4460,6 +4468,190 @@ function handleAgentSSE(ev, turn) {
             // Statusmeddelande, t.ex. modellbyte
             break;
     }
+}
+
+// ── Backtest ─────────────────────────────────────────────
+
+let _backtestData = null;
+let _backtestSelected = ['trifecta', 'quality_full_price', 'deep_value', 'cigar_butt'];
+
+async function renderBacktest() {
+    const root = document.getElementById('content');
+    root.innerHTML = `
+    <style>
+        .bt-wrap { max-width: 1100px; margin: 0 auto; }
+        .bt-header { background: linear-gradient(135deg,#1e3a8a 0%,#3b82f6 100%); color:white; padding:16px 20px; border-radius:14px; margin-bottom:16px; }
+        .bt-controls { display:flex; gap:8px; flex-wrap:wrap; padding:12px; background:white; border:1px solid var(--border); border-radius:10px; margin-bottom:14px; }
+        .bt-setup-chip { padding:8px 14px; border-radius:20px; border:1px solid var(--border); background:white; cursor:pointer; font-size:12px; font-weight:600; transition:all 0.15s; font-family:inherit; min-height:36px; }
+        .bt-setup-chip.active { background:linear-gradient(135deg,#1d4ed8,#3b82f6); color:white; border-color:#1d4ed8; }
+        .bt-result-card { background:white; border:1px solid var(--border); border-radius:12px; padding:16px; }
+        .bt-result-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:12px; }
+        .bt-stat { padding:10px 12px; background:#f9fafb; border-radius:8px; }
+        .bt-stat-label { font-size:10px; color:var(--text-muted); text-transform:uppercase; font-weight:700; letter-spacing:0.05em; }
+        .bt-stat-val { font-size:22px; font-weight:800; line-height:1.1; margin-top:3px; }
+        .bt-comparison-table { width:100%; border-collapse:collapse; font-size:13px; }
+        .bt-comparison-table th { padding:10px; text-align:left; background:#f1f5f9; font-size:11px; text-transform:uppercase; }
+        .bt-comparison-table td { padding:8px 10px; border-bottom:1px solid #e5e7eb; }
+        .bt-curve-svg { width:100%; height:220px; display:block; background:#f9fafb; border-radius:8px; }
+        @media (max-width: 768px) {
+            .bt-result-grid { grid-template-columns:1fr 1fr; }
+            .bt-stat-val { font-size:18px; }
+        }
+    </style>
+    <div class="bt-wrap">
+        <div class="bt-header">
+            <strong>📊 v2.3 Backtest</strong> — kvartalsvis rebalans, likavikt, 1M SEK startkapital, 2018-nu.
+            <div style="font-size:12px;margin-top:4px;opacity:0.85">
+                Lookahead-skydd: report_end + 30 dagar release-lag. Kräver att Börsdata-pris-data är synkad.
+            </div>
+        </div>
+
+        <div class="bt-controls">
+            <span style="font-size:11px;color:var(--text-muted);font-weight:700;text-transform:uppercase;align-self:center">Setup-typ:</span>
+            ${[
+                ['trifecta', '🎯 Trifecta'],
+                ['quality_full_price', '🏰 Quality CP'],
+                ['deep_value', '💎 Djup-värde'],
+                ['cigar_butt', '🚬 Cigarrfimp'],
+                ['quality_under_pressure', '🩺 Quality UP'],
+                ['balanced_value', '⚖️ Bal. värde'],
+            ].map(([k, l]) =>
+                `<button class="bt-setup-chip ${_backtestSelected.includes(k) ? 'active' : ''}" onclick="toggleBacktestSetup('${k}')">${l}</button>`
+            ).join('')}
+            <button onclick="runBacktest()" style="background:linear-gradient(135deg,#059669,#10b981);color:white;border:none;padding:10px 20px;border-radius:8px;font-weight:700;cursor:pointer;font-family:inherit;margin-left:auto">▶ Kör jämförelse</button>
+        </div>
+
+        <div id="btResult" style="margin-top:14px"></div>
+    </div>`;
+
+    if (_backtestData) {
+        _renderBacktestResults();
+    } else {
+        document.getElementById('btResult').innerHTML = `<div class="bt-result-card" style="text-align:center;padding:30px;color:var(--text-muted)">
+            Välj setup-typer ovan och klicka "Kör jämförelse" för att starta backtest.
+        </div>`;
+    }
+}
+
+function toggleBacktestSetup(key) {
+    if (_backtestSelected.includes(key)) {
+        _backtestSelected = _backtestSelected.filter(k => k !== key);
+    } else if (_backtestSelected.length < 6) {
+        _backtestSelected.push(key);
+    }
+    renderBacktest();
+}
+
+async function runBacktest() {
+    const out = document.getElementById('btResult');
+    if (!_backtestSelected.length) {
+        out.innerHTML = '<div class="bt-result-card" style="color:var(--red)">Välj minst en setup-typ.</div>';
+        return;
+    }
+    out.innerHTML = '<div class="bt-result-card" style="text-align:center;padding:30px"><div class="spinner"></div><div style="margin-top:10px;color:var(--text-muted)">Kör backtest... kan ta upp till 60s första gången.</div></div>';
+    try {
+        const r = await fetch(`/api/backtest/compare?setups=${_backtestSelected.join(',')}&start_year=2018`);
+        const d = await r.json();
+        _backtestData = d;
+        _renderBacktestResults();
+    } catch (e) {
+        out.innerHTML = `<div class="bt-result-card" style="color:var(--red)">Fel: ${e.message}</div>`;
+    }
+}
+
+function _renderBacktestResults() {
+    const out = document.getElementById('btResult');
+    const data = _backtestData;
+    if (!data || !data.results) {
+        out.innerHTML = '<div class="bt-result-card">Ingen data.</div>';
+        return;
+    }
+
+    const SETUP_LABELS = {
+        trifecta: '🎯 Trifecta',
+        quality_full_price: '🏰 Quality Compounder',
+        deep_value: '💎 Djup-värde',
+        cigar_butt: '🚬 Cigarrfimp',
+        quality_under_pressure: '🩺 Quality UP',
+        balanced_value: '⚖️ Bal. värde',
+    };
+    const COLORS = ['#059669', '#2563eb', '#ca8a04', '#ea580c', '#9333ea', '#0891b2'];
+
+    // Sortera på CAGR
+    const sorted = [...data.results].sort((a, b) => (b.cagr_pct || 0) - (a.cagr_pct || 0));
+
+    // Sammanställd tabell
+    let html = `<div class="bt-result-card">
+        <h3 style="margin:0 0 10px;font-size:16px">📈 Resultat-jämförelse</h3>
+        <div style="overflow-x:auto"><table class="bt-comparison-table">
+            <thead><tr><th>Setup</th><th>CAGR</th><th>Total return</th><th>Sharpe</th><th>Max DD</th><th>Trades</th></tr></thead>
+            <tbody>${sorted.map(r => {
+                if (r.error) return `<tr><td>${SETUP_LABELS[r.setup] || r.setup}</td><td colspan="5" style="color:var(--red)">${r.error}</td></tr>`;
+                const cagrCol = (r.cagr_pct || 0) > 10 ? '#059669' : (r.cagr_pct || 0) > 0 ? '#0891b2' : '#dc2626';
+                return `<tr>
+                    <td><strong>${SETUP_LABELS[r.setup] || r.setup}</strong></td>
+                    <td style="color:${cagrCol};font-weight:700">${r.cagr_pct?.toFixed(1)}%</td>
+                    <td>${r.total_return_pct?.toFixed(1)}%</td>
+                    <td>${r.sharpe_annual?.toFixed(2)}</td>
+                    <td style="color:#dc2626">-${r.max_drawdown_pct?.toFixed(0)}%</td>
+                    <td>${r.n_trades}</td>
+                </tr>`;
+            }).join('')}</tbody>
+        </table></div>
+    </div>`;
+
+    // Equity-curves
+    const allCurves = sorted.filter(r => r.equity_curve && r.equity_curve.length > 0);
+    if (allCurves.length) {
+        const W = 800, H = 220, pad = 30;
+        const allValues = allCurves.flatMap(r => r.equity_curve.map(p => p[1]));
+        const allDates = allCurves[0].equity_curve.map(p => p[0]);
+        const yMin = Math.min(...allValues, 1_000_000) * 0.95;
+        const yMax = Math.max(...allValues) * 1.05;
+        const xR = Math.max(allCurves[0].equity_curve.length - 1, 1);
+
+        function pointsFor(curve) {
+            return curve.equity_curve.map((p, i) => {
+                const x = pad + (i / xR) * (W - 2*pad);
+                const y = H - pad - ((p[1] - yMin) / (yMax - yMin)) * (H - 2*pad);
+                return [x, y];
+            });
+        }
+
+        const lines = allCurves.map((r, idx) => {
+            const pts = pointsFor(r);
+            const path = pts.map((p, i) => (i === 0 ? 'M' : 'L') + p[0].toFixed(1) + ',' + p[1].toFixed(1)).join(' ');
+            const color = COLORS[idx % COLORS.length];
+            return `<path d="${path}" stroke="${color}" stroke-width="2" fill="none"/>`;
+        }).join('');
+
+        const legend = allCurves.map((r, idx) => {
+            const color = COLORS[idx % COLORS.length];
+            return `<span style="display:inline-flex;align-items:center;gap:5px;margin-right:14px;font-size:11px">
+                <span style="width:14px;height:3px;background:${color};display:inline-block"></span>
+                ${SETUP_LABELS[r.setup] || r.setup}
+            </span>`;
+        }).join('');
+
+        html += `<div class="bt-result-card" style="margin-top:14px">
+            <h3 style="margin:0 0 10px;font-size:16px">📉 Equity-curves (1M SEK → ?)</h3>
+            <div style="margin-bottom:8px">${legend}</div>
+            <svg viewBox="0 0 ${W} ${H}" class="bt-curve-svg">
+                <line x1="${pad}" y1="${H-pad}" x2="${W-pad}" y2="${H-pad}" stroke="#9ca3af" stroke-width="0.5"/>
+                <line x1="${pad}" y1="${pad}" x2="${pad}" y2="${H-pad}" stroke="#9ca3af" stroke-width="0.5"/>
+                <text x="${pad-5}" y="${pad+4}" text-anchor="end" font-size="9" fill="#6b7280">${(yMax/1_000_000).toFixed(1)}M</text>
+                <text x="${pad-5}" y="${H-pad+4}" text-anchor="end" font-size="9" fill="#6b7280">${(yMin/1_000_000).toFixed(1)}M</text>
+                <text x="${pad}" y="${H-pad+12}" font-size="9" fill="#6b7280">${allDates[0] || ''}</text>
+                <text x="${W-pad}" y="${H-pad+12}" text-anchor="end" font-size="9" fill="#6b7280">${allDates[allDates.length-1] || ''}</text>
+                ${lines}
+            </svg>
+            <div style="font-size:10px;color:var(--text-muted);margin-top:8px;font-style:italic">
+                Notera: survivorship bias i datan kan addera 1-3% CAGR. Inga transaktionskostnader.
+            </div>
+        </div>`;
+    }
+
+    out.innerHTML = html;
 }
 
 // ── Dashboard (landing) ─────────────────────────────────

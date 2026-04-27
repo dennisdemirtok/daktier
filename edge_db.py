@@ -2532,18 +2532,20 @@ def _attach_hist_bulk(db, stock_dicts):
     for r in rows:
         by_oid.setdefault(r["orderbook_id"], []).append(dict(r))
 
-    # Börsdata: bulk-attacha senaste år-rapport per short_name
-    # (Avanza saknar ISIN, vi matchar via Avanza.short_name = Börsdata.ticker
-    # via mappnings-tabellen borsdata_instrument_map)
+    # Börsdata: bulk-attacha senaste år-rapport + sektor-info per short_name
     short_names = list({d.get("short_name") for d in stock_dicts
                         if isinstance(d, dict) and d.get("short_name")})
     borsdata_by_short = {}
+    sector_by_short = {}  # ticker → (sector_id, sector_name)
     if short_names:
         try:
             sn_placeholders = ",".join([ph] * len(short_names))
+            # Reports + map + sector i ett anrop
             bd_rows = _fetchall(db,
-                f"SELECT b.*, m.ticker FROM borsdata_reports b "
+                f"SELECT b.*, m.ticker, m.sector_id, s.name as sector_name "
+                f"FROM borsdata_reports b "
                 f"JOIN borsdata_instrument_map m ON b.isin = m.isin "
+                f"LEFT JOIN borsdata_sectors s ON m.sector_id = s.sector_id "
                 f"WHERE m.ticker IN ({sn_placeholders}) "
                 f"AND b.report_type = 'year' "
                 f"ORDER BY m.ticker, b.period_year DESC", short_names)
@@ -2551,12 +2553,22 @@ def _attach_hist_bulk(db, stock_dicts):
                 ticker = r["ticker"]
                 if ticker not in borsdata_by_short:
                     borsdata_by_short[ticker] = dict(r)
+                    try:
+                        sector_by_short[ticker] = (r["sector_id"], r.get("sector_name"))
+                    except (KeyError, IndexError):
+                        pass
         except Exception:
             pass
 
     for d in stock_dicts:
-        if isinstance(d, dict) and d.get("short_name") and d["short_name"] in borsdata_by_short:
-            d["_borsdata_latest"] = borsdata_by_short[d["short_name"]]
+        if isinstance(d, dict) and d.get("short_name"):
+            sn = d["short_name"]
+            if sn in borsdata_by_short:
+                d["_borsdata_latest"] = borsdata_by_short[sn]
+                if sn in sector_by_short:
+                    sec_id, sec_name = sector_by_short[sn]
+                    d["_borsdata_sector_id"] = sec_id
+                    d["_borsdata_sector_name"] = sec_name
 
     # v2.2/v2.3: quarterly EPS + ROE för earnings revision-proxy och Quality-trend
     quarterly_by_oid = {}
@@ -2868,12 +2880,16 @@ _SECTOR_KEYWORDS = {
 def _classify_stock(s):
     """Modul A — klassificerar ett bolag i 4 dimensioner.
 
+    v3: Använder VERIFIERAD Börsdata-sektor om tillgänglig, fallback till
+    keyword-matchning på namn.
+
     Returnerar:
         {
             "asset_intensity": "asset_light" | "mixed" | "asset_heavy",
             "growth_profile": "hyper" | "growth" | "steady" | "mature" | "cyclical" | "unknown",
             "quality_regime": "compounder" | "average" | "subpar" | "turnaround" | "unknown",
             "sector": "tech" | "financials" | ... | "unknown",
+            "sector_source": "borsdata" | "keyword_fallback",
             "confidence": 0..1
         }
     """
@@ -2886,12 +2902,37 @@ def _classify_stock(s):
     roce = s.get("return_on_capital_employed")
     ocf = s.get("operating_cash_flow") or 0
 
-    # ─── Sektor från namn-keywords ───
-    sector = "unknown"
-    for sec, kws in _SECTOR_KEYWORDS.items():
-        if any(kw in name for kw in kws):
-            sector = sec
-            break
+    # ─── Sektor: prio Börsdata, fallback keyword ───
+    sector = None
+    sector_source = "keyword_fallback"
+    bd = s.get("_borsdata_latest") or {}
+    bd_sector_id = s.get("_borsdata_sector_id") or bd.get("sector_id")
+    # Mappa Börsdatas svenska sektor-namn → våra interna keys
+    _BORSDATA_SECTOR_MAP = {
+        "Finans & Fastighet": "financials",
+        "Dagligvaror": "consumer",
+        "Energi": "energy",
+        "Hälsovård": "healthcare",
+        "Industri": "industrials",
+        "Informationsteknik": "tech",
+        "Material": "materials",
+        "Sällanköpsvaror": "consumer",
+        "Telekom": "telecom",
+        "Kraftförsörjning": "utility",
+    }
+    bd_sector_name = s.get("_borsdata_sector_name")
+    if bd_sector_name and bd_sector_name in _BORSDATA_SECTOR_MAP:
+        sector = _BORSDATA_SECTOR_MAP[bd_sector_name]
+        sector_source = "borsdata"
+
+    # Fallback: keyword-matchning
+    if not sector:
+        for sec, kws in _SECTOR_KEYWORDS.items():
+            if any(kw in name for kw in kws):
+                sector = sec
+                break
+        if not sector:
+            sector = "unknown"
 
     # ─── Asset intensity ───
     # Vi saknar goodwill/intangibles separat, så vi använder sektor som
@@ -2964,6 +3005,7 @@ def _classify_stock(s):
         "growth_profile": growth_profile,
         "quality_regime": quality_regime,
         "sector": sector,
+        "sector_source": sector_source,
         "confidence": round(confidence, 2),
     }
 
