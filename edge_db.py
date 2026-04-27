@@ -2520,6 +2520,331 @@ def _value_trap_score(s):
     return max(0.0, min(100.0, pts))
 
 
+# ══════════════════════════════════════════════════════════════════════
+# AKTIEAGENT v2 — Bolagsklassificering, tillämplighetsmatris, 3-axel composite
+# ══════════════════════════════════════════════════════════════════════
+# Specifikation: aktieagent_spec_v2.md
+# Adresserar v1-svagheter: alla modeller appliceras mekaniskt, naivt medel,
+# binär output. v2 introducerar:
+#   1. Klassificering (asset_intensity, growth, quality, sector)
+#   2. Tillämplighetsmatris (modeller markeras N/A för fel bolagstyp)
+#   3. Nya scorers: FCF Yield, ROIC-Implied Multiple, Capital Allocation
+#   4. 3-axel composite (Value / Quality / Momentum)
+#   5. Tesklassificering (Trifecta, Quality Compounder, Cigarrfimp, ...)
+#   6. Position-sizing-output istället för KÖP/VÄNTA/SÄLJ
+# ══════════════════════════════════════════════════════════════════════
+
+# Sektor-heuristik via bolagsnamn — vi har ingen sektordata i DB:n
+# (Avanza-API:n levererar tomma sector-fält). Detta är en approx.
+_SECTOR_KEYWORDS = {
+    "tech": ["software", "tech", "technologies", "digital", "data", "ai ",
+             "cloud", "cyber", "saas", "platform", "internet", "online",
+             "fintech", "edtech", "ecommerce", "e-commerce", "media",
+             "gaming", "esport", "microsoft", "apple", "alphabet",
+             "google", "meta", "amazon", "nvidia", "tesla", "netflix",
+             "salesforce", "oracle", "adobe", "intel", "amd", "arm ",
+             "spotify", "klarna", "ericsson", "evolution"],
+    "financials": ["bank", "banken", "bancorp", "financial", "finansiell",
+                   "holding", "investor", "insurance", "försäkring", "insurance",
+                   "asset management", "kreditmark", "spar", "savings"],
+    "healthcare": ["health", "hälsa", "medic", "pharma", "bio", "diagnos",
+                   "hospital", "sjukvård", "läkemedel", "therapeut", "clinic"],
+    "energy": ["oil", "olja", "gas", "energy", "energi", "petroleum",
+               "wind", "solar", "renewable", "uranium"],
+    "materials": ["mining", "gold", "silver", "copper", "nickel", "iron",
+                  "steel", "stål", "metals", "mineral", "chemical", "kemi",
+                  "paper", "papper", "lumber", "timber"],
+    "industrials": ["industri", "industrial", "engineering", "construction",
+                    "bygg", "manufactur", "machinery", "transport", "logistic",
+                    "shipping", "rederi", "airline", "aerospace", "defense",
+                    "försvar"],
+    "consumer": ["consumer", "retail", "fashion", "apparel", "kläder",
+                 "beverage", "food", "mat", "restaurant", "hotel", "leisure",
+                 "automobile", "auto"],
+    "reit": ["reit", "real estate", "fastighet", "property", "properties"],
+    "utility": ["utility", "utilities", "vatten", "water", "elektrici"],
+    "telecom": ["telecom", "telekom", "telia", "wireless", "communication"],
+}
+
+
+def _classify_stock(s):
+    """Modul A — klassificerar ett bolag i 4 dimensioner.
+
+    Returnerar:
+        {
+            "asset_intensity": "asset_light" | "mixed" | "asset_heavy",
+            "growth_profile": "hyper" | "growth" | "steady" | "mature" | "cyclical" | "unknown",
+            "quality_regime": "compounder" | "average" | "subpar" | "turnaround" | "unknown",
+            "sector": "tech" | "financials" | ... | "unknown",
+            "confidence": 0..1
+        }
+    """
+    name = (s.get("name") or "").lower()
+    market_cap = s.get("market_cap") or s.get("market_capitalization") or 0
+    total_assets = s.get("total_assets") or 0
+    total_liabilities = s.get("total_liabilities") or 0
+    sales = s.get("sales") or 0
+    roe = s.get("return_on_equity")
+    roce = s.get("return_on_capital_employed")
+    ocf = s.get("operating_cash_flow") or 0
+
+    # ─── Sektor från namn-keywords ───
+    sector = "unknown"
+    for sec, kws in _SECTOR_KEYWORDS.items():
+        if any(kw in name for kw in kws):
+            sector = sec
+            break
+
+    # ─── Asset intensity ───
+    # Vi saknar goodwill/intangibles separat, så vi använder sektor som
+    # primär signal + (sales/total_assets) som sekundär.
+    asset_intensity = "mixed"
+    if sector in ("tech",):
+        asset_intensity = "asset_light"
+    elif sector in ("financials", "reit", "utility", "energy", "materials", "industrials", "telecom"):
+        asset_intensity = "asset_heavy"
+    elif sector in ("consumer", "healthcare"):
+        asset_intensity = "mixed"
+    else:
+        # Fallback: sales-to-assets ratio
+        if total_assets > 0 and sales > 0:
+            sales_to_assets = sales / total_assets
+            if sales_to_assets > 1.5:
+                asset_intensity = "asset_light"   # hög omsättning per krona tillgång → asset-light
+            elif sales_to_assets < 0.4:
+                asset_intensity = "asset_heavy"   # låg omsättning per krona → asset-heavy
+
+    # ─── Growth profile (proxies — riktig CAGR kräver historik) ───
+    # Vi använder ägarutvecklings-trend som proxy för business momentum
+    # (smart money följer tillväxt) — inte perfekt men bättre än inget.
+    own_1y = s.get("owners_change_1y") or 0
+    own_3m = s.get("owners_change_3m") or 0
+    growth_profile = "unknown"
+    if own_1y > 0.40:
+        growth_profile = "hyper"
+    elif own_1y > 0.15:
+        growth_profile = "growth"
+    elif own_1y > 0.03:
+        growth_profile = "steady"
+    elif own_1y is not None:
+        growth_profile = "mature"
+    # Cyklisk-flagga om 3m-trend skiljer sig kraftigt från 1y
+    if own_3m is not None and own_1y is not None:
+        if abs(own_3m * 4 - own_1y) > 0.30:
+            growth_profile = "cyclical"
+
+    # ─── Quality regime ───
+    # ROIC = return_on_capital_employed (vår proxy)
+    # Vi har inte 5-års historik på ROIC → använd current + ROE som secondary
+    quality_regime = "unknown"
+    roic_proxy = roce if roce is not None else (roe if roe is not None else None)
+    if roic_proxy is not None:
+        roic_pct = roic_proxy * 100
+        if roic_pct >= 15:
+            quality_regime = "compounder"
+        elif roic_pct >= 8:
+            quality_regime = "average"
+        elif roic_pct >= 0:
+            quality_regime = "subpar"
+        else:
+            quality_regime = "turnaround"
+
+    # ─── Confidence — hur säker är klassificeringen? ───
+    confidence = 0.3
+    if sector != "unknown":
+        confidence += 0.25
+    if total_assets > 0:
+        confidence += 0.15
+    if quality_regime != "unknown":
+        confidence += 0.20
+    if growth_profile != "unknown":
+        confidence += 0.10
+    confidence = min(1.0, confidence)
+
+    return {
+        "asset_intensity": asset_intensity,
+        "growth_profile": growth_profile,
+        "quality_regime": quality_regime,
+        "sector": sector,
+        "confidence": round(confidence, 2),
+    }
+
+
+def _model_applicability(classification):
+    """Modul B — tillämplighetsmatris.
+
+    Returnerar dict {model_key: "applicable" | "conditional" | "not_applicable"}
+    Modeller markerade `not_applicable` får N/A, EJ 0, i compositen.
+    """
+    asset = classification.get("asset_intensity")
+    growth = classification.get("growth_profile")
+    quality = classification.get("quality_regime")
+    sector = classification.get("sector")
+    is_bank = sector == "financials"
+    is_cyclical = growth == "cyclical"
+    is_turnaround = quality == "turnaround"
+    is_asset_light = asset == "asset_light"
+
+    a = {
+        # Bok-modeller (v1)
+        "graham":  "not_applicable" if is_asset_light or is_turnaround else
+                   ("conditional" if is_cyclical or is_bank else "applicable"),
+        "klarman": "applicable" if not is_asset_light else "conditional",
+        "magic":   "not_applicable" if is_bank or is_turnaround else
+                   ("conditional" if is_asset_light else "applicable"),
+        "lynch":   "applicable" if quality == "compounder" else
+                   ("conditional" if quality in ("average",) else "not_applicable"),
+        "buffett": "not_applicable" if is_turnaround else "applicable",
+        "divq":    "applicable" if (s_dy := classification.get("_dy", 0)) and s_dy > 0.02 else "not_applicable",
+        "trend":   "applicable",
+        "taleb":   "applicable",
+        "kelly":   "applicable",
+        "owners":  "applicable",
+        # v2-modeller
+        "fcf_yield":     "applicable" if not is_bank else "not_applicable",
+        "roic_implied":  "applicable" if not is_bank and quality not in ("turnaround", "subpar") else
+                         ("conditional" if quality == "subpar" else "not_applicable"),
+        "capital_alloc": "applicable",
+        "earnings_revision": "applicable",  # körs om data finns, annars N/A
+    }
+    return a
+
+
+# ─── v2-scorers ──────────────────────────────────────────────────
+
+def _score_fcf_yield(s, classification):
+    """FCF Yield Score — vi använder OCF som proxy (CapEx-data saknas).
+    Detta överskattar FCF för CapEx-tunga bolag. Markerar därför som approx."""
+    ocf = s.get("operating_cash_flow")
+    market_cap = s.get("market_cap") or s.get("market_capitalization")
+    if not ocf or not market_cap or market_cap <= 0:
+        return None
+    # EV ≈ market_cap (vi har inte nettoskuld separerat, så approx)
+    fcf_yield = ocf / market_cap
+    if fcf_yield > 0.08: base = 100
+    elif fcf_yield > 0.06: base = 80
+    elif fcf_yield > 0.04: base = 60
+    elif fcf_yield > 0.03: base = 40
+    elif fcf_yield > 0.02: base = 20
+    else: base = max(0, fcf_yield * 1000)  # 1% = 10p
+    # CapEx-tunga sektorer: dämpa eftersom OCF överskattar FCF
+    if classification.get("sector") in ("energy", "materials", "industrials", "utility", "telecom"):
+        base *= 0.85
+    return _clamp(base)
+
+
+def _score_roic_implied(s, classification):
+    """ROIC-Implied Fair Multiple Score — kärnaddition från specen.
+    Bolag med hög ROIC förtjänar matematiskt högre multipel.
+    Vi använder tabellen från specen 5.2.
+
+    Förutsätter g från growth_profile, WACC från market_cap-storlek.
+    """
+    roic = s.get("return_on_capital_employed")
+    ev_ebit = s.get("ev_ebit_ratio")
+    if roic is None or ev_ebit is None or ev_ebit <= 0:
+        return None
+    roic_pct = roic * 100
+
+    # Antagen tillväxt — quality_regime har företräde över growth_profile
+    # eftersom quality är mer robust (ROIC-baserat) än ägardata-spikes.
+    # Compounders bör få högre g eftersom de återinvesterar lönsamt.
+    quality = classification.get("quality_regime")
+    growth = classification.get("growth_profile")
+    if quality == "compounder":
+        g = 0.06 if classification.get("asset_intensity") == "asset_light" else 0.05
+    elif quality == "average":
+        g = 0.04
+    elif quality == "subpar":
+        g = 0.02
+    else:
+        growth_map = {"hyper": 0.07, "growth": 0.05, "steady": 0.03, "mature": 0.02, "cyclical": 0.03}
+        g = growth_map.get(growth, 0.03)
+
+    # WACC baserat på market cap
+    market_cap = s.get("market_cap") or 0
+    if market_cap > 50e9: wacc = 0.08    # large cap
+    elif market_cap > 5e9: wacc = 0.09   # mid cap
+    elif market_cap > 500e6: wacc = 0.11 # small cap
+    else: wacc = 0.13                    # micro
+
+    # Steady-state formel: fair_ev_ebit = (1 - g/ROIC) / (WACC - g)
+    if roic_pct < 2 or g >= roic / 1.0:  # invalid: g >= ROIC ger negativ fair
+        return None
+    if wacc - g <= 0.005:  # förhindra division by zero / orealistiska multiplar
+        return None
+    fair_ev_ebit = (1 - g / roic) / (wacc - g)
+    if fair_ev_ebit <= 0 or fair_ev_ebit > 200:  # sanity cap
+        return None
+
+    discount = (fair_ev_ebit - ev_ebit) / fair_ev_ebit
+    if discount > 0.30: base = 100
+    elif discount > 0.10: base = 80
+    elif discount > -0.10: base = 60
+    elif discount > -0.30: base = 30
+    else: base = 10
+    return _clamp(base)
+
+
+def _score_capital_allocation(s, classification):
+    """Capital Allocation Score — kombinerar buyback yield, utdelning, ROIC-trend, skuld.
+    Vi har begränsad data: ingen buyback-historik, ingen ROIC-trend, bara nuvarande skuld.
+    Approx: fokus på ROIC-nivå + skuldhållning + utdelning.
+    """
+    roce = s.get("return_on_capital_employed")
+    de = s.get("debt_to_equity_ratio")
+    nd_ebitda = s.get("net_debt_ebitda_ratio")
+    dy = s.get("direct_yield") or 0
+    payout = s.get("dividend_payout_ratio") or 0
+    if roce is None and de is None:
+        return None
+
+    pts = 0
+    n_components = 0
+
+    # Komponent 1: ROIC nivå (proxy för "stigande ROIC" eftersom vi saknar historik)
+    if roce is not None:
+        n_components += 1
+        roce_pct = roce * 100
+        if roce_pct >= 20: pts += 20
+        elif roce_pct >= 15: pts += 17
+        elif roce_pct >= 10: pts += 12
+        elif roce_pct >= 5: pts += 7
+        else: pts += 2
+
+    # Komponent 2: Skuld-disciplin
+    debt_score = 0
+    if nd_ebitda is not None:
+        n_components += 1
+        if nd_ebitda < 1.0: debt_score = 20
+        elif nd_ebitda < 2.0: debt_score = 15
+        elif nd_ebitda < 3.0: debt_score = 8
+        else: debt_score = 2
+        pts += debt_score
+    elif de is not None:
+        n_components += 1
+        if de < 0.3: debt_score = 18
+        elif de < 0.6: debt_score = 14
+        elif de < 1.0: debt_score = 10
+        else: debt_score = 4
+        pts += debt_score
+
+    # Komponent 3: Utdelningskvalitet (för kapitaldistribution)
+    if dy > 0:
+        n_components += 1
+        dy_pct = dy * 100
+        if dy_pct >= 3 and dy_pct < 8 and payout < 0.7: pts += 18  # hållbar
+        elif dy_pct >= 2 and dy_pct < 8: pts += 13
+        elif dy_pct < 2: pts += 8                                   # liten utdelning
+        else: pts += 3                                               # > 8% = misstänkt
+
+    if n_components == 0:
+        return None
+    # Normalisera 0-100 (max teoretiska poäng = n_components × 20)
+    max_pts = n_components * 20
+    return _clamp(100.0 * pts / max_pts)
+
+
 def _score_book_models(s):
     """Returnerar dict {model_key: 0-100 score (eller None)} + composite.
 
@@ -2937,6 +3262,141 @@ def _score_book_models(s):
                 weighted_sum += v * m["weight"]
                 weight_sum += m["weight"]
         scores["composite"] = (weighted_sum / weight_sum) if weight_sum > 0 else None
+
+    # ══════════════════════════════════════════════════════════════
+    # AKTIEAGENT v2 — applicability + nya scorers + 3-axel composite
+    # ══════════════════════════════════════════════════════════════
+    classification = _classify_stock(s)
+    classification["_dy"] = s.get("direct_yield")  # för divq-applicability
+    applicability = _model_applicability(classification)
+
+    # Markera N/A på modeller som inte gäller — INTE 0
+    for k, status in applicability.items():
+        if status == "not_applicable" and scores.get(k) is not None and k in (
+            "graham", "klarman", "magic", "lynch", "buffett", "divq",
+            "trend", "taleb", "kelly", "owners"):
+            scores[f"{k}_v2_status"] = "N/A"
+
+    # v2-scorers
+    fcf = _score_fcf_yield(s, classification)
+    roic_imp = _score_roic_implied(s, classification)
+    cap_alloc = _score_capital_allocation(s, classification)
+    if fcf is not None: scores["fcf_yield"] = round(fcf, 1)
+    if roic_imp is not None: scores["roic_implied"] = round(roic_imp, 1)
+    if cap_alloc is not None: scores["capital_alloc"] = round(cap_alloc, 1)
+
+    # ─── 3-axel composite (Value / Quality / Momentum) ───
+    def _avg_applicable(keys, statuses):
+        """Genomsnitt av modeller som är applicable och har score."""
+        vals = []
+        for k in keys:
+            if statuses.get(k) == "not_applicable":
+                continue
+            v = scores.get(k)
+            if v is not None:
+                vals.append(v)
+        return sum(vals) / len(vals) if vals else None
+
+    # Value: Klarman, Magic Formula, FCF Yield, (Reverse DCF saknas)
+    value_axis = _avg_applicable(["klarman", "magic", "fcf_yield"], applicability)
+    # Quality: Buffett, ROIC-Implied, Capital Allocation
+    quality_axis = _avg_applicable(["buffett", "roic_implied", "capital_alloc"], applicability)
+    # Momentum: Trend, Owners (insider/retail), (Earnings Revision saknas)
+    momentum_axis = _avg_applicable(["trend", "owners"], applicability)
+
+    scores["v2_axes"] = {
+        "value": round(value_axis, 1) if value_axis is not None else None,
+        "quality": round(quality_axis, 1) if quality_axis is not None else None,
+        "momentum": round(momentum_axis, 1) if momentum_axis is not None else None,
+    }
+    scores["v2_classification"] = classification
+    scores["v2_applicability"] = applicability
+
+    # ─── Tesklassificering enligt 6.2 i specen ───
+    # Tröskel: high≥60 (passar bok-tröskel 65 +/- buffert), mid≥40, low<40
+    def _level(v):
+        if v is None: return "?"
+        if v >= 60: return "high"
+        if v >= 40: return "mid"
+        return "low"
+
+    v_lvl = _level(value_axis)
+    q_lvl = _level(quality_axis)
+    m_lvl = _level(momentum_axis)
+
+    # Behandla "mid" som "high" om vi har hög confidence i datan
+    def _hi(lvl): return lvl == "high" or lvl == "mid"
+    def _lo(lvl): return lvl == "low"
+
+    setup = "incomplete_data"
+    setup_label = "Otillräcklig data"
+    setup_action = "Vänta på mer data"
+
+    if v_lvl == "?" or q_lvl == "?":
+        setup, setup_label, setup_action = "incomplete_data", "🤷 Otillräcklig data", "Vänta på mer datatäckning"
+    elif v_lvl == "high" and q_lvl == "high" and _hi(m_lvl):
+        setup, setup_label, setup_action = "trifecta", "🎯 Trifecta", "Aggressiv köp — alla axlar lyser"
+    elif v_lvl == "high" and q_lvl == "high" and _lo(m_lvl):
+        setup, setup_label, setup_action = "deep_value", "💎 Djup-värde / value-trap-risk", "Selektiv, vänta på katalysator"
+    elif v_lvl == "high" and _lo(q_lvl) and _hi(m_lvl):
+        setup, setup_label, setup_action = "cigar_butt", "🚬 Cigarrfimp (Graham-style)", "Liten position, snabb rotation"
+    elif _lo(v_lvl) and q_lvl == "high" and _hi(m_lvl):
+        setup, setup_label, setup_action = "quality_full_price", "🏰 Quality Compounder vid fullt pris", "Skala in, ej fullposition"
+    elif _lo(v_lvl) and q_lvl == "high" and _lo(m_lvl):
+        setup, setup_label, setup_action = "quality_fair", "📐 Quality at fair-to-rich price", "Vänta eller mini-position"
+    elif _lo(v_lvl) and _lo(q_lvl) and _hi(m_lvl):
+        setup, setup_label, setup_action = "momentum_trap", "⚠️ Momentum-fälla", "Avstå"
+    elif _lo(v_lvl) and _lo(q_lvl) and _lo(m_lvl):
+        setup, setup_label, setup_action = "value_destruction", "💀 Värdedestruktion", "Avstå"
+    elif q_lvl == "mid" and _hi(v_lvl):
+        setup, setup_label, setup_action = "balanced_value", "⚖️ Balanserat värdecase", "Standardposition möjlig"
+    elif q_lvl == "mid" and _lo(v_lvl):
+        setup, setup_label, setup_action = "balanced_quality", "⚖️ Balanserat kvalitetscase", "Mini-position vid dipp"
+    else:
+        setup, setup_label, setup_action = "mixed_signals", "🔄 Blandade signaler", "Vänta på tydligare bild"
+
+    scores["v2_setup"] = setup
+    scores["v2_setup_label"] = setup_label
+    scores["v2_setup_action"] = setup_action
+
+    # ─── Confidence ───
+    # 1 - std(scores within axes) × applicability_ratio
+    n_applicable = sum(1 for k, st in applicability.items() if st in ("applicable", "conditional"))
+    n_total = len(applicability)
+    appl_ratio = n_applicable / n_total if n_total > 0 else 0
+    # std-deviation av axlar (närmare 0 = mer konsensus)
+    axes_vals = [v for v in (value_axis, quality_axis, momentum_axis) if v is not None]
+    if len(axes_vals) >= 2:
+        mean_a = sum(axes_vals) / len(axes_vals)
+        std_a = (sum((x - mean_a) ** 2 for x in axes_vals) / len(axes_vals)) ** 0.5
+        conviction = max(0, 1 - std_a / 50)  # std 50 → 0, std 0 → 1
+    else:
+        conviction = 0.3
+    scores["v2_confidence"] = round(conviction * appl_ratio * classification.get("confidence", 0.5), 2)
+
+    # ─── Position-sizing-output (basic enligt 7.2) ───
+    axes_factor_map = {
+        "trifecta": 1.5,
+        "deep_value": 1.2,
+        "quality_full_price": 1.0,
+        "quality_fair": 0.7,
+        "balanced_value": 0.9,
+        "balanced_quality": 0.8,
+        "cigar_butt": 0.5,
+        "mixed_signals": 0.3,
+        "momentum_trap": 0.0,
+        "value_destruction": 0.0,
+        "incomplete_data": 0.0,
+    }
+    axes_factor = axes_factor_map.get(setup, 0.5)
+    target_pct = 5.0  # 5% per position som default
+    sized = target_pct * axes_factor * scores["v2_confidence"]
+    scores["v2_position"] = {
+        "axes_factor": axes_factor,
+        "target_pct_of_portfolio": round(sized, 2),
+        "starter_pct_of_target": 25 if axes_factor < 1.0 else (50 if axes_factor >= 1.5 else 33),
+        "scale_in_at": [-7, -15, -25],  # procent från ingång
+    }
 
     return scores
 

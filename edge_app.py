@@ -575,6 +575,21 @@ def api_stock_detail(orderbook_id):
                 m["key"]: round(sc[m["key"]], 1) if sc.get(m["key"]) is not None else None
                 for m in BOOK_MODELS
             }
+            # v2-output (klassificering, axlar, setup, position)
+            d["v2"] = {
+                "classification": sc.get("v2_classification"),
+                "applicability": sc.get("v2_applicability"),
+                "axes": sc.get("v2_axes"),
+                "setup": sc.get("v2_setup"),
+                "setup_label": sc.get("v2_setup_label"),
+                "setup_action": sc.get("v2_setup_action"),
+                "confidence": sc.get("v2_confidence"),
+                "position": sc.get("v2_position"),
+                "fcf_yield_score": sc.get("fcf_yield"),
+                "roic_implied_score": sc.get("roic_implied"),
+                "capital_alloc_score": sc.get("capital_alloc"),
+                "na_models": [k for k, v in (sc.get("v2_applicability") or {}).items() if v == "not_applicable"],
+            }
             if sc.get("value_trap_score"):
                 d["value_trap_score"] = sc["value_trap_score"]
             if sc.get("graham_normalized_pe"):
@@ -3342,6 +3357,63 @@ Buy-zone = simulerar vad composite-score blir vid en kursnedgång.
 - "Approaching": rörelse går mot köpzon men ej passerat ännu
 
 ══════════════════════════════════════════════════════════════
+DEL 6.5 — AKTIEAGENT v2 (NY MODELL — använd ALLTID denna ramverk)
+══════════════════════════════════════════════════════════════
+
+v2 är en grundläggande omarbetning av v1. Användaren förväntar sig att
+DU pratar i v2-termer, inte v1.
+
+**Steg 1: Klassificering** (görs automatiskt av get_full_stock):
+- Asset intensity: asset_light / mixed / asset_heavy
+- Quality regime: compounder (ROIC ≥ 15%) / average / subpar / turnaround
+- Growth profile: hyper / growth / steady / mature / cyclical
+- Sector: tech, financials, healthcare, energy, materials, industrials, consumer, reit, utility, telecom
+
+**Steg 2: Tillämplighetsmatris** — vissa modeller är N/A för fel bolagstyp:
+- Graham defensive: N/A för asset_light bolag (designad för 1930-talets industri)
+- Magic Formula: N/A för banker (EV/EBIT är meningslöst)
+- Lynch PEG: N/A för subpar/turnaround
+- Buffett Quality: N/A för turnarounds
+- Utdelningskvalitet: N/A om DY < 2%
+
+**Modeller markerade N/A EXKLUDERAS från composite — inte 0 poäng.**
+v1:s misstag var att ge Graham 0 till Microsoft och dra ned compositen.
+
+**Steg 3: Nya scorers (utöver bok-modellerna):**
+- **FCF Yield Score**: OCF/Market Cap. ≥8% = 100p, 4-6% = 60p, <2% = 0
+- **ROIC-Implied Multiple**: Bolag med hög ROIC förtjänar matematiskt
+  högre P/E. Formel: fair_ev_ebit = (1 - g/ROIC) / (WACC - g).
+  En MSFT med ROIC 28% och g=6% har fair EV/EBIT ≈ 38, mot faktisk 22 →
+  STARK BUY enligt matematiken (score ~85).
+- **Capital Allocation Score**: ROIC-nivå + skuld-disciplin + utdelningskvalitet
+
+**Steg 4: 3-axel composite** (inte naivt medeltal som v1):
+- **Value axis**: Klarman + Magic + FCF Yield
+- **Quality axis**: Buffett + ROIC-Implied + Capital Alloc
+- **Momentum axis**: Trend + Owners (insider/retail)
+
+**Steg 5: Tesklassificering** (high ≥60, mid 40-60, low <40 per axel):
+- 🎯 **Trifecta** (V high + Q high + M high) → Aggressiv köp 7.5% av portfölj
+- 💎 **Djup-värde** (V high + Q high + M low) → Vänta på katalysator
+- 🚬 **Cigarrfimp** (V high + Q low + M high) → Liten position, snabb rotation
+- 🏰 **Quality Compounder vid fullt pris** (V low + Q high + M high) → SKALA IN, ej fullposition
+- 📐 **Quality at fair-to-rich** (V low + Q high + M low) → Mini-position
+- ⚠️ **Momentum-fälla** (V low + Q low + M high) → AVSTÅ
+- 💀 **Värdedestruktion** (V low + Q low + M low) → AVSTÅ
+
+**Steg 6: Position sizing** ersätter binär KÖP/VÄNTA/SÄLJ:
+- Trifecta: 1.5x base allocation, 50% starter
+- Quality Compounder: 1.0x, men 25% starter med skalning vid -7%, -15%, -25%
+- Cigarrfimp: 0.5x, snabb in-och-ut
+- Momentum-fälla / Value destruction: 0x (avstå)
+
+**EXEMPEL — Microsoft i v2:**
+- v1 sa 35/100 (mekaniskt: Graham failar P/E×P/B test för asset-light bolag)
+- v2 säger: asset_light + compounder → Graham är N/A, ej "fail".
+  V=låg, Q=hög, M=medel → 🏰 Quality Compounder vid fullt pris.
+  Action: SKALA IN över tid, inte VÄNTA på dipp.
+
+══════════════════════════════════════════════════════════════
 DEL 7 — SVARSPRINCIPER
 ══════════════════════════════════════════════════════════════
 
@@ -3356,12 +3428,18 @@ Edge Score handlar om momentum just nu, composite om fundamental kvalitet enligt
 **Vid skärmbild av portfölj**: identifiera bolag → search_stocks för var och en →
 analysera viktning, kvalitet (composite), koncentrationsrisk, missing föreslagna picks.
 
-**Vid frågan "är X köpvärt?"**:
-1. search_stocks(X) för att få alla nyckeltal
-2. Lista composite + de 3-5 viktigaste modell-scores
-3. Säg vad bolaget passerar och vad det fallerar på
-4. Nämn buy-zone om aktien är nära (distance_pct < 10%)
-5. Avsluta med en KLAR rekommendation: "köp / vänta / undvik"
+**Vid frågan "är X köpvärt?"** (använd v2-ramverket):
+1. `get_full_stock(X)` för komplett data
+2. Inled med v2-classification: "X är asset_light tech-compounder" (1 mening)
+3. Visa **3-axel-tabell**: Value / Quality / Momentum med poäng
+4. Förklara setup-typen: "→ 🏰 Quality Compounder vid fullt pris betyder..."
+5. Visa vilka modeller som är **N/A** och varför (transparens)
+6. Lista de 3 viktigaste numeriska skälen (ROIC, FCF Yield, etc.)
+7. Avsluta med **position-plan**, inte binär signal:
+   - Mål-allokering (% av portfölj)
+   - Starter-storlek (% av målet)
+   - Skalningsnivåer vid prisfall
+   - Stop_thesis (FUNDAMENTAL trigger, inte pris-stop)
 
 **Vid jämförelse av flera bolag**: visa tabell med composite + 3-4 nyckeltal.
 

@@ -3028,6 +3028,71 @@ function openDrawer(s) {
 
     let html = '';
 
+    // ── 🎯 v2 SETUP (Aktieagent v2: tesklassificering + 3-axlar + position) ──
+    if (s.v2 && s.v2.setup) {
+        const v = s.v2;
+        const axes = v.axes || {};
+        const cls = v.classification || {};
+        const pos = v.position || {};
+        const conf = v.confidence != null ? Math.round(v.confidence * 100) : 0;
+
+        // Färg per setup
+        const setupBg = {
+            trifecta: 'linear-gradient(135deg,#bbf7d0,#86efac)',
+            deep_value: 'linear-gradient(135deg,#fde68a,#fbbf24)',
+            cigar_butt: 'linear-gradient(135deg,#fed7aa,#fb923c)',
+            quality_full_price: 'linear-gradient(135deg,#dbeafe,#93c5fd)',
+            quality_fair: 'linear-gradient(135deg,#e0e7ff,#a5b4fc)',
+            balanced_value: 'linear-gradient(135deg,#d1fae5,#86efac)',
+            balanced_quality: 'linear-gradient(135deg,#e0e7ff,#a5b4fc)',
+            mixed_signals: 'linear-gradient(135deg,#f3f4f6,#d1d5db)',
+            momentum_trap: 'linear-gradient(135deg,#fee2e2,#fca5a5)',
+            value_destruction: 'linear-gradient(135deg,#fee2e2,#f87171)',
+            incomplete_data: 'linear-gradient(135deg,#f3f4f6,#e5e7eb)',
+        }[v.setup] || 'linear-gradient(135deg,#f3f4f6,#e5e7eb)';
+
+        function axisBar(label, val, color) {
+            const v_ = val == null ? 0 : val;
+            const lbl = val == null ? '–' : val.toFixed(0);
+            return `<div style="flex:1">
+                <div style="display:flex;justify-content:space-between;font-size:10px;color:#374151;margin-bottom:3px;font-weight:700"><span>${label}</span><span style="font-size:13px">${lbl}</span></div>
+                <div style="height:6px;background:rgba(0,0,0,0.08);border-radius:3px;overflow:hidden">
+                    <div style="height:100%;width:${v_}%;background:${color};border-radius:3px"></div>
+                </div>
+            </div>`;
+        }
+
+        html += `<div class="drawer-section" style="background:${setupBg};border-radius:14px;padding:16px 18px;margin-bottom:14px">
+            <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:14px;margin-bottom:12px">
+                <div>
+                    <div style="font-size:11px;color:#374151;text-transform:uppercase;letter-spacing:0.06em;font-weight:700">v2 Setup-klassificering</div>
+                    <div style="font-size:22px;font-weight:800;line-height:1.1;margin-top:4px">${v.setup_label}</div>
+                    <div style="font-size:13px;font-weight:600;color:#1f2937;margin-top:4px">${v.setup_action}</div>
+                </div>
+                <div style="text-align:right;font-size:11px">
+                    <div style="font-weight:700;color:#1f2937">Confidence ${conf}%</div>
+                    <div style="color:#374151;margin-top:2px">${cls.asset_intensity || '–'} · ${cls.quality_regime || '–'}</div>
+                    <div style="color:#374151">${cls.sector || 'sektor okänd'}</div>
+                </div>
+            </div>
+            <div style="display:flex;gap:14px;background:rgba(255,255,255,0.5);padding:10px;border-radius:10px">
+                ${axisBar('💰 Value', axes.value, '#dc2626')}
+                ${axisBar('🏰 Quality', axes.quality, '#059669')}
+                ${axisBar('📈 Momentum', axes.momentum, '#2563eb')}
+            </div>
+            ${pos.target_pct_of_portfolio > 0 ? `
+                <div style="background:rgba(255,255,255,0.6);border-radius:10px;padding:10px 12px;margin-top:10px;font-size:12px">
+                    <strong>📊 Position-plan:</strong> mål ${pos.target_pct_of_portfolio}% av portföljen ·
+                    starter ${pos.starter_pct_of_target}% av målet ·
+                    skala in vid ${(pos.scale_in_at || []).map(x => x + '%').join(' / ')}
+                </div>` : ''}
+            ${(v.na_models || []).length > 0 ? `
+                <div style="font-size:10px;color:#4b5563;margin-top:8px;font-style:italic">
+                    Ej tillämpliga modeller (N/A): ${v.na_models.join(', ')}
+                </div>` : ''}
+        </div>`;
+    }
+
     // ── ⭐ SMART SCORE (sammanvägd, nya hjältescoren) ──
     if (s.smart_score != null) {
         const ss = s.smart_score;
