@@ -1051,6 +1051,51 @@ def api_insiders():
     return jsonify(result)
 
 
+@app.route("/api/preset/<mode>")
+def api_preset_screen(mode):
+    """Trending Value / Trending Quality preset (O'Shaughnessy + Hammar).
+
+    GET /api/preset/value?country=SE&limit=50&min_owners=100
+    GET /api/preset/quality?country=SE&limit=50&min_owners=100
+
+    Returnerar top-decilens bolag sorterade på 6m momentum.
+    """
+    if mode not in ("value", "quality"):
+        return jsonify({"error": "mode måste vara 'value' eller 'quality'"}), 400
+    country = request.args.get("country", "SE")
+    limit = int(request.args.get("limit", 50))
+    min_owners = int(request.args.get("min_owners", 100))
+    ck = f"preset|{mode}|{country}|{limit}|{min_owners}"
+    cached, hit = _cached_response(ck)
+    if hit:
+        return jsonify(cached)
+
+    db = get_db()
+    try:
+        from edge_db import get_trending_value_quality
+        results = get_trending_value_quality(db, mode=mode, country=country,
+                                              limit=limit, min_owners=min_owners)
+    finally:
+        db.close()
+
+    payload = {
+        "mode": mode,
+        "country": country,
+        "count": len(results),
+        "label": "Trending Value (O'Shaughnessy)" if mode == "value" else "Trending Quality (Hammar)",
+        "description": (
+            "Top 10% billigaste på Value Composite (P/E + P/B + P/S + EV/EBITDA + "
+            "dir.avk.), sorterade på 6m prismomentum."
+        ) if mode == "value" else (
+            "Top 10% bästa kvalitet (ROE + ROIC + bruttomarginal + op.marginal), "
+            "sorterade på 6m prismomentum."
+        ),
+        "results": results,
+    }
+    _set_cache(ck, payload)
+    return jsonify(payload)
+
+
 @app.route("/api/signals")
 def api_signals():
     """
@@ -3946,6 +3991,38 @@ Bolag med historisk hög ROIC men nu fallande, ej cyclical, fortfarande lönsam.
 **Management guidance — TIER 4-källa:**
 "Bolaget guidar...", "2028-modellen" → MÅSTE flaggas:
 > "Detta är bolagets egen prognos. Historiskt missar mgmt-guidance med 15-25%."
+
+**Input-verifiering (Patch 9 — anti-hallucination):**
+Om användaren ger en specifik datapunkt i prompten (t.ex. "Reverse DCF
+visar 3% implicit growth" eller "P/E = 8"), MÅSTE du verifiera mot
+egen beräkning innan analysen byggs på den:
+
+1. Kör get_full_stock + jämför med användarens siffra
+2. Om |användarens − din beräkning| / |din beräkning| > 20% → flagga divergens:
+   > "⚠ Användarens uppgift (X%) avviker från min beräkning (Y%). Jag bygger
+   > analysen på Y% och flaggar diskrepansen."
+3. Acceptera ALDRIG en orealistisk premiss tyst. T.ex. TSLA 3% implicit growth
+   är osannolikt — TSLA har historiskt prisat in 25-40%.
+
+**Sanity-check inputs (Patch 7 enforcement):**
+Backend FCF-pipelinen blockerar nu räkning om:
+- market_cap < 1e7 eller > 1e13 (sannolikt valuta-fel)
+- |OCF| > market_cap (decimalfel)
+Om `v2.fcf_debug.source = "blocked_by_sanity_check"`, säg det rakt:
+> "FCF Yield kunde ej beräknas — datakvalitetsproblem (se warnings)."
+
+**Sektor-routning (v2.3 Patch 8):**
+För **real_estate (REIT), insurance, financials**: FCF Yield, ROIC-implied och
+Reverse DCF returnerar `not_applicable`. Använd istället:
+- REIT: P/B mot NAV, belåningsgrad, hyresgäst-koncentration
+- Bank/insurance: ROE, P/B, kapitaltäckning
+Kör INTE generisk FCF-mall för dessa sektorer — det ger missvisande resultat.
+
+**Piotroski F-Score (v2.3 ny — Börsdata-baserad):**
+Om get_full_stock returnerar `f_score`, citera den i Quality-sektion:
+> "Piotroski F-Score: 7/9 (stark) — positiv NI/OCF, ROA-förbättring,
+> ingen utspädning, bruttomarginal upp."
+F-Score ≥ 7 = stark. 5-6 = medel. ≤ 4 = varningssignal.
 
 ══════════════════════════════════════════════════════════════
 DEL 6.35 — TOKEN-BUDGET (Patch 7, hård gräns)

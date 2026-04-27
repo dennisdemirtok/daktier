@@ -3146,16 +3146,22 @@ def _model_applicability(classification):
     quality = classification.get("quality_regime")
     sector = classification.get("sector")
     is_bank = sector == "financials"
+    is_reit = sector == "real_estate"      # v2.3 Patch 8: REIT-routning
+    is_insurance = sector == "insurance"   # v2.3 Patch 8
+    is_utility = sector == "utilities"     # v2.3 Patch 8
     is_cyclical = growth == "cyclical"
     is_turnaround = quality == "turnaround"
     is_asset_light = asset == "asset_light"
+
+    # Sektorer där FCF inte är primärt mått (book value/NAV/dividend driven)
+    is_book_value_driven = is_bank or is_reit or is_insurance
 
     a = {
         # Bok-modeller (v1)
         "graham":  "not_applicable" if is_asset_light or is_turnaround else
                    ("conditional" if is_cyclical or is_bank else "applicable"),
         "klarman": "applicable" if not is_asset_light else "conditional",
-        "magic":   "not_applicable" if is_bank or is_turnaround else
+        "magic":   "not_applicable" if is_book_value_driven or is_turnaround else
                    ("conditional" if is_asset_light else "applicable"),
         "lynch":   "applicable" if quality == "compounder" else
                    ("conditional" if quality in ("average",) else "not_applicable"),
@@ -3165,12 +3171,12 @@ def _model_applicability(classification):
         "taleb":   "applicable",
         "kelly":   "applicable",
         "owners":  "applicable",
-        # v2-modeller
-        "fcf_yield":     "applicable" if not is_bank else "not_applicable",
-        "roic_implied":  "applicable" if not is_bank and quality not in ("turnaround", "subpar") else
+        # v2-modeller — FCF/ROIC/reverse-DCF olämpliga för book-value-driven sektorer
+        "fcf_yield":     "applicable" if not is_book_value_driven else "not_applicable",
+        "roic_implied":  "applicable" if not is_book_value_driven and quality not in ("turnaround", "subpar") else
                          ("conditional" if quality == "subpar" else "not_applicable"),
         "capital_alloc": "applicable",
-        "reverse_dcf":   "applicable" if not is_bank else "not_applicable",
+        "reverse_dcf":   "applicable" if not is_book_value_driven else "not_applicable",
         "earnings_revision": "applicable",  # körs om data finns, annars N/A
     }
     return a
@@ -3862,12 +3868,60 @@ _SECTOR_SBC_PROXY = {
 }
 
 
+def _sanity_check_financials(s):
+    """v2.3 Patch 7 — Input sanity-check innan FCF-pipelinen kör.
+
+    Returnerar (ok: bool, warnings: list[str]).
+
+    Range-checks (loggas men flaggar bara hård fail om absolut absurda):
+      - market_cap: 1e7 (10M) ≤ MC ≤ 1e13 (10T) i nativ valuta
+      - operating_cash_flow: |OCF| < market_cap (annars decimalfel)
+      - debt_to_equity_ratio: D/E < 50 (rimligt även för leveraged)
+      - last_price > 0
+    """
+    warnings = []
+    mcap = _market_cap_native(s) or 0
+    ocf = s.get("operating_cash_flow") or 0
+    de = s.get("debt_to_equity_ratio") or 0
+    price = s.get("last_price") or 0
+
+    # Hård fail: market_cap utanför rimligt intervall
+    if mcap > 0 and (mcap < 1e7 or mcap > 1e13):
+        warnings.append(f"market_cap_native={mcap:.0f} utanför 1e7–1e13 (sannolikt valuta-fel)")
+        return False, warnings
+
+    # Hård fail: |OCF| > MCap = decimalfel någonstans
+    if ocf and abs(ocf) > mcap and mcap > 0:
+        warnings.append(f"|OCF|={abs(ocf):.0f} > market_cap={mcap:.0f} (decimalfel?)")
+        return False, warnings
+
+    # Mjukt: extrema D/E flaggas men blockerar inte
+    if de > 50:
+        warnings.append(f"D/E={de:.1f} extremt högt (>50)")
+
+    # Mjukt: pris noll
+    if price <= 0:
+        warnings.append(f"last_price={price} (delisted/illikvid?)")
+
+    return True, warnings
+
+
 def _score_fcf_yield(s, classification):
     """FCF Yield Score — Börsdata-data om tillgänglig, annars sektor-proxy.
 
     Med Börsdata: riktig FCF (OCF − investing CF), riktig nettoskuld → riktig EV.
     Utan Börsdata: OCF − sektor-CapEx-proxy, EV = MCap × (1 + 0.5 × D/E).
     """
+    # ── v2.3 Patch 7: Sanity-check inputs ──
+    sanity_ok, sanity_warnings = _sanity_check_financials(s)
+    if not sanity_ok:
+        s["_fcf_debug"] = {
+            "source": "blocked_by_sanity_check",
+            "warnings": sanity_warnings,
+            "score": None,
+        }
+        return None
+
     # ── Försök hämta riktiga Börsdata-värden via ISIN ──
     bd = s.get("_borsdata_latest")  # förladdad i bulk-attach
     if bd:
@@ -3887,6 +3941,13 @@ def _score_fcf_yield(s, classification):
             if ev <= 0:
                 return None
             fcf_yield = sbc_adj / ev
+
+            # v2.3 Patch 7: output sanity-check (-5% till +20%)
+            output_warning = None
+            if fcf_yield < -0.05 or fcf_yield > 0.20:
+                output_warning = (f"fcf_yield={fcf_yield*100:.2f}% utanför "
+                                  f"-5% till +20% — datakvalitet osäker")
+
             if fcf_yield > 0.08: base = 100
             elif fcf_yield > 0.06: base = 80
             elif fcf_yield > 0.04: base = 60
@@ -3905,6 +3966,8 @@ def _score_fcf_yield(s, classification):
                 "enterprise_value_real": round(ev),
                 "fcf_yield_on_ev_pct": round(fcf_yield * 100, 2),
                 "score": round(base, 1),
+                "sanity_warnings": (sanity_warnings or []) + (
+                    [output_warning] if output_warning else []),
                 "data_quality": {
                     "fcf_actual_available": True,
                     "net_debt_actual_available": True,
@@ -7193,6 +7256,168 @@ def get_insider_summary(db, days_back=90):
 
     _INSIDER_CACHE[days_back] = (summary, time.time())
     return summary
+
+
+def _price_return_6m(db, isin):
+    """6-månaders prisförändring baserat på borsdata_prices.
+
+    Returnerar None om vi har <120 dagars data (för kort historik).
+    """
+    if not isin:
+        return None
+    ph = _ph()
+    try:
+        rows = _fetchall(db,
+            f"SELECT date, close FROM borsdata_prices "
+            f"WHERE isin = {ph} ORDER BY date DESC LIMIT 130",
+            (isin,))
+    except Exception:
+        return None
+    if not rows or len(rows) < 100:
+        return None
+    rows_list = [dict(r) for r in rows]
+    # Senaste pris vs ~125 dagar bak (~6 mån handelsdagar)
+    latest = rows_list[0].get("close")
+    six_m_idx = min(125, len(rows_list) - 1)
+    six_m_ago = rows_list[six_m_idx].get("close")
+    if not latest or not six_m_ago or six_m_ago <= 0:
+        return None
+    return (latest - six_m_ago) / six_m_ago
+
+
+def get_trending_value_quality(db, mode="value", country="SE",
+                                limit=50, min_owners=100):
+    """Trending Value / Trending Quality preset (O'Shaughnessy + Hammar).
+
+    mode='value':
+      1. Rank universum på Value Composite (P/E + P/B + P/S + EV/EBITDA + dir.avk.)
+      2. Ta top 10% billigaste
+      3. Sortera den decilen på 6-månaders prismomentum
+      4. Returnera top {limit}
+
+    mode='quality':
+      Som ovan men Quality Composite (ROE + ROIC + bruttomarginal + FCF/EV).
+
+    Returnerar list[dict] med stock-data + value_composite_rank /
+    quality_composite_rank + momentum_6m + final_rank.
+    """
+    ph = _ph()
+    where_parts = [f"number_of_owners >= {ph}", "last_price > 0"]
+    params = [min_owners]
+    if country:
+        where_parts.append(f"country = {ph}")
+        params.append(country)
+    where_clause = "WHERE " + " AND ".join(where_parts)
+
+    cols = ("orderbook_id, name, short_name, isin, country, last_price, "
+            "currency, market_cap, number_of_owners, "
+            "price_earnings_ratio, price_book_ratio, price_sales_ratio, "
+            "ev_ebitda, dividend_yield, "
+            "return_on_equity, return_on_invested_capital, "
+            "operating_margin, gross_margin, "
+            "smart_score, v2_value, v2_quality")
+
+    rows = _fetchall(db,
+        f"SELECT {cols} FROM stocks {where_clause}",
+        tuple(params))
+    universe = [dict(r) for r in rows]
+    if not universe:
+        return []
+
+    # ── Beräkna Value/Quality Composite per bolag (lägre rank = bättre) ──
+    # Value: lågt P/E, P/B, P/S, EV/EBITDA är bra; hög dir.avk. är bra
+    # Quality: hög ROE, ROIC, gross_margin är bra
+    def _safe_pos(v):
+        """Returnerar v om positivt finite, annars None (skipas i ranking)."""
+        if v is None:
+            return None
+        try:
+            f = float(v)
+            if f != f or f == float("inf") or f <= 0:
+                return None
+            return f
+        except (ValueError, TypeError):
+            return None
+
+    def _rank_ascending(values):
+        """Returnerar dict {idx: rank} där lägsta värde = rank 1.
+        None-värden får rank len(non_none)+1 (bottnen)."""
+        idxed = [(i, v) for i, v in enumerate(values)]
+        valid = sorted([(i, v) for i, v in idxed if v is not None],
+                       key=lambda x: x[1])
+        ranks = {i: r + 1 for r, (i, _) in enumerate(valid)}
+        worst = len(valid) + 1
+        for i, v in idxed:
+            if v is None:
+                ranks[i] = worst
+        return ranks
+
+    def _rank_descending(values):
+        """Hög = bra (rank 1)."""
+        idxed = [(i, v) for i, v in enumerate(values)]
+        valid = sorted([(i, v) for i, v in idxed if v is not None],
+                       key=lambda x: -x[1])
+        ranks = {i: r + 1 for r, (i, _) in enumerate(valid)}
+        worst = len(valid) + 1
+        for i, v in idxed:
+            if v is None:
+                ranks[i] = worst
+        return ranks
+
+    if mode == "value":
+        pe_vals = [_safe_pos(s.get("price_earnings_ratio")) for s in universe]
+        pb_vals = [_safe_pos(s.get("price_book_ratio")) for s in universe]
+        ps_vals = [_safe_pos(s.get("price_sales_ratio")) for s in universe]
+        evebitda = [_safe_pos(s.get("ev_ebitda")) for s in universe]
+        # Dividend yield: hög = bra, så descending
+        dy_vals = [(s.get("dividend_yield") if (s.get("dividend_yield") or 0) > 0 else None)
+                   for s in universe]
+        r_pe = _rank_ascending(pe_vals)
+        r_pb = _rank_ascending(pb_vals)
+        r_ps = _rank_ascending(ps_vals)
+        r_ev = _rank_ascending(evebitda)
+        r_dy = _rank_descending(dy_vals)
+        composite_ranks = []
+        for i in range(len(universe)):
+            composite_ranks.append(r_pe[i] + r_pb[i] + r_ps[i] + r_ev[i] + r_dy[i])
+        composite_key = "value_composite_rank"
+    else:  # mode == "quality"
+        roe_vals = [_safe_pos(s.get("return_on_equity")) for s in universe]
+        roic_vals = [_safe_pos(s.get("return_on_invested_capital")) for s in universe]
+        gm_vals = [_safe_pos(s.get("gross_margin")) for s in universe]
+        om_vals = [_safe_pos(s.get("operating_margin")) for s in universe]
+        r_roe = _rank_descending(roe_vals)
+        r_roic = _rank_descending(roic_vals)
+        r_gm = _rank_descending(gm_vals)
+        r_om = _rank_descending(om_vals)
+        composite_ranks = []
+        for i in range(len(universe)):
+            composite_ranks.append(r_roe[i] + r_roic[i] + r_gm[i] + r_om[i])
+        composite_key = "quality_composite_rank"
+
+    # Tilldela composite-rank
+    for i, s in enumerate(universe):
+        s[composite_key] = composite_ranks[i]
+
+    # ── Top decil (10% bästa) ──
+    universe.sort(key=lambda s: s.get(composite_key, 99999))
+    decile_size = max(20, len(universe) // 10)  # minst 20 bolag, oftast 10%
+    decile = universe[:decile_size]
+
+    # ── Beräkna 6m momentum för decilen ──
+    for s in decile:
+        s["momentum_6m"] = _price_return_6m(db, s.get("isin"))
+
+    # ── Sortera decilen på momentum (None längst ned) ──
+    def _mom_key(s):
+        m = s.get("momentum_6m")
+        return -m if m is not None else 1e9
+    decile.sort(key=_mom_key)
+
+    # ── Tilldela final_rank + returnera top {limit} ──
+    for r, s in enumerate(decile):
+        s["final_rank"] = r + 1
+    return decile[:limit]
 
 
 def get_signals(db, country="SE", sort="score", order="desc",

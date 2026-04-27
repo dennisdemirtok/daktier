@@ -745,6 +745,10 @@
             <span class="material-symbols-outlined">analytics</span>
             Backtest
         </button>
+        <button class="sidebar-item" onclick="sidebarNav('trending', this)" data-tab="trending">
+            <span class="material-symbols-outlined">leaderboard</span>
+            Trending V/Q
+        </button>
         <button class="sidebar-item" onclick="sidebarNav('aitoplist', this)" data-tab="aitoplist">
             <span class="material-symbols-outlined">smart_toy</span>
             AI Topplista
@@ -1002,6 +1006,9 @@ async function fetchData(append = false) {
             return;
         } else if (currentTab === 'backtest') {
             renderBacktest();
+            return;
+        } else if (currentTab === 'trending') {
+            renderTrending();
             return;
         }
 
@@ -4604,6 +4611,175 @@ function handleAgentSSE(ev, turn) {
 }
 
 // ── Backtest ─────────────────────────────────────────────
+
+// ── Trending Value / Quality preset (O'Shaughnessy + Hammar) ──────
+
+let _trendingMode = 'value';  // 'value' eller 'quality'
+let _trendingCountry = 'SE';
+let _trendingData = null;
+
+async function renderTrending() {
+    const root = document.getElementById('content');
+    root.innerHTML = `
+    <style>
+        .tv-wrap { max-width: 1100px; margin: 0 auto; padding: 20px; }
+        .tv-header { margin-bottom: 16px; }
+        .tv-title { font-size: 22px; font-weight: 800; margin-bottom: 4px; }
+        .tv-desc { font-size: 13px; color: var(--text-muted); line-height: 1.5; }
+        .tv-controls { display: flex; gap: 8px; margin: 16px 0; flex-wrap: wrap; }
+        .tv-chip {
+            padding: 8px 16px; border-radius: 999px; border: 1px solid var(--border);
+            background: var(--surface); font-size: 13px; font-weight: 600;
+            cursor: pointer; transition: all 0.15s;
+        }
+        .tv-chip.active {
+            background: linear-gradient(135deg, #3b82f6, #2563eb); color: white;
+            border-color: transparent; box-shadow: 0 2px 6px rgba(59,130,246,0.3);
+        }
+        .tv-chip:hover:not(.active) { border-color: #60a5fa; }
+        .tv-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+        .tv-table th { background: var(--surface-hover); padding: 8px; text-align: left; font-weight: 700; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-muted); border-bottom: 2px solid var(--border); }
+        .tv-table td { padding: 8px; border-bottom: 1px solid var(--border-light); }
+        .tv-table tr:hover td { background: var(--surface-hover); cursor: pointer; }
+        .tv-rank { font-weight: 800; color: #2563eb; width: 32px; }
+        .tv-mom-pos { color: #059669; font-weight: 700; }
+        .tv-mom-neg { color: #dc2626; font-weight: 700; }
+        .tv-mom-na { color: var(--text-muted); font-style: italic; }
+        .tv-info-banner {
+            background: linear-gradient(135deg, #fef3c7, #fde68a); color: #78350f;
+            padding: 10px 14px; border-radius: 8px; font-size: 12px; margin-bottom: 12px;
+            border-left: 3px solid #f59e0b;
+        }
+    </style>
+    <div class="tv-wrap">
+        <div class="tv-header">
+            <div class="tv-title">📈 Trending Value & Quality</div>
+            <div class="tv-desc">
+                Klassisk O'Shaughnessy-strategi (boken "What Works on Wall Street").
+                Top 10% av universum på Value- eller Quality-Composite, sorterade på 6-månaders prismomentum.
+                Backtests på Stockholmsbörsen 2001-2021 visar <strong>Trending Value 20%/år</strong>,
+                <strong>Trending Quality 25%/år</strong> (källa: Börslabbet/Henning Hammar).
+            </div>
+        </div>
+        <div class="tv-controls">
+            <button class="tv-chip ${_trendingMode === 'value' ? 'active' : ''}"
+                    onclick="setTrendingMode('value')">💰 Trending Value</button>
+            <button class="tv-chip ${_trendingMode === 'quality' ? 'active' : ''}"
+                    onclick="setTrendingMode('quality')">🏰 Trending Quality</button>
+            <div style="flex:1"></div>
+            <button class="tv-chip ${_trendingCountry === 'SE' ? 'active' : ''}"
+                    onclick="setTrendingCountry('SE')">🇸🇪 Sverige</button>
+            <button class="tv-chip ${_trendingCountry === 'US' ? 'active' : ''}"
+                    onclick="setTrendingCountry('US')">🇺🇸 USA</button>
+        </div>
+        <div id="trendingContent">
+            <div style="padding: 40px; text-align: center; color: var(--text-muted)">⏳ Laddar...</div>
+        </div>
+    </div>`;
+    await fetchTrending();
+}
+
+function setTrendingMode(mode) {
+    _trendingMode = mode;
+    renderTrending();
+}
+
+function setTrendingCountry(country) {
+    _trendingCountry = country;
+    renderTrending();
+}
+
+async function fetchTrending() {
+    const url = `/api/preset/${_trendingMode}?country=${_trendingCountry}&limit=50&min_owners=100`;
+    try {
+        const res = await fetch(url);
+        const data = await res.json();
+        _trendingData = data;
+        renderTrendingTable();
+    } catch (e) {
+        document.getElementById('trendingContent').innerHTML =
+            `<div style="color: #dc2626; padding: 20px">Fel: ${e.message}</div>`;
+    }
+}
+
+function renderTrendingTable() {
+    const data = _trendingData;
+    if (!data || !data.results) return;
+    const rows = data.results;
+    if (rows.length === 0) {
+        document.getElementById('trendingContent').innerHTML = `
+            <div class="tv-info-banner">
+                Inga resultat. Möjliga orsaker: för få bolag i universum, eller saknad
+                fundamental data för rankingen. Sänk min_owners eller välj annat land.
+            </div>`;
+        return;
+    }
+    // Hur många har 6m momentum?
+    const withMom = rows.filter(r => r.momentum_6m != null).length;
+    const banner = withMom < rows.length ? `
+        <div class="tv-info-banner">
+            ${withMom} av ${rows.length} bolag har 6m prishistorik. Resterande
+            sorteras enligt enbart composite-rank. (Bulk-fetchen körs fortfarande
+            i bakgrunden — kom tillbaka om någon timme för komplett momentum-data.)
+        </div>` : '';
+
+    const compositeKey = data.mode === 'value' ? 'value_composite_rank' : 'quality_composite_rank';
+    const compositeLabel = data.mode === 'value' ? 'Value rank' : 'Quality rank';
+
+    function fmtMom(v) {
+        if (v == null) return `<span class="tv-mom-na">–</span>`;
+        const pct = (v * 100).toFixed(1);
+        const cls = v >= 0 ? 'tv-mom-pos' : 'tv-mom-neg';
+        const sign = v >= 0 ? '+' : '';
+        return `<span class="${cls}">${sign}${pct}%</span>`;
+    }
+
+    let html = banner + `
+        <table class="tv-table">
+            <thead>
+                <tr>
+                    <th>#</th>
+                    <th>Bolag</th>
+                    <th>Pris</th>
+                    <th>${compositeLabel}</th>
+                    <th>6m momentum</th>
+                    <th>Smart score</th>
+                </tr>
+            </thead>
+            <tbody>`;
+    rows.forEach((s, i) => {
+        const flag = (FLAGS && FLAGS[s.country]) || '';
+        const price = s.last_price != null ? s.last_price.toFixed(2) + ' ' + (s.currency || '') : '-';
+        const ss = s.smart_score != null ? s.smart_score.toFixed(0) : '-';
+        html += `
+            <tr onclick="openStockDrawer(${s.orderbook_id})">
+                <td class="tv-rank">${i + 1}</td>
+                <td>
+                    <div style="font-weight:600">${flag} ${s.name}</div>
+                    <div style="font-size:11px;color:var(--text-muted)">${s.short_name || ''}</div>
+                </td>
+                <td>${price}</td>
+                <td>${s[compositeKey] || '-'}</td>
+                <td>${fmtMom(s.momentum_6m)}</td>
+                <td>${ss}</td>
+            </tr>`;
+    });
+    html += '</tbody></table>';
+    document.getElementById('trendingContent').innerHTML = html;
+}
+
+function openStockDrawer(orderbookId) {
+    // Reuse existing drawer-fetch logic
+    if (typeof loadStockIntoDrawer === 'function') {
+        loadStockIntoDrawer(orderbookId);
+    } else {
+        fetch(`/api/stock/${orderbookId}`).then(r => r.json()).then(s => {
+            if (typeof openDrawer === 'function') openDrawer(s);
+        });
+    }
+}
+
+// ── Backtest ──
 
 let _backtestData = null;
 let _backtestSelected = ['trifecta', 'quality_full_price', 'deep_value', 'cigar_butt'];
