@@ -2961,7 +2961,8 @@ def sync_borsdata_reports(db, limit=None, max_age_days=7):
     """
     try:
         from borsdata_fetcher import (
-            fetch_all_instruments, fetch_reports, extract_v21_metrics,
+            fetch_all_instruments, fetch_global_instruments,
+            fetch_reports, fetch_global_reports, extract_v21_metrics,
             BORSDATA_KEY,
         )
     except ImportError:
@@ -2973,28 +2974,66 @@ def sync_borsdata_reports(db, limit=None, max_age_days=7):
     cutoff = (datetime.now() - timedelta(days=max_age_days)).isoformat()
     now_iso = datetime.now().isoformat()
 
-    # Hämta Avanza-bolag (matchar via short_name = Börsdata ticker)
+    # Hämta Avanza-bolag
     avz_rows = _fetchall(db,
         f"SELECT orderbook_id, isin, short_name, name, country FROM stocks "
-        f"WHERE short_name IS NOT NULL AND short_name != '' AND last_price > 0 "
-        f"AND number_of_owners >= 100")
-    # Mappa via short_name eftersom ISIN är tomt i Avanza-data
-    avz_by_short = {r["short_name"]: r for r in avz_rows}
+        f"WHERE last_price > 0 AND number_of_owners >= 100")
+    avz_by_short = {r["short_name"]: r for r in avz_rows
+                    if r["short_name"] and r["short_name"].strip()}
+    avz_by_name = {(r["name"] or "").strip().lower(): r for r in avz_rows
+                   if r["name"]}
 
-    # Hämta Börsdata-instruments
-    print(f"[Börsdata] Hämtar instrumentlista...")
-    instruments = fetch_all_instruments()
-    # Börsdata ticker matchar Avanza short_name (t.ex. "INVE B")
-    bd_by_ticker = {i["ticker"]: i for i in instruments if i.get("ticker")}
+    # Hämta Börsdata-instruments — både nordiska och globala (Pro Plus)
+    print(f"[Börsdata] Hämtar nordiska instruments...")
+    nordic = fetch_all_instruments()
+    print(f"[Börsdata] Hämtar globala instruments (Pro Plus)...")
+    global_inst = fetch_global_instruments()
+    print(f"[Börsdata] Nordiska: {len(nordic)}, Globala: {len(global_inst)}")
 
-    # Matcha på ticker = short_name. ISIN i borsdata används som primary key i DB
-    matched = []
+    # Markera vilka som är globala (för att veta vilken endpoint att använda för reports)
+    for inst in global_inst:
+        inst["_is_global"] = True
+
+    matched = []  # tuples (key, bd_inst, avz_row, is_global)
+
+    # 1) Nordiska: ticker matchar Avanza short_name (e.g. "INVE B")
+    bd_by_ticker_nordic = {i["ticker"]: i for i in nordic if i.get("ticker")}
     for short_name, avz in avz_by_short.items():
-        bd = bd_by_ticker.get(short_name)
+        bd = bd_by_ticker_nordic.get(short_name)
         if bd and bd.get("isin"):
-            matched.append((bd["isin"], bd, avz))
+            matched.append((bd["isin"], bd, avz, False))
 
-    print(f"[Börsdata] Matchade {len(matched)} bolag (av {len(avz_by_short)} Avanza-bolag + {len(bd_by_ticker)} Börsdata-tickers)")
+    # 2) Globala: matcha via name (t.ex. Avanza "Microsoft" = Börsdata "Microsoft Corp")
+    # samt via yahoo-ticker
+    matched_isins = {m[0] for m in matched}
+    for inst in global_inst:
+        bd_name = (inst.get("name") or "").strip().lower()
+        bd_yahoo = inst.get("yahoo")
+        bd_ticker = inst.get("ticker")
+        bd_isin = inst.get("isin") or f"YAHOO_{bd_yahoo}"  # fallback om ISIN saknas
+        if bd_isin in matched_isins:
+            continue
+
+        avz = None
+        # Försök ticker → short_name
+        if bd_yahoo and bd_yahoo in avz_by_short:
+            avz = avz_by_short[bd_yahoo]
+        # Annars: name-prefix match (t.ex. "Microsoft" → "Microsoft Corp")
+        if not avz and bd_name:
+            for avz_name_lc, avz_row in avz_by_name.items():
+                if avz_name_lc and (
+                    bd_name.startswith(avz_name_lc) or
+                    avz_name_lc.startswith(bd_name.split()[0])
+                ):
+                    if (avz_row.get("country") or "").upper() in ("US", "CA"):
+                        avz = avz_row
+                        break
+
+        if avz:
+            matched.append((bd_isin, inst, avz, True))
+            matched_isins.add(bd_isin)
+
+    print(f"[Börsdata] Matchade {len(matched)} bolag totalt")
 
     if limit:
         matched = matched[:limit]
@@ -3004,23 +3043,26 @@ def sync_borsdata_reports(db, limit=None, max_age_days=7):
     errors = 0
 
     # Spara mappnings-cache
-    for isin, bd_inst, _ in matched:
+    for isin, bd_inst, _, _ in matched:
         ins_id = bd_inst.get("insId")
         try:
+            # ticker-fältet i map: globala använder yahoo som ticker
+            map_ticker = bd_inst.get("ticker") or bd_inst.get("yahoo")
             db.execute(
                 f"INSERT OR REPLACE INTO borsdata_instrument_map "
                 f"(isin, ins_id, ticker, name, market_id, fetched_at) "
                 f"VALUES ({ph}, {ph}, {ph}, {ph}, {ph}, {ph})",
-                (isin, ins_id, bd_inst.get("ticker"), bd_inst.get("name"),
+                (isin, ins_id, map_ticker, bd_inst.get("name"),
                  bd_inst.get("marketId"), now_iso))
         except Exception as e:
             print(f"[Börsdata] map-insert fel: {e}")
     db.commit()
 
-    for i, (isin, bd_inst, avz) in enumerate(matched):
+    for i, (isin, bd_inst, avz, is_global) in enumerate(matched):
         ins_id = bd_inst.get("insId")
         if i % 50 == 0:
-            print(f"[Börsdata] {i}/{len(matched)} ({avz['name']})")
+            tag = "🌍" if is_global else "🇸🇪"
+            print(f"[Börsdata] {i}/{len(matched)} {tag} ({avz['name']})")
 
         # Skippa om vi har färska data
         last = _fetchone(db,
@@ -3037,7 +3079,10 @@ def sync_borsdata_reports(db, limit=None, max_age_days=7):
         try:
             # Hämta år + kvartal (ger oss både årlig + quarterly)
             for report_type in ("year", "quarter"):
-                reports = fetch_reports(ins_id, report_type)
+                if is_global:
+                    reports = fetch_global_reports(ins_id, report_type)
+                else:
+                    reports = fetch_reports(ins_id, report_type)
                 for r in reports:
                     metrics = extract_v21_metrics(r)
                     period_year = r.get("year")

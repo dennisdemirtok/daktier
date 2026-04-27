@@ -70,15 +70,48 @@ def _rate_limited_get(url, params=None, timeout=15):
 # ──────────────────────────────────────────────────────────────
 
 _INSTRUMENT_CACHE = None
+_GLOBAL_INSTRUMENT_CACHE = None
 
 def fetch_all_instruments():
-    """Returnerar alla 1,700+ instrument med insId, isin, ticker, name, marketId."""
+    """Returnerar alla nordiska instrument (~1,700)."""
     global _INSTRUMENT_CACHE
     if _INSTRUMENT_CACHE is not None:
         return _INSTRUMENT_CACHE
     data = _rate_limited_get(f"{BORSDATA_BASE}/instruments")
     _INSTRUMENT_CACHE = data.get("instruments", [])
     return _INSTRUMENT_CACHE
+
+
+def fetch_global_instruments():
+    """Returnerar alla globala instrument (~15,800) — kräver Pro Plus."""
+    global _GLOBAL_INSTRUMENT_CACHE
+    if _GLOBAL_INSTRUMENT_CACHE is not None:
+        return _GLOBAL_INSTRUMENT_CACHE
+    try:
+        data = _rate_limited_get(f"{BORSDATA_BASE}/instruments/global")
+        _GLOBAL_INSTRUMENT_CACHE = data.get("instruments", [])
+    except RuntimeError as e:
+        # Pro Plus krävs — gracefully degrade till tom lista
+        print(f"[Börsdata] Global endpoint kräver Pro Plus: {e}")
+        _GLOBAL_INSTRUMENT_CACHE = []
+    return _GLOBAL_INSTRUMENT_CACHE
+
+
+def fetch_all_instruments_combined():
+    """Returnerar både nordiska + globala (om Pro Plus finns)."""
+    nordic = fetch_all_instruments()
+    global_inst = fetch_global_instruments()
+    # Nordiska har 'isin' som primärt, globala har 'yahoo' = ticker som primary identifier
+    return nordic + global_inst
+
+
+def fetch_global_reports(insId, report_type="quarter"):
+    """Reports för globala instrument — separat endpoint."""
+    if report_type not in ("quarter", "year", "r12"):
+        raise ValueError(f"Invalid report_type: {report_type}")
+    url = f"{BORSDATA_BASE}/instruments/global/{insId}/reports/{report_type}"
+    data = _rate_limited_get(url)
+    return data.get("reports", [])
 
 
 def build_isin_to_insid_map():
