@@ -3674,7 +3674,18 @@ async function agentSend() {
         if (data.error) {
             _agentHistory.push({ role: 'assistant', content: '⚠ ' + data.error });
         } else {
-            _agentHistory.push({ role: 'assistant', content: data.reply || '(tomt svar)' });
+            // Bygg svar + (valfri) cache-fotnot
+            let reply = data.reply || '(tomt svar)';
+            const c = data.cache || {};
+            if (c.cache_read_input_tokens > 0) {
+                reply += `\n\n_⚡ Cache hit: ${c.cache_read_input_tokens.toLocaleString('sv')} tokens läst från cache (sparat ~90%)_`;
+            } else if (c.cache_creation_input_tokens > 0) {
+                reply += `\n\n_📦 Cache skapad: ${c.cache_creation_input_tokens.toLocaleString('sv')} tokens — nästa fråga blir billigare_`;
+            }
+            if (data.tool_calls?.length) {
+                reply += `\n_🔍 Slog upp ${data.tool_calls.length} bolag i DB:n_`;
+            }
+            _agentHistory.push({ role: 'assistant', content: reply });
         }
     } catch (e) {
         _agentHistory.push({ role: 'assistant', content: '⚠ Nätverksfel: ' + e.message });

@@ -3070,6 +3070,209 @@ Svara EXAKT i JSON:
 
 # ── AI Agent (chat med Claude Opus + DB-kontext) ─────────────
 
+# ══════════════════════════════════════════════════════════════
+# AGENT KNOWLEDGE BASE
+# Statisk text som beskriver alla bokmodeller, scoring-formler, värdefälla,
+# DD-risk osv. Skickas som CACHADE block (cache_control: ephemeral) så att
+# Anthropic API inte räknar tokens på nytt vid varje fråga — efter första
+# anropet betalar vi bara ~10% av pris för dessa tokens.
+# ══════════════════════════════════════════════════════════════
+_AGENT_KNOWLEDGE_BASE = """\
+# EDGE AGENT — KUNSKAPSBANK
+
+Du är **Edge Agent**, personlig analytiker för Dennis svenska aktiedashboard.
+Du har tillgång till ~11 700 nordiska/europeiska/amerikanska aktier från Avanza,
+10 års historik, daglig owner-momentum, FI-insider-transaktioner.
+
+══════════════════════════════════════════════════════════════
+DEL 1 — DE 10 BOKMODELLERNA (exakta kriterier)
+══════════════════════════════════════════════════════════════
+
+1. **📘 GRAHAM DEFENSIVE** (vikt 1.2) — *Den intelligente investeraren, kap 14*
+   - Kärnregel: **P/E × P/B ≤ 22.5** (Grahams "magiska produkt")
+   - Score-skala: produkt 6 = 100p, 10 = 90, 15 = 75, 22.5 = 50, 35 = 20
+   - Använd 7-års EPS-snitt om historik finns (skyddar mot cyklisk peak)
+   - Kräver: P/E [2..80], P/B [0.1..20]; minst 10 års positiv EPS;
+     20 års kontinuerlig utdelning
+   - Straff: P/B > 3 (multiplicerar score), instabil EPS (3+ förlustår = -45%)
+   - **Pass-tröskel: ≥65**. Klassisk Graham-aktie: stabil, billig, utdelar.
+
+2. **🏰 BUFFETT QUALITY MOAT** (vikt 1.3) — *Berkshire-brevet*
+   - Kärnregel: **ROE ≥ 15% KONSEKVENT** över 10 år + låg skuld
+   - Score-skala: ROE 10% = 33, 15% = 50, 25% = 75, 35% = 90, 50%+ = 95
+   - Använder 10-års median-ROE om historik finns (dämpar peak)
+   - Skuldstraff: D/E > 0.5 minskar score; ND/EBITDA > 3 minskar
+   - Hävstångsvarning: hög ROE utan låg skuld = misstänkt finansiell ingenjörskonst (-35%)
+   - 100p kräver: ROE ≥ 35% + D/E < 0.3 + ND/EBITDA < 2
+   - Buffett betalar inte P/E 40+ för kvalitet (straff över P/E 30)
+   - **Pass-tröskel: ≥65**. "Wonderful business at fair price."
+
+3. **🔎 LYNCH PEG** (vikt 1.0) — *One Up On Wall Street*
+   - Formel: **PEG = P/E / tillväxt%**
+   - Score: PEG 0.5 = 100, 1.0 = 65, 1.5 = 30, 2.5+ = 0
+   - Lynch's tumregel: PEG < 1 = köp, > 2 = övervärderad
+   - Vi använder ägartillväxt 1y som proxy (riktig EPS-tillväxt på roadmap)
+   - Kräver tillväxt > 5% (annars är PEG meningslös)
+   - **Pass-tröskel: ≥65**. Hittar växande bolag som inte är hyfsat prissatta.
+
+4. **📊 MAGIC FORMULA** (vikt 1.3) — *Greenblatt: Little Book that Beats the Market*
+   - Två krav: **låg EV/EBIT** (billighet) **+ hög ROCE** (kvalitet)
+   - EV/EBIT-score: 5 = 100, 8 = 80, 12 = 50, 20 = 0
+   - ROCE-score: 25% = 100, 15% = 60, 10% = 35, 5% = 10
+   - Kombineras med **geometric mean** — båda måste vara höga
+   - Exempel: NVIDIA EV/EBIT 37 → ey_score 0, ROCE 74% → magic = 0 ✓
+   - **Pass-tröskel: ≥65**. Greenblatts "köp bra bolag billigt".
+
+5. **🛡️ KLARMAN MARGIN OF SAFETY** (vikt 1.1) — *Margin of Safety: Risk-averse Value Investing*
+   - Kräver låg P/B **OCH** låg EV/EBIT (geometric mean)
+   - P/B-score: 0.6 = 100, 1.0 = 75, 1.5 = 40, 2.5 = 0
+   - EV/EBIT-score: 5 = 100, 8 = 75, 12 = 40, 20 = 0
+   - Båda krävs — endast ena → 70% dämpning
+   - Klarman: "köp under inre värde, sov gott"
+   - **Pass-tröskel: ≥65**. Djupvärde — flera värdemätare bekräftar.
+
+6. **💰 UTDELNINGSKVALITET (Bogle/Graham)** (vikt 0.9)
+   - DY-skala: 3% = 50, 5% = 70, 7% = 85, 10% = 95
+   - Över 15% DY = utdelningsfälla (score < 15)
+   - Kräver lönsamhet (P/E > 0) + ROE eller D/E
+   - Straff: ROE < 5% multiplicerar 0.4×; D/E > 1 multiplicerar 0.6×
+   - **Pass-tröskel: ≥65**. Stabil hållbar direktavkastning, INTE utdelningsfälla.
+
+7. **📈 TREND & MOMENTUM (Stinsen)** (vikt 1.0)
+   - Sweet spot: 15% över 200d-SMA + RSI 40-65
+   - SMA 0% = 55p, 15% = 90p, 30%+ = överhettat (max 85)
+   - RSI > 75 → 50% straff, > 65 → 20%; < 30 → 25% straff
+   - **Pass-tröskel: ≥65**. Hälsosam uppåttrend utan FOMO-utbrott.
+
+8. **🎯 TALEB BARBELL — säker-sidan** (vikt 0.7) — *Antifragile / Black Swan*
+   - Sweet spot: 12-18% volatilitet
+   - Vol < 8% misstänkt illikvid; > 30% → < 65p
+   - Klassar barbell-strategins "trygga 80%"-del
+   - **Pass-tröskel: ≥65**.
+
+9. **🎲 KELLY SIZING** (vikt 0.8) — Kelly Criterion
+   - Proportionell mot Meta Score (vår viktade signalsumma)
+   - Hög Meta = stor positionsstorlek enligt Kelly
+   - **Pass-tröskel: ≥65**.
+
+10. **👥 ÄGARMOMENTUM (Spiltan-approach)** (vikt 1.0)
+    - 1m-tillväxt + 1y-tillväxt (60/40-vikt)
+    - 1m: 3% = 80, 5% = 95; 1y: 15% = 95, 25%+ = 100
+    - Spike-skydd: stark 1m + svag 1y → 30% straff
+    - **Pass-tröskel: ≥65**. Smart money följer kvalitet — ny ägartillväxt = signal.
+
+══════════════════════════════════════════════════════════════
+DEL 2 — COMPOSITE & TOPPLISTOR
+══════════════════════════════════════════════════════════════
+
+**COMPOSITE BOK-SCORE** = viktat snitt över de 10 modellerna ovan
+- ≥ 75: high-conviction buy (sällsynt, ofta stora kvalitetsbolag)
+- 65-74: bra investering enligt böckerna
+- 50-64: neutralt — vänta på bättre läge
+- < 50: undvik
+
+**Post-processing caps** (förhindrar 100-poängs-kluster):
+- Composite ≥ 82 → enskilda modeller får nå 100
+- Composite 70-82 → cap 95
+- Composite 60-70 → cap 90
+- Composite < 60 → cap 85 (misstänkt enskild metric, ej all-round-bra)
+
+══════════════════════════════════════════════════════════════
+DEL 3 — VÄRDEFÄLLA-DETEKTOR (cyklisk peak-earnings)
+══════════════════════════════════════════════════════════════
+
+Trigger när TRE samtidiga signaler:
+1. Extremt låg värdering (P/E < 8 ELLER P/B < 0.8 ELLER EV/EBIT < 6)
+2. Extremt hög lönsamhet TTM (ROE > 30% ELLER ROCE > 25%)
+3. Pris fallit > -25% senaste 6m
+
+Tolkning: marknaden prissätter att TTM-vinsten är PEAK och kommer ned.
+Klassiska exempel: bird-flu-vinst hos kycklingbolag, råvaruprisspik,
+covid-engångsvinst.
+
+Straff på Graham/Buffett/Magic/Klarman: 40p trap → -10% av score, 80p → -30%.
+Trend/Owner/Taleb påverkas inte (de fångar redan momentum-skifte).
+
+══════════════════════════════════════════════════════════════
+DEL 4 — EDGE SCORE / META SCORE / DSM / ACE
+══════════════════════════════════════════════════════════════
+
+**Edge Score** (Trav-modellen, 0-100):
+- 35% Owner momentum (1w + 1m + 3m + ytd ägarförändring)
+- 25% Acceleration + Sweet Spot (ägare i discovery zone)
+- 20% Kontrarian / FOMO-filter (insider-aktivitet, RSI, kursextrem)
+- 20% Quality + Value (ROE, OCF, EV/EBIT, P/B)
+- Action: ENTRY ≥ 70, HOLD 50-69, WARNING 30-49, EXIT < 30
+
+**Meta Score** (kombinerad, 0-100): 30% Trav + 25% DSM + 25% ACE + 20% Magic
+- Modellöverenskommelse: antal modeller med ≥ 65 = "model_agreement"
+
+**DSM (Dennis Signal Model)**: kontrarian + värde — låg värdering + hög ROE
+**ACE (Alpha Engine)**: percentil multi-faktor — relativ till universum
+**Magic Score**: rank-baserad EV/EBIT + ROCE (ej samma som book-magic)
+
+**DD-risk** (drawdown-skydd):
+- Beräknar sannolikhet för stort prisfall framåt
+- Trigger: extremt hög RSI + svag fundamenta + nyligen rally
+- DD-risk ≥ 60 → BLOCKERAR ENTRY oavsett score
+- Visas som badge i UI
+
+**FOMO-flagga**: pris > +50% YTD med svag ägartillväxt = misstänkt FOMO
+**Value trap-flagga**: rebound trap = aktien har studsat utan fundamental förbättring
+
+══════════════════════════════════════════════════════════════
+DEL 5 — ÄGARMOGNAD (maturity_score)
+══════════════════════════════════════════════════════════════
+
+Beräknat från 1y veckohistorik (owner_history-tabellen):
+- 40% Tillväxtkonsistens (kvartalvisa positiva tillväxtperioder / total)
+- 25% Ägarbracket (5k-10k = 80, 10k-25k = 65, 25k+ = 50)
+- 20% Lönsamhet (ROE > 20% = 100; >15 = 85; >10 = 70)
+- 15% Acceleration (1m vs 3m-snitt)
+
+Discovery-score: 500-2000 ägare + 5-20% månadlig tillväxt + lönsamhet = 70-100
+"🔥 Stark discovery": discovery_score ≥ 70 (intressant tidigt skede)
+"📈 Tidig tillväxt": 30-50
+
+══════════════════════════════════════════════════════════════
+DEL 6 — BUY-ZONE
+══════════════════════════════════════════════════════════════
+
+Buy-zone = simulerar vad composite-score blir vid en kursnedgång.
+- Testar discounts [2%, 5%, 8%, 10%, 12%, 15%, 18%, 20%, 25%]
+- Hittar minsta discount där composite ≥ 75 (target)
+- Visas som: "köpzon-pris", "distance_pct", "in_zone"-flag
+- "Crossed today": dagens kurs föll förbi köpzon-priset just idag
+- "Approaching": rörelse går mot köpzon men ej passerat ännu
+
+══════════════════════════════════════════════════════════════
+DEL 7 — SVARSPRINCIPER
+══════════════════════════════════════════════════════════════
+
+**Använd alltid search_stocks-tool** när användaren nämner ett specifikt bolag.
+Citera EXAKTA siffror från DB:n — gissa aldrig på nyckeltal.
+
+**Föredra book-composite framför Edge Score** för "är detta en bra investering".
+Edge Score handlar om momentum just nu, composite om fundamental kvalitet enligt 10 böcker.
+
+**Format**: svenska, punktlistor, fetstilta nyckeltal, kort. Använd 1-3 emojis sparsamt.
+
+**Vid skärmbild av portfölj**: identifiera bolag → search_stocks för var och en →
+analysera viktning, kvalitet (composite), koncentrationsrisk, missing föreslagna picks.
+
+**Vid frågan "är X köpvärt?"**:
+1. search_stocks(X) för att få alla nyckeltal
+2. Lista composite + de 3-5 viktigaste modell-scores
+3. Säg vad bolaget passerar och vad det fallerar på
+4. Nämn buy-zone om aktien är nära (distance_pct < 10%)
+5. Avsluta med en KLAR rekommendation: "köp / vänta / undvik"
+
+**Vid jämförelse av flera bolag**: visa tabell med composite + 3-4 nyckeltal.
+
+**Var ärlig**: säg "data saknas" om det saknas. Låtsas inte ha info som inte finns.
+"""
+
+
 def _build_agent_context(db, max_per_list=20):
     """Bygger en text-snapshot av databasens viktigaste topplistor som
     Claude får som kontext. Cachas 5 min."""
@@ -3198,31 +3401,27 @@ def api_agent_chat():
     finally:
         db.close()
 
-    system_prompt = f"""Du är **Edge Agent** — en personlig analytiker för Dennis aktiedashboard.
+    # Statiskt block (kunskapsbank + bolag-stats) — cachas i Anthropic API
+    static_system = _AGENT_KNOWLEDGE_BASE + f"""
 
-Du har full tillgång till en svensk databas över Avanza-noterade aktier:
+══════════════════════════════════════════════════════════════
+DEL 8 — DATABAS-SAMMANFATTNING
+══════════════════════════════════════════════════════════════
 - {stats.get('total_stocks', 0):,} aktier (SE/US/EU)
-- {stats.get('total_owners', 0):,.0f} ägare totalt
+- {stats.get('total_owners', 0):,.0f} Avanza-ägare totalt
 - 10 års historik (income statement, balance sheet, cash flow)
-- Daglig owner-momentum (snapshot av ägarförändring)
+- Daglig owner-momentum-snapshot
 - Insider-transaktioner från Finansinspektionen
 
-DU KAN ANVÄNDA TOOL `search_stocks(query)` för att slå upp specifika bolag i databasen — t.ex. när användaren nämner en aktie vid namn eller ticker. Returnerar exakta nyckeltal från DB.
+DU KAN ANVÄNDA TOOL `search_stocks(query)` för att slå upp specifika bolag —
+returnerar exakta P/E, P/B, ROE, OCF, kursförändring, ägare m.m.
+"""
 
-EDGE SCORE-MODELLERNA (kort):
-- **Edge Score** (Trav-modellen): ägardriven momentum + fundament. 80-100 = stark köp.
-- **Meta Score**: viktat snitt av Trav (30%) + DSM (25%) + ACE (25%) + Magic (20%).
-- **Composite (Bok)**: snitt över 10 bok-modeller — Graham Defensive, Buffett Quality, Lynch PEG, Magic Formula, Klarman Margin of Safety, Bogle Index, Spiltan Quality, Taleb Barbell, Kelly Sizing, Utdelningskvalitet.
-- **Composite ≥ 75 = high-conviction köp**, 65-74 = bra, 50-64 = neutralt, <50 = undvik.
-
-BEAKTA dessa principer i dina svar:
-- Var konkret med siffror (alltid valuta-suffix). Avstå från vag prognos.
-- Om data saknas, säg det rakt — gissa inte.
-- Föredra DB-data via search_stocks för att svara på "har bolag X bra cash flow?" — citera exakta siffror.
-- Om användaren laddar upp en portföljbild → tolka innehåll och kommentera viktning, koncentration, kvalitet enligt bokmodellerna.
-- Skriv på svenska. Använd punktlistor och fetstilta nyckeltal.
-
-NUVARANDE DB-SNAPSHOT (för referens utan att slå upp):
+    # Dynamiskt block (topplistor) — uppdateras var 5 min, cachas separat
+    dynamic_system = f"""\
+══════════════════════════════════════════════════════════════
+DEL 9 — DAGENS DB-SNAPSHOT (uppdateras var 5 min)
+══════════════════════════════════════════════════════════════
 {ctx}
 """
 
@@ -3258,6 +3457,7 @@ NUVARANDE DB-SNAPSHOT (för referens utan att slå upp):
     }]
 
     MODEL = os.environ.get("AGENT_MODEL", "claude-opus-4-5")
+    # Prompt-caching kräver 1024+ tokens i stat-blocket → vi har ~3000 tokens i KB
     headers = {
         "x-api-key": CLAUDE_API_KEY,
         "anthropic-version": "2023-06-01",
@@ -3267,12 +3467,26 @@ NUVARANDE DB-SNAPSHOT (för referens utan att slå upp):
     # Loop för tool use (max 5 iterationer)
     final_text = ""
     tool_calls_made = []
+    cache_stats = {}
     try:
         for _iter in range(5):
+            # System som blocks: statisk (cachad) + dynamisk (uppdateras 5 min)
+            # Tools cachas också (de ändras aldrig).
             payload = {
                 "model": MODEL,
                 "max_tokens": 2048,
-                "system": system_prompt,
+                "system": [
+                    {
+                        "type": "text",
+                        "text": static_system,
+                        "cache_control": {"type": "ephemeral"},
+                    },
+                    {
+                        "type": "text",
+                        "text": dynamic_system,
+                        "cache_control": {"type": "ephemeral"},
+                    },
+                ],
                 "messages": messages,
                 "tools": tools,
             }
@@ -3293,6 +3507,14 @@ NUVARANDE DB-SNAPSHOT (för referens utan att slå upp):
             result = resp.json()
             stop_reason = result.get("stop_reason")
             content = result.get("content", [])
+            usage = result.get("usage", {}) or {}
+            # Spara senaste cache-stats (intresseant för debug — visar om cache hit)
+            cache_stats = {
+                "input_tokens": usage.get("input_tokens"),
+                "cache_creation_input_tokens": usage.get("cache_creation_input_tokens"),
+                "cache_read_input_tokens": usage.get("cache_read_input_tokens"),
+                "output_tokens": usage.get("output_tokens"),
+            }
 
             if stop_reason == "tool_use":
                 tool_uses = [c for c in content if c.get("type") == "tool_use"]
@@ -3334,6 +3556,7 @@ NUVARANDE DB-SNAPSHOT (för referens utan att slå upp):
             "reply": final_text or "(tomt svar)",
             "model": MODEL,
             "tool_calls": tool_calls_made,
+            "cache": cache_stats,
         })
     except Exception as e:
         import traceback; traceback.print_exc()
