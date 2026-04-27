@@ -2870,8 +2870,36 @@ def _score_book_models(s):
         if v is not None:
             weighted_sum += v * m["weight"]
             weight_sum += m["weight"]
-    scores["composite"] = (weighted_sum / weight_sum) if weight_sum > 0 else None
-    scores["models_available"] = sum(1 for m in BOOK_MODELS if scores.get(m["key"]) is not None)
+    raw_composite = (weighted_sum / weight_sum) if weight_sum > 0 else None
+    n_avail = sum(1 for m in BOOK_MODELS if scores.get(m["key"]) is not None)
+    scores["models_available"] = n_avail
+
+    # ══════════════════════════════════════════════════════════
+    # DATATÄCKNINGS-FILTER — undvik 100/100 på bolag med 1 modell.
+    # Merlin (MRLN) hade bara Ägarmomentum-data → composite 100 utan att en
+    # enda fundamental modell utvärderats. Det är vilseledande.
+    #
+    # Regel:
+    #   < 3 modeller  → composite = None (otillförlitlig — bolaget ekluderas)
+    #   3-6 modeller  → dämpa composite gradvis (0.75-0.92×)
+    #   7+ modeller   → ingen dämpning
+    # ══════════════════════════════════════════════════════════
+    if raw_composite is None or n_avail < 3:
+        scores["composite"] = None
+        scores["composite_coverage_warning"] = (
+            f"Endast {n_avail}/10 bokmodeller har data — för lite för pålitligt composite"
+            if n_avail > 0 else None
+        )
+    elif n_avail < 7:
+        # Lineär dämpning: 3 modeller = 0.75×, 6 modeller = 0.92×
+        coverage_factor = 0.65 + (n_avail / 10.0) * 0.45  # 3=0.80, 4=0.83, 5=0.875, 6=0.92
+        scores["composite"] = round(raw_composite * coverage_factor, 1)
+        scores["composite_coverage_warning"] = (
+            f"{n_avail}/10 modeller — composite dämpat {int((1-coverage_factor)*100)}%"
+        )
+    else:
+        scores["composite"] = round(raw_composite, 1)
+        scores["composite_coverage_warning"] = None
 
     # ══════════════════════════════════════════════════════════
     # POST-PROCESSING CAPS — undvik 100-poäng-kluster i topplistor.

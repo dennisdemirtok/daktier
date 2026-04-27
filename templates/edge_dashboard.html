@@ -2709,6 +2709,142 @@ function renderBuyZoneSection(s) {
     </div>`;
 }
 
+function renderQuarterlyTrendsSection(s) {
+    // Visar vinst-, försäljnings- och marginal-utveckling per kvartal
+    // (Avanza levererar ej FCF/cash flow per kvartal — vi visar net_profit som proxy)
+    const quarterly = s.historical_quarterly || [];
+    if (!quarterly.length) return '';
+
+    // Sortera nyaste först — kvartal kan vara "Q1", "Q2" osv, kombinerat med år
+    const qOrder = (r) => (r.financial_year || 0) * 10 + (parseInt((r.quarter || 'Q0').replace(/\D/g,'')) || 0);
+    const sortedDesc = [...quarterly].sort((a, b) => qOrder(b) - qOrder(a));
+    const recent = sortedDesc.slice(0, 10);          // 10 senaste kvartal
+    const sortedAsc = [...recent].reverse();          // för sparkline
+
+    const latest = sortedDesc[0];
+    const prevQ = sortedDesc[1];                       // föregående kvartal (QoQ)
+    const yoyQ = sortedDesc.find(r =>
+        r.quarter === latest.quarter && r.financial_year === (latest.financial_year || 0) - 1
+    );
+
+    function fmtMoney(v) {
+        if (v == null) return '–';
+        const a = Math.abs(v);
+        if (a >= 1e9) return (v / 1e9).toFixed(2) + ' Md';
+        if (a >= 1e6) return (v / 1e6).toFixed(0) + ' M';
+        if (a >= 1e3) return (v / 1e3).toFixed(0) + ' k';
+        return v.toFixed(0);
+    }
+    function fmtPct(v) { return v == null ? '–' : (v * 100).toFixed(1) + '%'; }
+    function deltaPct(curr, prev) {
+        if (curr == null || prev == null || prev === 0) return null;
+        return (curr - prev) / Math.abs(prev);
+    }
+    function deltaTag(d, label) {
+        if (d == null) return '<span style="color:var(--text-muted);font-size:11px">— ingen ' + label + ' —</span>';
+        const pct = (d * 100);
+        const cls = d > 0.005 ? '#00a870' : d < -0.005 ? '#c0392b' : '#888';
+        const arrow = d > 0.005 ? '▲' : d < -0.005 ? '▼' : '●';
+        return `<span style="color:${cls};font-weight:700">${arrow} ${pct >= 0 ? '+' : ''}${pct.toFixed(1)}%</span> <span style="color:var(--text-muted);font-size:11px">${label}</span>`;
+    }
+
+    // Sparkline-helper för en serie
+    function spark(values, color, height=44) {
+        const nn = values.filter(v => v != null && !isNaN(v));
+        if (nn.length < 2) return '';
+        const min = Math.min(...nn), max = Math.max(...nn);
+        const range = max - min || 1;
+        const w = 240, pad = 3;
+        const step = (w - 2*pad) / (values.length - 1);
+        const baseline = (min < 0 && max > 0) ? height - pad - ((0 - min) / range) * (height - 2*pad) : null;
+        const pts = values.map((v, i) => {
+            if (v == null || isNaN(v)) return null;
+            const x = pad + i * step;
+            const y = height - pad - ((v - min) / range) * (height - 2*pad);
+            return [x, y];
+        });
+        const path = pts.filter(p => p).map((p, i) => (i === 0 ? 'M' : 'L') + p[0].toFixed(1) + ',' + p[1].toFixed(1)).join(' ');
+        // Fill area under linjen
+        const valid = pts.filter(p => p);
+        const area = valid.length >= 2 ? `${path} L${valid[valid.length-1][0].toFixed(1)},${height-pad} L${valid[0][0].toFixed(1)},${height-pad} Z` : '';
+        return `<svg viewBox="0 0 ${w} ${height}" style="width:100%;height:${height}px;display:block">
+            ${baseline != null ? `<line x1="0" y1="${baseline}" x2="${w}" y2="${baseline}" stroke="#ccc" stroke-dasharray="2,2"/>` : ''}
+            ${area ? `<path d="${area}" fill="${color}" opacity="0.12"/>` : ''}
+            <path d="${path}" fill="none" stroke="${color}" stroke-width="1.8"/>
+            ${valid.map(p => `<circle cx="${p[0].toFixed(1)}" cy="${p[1].toFixed(1)}" r="2" fill="${color}"/>`).join('')}
+        </svg>`;
+    }
+
+    // Hade bolaget förlust som vänts till vinst?
+    const profitSeries = sortedAsc.map(r => r.net_profit);
+    const negCount = profitSeries.filter(v => v != null && v < 0).length;
+    const posCount = profitSeries.filter(v => v != null && v > 0).length;
+    let turnaroundBadge = '';
+    if (negCount >= 2 && profitSeries.length >= 4 && profitSeries.slice(-2).every(v => v != null && v > 0)) {
+        turnaroundBadge = '<span style="background:#d1fae5;color:#065f46;padding:4px 10px;border-radius:14px;font-size:11px;font-weight:700">🔄 Turnaround: vinst senaste 2 kvartalen</span>';
+    } else if (posCount === profitSeries.filter(v => v != null).length && profitSeries.length >= 4) {
+        turnaroundBadge = '<span style="background:#dbeafe;color:#1e40af;padding:4px 10px;border-radius:14px;font-size:11px;font-weight:700">✓ Konsekvent vinst</span>';
+    }
+
+    const profitQoQ = deltaPct(latest.net_profit, prevQ?.net_profit);
+    const profitYoY = deltaPct(latest.net_profit, yoyQ?.net_profit);
+    const salesQoQ = deltaPct(latest.sales, prevQ?.sales);
+    const salesYoY = deltaPct(latest.sales, yoyQ?.sales);
+    const marginQoQ = latest.profit_margin != null && prevQ?.profit_margin != null ? latest.profit_margin - prevQ.profit_margin : null;
+
+    function bigStat(label, value, color, qoq, yoy, sparkData) {
+        return `<div style="background:#f9fafb;border-radius:10px;padding:14px;flex:1;min-width:0">
+            <div style="font-size:11px;color:var(--text-muted);font-weight:700;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:4px">${label}</div>
+            <div style="font-size:24px;font-weight:700;color:${color};line-height:1.1">${value}</div>
+            <div style="font-size:11px;margin-top:6px;display:flex;flex-direction:column;gap:2px">
+                <div>${deltaTag(qoq, 'QoQ')}</div>
+                <div>${deltaTag(yoy, 'YoY')}</div>
+            </div>
+            <div style="margin-top:8px">${spark(sparkData, color)}</div>
+        </div>`;
+    }
+
+    // Tabell med 8 senaste kvartalen
+    const tableRows = recent.slice(0, 8).map(r => {
+        const np = r.net_profit;
+        const sales = r.sales;
+        const margin = r.profit_margin;
+        const npCol = np == null ? '#888' : np > 0 ? '#00a870' : '#c0392b';
+        return `<tr>
+            <td style="padding:6px 10px;font-weight:600">${r.quarter} ${r.financial_year}</td>
+            <td style="padding:6px 10px;text-align:right">${fmtMoney(sales)}</td>
+            <td style="padding:6px 10px;text-align:right;color:${npCol};font-weight:600">${fmtMoney(np)}</td>
+            <td style="padding:6px 10px;text-align:right">${fmtPct(margin)}</td>
+        </tr>`;
+    }).join('');
+
+    return `<div class="drawer-section">
+        <div class="drawer-section-title">📈 Vinst- och tillväxtutveckling per kvartal</div>
+        ${turnaroundBadge ? `<div style="margin-bottom:10px">${turnaroundBadge}</div>` : ''}
+        <div style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:12px">
+            ${bigStat('Nettoresultat', fmtMoney(latest.net_profit), latest.net_profit > 0 ? '#00a870' : '#c0392b', profitQoQ, profitYoY, sortedAsc.map(r => r.net_profit))}
+            ${bigStat('Omsättning', fmtMoney(latest.sales), '#3b82f6', salesQoQ, salesYoY, sortedAsc.map(r => r.sales))}
+            ${bigStat('Vinstmarginal', fmtPct(latest.profit_margin), '#8b5cf6', marginQoQ, null, sortedAsc.map(r => r.profit_margin))}
+        </div>
+        <div style="background:white;border:1px solid var(--border);border-radius:10px;overflow:hidden">
+            <table style="width:100%;border-collapse:collapse;font-size:12px">
+                <thead style="background:#f9fafb">
+                    <tr style="border-bottom:1px solid var(--border)">
+                        <th style="text-align:left;padding:8px 10px">Kvartal</th>
+                        <th style="text-align:right;padding:8px 10px">Omsättning</th>
+                        <th style="text-align:right;padding:8px 10px">Nettoresultat</th>
+                        <th style="text-align:right;padding:8px 10px">Marginal</th>
+                    </tr>
+                </thead>
+                <tbody>${tableRows}</tbody>
+            </table>
+        </div>
+        <div style="font-size:10px;color:var(--text-muted);margin-top:8px;font-style:italic">
+            ⓘ Avanza levererar ej FCF/cash flow per kvartal — vi visar nettoresultat som proxy för lönsamhetsutveckling. ${latest.financial_year ? 'Senaste rapport: ' + latest.quarter + ' ' + latest.financial_year : ''}
+        </div>
+    </div>`;
+}
+
 function renderHistoricalSection(s) {
     const annual = s.historical_annual || [];
     const ctx = s.historical_context || {};
@@ -3059,6 +3195,9 @@ function openDrawer(s) {
 
     // ── KÖPZON (simulerat riktpris) ──
     html += renderBuyZoneSection(s);
+
+    // ── VINST/TILLVÄXT PER KVARTAL (Avanza har ej FCF — vi visar nettoresultat) ──
+    html += renderQuarterlyTrendsSection(s);
 
     // ── 10-års HISTORIK (Avanza /analysis) ──
     html += renderHistoricalSection(s);
