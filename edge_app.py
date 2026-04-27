@@ -647,6 +647,17 @@ def api_stock_detail(orderbook_id):
             if d.get("_hist"):
                 # Exponera via tydligt namn för UI
                 d["historical_context"] = d.pop("_hist")
+            # Fallback: om Avanza-historik saknas, använd Börsdata-rapporter
+            # (täcker många globala bolag som Avanza inte har historical för)
+            if not d["historical_annual"] and d.get("isin"):
+                try:
+                    from edge_db import get_borsdata_history_as_annual
+                    bd_hist = get_borsdata_history_as_annual(db, d["isin"], max_years=10)
+                    if bd_hist:
+                        d["historical_annual"] = bd_hist
+                        d["historical_source"] = "borsdata"
+                except Exception as e:
+                    print(f"[stock detail] borsdata fallback: {e}", file=sys.stderr)
         except Exception as e:
             print(f"[stock detail] hist failed: {e}", file=sys.stderr)
         # Berika med book composite så drawer kan visa det

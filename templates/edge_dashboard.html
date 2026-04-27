@@ -3095,17 +3095,20 @@ function renderHistoricalSection(s) {
         return `<div class="drawer-section">
             <div class="drawer-section-title">📊 10-års historik</div>
             <div style="padding:16px;background:linear-gradient(135deg,#fef3c7,#fde68a);border-radius:10px;font-size:13px;color:#78350f">
-                <div style="font-weight:600;margin-bottom:6px">⏳ Historisk data hämtas i bakgrunden</div>
+                <div style="font-weight:600;margin-bottom:6px">⚠ Historisk data saknas för detta bolag</div>
                 <div style="font-size:12px;line-height:1.5">
-                    Vi synkar 10 års historik från Avanza för alla bolag (~10-15 min totalt).
-                    Försök igen om några minuter — eller klicka <a href="#" onclick="event.preventDefault(); checkHistSyncStatus()" style="color:#1e40af;font-weight:600">visa sync-status</a>.
+                    Varken Avanza eller Börsdata har 10-års-historik för bolaget. Detta är vanligt för:
+                    nyligen noterade bolag, små illikvida aktier, samt vissa globala bolag som inte täcks av Avanza.
+                    <a href="#" onclick="event.preventDefault(); checkHistSyncStatus()" style="color:#1e40af;font-weight:600">Visa sync-status</a>.
                 </div>
                 <div style="font-size:11px;color:#92400e;margin-top:6px;font-style:italic">
-                    Composite-score, buy-zone och vinst-historik är begränsade tills datan är klar.
+                    Composite-score, buy-zone och vinst-historik baseras på TTM-data utan historisk kontext.
                 </div>
             </div>
         </div>`;
     }
+    // Markera om datakällan är Börsdata (fallback)
+    const dataSource = s.historical_source === 'borsdata' ? 'Börsdata' : 'Avanza';
 
     // Sortera stigande på år
     const sorted = [...annual].sort((a, b) => (a.financial_year||0) - (b.financial_year||0));
@@ -3192,7 +3195,7 @@ function renderHistoricalSection(s) {
     }
 
     return `<div class="drawer-section">
-        <div class="drawer-section-title">📊 10-års historik (Avanza)</div>
+        <div class="drawer-section-title">📊 ${sorted.length}-års historik (${dataSource})</div>
         ${contextPills.length ? `<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px">${contextPills.join('')}</div>` : ''}
         ${miniRow('EPS per aktie', eps, '#3b82f6', fmtEps)}
         ${miniRow('Return on Equity', roe, '#10b981', fmtRoe)}

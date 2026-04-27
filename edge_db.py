@@ -932,16 +932,35 @@ def _ensure_borsdata_columns(db):
     ]
 
     if is_pg:
+        # Advisory lock så bara EN worker kör migration åt gången.
+        # Annars deadlockar gunicorn-workers när de bootar parallellt
+        # och försöker ALTER TABLE samtidigt.
+        ADV_LOCK_KEY = 8723091  # godtyckligt unikt int för Börsdata-migrationen
         cur = db.cursor()
-        for table, cols in [("borsdata_instrument_map", map_cols),
-                            ("borsdata_reports", reports_cols)]:
-            for name, typ in cols:
-                try:
-                    cur.execute(f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {name} {typ}")
-                except Exception as e:
-                    print(f"[borsdata migration PG] {table}.{name}: {e}")
-        cur.close()
-        db.commit()
+        try:
+            cur.execute(f"SELECT pg_advisory_lock({ADV_LOCK_KEY})")
+            db.commit()  # commit för att frigöra ev. tidigare transaktion
+            for table, cols in [("borsdata_instrument_map", map_cols),
+                                ("borsdata_reports", reports_cols)]:
+                for name, typ in cols:
+                    try:
+                        cur.execute(f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {name} {typ}")
+                        db.commit()  # commit per ALTER så fel inte cascade-aborterar
+                    except Exception as e:
+                        try: db.rollback()
+                        except Exception: pass
+                        # Kolumnen finns sannolikt redan — det är ok
+                        msg = str(e).lower()
+                        if "already exists" not in msg and "duplicate column" not in msg:
+                            print(f"[borsdata migration PG] {table}.{name}: {e}")
+        finally:
+            try:
+                cur.execute(f"SELECT pg_advisory_unlock({ADV_LOCK_KEY})")
+                db.commit()
+            except Exception:
+                pass
+            try: cur.close()
+            except Exception: pass
     else:
         for table, cols in [("borsdata_instrument_map", map_cols),
                             ("borsdata_reports", reports_cols)]:
@@ -978,21 +997,42 @@ def _ensure_smart_score_columns(db):
     ]
 
     if is_pg:
+        # Advisory lock så workers serialiseras
+        ADV_LOCK_KEY = 8723092
         cur = db.cursor()
-        for name, typ in cols:
+        try:
+            cur.execute(f"SELECT pg_advisory_lock({ADV_LOCK_KEY})")
+            db.commit()
+            for name, typ in cols:
+                try:
+                    cur.execute(f"ALTER TABLE stocks ADD COLUMN IF NOT EXISTS {name} {typ}")
+                    db.commit()
+                except Exception as e:
+                    try: db.rollback()
+                    except Exception: pass
+                    msg = str(e).lower()
+                    if "already exists" not in msg and "duplicate column" not in msg:
+                        print(f"[v2 migration] PG {name}: {e}")
+            for sql in [
+                "CREATE INDEX IF NOT EXISTS idx_stocks_smart_score ON stocks(smart_score DESC NULLS LAST)",
+                "CREATE INDEX IF NOT EXISTS idx_stocks_v2_setup ON stocks(v2_setup)",
+                "CREATE INDEX IF NOT EXISTS idx_stocks_v2_quality ON stocks(v2_quality DESC NULLS LAST)",
+            ]:
+                try:
+                    cur.execute(sql)
+                    db.commit()
+                except Exception as e:
+                    try: db.rollback()
+                    except Exception: pass
+                    print(f"[v2 idx] PG: {e}")
+        finally:
             try:
-                cur.execute(f"ALTER TABLE stocks ADD COLUMN IF NOT EXISTS {name} {typ}")
-            except Exception as e:
-                print(f"[v2 migration] PG: {e}")
-        for sql in [
-            "CREATE INDEX IF NOT EXISTS idx_stocks_smart_score ON stocks(smart_score DESC NULLS LAST)",
-            "CREATE INDEX IF NOT EXISTS idx_stocks_v2_setup ON stocks(v2_setup)",
-            "CREATE INDEX IF NOT EXISTS idx_stocks_v2_quality ON stocks(v2_quality DESC NULLS LAST)",
-        ]:
-            try: cur.execute(sql)
-            except Exception as e: print(f"[v2 idx] PG: {e}")
-        cur.close()
-        db.commit()
+                cur.execute(f"SELECT pg_advisory_unlock({ADV_LOCK_KEY})")
+                db.commit()
+            except Exception:
+                pass
+            try: cur.close()
+            except Exception: pass
     else:
         existing = {r[1] for r in db.execute("PRAGMA table_info(stocks)").fetchall()}
         for name, typ in cols:
@@ -3561,6 +3601,55 @@ def sync_borsdata_kpis(db, kpi_ids=None, isin_list=None, max_per_run=500):
     db.commit()
     return {"synced": synced, "total_rows": total_rows, "errors": errors,
             "total": len(targets)}
+
+
+def get_borsdata_history_as_annual(db, isin, max_years=10):
+    """Hämta Börsdata-årsrapporter formaterat som Avanza historical_annual.
+
+    Används som fallback i drawer när Avanza-historik saknas (t.ex. globala
+    bolag som inte täcks av Avanzas historical-endpoint men finns i Börsdata).
+
+    Returnerar lista (sorterad ASC på år) med fält:
+      financial_year, eps, sales, net_profit, dividend_per_share,
+      return_on_equity, _source ('borsdata')
+    """
+    if not isin:
+        return []
+    ph = _ph()
+    try:
+        rows = _fetchall(db,
+            f"SELECT period_year, eps, revenues, net_profit, dividend, total_equity "
+            f"FROM borsdata_reports "
+            f"WHERE isin = {ph} AND report_type = {ph} "
+            f"ORDER BY period_year DESC LIMIT {ph}",
+            (isin, "year", max_years))
+    except Exception:
+        return []
+    if not rows:
+        return []
+    out = []
+    for r in rows:
+        rd = dict(r)
+        year = rd.get("period_year")
+        if year is None:
+            continue
+        net = rd.get("net_profit")
+        eq = rd.get("total_equity")
+        roe = None
+        if net is not None and eq and eq > 0:
+            roe = (net / eq) * 100  # i procent (samma skala som Avanza-data ofta är i)
+        out.append({
+            "financial_year": year,
+            "eps": rd.get("eps"),
+            "sales": rd.get("revenues"),
+            "net_profit": net,
+            "dividend_per_share": rd.get("dividend"),
+            "return_on_equity": roe,
+            "_source": "borsdata",
+        })
+    # Sortera ASC på år (samma som Avanza-funktionen)
+    out.sort(key=lambda x: x.get("financial_year") or 0)
+    return out
 
 
 def get_borsdata_latest(db, isin, report_type="year"):
