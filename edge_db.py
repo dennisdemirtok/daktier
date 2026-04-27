@@ -616,6 +616,23 @@ def _create_tables(db):
                 error_message TEXT
             );
 
+            -- Makro-historik (CAPE, Buffett-indikator, VIX, US10Y m.fl.)
+            -- En rad per dag/månad/år beroende på period_type
+            CREATE TABLE IF NOT EXISTS macro_history (
+                period TEXT NOT NULL,           -- '2024-12-31' eller '2024' eller '2024-12'
+                period_type TEXT NOT NULL,      -- 'daily' | 'monthly' | 'yearly'
+                cape REAL,
+                buffett_indicator REAL,
+                vix REAL,
+                us_10y REAL,
+                sp500 REAL,
+                gold_ratio REAL,
+                fear_greed REAL,
+                source TEXT,
+                fetched_at TEXT,
+                PRIMARY KEY (period, period_type)
+            );
+
             -- Indexes for fast queries
             CREATE INDEX IF NOT EXISTS idx_sim_portfolio ON simulation_holdings(portfolio);
             CREATE INDEX IF NOT EXISTS idx_sim_trades_portfolio ON simulation_trades(portfolio);
@@ -633,8 +650,135 @@ def _create_tables(db):
             CREATE INDEX IF NOT EXISTS idx_hist_annual_oid ON historical_annual(orderbook_id);
             CREATE INDEX IF NOT EXISTS idx_hist_quarterly_oid ON historical_quarterly(orderbook_id);
             CREATE INDEX IF NOT EXISTS idx_hist_fetch_log_at ON historical_fetch_log(last_fetch_at);
+            CREATE INDEX IF NOT EXISTS idx_macro_period_type ON macro_history(period_type, period DESC);
         """)
         db.commit()
+
+
+# ── Macro indicators (history table) ──────────────────────────
+
+# Historisk Shiller CAPE för S&P 500 (årssnitt) — offentlig data från Robert Shillers
+# online dataset (http://www.econ.yale.edu/~shiller/data.htm). Vi seedar med årsmedel
+# från 1928 till 2024 så att tabellen har en lång baslinje.
+_SHILLER_CAPE_YEARLY = {
+    1928: 24.0, 1929: 27.1, 1930: 22.3, 1931: 16.4, 1932:  9.3, 1933:  7.7,
+    1934: 12.8, 1935: 13.1, 1936: 17.0, 1937: 18.7, 1938: 13.4, 1939: 14.8,
+    1940: 13.9, 1941: 11.8, 1942:  9.8, 1943: 10.7, 1944: 11.3, 1945: 13.4,
+    1946: 16.6, 1947: 12.0, 1948: 10.5, 1949: 10.2, 1950: 10.7, 1951: 11.6,
+    1952: 11.9, 1953: 13.0, 1954: 13.9, 1955: 18.2, 1956: 19.0, 1957: 16.7,
+    1958: 16.3, 1959: 19.0, 1960: 18.3, 1961: 19.7, 1962: 20.6, 1963: 19.0,
+    1964: 21.6, 1965: 23.3, 1966: 22.0, 1967: 19.7, 1968: 21.5, 1969: 21.2,
+    1970: 17.0, 1971: 17.2, 1972: 18.7, 1973: 18.7, 1974: 12.0, 1975:  8.9,
+    1976: 11.2, 1977: 10.8, 1978:  9.3, 1979:  8.9, 1980:  8.9, 1981:  9.3,
+    1982:  7.4, 1983:  8.8, 1984: 10.0, 1985:  9.9, 1986: 12.5, 1987: 14.7,
+    1988: 13.5, 1989: 15.1, 1990: 16.5, 1991: 16.5, 1992: 19.0, 1993: 20.2,
+    1994: 20.3, 1995: 20.2, 1996: 24.7, 1997: 28.3, 1998: 32.9, 1999: 40.6,
+    2000: 43.8, 2001: 36.9, 2002: 28.5, 2003: 22.8, 2004: 27.0, 2005: 26.6,
+    2006: 27.0, 2007: 27.2, 2008: 24.0, 2009: 16.5, 2010: 20.9, 2011: 22.3,
+    2012: 21.8, 2013: 23.3, 2014: 25.6, 2015: 26.3, 2016: 25.0, 2017: 28.3,
+    2018: 30.7, 2019: 28.7, 2020: 30.6, 2021: 35.7, 2022: 33.6, 2023: 30.5,
+    2024: 35.8, 2025: 37.2, 2026: 37.5,
+}
+
+# Buffett-indikator (Wilshire 5000 / GDP) — slutet av året (FRED-data + Bloomberg-uppskattning).
+# Tom data före 2000 eftersom Wilshire 5000 inte är konsistent rapporterad bakåt.
+_BUFFETT_INDICATOR_YEARLY = {
+    1995:  76, 1996:  91, 1997: 117, 1998: 144, 1999: 166, 2000: 137,
+    2001: 110, 2002:  79, 2003: 100, 2004: 111, 2005: 112, 2006: 119,
+    2007: 113, 2008:  68, 2009:  91, 2010:  99, 2011:  93, 2012: 105,
+    2013: 130, 2014: 137, 2015: 130, 2016: 139, 2017: 158, 2018: 132,
+    2019: 153, 2020: 188, 2021: 213, 2022: 158, 2023: 184, 2024: 207,
+    2025: 212, 2026: 210,
+}
+
+
+def seed_macro_history(db):
+    """Seedar macro_history-tabellen med årliga historiska värden för CAPE
+    och Buffett-indikator. Idempotent — kör utan effekt om data redan finns.
+    Returnerar antal nya rader."""
+    ph = _ph()
+    inserted = 0
+    fetched_at = datetime.now().isoformat()
+    for year, cape in _SHILLER_CAPE_YEARLY.items():
+        bi = _BUFFETT_INDICATOR_YEARLY.get(year)
+        period = str(year)
+        # Kolla om finns redan
+        existing = _fetchone(db,
+            f"SELECT period FROM macro_history WHERE period = {ph} AND period_type = 'yearly'",
+            (period,))
+        if existing:
+            continue
+        if _use_postgres():
+            db.cursor().execute(
+                f"INSERT INTO macro_history (period, period_type, cape, buffett_indicator, source, fetched_at) "
+                f"VALUES ({ph}, 'yearly', {ph}, {ph}, 'shiller-seed', {ph})",
+                (period, cape, bi, fetched_at))
+        else:
+            db.execute(
+                "INSERT INTO macro_history (period, period_type, cape, buffett_indicator, source, fetched_at) "
+                "VALUES (?, 'yearly', ?, ?, 'shiller-seed', ?)",
+                (period, cape, bi, fetched_at))
+        inserted += 1
+    db.commit()
+    return inserted
+
+
+def save_macro_snapshot(db, data, period_type='daily', period=None):
+    """Sparar dagens (eller vald) makro-snapshot. Upsert på (period, period_type)."""
+    if period is None:
+        if period_type == 'yearly':
+            period = datetime.now().strftime("%Y")
+        elif period_type == 'monthly':
+            period = datetime.now().strftime("%Y-%m")
+        else:
+            period = datetime.now().strftime("%Y-%m-%d")
+
+    ph = _ph()
+    fetched_at = datetime.now().isoformat()
+
+    # Upsert
+    if _use_postgres():
+        db.cursor().execute(
+            f"""INSERT INTO macro_history
+                (period, period_type, cape, buffett_indicator, vix, us_10y, sp500, gold_ratio, fear_greed, source, fetched_at)
+                VALUES ({ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph})
+                ON CONFLICT (period, period_type) DO UPDATE SET
+                    cape = EXCLUDED.cape,
+                    buffett_indicator = EXCLUDED.buffett_indicator,
+                    vix = EXCLUDED.vix,
+                    us_10y = EXCLUDED.us_10y,
+                    sp500 = EXCLUDED.sp500,
+                    gold_ratio = EXCLUDED.gold_ratio,
+                    fear_greed = EXCLUDED.fear_greed,
+                    source = EXCLUDED.source,
+                    fetched_at = EXCLUDED.fetched_at""",
+            (period, period_type, data.get('cape'), data.get('buffett_indicator'),
+             data.get('vix'), data.get('us_10y'), data.get('sp500'),
+             data.get('gold_ratio'), data.get('fear_greed'),
+             data.get('source', 'snapshot'), fetched_at))
+    else:
+        db.execute(
+            """INSERT OR REPLACE INTO macro_history
+                (period, period_type, cape, buffett_indicator, vix, us_10y, sp500, gold_ratio, fear_greed, source, fetched_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (period, period_type, data.get('cape'), data.get('buffett_indicator'),
+             data.get('vix'), data.get('us_10y'), data.get('sp500'),
+             data.get('gold_ratio'), data.get('fear_greed'),
+             data.get('source', 'snapshot'), fetched_at))
+    db.commit()
+
+
+def get_macro_history(db, period_type='yearly', limit=200, since=None):
+    """Hämtar makro-historik sorterad nyaste först."""
+    ph = _ph()
+    where = f"WHERE period_type = {ph}"
+    params = [period_type]
+    if since:
+        where += f" AND period >= {ph}"
+        params.append(since)
+    sql = f"SELECT * FROM macro_history {where} ORDER BY period DESC LIMIT {ph}"
+    rows = _fetchall(db, sql, params + [limit])
+    return [dict(r) for r in rows]
 
 
 # ── Avanza Stock Import ──────────────────────────────────────

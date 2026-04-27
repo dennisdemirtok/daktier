@@ -4046,8 +4046,12 @@ async function renderDashboard() {
                 </div>
             </div>
             <div class="dash-section">
-                <h3 class="dash-heading">Makro-indikatorer <span class="dash-sub">från böckerna</span></h3>
+                <h3 class="dash-heading" style="display:flex;align-items:center;gap:12px">
+                    Makro-indikatorer <span class="dash-sub">från böckerna</span>
+                    <button id="macroHistToggle" onclick="toggleMacroHistory()" style="margin-left:auto;background:white;border:1px solid var(--border);padding:6px 12px;border-radius:8px;font-size:12px;cursor:pointer;font-family:inherit;font-weight:500">📊 Visa historik</button>
+                </h3>
                 <div class="dash-macro-grid" id="dashMacroGrid"></div>
+                <div id="macroHistPanel" style="display:none;margin-top:14px"></div>
             </div>
             <div class="dash-section">
                 <h3 class="dash-heading">Modell-signaler <span class="dash-sub">baserat på Graham, Greenblatt, Lynch, Klarman, Shiller m.fl.</span></h3>
@@ -4316,6 +4320,157 @@ function renderMacroTile(m) {
             <div class="macro-note">Buffett: "Var rädd när andra är giriga, girig när andra är rädda"</div>
         </div>
     `;
+}
+
+// ── Makro-historik (CAPE + Buffett-indikator per år) ─────
+
+let _macroHistData = null;
+let _macroHistOpen = false;
+
+async function toggleMacroHistory() {
+    const panel = document.getElementById('macroHistPanel');
+    const btn = document.getElementById('macroHistToggle');
+    if (!panel) return;
+    _macroHistOpen = !_macroHistOpen;
+    if (!_macroHistOpen) {
+        panel.style.display = 'none';
+        if (btn) btn.textContent = '📊 Visa historik';
+        return;
+    }
+    if (btn) btn.textContent = '✕ Dölj historik';
+    panel.style.display = 'block';
+    panel.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-muted)">Laddar historik…</div>';
+    try {
+        if (!_macroHistData) {
+            const r = await fetch('/api/macro/history?period_type=yearly&limit=100');
+            _macroHistData = await r.json();
+        }
+        renderMacroHistoryTable(_macroHistData.rows || []);
+    } catch (e) {
+        panel.innerHTML = '<div style="padding:14px;color:var(--red)">Fel: ' + e.message + '</div>';
+    }
+}
+
+function renderMacroHistoryTable(rows) {
+    const panel = document.getElementById('macroHistPanel');
+    if (!panel) return;
+
+    // Färgkod: CAPE
+    const capeCol = (v) => v == null ? '#888' : v >= 30 ? '#c0392b' : v >= 22 ? '#e67700' : v < 15 ? '#00a870' : '#888';
+    const biCol   = (v) => v == null ? '#888' : v >= 140 ? '#c0392b' : v >= 100 ? '#e67700' : v < 70 ? '#00a870' : '#888';
+
+    // CAPE-zon-text
+    const capeZone = (v) => v == null ? '–' : v >= 30 ? 'Bubbla' : v >= 22 ? 'Dyrt' : v < 15 ? 'Köp' : 'Neutral';
+    const biZone   = (v) => v == null ? '–' : v >= 140 ? 'Bubbla' : v >= 100 ? 'Dyrt' : v < 70 ? 'Köp' : 'Rimligt';
+
+    // Beräkna sparkline (mini-graf) — använd alla rows sorterade ASC
+    const sortedAsc = [...rows].sort((a,b) => (a.period > b.period ? 1 : -1));
+    const capeSeries = sortedAsc.filter(r => r.cape != null).map(r => ({ x: parseInt(r.period), y: r.cape }));
+    const biSeries   = sortedAsc.filter(r => r.buffett_indicator != null).map(r => ({ x: parseInt(r.period), y: r.buffett_indicator }));
+
+    function sparkline(series, width=600, height=80, color='#1d4ed8') {
+        if (!series.length) return '';
+        const xs = series.map(p => p.x), ys = series.map(p => p.y);
+        const xMin = Math.min(...xs), xMax = Math.max(...xs);
+        const yMin = Math.min(...ys), yMax = Math.max(...ys);
+        const xR = xMax - xMin || 1, yR = yMax - yMin || 1;
+        const pad = 4;
+        const pts = series.map(p => {
+            const x = pad + ((p.x - xMin) / xR) * (width - 2*pad);
+            const y = height - pad - ((p.y - yMin) / yR) * (height - 2*pad);
+            return [x, y];
+        });
+        const path = pts.map((p,i) => (i===0?'M':'L') + p[0].toFixed(1)+','+p[1].toFixed(1)).join(' ');
+        // Markera senaste punkten
+        const last = pts[pts.length-1];
+        return `<svg viewBox="0 0 ${width} ${height}" style="width:100%;height:${height}px;display:block">
+            <path d="${path}" fill="none" stroke="${color}" stroke-width="1.6"/>
+            <circle cx="${last[0].toFixed(1)}" cy="${last[1].toFixed(1)}" r="3" fill="${color}"/>
+            <text x="${last[0]-2}" y="${Math.max(12, last[1]-6)}" text-anchor="end" font-size="10" fill="${color}" font-weight="600">${series[series.length-1].y.toFixed(1)}</text>
+            <text x="${pad}" y="${height-2}" font-size="10" fill="#888">${xMin}</text>
+            <text x="${width-pad}" y="${height-2}" text-anchor="end" font-size="10" fill="#888">${xMax}</text>
+        </svg>`;
+    }
+
+    // Tabell — visa max 30 senaste år, äldre i collapse
+    const recent = rows.slice(0, 30);
+    const tableRows = recent.map(r => `
+        <tr>
+            <td style="font-weight:600">${r.period}</td>
+            <td style="text-align:right;color:${capeCol(r.cape)};font-weight:600">${r.cape != null ? r.cape.toFixed(1) : '–'}</td>
+            <td style="text-align:right;color:${capeCol(r.cape)};font-size:11px">${capeZone(r.cape)}</td>
+            <td style="text-align:right;color:${biCol(r.buffett_indicator)};font-weight:600">${r.buffett_indicator != null ? r.buffett_indicator.toFixed(0) + '%' : '–'}</td>
+            <td style="text-align:right;color:${biCol(r.buffett_indicator)};font-size:11px">${biZone(r.buffett_indicator)}</td>
+            <td style="text-align:right;color:var(--text-muted);font-size:11px">${r.source || ''}</td>
+        </tr>
+    `).join('');
+
+    panel.innerHTML = `
+        <div style="background:white;border:1px solid var(--border);border-radius:12px;padding:16px;box-shadow:0 1px 3px rgba(0,0,0,0.04)">
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-bottom:16px">
+                <div>
+                    <div style="font-size:12px;color:var(--text-muted);font-weight:600;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:6px">📘 Shillers CAPE — historik</div>
+                    ${sparkline(capeSeries, 600, 80, '#c0392b')}
+                    <div style="font-size:11px;color:var(--text-muted);margin-top:4px">Snitt 1881-2024: 17 · 1929-topp: 32 · Dotcom-topp: 44 · 2007-topp: 27</div>
+                </div>
+                <div>
+                    <div style="font-size:12px;color:var(--text-muted);font-weight:600;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:6px">🏰 Buffett-indikatorn — historik</div>
+                    ${sparkline(biSeries, 600, 80, '#1d4ed8')}
+                    <div style="font-size:11px;color:var(--text-muted);margin-top:4px">Mätt sedan 1995. Tidigare bottnar: 2002 (79%), 2008 (68%). Toppar: 1999 (166%), 2021 (213%)</div>
+                </div>
+            </div>
+            <div style="border-top:1px solid var(--border);padding-top:12px">
+                <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px">
+                    <strong style="font-size:13px">Tabell — senaste ${recent.length} år</strong>
+                    <span style="font-size:11px;color:var(--text-muted)">Klicka kolumn för att sortera</span>
+                </div>
+                <div style="max-height:380px;overflow-y:auto;border:1px solid var(--border);border-radius:8px">
+                    <table style="width:100%;border-collapse:collapse;font-size:13px">
+                        <thead style="position:sticky;top:0;background:#f9fafb">
+                            <tr style="border-bottom:1px solid var(--border)">
+                                <th style="text-align:left;padding:8px 12px">År</th>
+                                <th style="text-align:right;padding:8px 12px">Shillers CAPE</th>
+                                <th style="text-align:right;padding:8px 12px">Zon</th>
+                                <th style="text-align:right;padding:8px 12px">Buffett-indikator</th>
+                                <th style="text-align:right;padding:8px 12px">Zon</th>
+                                <th style="text-align:right;padding:8px 12px">Källa</th>
+                            </tr>
+                        </thead>
+                        <tbody>${tableRows}</tbody>
+                    </table>
+                </div>
+                ${rows.length > 30 ? `<div style="text-align:center;margin-top:10px"><button onclick="renderMacroHistoryTableFull()" style="background:none;border:1px solid var(--border);padding:6px 14px;border-radius:6px;font-size:12px;cursor:pointer;font-family:inherit">Visa alla ${rows.length} år</button></div>` : ''}
+            </div>
+        </div>
+    `;
+}
+
+function renderMacroHistoryTableFull() {
+    if (!_macroHistData) return;
+    // Återrendera men med alla rader
+    const panel = document.getElementById('macroHistPanel');
+    const all = _macroHistData.rows || [];
+    // Tillfälligt ändra slice-gränsen genom att modifiera datan
+    const html = panel.innerHTML;
+    // Enkel approach: bygg om tabell med alla rader inline
+    const capeCol = (v) => v == null ? '#888' : v >= 30 ? '#c0392b' : v >= 22 ? '#e67700' : v < 15 ? '#00a870' : '#888';
+    const biCol   = (v) => v == null ? '#888' : v >= 140 ? '#c0392b' : v >= 100 ? '#e67700' : v < 70 ? '#00a870' : '#888';
+    const capeZone = (v) => v == null ? '–' : v >= 30 ? 'Bubbla' : v >= 22 ? 'Dyrt' : v < 15 ? 'Köp' : 'Neutral';
+    const biZone   = (v) => v == null ? '–' : v >= 140 ? 'Bubbla' : v >= 100 ? 'Dyrt' : v < 70 ? 'Köp' : 'Rimligt';
+    const tableRows = all.map(r => `
+        <tr>
+            <td style="font-weight:600;padding:6px 12px">${r.period}</td>
+            <td style="text-align:right;color:${capeCol(r.cape)};font-weight:600;padding:6px 12px">${r.cape != null ? r.cape.toFixed(1) : '–'}</td>
+            <td style="text-align:right;color:${capeCol(r.cape)};font-size:11px;padding:6px 12px">${capeZone(r.cape)}</td>
+            <td style="text-align:right;color:${biCol(r.buffett_indicator)};font-weight:600;padding:6px 12px">${r.buffett_indicator != null ? r.buffett_indicator.toFixed(0) + '%' : '–'}</td>
+            <td style="text-align:right;color:${biCol(r.buffett_indicator)};font-size:11px;padding:6px 12px">${biZone(r.buffett_indicator)}</td>
+            <td style="text-align:right;color:var(--text-muted);font-size:11px;padding:6px 12px">${r.source || ''}</td>
+        </tr>
+    `).join('');
+    const tbody = panel.querySelector('tbody');
+    if (tbody) tbody.innerHTML = tableRows;
+    const btn = panel.querySelector('button[onclick="renderMacroHistoryTableFull()"]');
+    if (btn) btn.style.display = 'none';
 }
 
 // ── Nyckeltal (Metrics Tool) ────────────────────────────

@@ -384,6 +384,47 @@ def _build_model_signals(macro):
     return out
 
 
+@app.route("/api/macro/history")
+def api_macro_history():
+    """Returnerar makro-historik (CAPE + Buffett-indikator m.fl.).
+
+    Query params:
+        period_type: 'yearly' | 'monthly' | 'daily' (default 'yearly')
+        limit:       max antal rader (default 100)
+        since:       hämta endast period ≥ since (t.ex. '2000')
+    """
+    from edge_db import get_macro_history, seed_macro_history
+    period_type = request.args.get("period_type", "yearly")
+    limit = int(request.args.get("limit", 100))
+    since = request.args.get("since")
+
+    ck = f"macro_history|{period_type}|{limit}|{since}"
+    cached, hit = _cached_response(ck, ttl=600)  # 10 min cache
+    if hit:
+        return jsonify(cached)
+
+    db = get_db()
+    try:
+        # Seedar om tabellen är tom (idempotent)
+        from edge_db import _fetchone, _ph
+        existing = _fetchone(db, f"SELECT COUNT(*) AS n FROM macro_history WHERE period_type = 'yearly'")
+        n = (existing["n"] if existing else 0) if existing else 0
+        if not n:
+            seed_macro_history(db)
+
+        rows = get_macro_history(db, period_type=period_type, limit=limit, since=since)
+    finally:
+        db.close()
+
+    payload = {
+        "period_type": period_type,
+        "rows": rows,
+        "count": len(rows),
+    }
+    _set_cache(ck, payload)
+    return jsonify(payload)
+
+
 @app.route("/api/dashboard")
 def api_dashboard():
     ck = "dashboard|v1"
@@ -3601,9 +3642,45 @@ def _startup():
             _run_hist_sync(limit=None, max_age_days=6, tier="extended")
 
         scheduler.add_job(scheduled_hist_sync, 'cron', hour=3, minute=30, id='hist_sync_nightly')
+
+        # Dagligt makro-snapshot (06:00 lokal)
+        def scheduled_macro_snapshot():
+            try:
+                from edge_db import save_macro_snapshot, seed_macro_history
+                _MACRO_CACHE["data"] = None  # tvinga ny live-fetch
+                m = _fetch_macro_indicators()
+                dbm = get_db()
+                try:
+                    save_macro_snapshot(dbm, m, period_type='daily')
+                    save_macro_snapshot(dbm, m, period_type='monthly')
+                    save_macro_snapshot(dbm, m, period_type='yearly')
+                    # Seeda historik om tom
+                    seed_macro_history(dbm)
+                finally:
+                    dbm.close()
+                print(f"[AUTO] Makro-snapshot sparad {datetime.now().strftime('%H:%M')} (CAPE={m.get('cape'):.1f}, BI={m.get('buffett_indicator'):.0f}%)")
+            except Exception as e:
+                print(f"[AUTO] Makro-snapshot fel: {e}")
+
+        scheduler.add_job(scheduled_macro_snapshot, 'cron', hour=6, minute=0, id='macro_daily')
+
+        # Daglig insider-sync (06:30 lokal — innan börsöppning)
+        def scheduled_insider_sync():
+            if state["loading"]:
+                return
+            print(f"[AUTO] Daglig insider-sync start {datetime.now().strftime('%H:%M')}")
+            try:
+                refresh_insiders()
+            except Exception as e:
+                print(f"[AUTO] Insider-sync fel: {e}")
+
+        scheduler.add_job(scheduled_insider_sync, 'cron', hour=6, minute=30, id='insider_daily')
+
         scheduler.start()
         print("  ✓ Auto-refresh scheduler aktiv (var 15:e min under marknadstid)")
         print("  ✓ Nightly historical sync schemalagd (03:30, extended tier)")
+        print("  ✓ Daily macro snapshot schemalagd (06:00)")
+        print("  ✓ Daily insider sync schemalagd (06:30)")
     except ImportError:
         print("  ⚠ APScheduler ej installerat — auto-refresh inaktivt")
 
