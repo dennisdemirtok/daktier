@@ -518,23 +518,41 @@
 
         /* ── Mobile (best-practice responsive) ──── */
         @media (max-width: 1024px) {
-            .sidebar { transform: translateX(-100%); box-shadow: 4px 0 24px rgba(0,0,0,0.15); }
+            /* Z-index ordning på mobil: header (100) < overlay (150) < sidebar (200)
+               Tidigare bug: overlay 99 låg ÖVER sidebar 90 → klick blockerades */
+            .sidebar {
+                transform: translateX(-100%);
+                box-shadow: 4px 0 24px rgba(0,0,0,0.15);
+                z-index: 200;
+                top: 0;  /* full skärmhöjd när öppen — header skall inte överlappa */
+                padding-top: 70px;  /* ge plats åt mobile-menu-btn */
+            }
             .sidebar.open { transform: translateX(0); }
             .main-content { margin-left: 0; }
             .mobile-menu-btn { display: flex !important; }
-            /* Sidebar-overlay när öppen */
             body.sidebar-open::before {
                 content: ''; position: fixed; inset: 0; background: rgba(0,0,0,0.4);
-                z-index: 99; backdrop-filter: blur(2px);
+                z-index: 150; backdrop-filter: blur(2px);
             }
+            /* Header måste vara under sidebar+overlay på mobil */
+            .header { z-index: 100; }
         }
         @media (max-width: 768px) {
             /* Container & layout */
             :root { --header-h: 56px; }
             .container { padding: 12px; }
-            .header { padding: 0 12px; height: 56px; }
+            .header { padding: 0 12px; height: 56px; gap: 8px; }
+            .header-left { gap: 8px; flex: 1; min-width: 0; overflow: hidden; }
+            /* Dölj h1-text på mobil — bara logo + ev. menyknapp */
+            .header h1 { font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+            .header h1 span { display: none; }
             .header-center { display: none; }
-            .header-right { gap: 4px; }
+            .header-right { gap: 4px; flex-shrink: 0; }
+            /* Klocka tar plats — gömma på mobil */
+            .update-time { display: none; }
+            /* Refresh-knappar kompaktare */
+            .refresh-btn { padding: 7px 10px !important; font-size: 11px !important; }
+            .refresh-btn .material-symbols-outlined { font-size: 14px !important; }
             .header-icon-btn { padding: 8px; }
             .page-header { gap: 8px; margin: 4px 0 12px; }
             .page-title { font-size: 20px; }
@@ -621,6 +639,10 @@
             /* Riktigt små skärmar (gamla iPhone, små Android) */
             .container { padding: 10px; }
             .header { padding: 0 10px; }
+            /* Dölj header h1-text helt — bara logo räcker */
+            .header h1 { display: none; }
+            /* Insiders-knapp döljd på mycket små skärmar — finns i Insiders-fliken ändå */
+            #refreshInsidersBtn { display: none; }
             .page-title { font-size: 18px; }
             .card-value { font-size: 20px; }
             /* Edge Signals: ännu fler kolumner gömda < 480px */
@@ -1236,31 +1258,34 @@ function switchTab(tab, el) {
 
 function sidebarNav(tab, el) {
     switchTab(tab);
-    // Close sidebar on mobile
+    // Close sidebar on mobile + lyft body-class
     if (window.innerWidth <= 1024) {
         document.getElementById('sidebar').classList.remove('open');
+        document.body.classList.remove('sidebar-open');
     }
 }
 
 function toggleSidebar() {
     const sb = document.getElementById('sidebar');
     sb.classList.toggle('open');
-    // Lägg till overlay-state på body så CSS-overlay aktiveras
     document.body.classList.toggle('sidebar-open', sb.classList.contains('open'));
 }
 
-// Stäng sidebar när man klickar utanför (på overlay)
-document.addEventListener('click', function(e) {
+// Stäng sidebar när man klickar på overlay (men EJ på sidebar/menyknapp)
+// Använder pointerdown istället för click för bättre touch-responsivitet,
+// + capture-fas så vi kan stoppa innan det boublar.
+document.addEventListener('pointerdown', function(e) {
     const sb = document.getElementById('sidebar');
+    if (!sb || !sb.classList.contains('open')) return;
+    if (window.innerWidth > 1024) return;
+    // Klick INNE i sidebar eller på menyknappen → låt det funka
+    if (sb.contains(e.target)) return;
     const btn = document.querySelector('.mobile-menu-btn');
-    if (sb && sb.classList.contains('open') &&
-        !sb.contains(e.target) &&
-        btn && !btn.contains(e.target) &&
-        window.innerWidth <= 1024) {
-        sb.classList.remove('open');
-        document.body.classList.remove('sidebar-open');
-    }
-});
+    if (btn && btn.contains(e.target)) return;
+    // Annars: stäng sidebar
+    sb.classList.remove('open');
+    document.body.classList.remove('sidebar-open');
+}, true);
 
 // ── Filter Actions ──────────────────────────────────
 
