@@ -664,7 +664,7 @@ def api_stock_detail(orderbook_id):
                 m["key"]: round(sc[m["key"]], 1) if sc.get(m["key"]) is not None else None
                 for m in BOOK_MODELS
             }
-            # v2/v2.1/v2.2-output
+            # v2/v2.1/v2.2/v2.3-output
             d["v2"] = {
                 "classification": sc.get("v2_classification"),
                 "applicability": sc.get("v2_applicability"),
@@ -684,6 +684,7 @@ def api_stock_detail(orderbook_id):
                 "fcf_debug": sc.get("v2_fcf_debug"),
                 "consistency": sc.get("v2_2_consistency"),
                 "conflicts": sc.get("v2_2_conflicts"),
+                "quality_trend": sc.get("v2_3_quality_trend"),  # v2.3 Patch 4
                 "na_models": [k for k, v in (sc.get("v2_applicability") or {}).items() if v == "not_applicable"],
             }
             # v2.2 Gate 5 — separerade ownership-signals
@@ -3620,6 +3621,65 @@ Buy-zone = simulerar vad composite-score blir vid en kursnedgång.
 - "Approaching": rörelse går mot köpzon men ej passerat ännu
 
 ══════════════════════════════════════════════════════════════
+DEL 6.3 — AKTIEAGENT v2.3 KRITISKA REGLER (HÅRDVALIDERAS)
+══════════════════════════════════════════════════════════════
+
+DESSA REGLER VALIDERAS POST-STREAM. Brott rapporteras till användaren.
+
+**Smart Money — hårdkodad terminologi:**
+- "Smart money" = insider transactions + institutional flow ENDAST
+- Avanza/Nordnet/retail-data är ALDRIG smart money — det är RETAIL FLOW
+- FÖRBJUDET: "smart money" + "Avanza" / "ägare" / "retail" inom 50 tecken
+- FÖRBJUDET: disclaimer som "smart money (retail)" eller "smart money-liknande"
+
+Använd istället:
+- "Retail flow ackumulerar under nedtrend (kontraindikator-mönster)"
+- "Retail-utflöde observerat — potentiell capitulation"
+- "Insider net 6m: -$45M" (= riktig smart money)
+
+**Earnings Revision — surprise-proxy är OBLIGATORISK:**
+Om get_full_stock returnerar `v2.earnings_revision_debug`, MÅSTE du citera
+YoY-tillväxt. "Data saknas" är förbjudet om quarterly EPS finns.
+
+**FCF Pipeline — visa beräkningskedja:**
+Om `v2.fcf_debug` finns, visa minst:
+- Market cap (i bolagscurrency)
+- OCF TTM
+- CapEx-proxy %
+- FCF SBC-justerad
+- EV
+- FCF Yield på EV (inte mcap)
+
+**Quality-trend:**
+Om `v2.quality_trend.modifier < 0.85`, NÄMN att Quality-poängen är
+trend-justerad nedåt. Tower: ROE 21→7.5% → modifier 0.40 → trend "collapsing".
+
+**Quality Under Pressure (ny setup-typ v2.3):**
+Bolag med historisk hög ROIC men nu fallande, ej cyclical, fortfarande lönsam.
+→ REDUCED_STARTER 15% + watchlist på specifik katalysator.
+
+**Management guidance — TIER 4-källa:**
+"Bolaget guidar...", "2028-modellen" → MÅSTE flaggas:
+> "Detta är bolagets egen prognos. Historiskt missar mgmt-guidance med 15-25%."
+
+══════════════════════════════════════════════════════════════
+DEL 6.35 — TOKEN-BUDGET (Patch 7, hård gräns)
+══════════════════════════════════════════════════════════════
+
+Total output: max ~2400 tokens. Budget per sektion:
+- Setup-klassificering: 100t
+- 4-axel-tabell: 200t
+- Reverse DCF-rad: 150t
+- FCF-debug-block: 200t (om relevant)
+- Quartal-trend (max 4 senaste): 200t
+- Position-plan: 200t
+- Stop_thesis: 150t
+- Slutsats: 250t
+
+Aldrig trunkera: position_plan, stop_thesis, conclusion, FCF debug.
+Trunkera först: kontext-block, modell-motiveringar.
+
+══════════════════════════════════════════════════════════════
 DEL 6.4 — AKTIEAGENT v2.1 PATCHES (TVINGANDE DISCIPLIN)
 ══════════════════════════════════════════════════════════════
 
@@ -4319,6 +4379,33 @@ DEL 9 — DAGENS DB-SNAPSHOT (uppdateras var 5 min)
 # ──────────────────────────────────────────────────────────────
 import re as _re_v22
 
+# v2.3 Patch 1 — Smart Money proximity-validation.
+# 'Smart money' får INTE användas i samma mening som retail/Avanza/ägare.
+# Definition: Smart money = insider + institutional ENDAST.
+_V23_SMART_MONEY_FORBIDDEN_PROXIMITY = [
+    # 'smart money' inom 50 tecken av retail-källa
+    (r"smart\s+money[^.]{0,50}(Avanza|Nordnet|retail|ägare|ägarflöde|ägartillväxt|owner)", "Smart money + retail-data i samma mening"),
+    (r"(Avanza|Nordnet|retail|ägare|ägarflöde|ägartillväxt|owner)[^.]{0,50}smart\s+money", "Retail-data → smart money-tolkning"),
+    # Direkta felmappningar
+    (r"smart\s+money[-\s]signal[^.]{0,30}Avanza", "Smart money-signal från Avanza-data"),
+    (r"Avanza[^.]{0,30}smart\s+money", "Avanza data labeled smart money"),
+    (r"retail[^.]{0,30}smart\s+money", "Retail labeled as smart money"),
+    (r"smart\s+money[^.]{0,30}retail", "Smart money equated with retail"),
+    # Disclaimer-försök som inte räddar
+    (r"smart\s+money\s*\(retail\)", "Disclaimer 'smart money (retail)' otillräcklig"),
+    (r"smart\s+money[-\s]liknande", "Pseudo-smart money-term"),
+]
+
+# v2.3 Patch 6 — Management guidance utan flagga är förbjudet
+_V23_MGMT_GUIDANCE_PATTERNS = [
+    r"(bolaget|ledningen|management|company)\s+(guidar|prognostiserar|projekterar|siktar|targets?)",
+    r"(2028|2027|2026)[-\s]modellen",
+    r"(intäktsmål|vinstmål)[^.]{0,30}(bolag|management|ledning)",
+    r"(ledningen|management)[-\s]presented",
+    r"investor\s+day",
+    r"capital\s+markets\s+day",
+]
+
 _V22_FORBIDDEN_PATTERNS = [
     # Specifika personer som narrativ källa (ej som modell-namn)
     (r"\b(Michael\s+)?Burry\b", "Michael Burry som källa"),
@@ -4354,16 +4441,55 @@ _V22_FORBIDDEN_PATTERNS = [
 
 
 def _validate_v22_sentiment(output_text):
-    """Returnerar lista med (pattern_description, matched_text) per regelbrott."""
+    """Returnerar lista med (pattern_description, matched_text) per regelbrott.
+    Inkluderar v2.2 sentiment + v2.3 smart money proximity + mgmt guidance."""
     if not output_text:
         return []
     violations = []
+    # v2.2 sentiment
     for pattern, desc in _V22_FORBIDDEN_PATTERNS:
         matches = _re_v22.findall(pattern, output_text, _re_v22.IGNORECASE)
         if matches:
-            # Spara första matchen som exempel
             sample = matches[0] if isinstance(matches[0], str) else " ".join(str(m) for m in matches[0])
-            violations.append({"rule": desc, "sample": sample[:80]})
+            violations.append({"rule": desc, "sample": sample[:80], "severity": "high"})
+
+    # v2.3 Patch 1 — Smart money proximity
+    for pattern, desc in _V23_SMART_MONEY_FORBIDDEN_PROXIMITY:
+        m = _re_v22.search(pattern, output_text, _re_v22.IGNORECASE)
+        if m:
+            violations.append({
+                "rule": f"v2.3 SmartMoney: {desc}",
+                "sample": m.group()[:100],
+                "severity": "critical",
+            })
+
+    # v2.3 Patch 6 — Management guidance utan flagga
+    for pattern in _V23_MGMT_GUIDANCE_PATTERNS:
+        m = _re_v22.search(pattern, output_text, _re_v22.IGNORECASE)
+        if m:
+            # Kolla om flagga finns inom 200 tecken
+            window_start = max(0, m.start() - 100)
+            window_end = min(len(output_text), m.end() + 100)
+            window = output_text[window_start:window_end].lower()
+            if ("management_guidance_warning" not in window and
+                "ledningens egen prognos" not in window and
+                "partisk källa" not in window and
+                "bolagets egen prognos" not in window):
+                violations.append({
+                    "rule": "v2.3 MgmtGuidance: refererad utan flagga",
+                    "sample": m.group()[:80],
+                    "severity": "medium",
+                })
+
+    # v2.3 Patch 3 — "data saknas" earnings förbjudet om quarterly EPS finns
+    if _re_v22.search(r"earnings\s+revision[:\s]+(data\s+saknas|ej\s+tillgänglig|kan\s+ej\s+bedöma)",
+                      output_text, _re_v22.IGNORECASE):
+        violations.append({
+            "rule": "v2.3 Earnings: 'data saknas' rapporterat — surprise-proxy MÅSTE användas",
+            "sample": "Earnings revision: data saknas",
+            "severity": "high",
+        })
+
     return violations
 
 

@@ -2278,14 +2278,26 @@ def _attach_hist(db, stock_dict):
         h = _hist_context(db, oid)
         if h is None:
             h = {}
-        # Quarterly EPS för earnings revision-proxy
+        # Quarterly EPS + ROE för earnings revision och Quality-trend (v2.3)
         try:
             ph = _ph()
             q_rows = _fetchall(db,
-                f"SELECT financial_year, quarter, eps FROM historical_quarterly "
+                f"SELECT financial_year, quarter, eps, return_on_equity FROM historical_quarterly "
                 f"WHERE orderbook_id = {ph} ORDER BY financial_year DESC, quarter DESC LIMIT 12",
                 (oid,))
-            h["eps_quarters"] = [(r["financial_year"], r["quarter"], r["eps"]) for r in q_rows]
+            # sqlite3.Row stödjer [] men inte .get() — använd try/except
+            eps_list = []
+            roe_list = []
+            for r in q_rows:
+                eps_list.append((r["financial_year"], r["quarter"], r["eps"]))
+                try:
+                    roe_val = r["return_on_equity"]
+                    if roe_val is not None:
+                        roe_list.append((r["financial_year"], r["quarter"], roe_val))
+                except (KeyError, IndexError):
+                    pass
+            h["eps_quarters"] = eps_list
+            h["roe_quarters"] = roe_list
         except Exception:
             pass
         if h:
@@ -2320,12 +2332,13 @@ def _attach_hist_bulk(db, stock_dicts):
     for r in rows:
         by_oid.setdefault(r["orderbook_id"], []).append(dict(r))
 
-    # v2.2: quarterly EPS för earnings revision-proxy
+    # v2.2/v2.3: quarterly EPS + ROE för earnings revision-proxy och Quality-trend
     quarterly_by_oid = {}
+    roe_quarters_by_oid = {}
     try:
         q_rows = _fetchall(
             db,
-            f"SELECT orderbook_id, financial_year, quarter, eps FROM historical_quarterly "
+            f"SELECT orderbook_id, financial_year, quarter, eps, return_on_equity FROM historical_quarterly "
             f"WHERE orderbook_id IN ({placeholders}) "
             f"ORDER BY orderbook_id, financial_year DESC, quarter DESC",
             oids,
@@ -2334,6 +2347,10 @@ def _attach_hist_bulk(db, stock_dicts):
             quarterly_by_oid.setdefault(r["orderbook_id"], []).append(
                 (r["financial_year"], r["quarter"], r["eps"])
             )
+            if r.get("return_on_equity") is not None:
+                roe_quarters_by_oid.setdefault(r["orderbook_id"], []).append(
+                    (r["financial_year"], r["quarter"], r["return_on_equity"])
+                )
     except Exception:
         pass
 
@@ -2350,6 +2367,8 @@ def _attach_hist_bulk(db, stock_dicts):
                 ctx = {}
             # Lägg till quarterly EPS-tuples för earnings revision proxy
             ctx["eps_quarters"] = quarterly_by_oid.get(oid, [])
+            # v2.3: Quarterly ROE för Quality-trend-modifier
+            ctx["roe_quarters"] = roe_quarters_by_oid.get(oid, [])
             d["_hist"] = ctx
     return stock_dicts
 
@@ -3068,23 +3087,80 @@ def _reverse_dcf_solve(current_ev, current_fcf, wacc,
     return mid
 
 
-def _score_earnings_revision_proxy(s, classification):
-    """v2.2 Gate 4 — Earnings Revision Score via EPS-acceleration-proxy.
+def _quality_trend_modifier(roe_quarters):
+    """v2.3 Patch 4 — Trend-aware Quality-axel.
 
-    Vi har inte estimat-data, men quarterly EPS-historik (i s["_hist"])
-    ger oss YoY-acceleration som proxy. Spec sa att 'data saknas' är
-    förbjudet om quarterly data finns.
+    Tillämpas som multiplikator på Quality-axeln. Bestraffar fallande
+    kvalitet (Tower: ROE 21% → 7.5% = -64% → modifier 0.40).
+
+    Returnerar dict med modifier (0.40-1.05) och trend-label.
+    """
+    if not roe_quarters or len(roe_quarters) < 8:
+        return {"modifier": 1.0, "trend": "insufficient_data", "delta_pct": None}
+
+    # Sortera nyaste först
+    try:
+        sorted_q = sorted(roe_quarters,
+                          key=lambda r: (r[0], int(str(r[1]).replace("Q",""))),
+                          reverse=True)
+    except Exception:
+        return {"modifier": 1.0, "trend": "sort_error", "delta_pct": None}
+
+    roe_vals = [r[2] for r in sorted_q if r[2] is not None]
+    if len(roe_vals) < 8:
+        return {"modifier": 1.0, "trend": "insufficient_data", "delta_pct": None}
+
+    recent_4q = roe_vals[:4]   # senaste 4 kvartal
+    prior_4q = roe_vals[4:8]   # föregående 4 kvartal
+    recent_avg = sum(recent_4q) / 4
+    prior_avg = sum(prior_4q) / 4
+
+    if abs(prior_avg) < 0.001:
+        return {"modifier": 1.0, "trend": "near_zero_baseline", "delta_pct": None}
+
+    relative_change = (recent_avg - prior_avg) / abs(prior_avg)
+
+    if relative_change > 0.10:
+        return {"modifier": 1.05, "trend": "improving", "delta_pct": round(relative_change * 100, 1)}
+    elif relative_change > -0.05:
+        return {"modifier": 1.00, "trend": "stable", "delta_pct": round(relative_change * 100, 1)}
+    elif relative_change > -0.15:
+        return {"modifier": 0.85, "trend": "declining_modest", "delta_pct": round(relative_change * 100, 1)}
+    elif relative_change > -0.30:
+        return {"modifier": 0.70, "trend": "declining_significant", "delta_pct": round(relative_change * 100, 1)}
+    elif relative_change > -0.50:
+        return {"modifier": 0.55, "trend": "deteriorating", "delta_pct": round(relative_change * 100, 1)}
+    else:
+        return {"modifier": 0.40, "trend": "collapsing", "delta_pct": round(relative_change * 100, 1)}
+
+
+def _score_earnings_revision_proxy(s, classification):
+    """v2.3 Patch 3 — Earnings Revision Score via YoY-surprise-proxy.
+
+    Använder per-kvartal YoY-jämförelse (recent_4q[i] vs prior_4q[i]) för
+    consistency-mätning, plus acceleration-bonus/-straff.
 
     Logik:
-      Om senaste 4 kvartalens YoY-tillväxt > föregående 4 kvartalens
-      YoY-tillväxt → analytiker-revisioner trendar uppåt (positivt momentum).
+        avg_yoy_growth = medel av per-kvartal YoY
+        consistency = andel kvartal med positiv YoY
+        acceleration = senaste YoY − äldsta YoY (visar trend i tillväxttakten)
+
+    Score:
+        avg > 30% + consistency > 75% → 90
+        avg > 15%                     → 75
+        avg > 5%                      → 60
+        avg > -5%                     → 45
+        avg > -15%                    → 25
+        annars                        → 10
+        + 10 om acceleration > 10% (förbättras)
+        - 10 om acceleration < -10% (försämras)
     """
     hist = s.get("_hist") or {}
-    eps_q = hist.get("eps_quarters") or []  # lista med tuples (year, q, eps)
-    if not eps_q or len(eps_q) < 8:
+    eps_q = hist.get("eps_quarters") or []
+    if not eps_q or len(eps_q) < 4:
         return None
 
-    # Sortera nyaste först — accept både ('Q1', 2026) eller dict-format
+    # Sortera nyaste först
     try:
         sorted_q = sorted(eps_q,
                           key=lambda r: (r[0] if isinstance(r, tuple) else r.get("year", 0),
@@ -3093,40 +3169,87 @@ def _score_earnings_revision_proxy(s, classification):
     except Exception:
         return None
 
-    # Senaste 4 kvartal vs föregående 4
-    recent_eps = []
-    older_eps = []
-    for r in sorted_q[:8]:
+    eps_vals = []
+    for r in sorted_q[:12]:
         eps = r[2] if isinstance(r, tuple) else r.get("eps")
         if eps is not None:
-            if len(recent_eps) < 4:
-                recent_eps.append(eps)
-            else:
-                older_eps.append(eps)
-    if len(recent_eps) < 4 or len(older_eps) < 4:
+            eps_vals.append(eps)
+
+    if len(eps_vals) < 4:
         return None
 
-    recent_sum = sum(recent_eps)
-    older_sum = sum(older_eps)
-    if older_sum == 0:
+    # Fallback: bara 4 kvartal — använd enkel trend
+    if len(eps_vals) < 8:
+        recent_avg = sum(eps_vals[:2]) / 2
+        older_avg = sum(eps_vals[2:4]) / 2
+        if older_avg <= 0:
+            return None
+        growth = (recent_avg - older_avg) / abs(older_avg)
+        if growth > 0.20: base = 75
+        elif growth > 0.05: base = 60
+        elif growth > -0.05: base = 45
+        elif growth > -0.15: base = 25
+        else: base = 10
+        s["_earnings_revision_debug"] = {
+            "source": "quarterly_eps_trend_4q (fallback)",
+            "recent_avg": round(recent_avg, 2),
+            "older_avg": round(older_avg, 2),
+            "growth_pct": round(growth * 100, 1),
+            "score": base,
+        }
+        return _clamp(base)
+
+    # Full version: 8 kvartal med YoY per kvartal
+    recent_4q = eps_vals[:4]   # senaste 4 kvartal (Q nu, Q-1, Q-2, Q-3)
+    prior_4q = eps_vals[4:8]   # samma kvartal förra året (Q-4, Q-5, Q-6, Q-7)
+
+    yoy_changes = []
+    for i in range(4):
+        prior = prior_4q[i]
+        recent = recent_4q[i]
+        if prior > 0:
+            yoy_changes.append((recent - prior) / prior)
+
+    if not yoy_changes:
         return None
 
-    yoy_growth = (recent_sum - older_sum) / abs(older_sum)
+    avg_yoy = sum(yoy_changes) / len(yoy_changes)
+    consistency = sum(1 for x in yoy_changes if x > 0) / len(yoy_changes)
+    # Acceleration: senaste YoY − äldsta YoY (yoy_changes[0] = senaste, [-1] = äldsta)
+    acceleration = yoy_changes[0] - yoy_changes[-1]
 
-    # Score: 0% YoY = 50 (neutral), +20% = 80, +50%+ = 95, -20% = 20
-    if yoy_growth > 0.5: base = 95
-    elif yoy_growth > 0.2: base = 80
-    elif yoy_growth > 0.1: base = 70
-    elif yoy_growth > 0.0: base = 55
-    elif yoy_growth > -0.1: base = 40
-    elif yoy_growth > -0.2: base = 25
+    # Score-mappning
+    if avg_yoy > 0.30 and consistency > 0.75: base = 90
+    elif avg_yoy > 0.15: base = 75
+    elif avg_yoy > 0.05: base = 60
+    elif avg_yoy > -0.05: base = 45
+    elif avg_yoy > -0.15: base = 25
     else: base = 10
 
+    # Acceleration-bonus/-straff
+    if acceleration > 0.10:
+        base += 10
+    elif acceleration < -0.10:
+        base -= 10
+    base = max(0, min(100, base))
+
+    if avg_yoy > 0.30 and consistency > 0.75:
+        interp = "kraftig accelerande tillväxt"
+    elif avg_yoy > 0.10 and consistency > 0.50:
+        interp = "stadig vinsttillväxt"
+    elif avg_yoy < -0.20:
+        interp = "kraftig vinst-deceleration"
+    elif avg_yoy < -0.05:
+        interp = "vinst pressas"
+    else:
+        interp = "stabil/neutral vinstutveckling"
+
     s["_earnings_revision_debug"] = {
-        "source": "quarterly_eps_acceleration_proxy",
-        "recent_4q_eps_sum": round(recent_sum, 2),
-        "older_4q_eps_sum": round(older_sum, 2),
-        "yoy_growth_pct": round(yoy_growth * 100, 1),
+        "source": "yoy_surprise_proxy_8q",
+        "avg_yoy_growth_pct": round(avg_yoy * 100, 1),
+        "consistency_pct": round(consistency * 100, 0),
+        "acceleration_pct": round(acceleration * 100, 1),
+        "interpretation": interp,
         "score": base,
     }
     return _clamp(base)
@@ -3762,7 +3885,21 @@ def _score_book_models(s):
     # Value: Klarman, Magic Formula, FCF Yield, Reverse DCF (med Gate 3-cap)
     value_axis = _avg_applicable_eff(["klarman", "magic", "fcf_yield", "reverse_dcf"], applicability)
     # Quality: Buffett, ROIC-Implied (med Gate 3-cap), Capital Allocation
-    quality_axis = _avg_applicable_eff(["buffett", "roic_implied", "capital_alloc"], applicability)
+    quality_axis_raw = _avg_applicable_eff(["buffett", "roic_implied", "capital_alloc"], applicability)
+    # v2.3 Patch 4 — Quality-trend-modifier (ROE-trend bestraffar fallande kvalitet)
+    hist = s.get("_hist") or {}
+    roe_quarters = hist.get("roe_quarters") or []
+    quality_trend = _quality_trend_modifier(roe_quarters)
+    quality_axis = (quality_axis_raw * quality_trend["modifier"]
+                    if quality_axis_raw is not None else None)
+    # Spara debug
+    scores["v2_3_quality_trend"] = {
+        "raw_score": round(quality_axis_raw, 1) if quality_axis_raw else None,
+        "trend_modifier": quality_trend["modifier"],
+        "trend_label": quality_trend["trend"],
+        "roe_delta_pct": quality_trend.get("delta_pct"),
+        "adjusted_score": round(quality_axis, 1) if quality_axis else None,
+    }
     # Momentum: Trend, Owners + EARNINGS REVISION (v2.2 Gate 4)
     momentum_axis = _avg_applicable_eff(["trend", "owners", "earnings_revision"], applicability)
     # Risk: Taleb (volatilitet) + composite-coverage
@@ -3828,8 +3965,19 @@ def _score_book_models(s):
     setup_label = "Otillräcklig data"
     setup_action = "Vänta på mer data"
 
+    # v2.3 Patch 5 — Quality Under Pressure
+    # Bolag som var compounder men nu pressas (ROE faller men fortfarande lönsam)
+    quality_under_pressure = (
+        classification.get("quality_regime") == "compounder"
+        and quality_trend["trend"] in ("declining_significant", "deteriorating", "collapsing")
+        and (s.get("ytd_change_pct") or 0) < -0.10
+        and (s.get("return_on_capital_employed") or 0) > 0.10  # fortfarande lönsam
+    )
+
     if v_lvl == "?" or q_lvl == "?":
         setup, setup_label, setup_action = "incomplete_data", "🤷 Otillräcklig data", "Vänta på mer datatäckning"
+    elif quality_under_pressure:
+        setup, setup_label, setup_action = "quality_under_pressure", "🩺 Quality Under Pressure", "REDUCED_STARTER 15% + watchlist på katalysator"
     elif v_lvl == "high" and q_lvl == "high" and _hi(m_lvl):
         setup, setup_label, setup_action = "trifecta", "🎯 Trifecta", "Aggressiv köp — alla axlar lyser"
     elif v_lvl == "high" and q_lvl == "high" and _lo(m_lvl):
@@ -3889,6 +4037,7 @@ def _score_book_models(s):
         "trifecta": 1.5,
         "deep_value": 1.2,
         "quality_full_price": 1.0,
+        "quality_under_pressure": 0.6,  # v2.3 Patch 5 — försiktig + watchlist
         "quality_fair": 0.7,
         "balanced_value": 0.9,
         "balanced_quality": 0.8,
