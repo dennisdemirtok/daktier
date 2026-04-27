@@ -516,23 +516,126 @@
         .consistency-bar { height: 8px; border-radius: 4px; background: #e5e7eb; overflow: hidden; margin-top: 4px; }
         .consistency-bar-fill { height: 100%; border-radius: 4px; background: linear-gradient(90deg, #22c55e, #16a34a); }
 
-        /* ── Mobile ──── */
+        /* ── Mobile (best-practice responsive) ──── */
         @media (max-width: 1024px) {
-            .sidebar { transform: translateX(-100%); }
+            .sidebar { transform: translateX(-100%); box-shadow: 4px 0 24px rgba(0,0,0,0.15); }
             .sidebar.open { transform: translateX(0); }
             .main-content { margin-left: 0; }
             .mobile-menu-btn { display: flex !important; }
+            /* Sidebar-overlay när öppen */
+            body.sidebar-open::before {
+                content: ''; position: fixed; inset: 0; background: rgba(0,0,0,0.4);
+                z-index: 99; backdrop-filter: blur(2px);
+            }
         }
         @media (max-width: 768px) {
-            .container { padding: 16px; }
-            .cards { grid-template-columns: 1fr 1fr; }
-            .search-input { width: 100%; }
-            .drawer { width:100vw;max-width:100vw; }
-            .brief-grid { grid-template-columns: 1fr; }
-            .header { padding: 0 16px; }
+            /* Container & layout */
+            :root { --header-h: 56px; }
+            .container { padding: 12px; }
+            .header { padding: 0 12px; height: 56px; }
             .header-center { display: none; }
+            .header-right { gap: 4px; }
+            .header-icon-btn { padding: 8px; }
+            .page-header { gap: 8px; margin: 4px 0 12px; }
+            .page-title { font-size: 20px; }
+            .page-subtitle { font-size: 12px; }
+
+            /* Cards */
+            .cards { grid-template-columns: 1fr; gap: 10px; margin-bottom: 16px; }
+            .card { padding: 14px; }
+            .card-value { font-size: 22px; }
+
+            /* Forms — 16px font-size förhindrar zoom på iOS */
+            .search-input { width: 100%; font-size: 16px; padding: 10px 14px 10px 36px; }
+            .min-owners-select { font-size: 14px; padding: 9px 28px 9px 12px; }
+
+            /* Filter-bar — scrollar horisontellt på mobil */
+            .filter-bar {
+                gap: 8px; padding: 8px 10px; flex-wrap: nowrap; overflow-x: auto;
+                scrollbar-width: none; -webkit-overflow-scrolling: touch;
+            }
+            .filter-bar::-webkit-scrollbar { display: none; }
+            .filter-group { flex-shrink: 0; }
+            .filter-chip, .period-chip, .signal-chip, .dir-chip {
+                padding: 9px 14px; font-size: 12px; min-height: 36px;
+            }
+            .filter-label { font-size: 9px; padding: 0 4px 0 8px; }
+            .filter-count { display: none; }
+
+            /* Drawer — full skärm på mobil */
+            .drawer { width: 100vw; max-width: 100vw; }
+            .drawer-section { padding: 12px !important; margin-bottom: 10px !important; }
+            .drawer-grid { grid-template-columns: 1fr 1fr !important; gap: 6px !important; }
+            .drawer-item { padding: 8px !important; }
+
+            /* Tabeller — kompakt + dölj icke-essentiella kolumner */
+            .table-container { margin: 0 -12px; border-radius: 0; }
+            th { padding: 10px 8px; font-size: 9px; }
+            td { padding: 8px; font-size: 11px; }
+            .score-bar { width: 50px; }
+            .score-value { font-size: 12px; min-width: 28px; }
+            /* Edge Signals: dölj sekundära kolumner < 768px */
+            .signals-table th:nth-child(n+9),
+            .signals-table td:nth-child(n+9) { display: none; }
+
+            /* Dashboard-grids stackar till 1 kolumn */
+            .dash-top-stats { grid-template-columns: 1fr 1fr !important; gap: 8px; }
+            .dash-macro-grid { grid-template-columns: 1fr !important; }
+            .dash-model-grid { grid-template-columns: 1fr !important; }
+            .today-grid { grid-template-columns: 1fr !important; }
+            .daily-picks-grid { grid-template-columns: 1fr !important; }
+
+            /* Dagens picks-banner */
+            #dailyPicksBanner, #buyZoneWatchBanner { padding: 14px !important; }
+
+            /* Agent-chat — bredare bubblor på mobil */
+            .agent-wrap { height: calc(100vh - 110px) !important; gap: 10px !important; }
+            .agent-msg-bubble { max-width: 88% !important; padding: 10px 13px !important; font-size: 13.5px !important; }
+            .agent-hero { padding: 12px 14px !important; font-size: 12px; }
+            .agent-msg-img { max-width: 220px; max-height: 160px; }
+            .agent-input-row { padding: 8px !important; }
+            .agent-textarea { font-size: 16px; }
+            .agent-md table { font-size: 11px !important; }
+            .agent-md th, .agent-md td { padding: 5px 6px !important; }
+            .agent-examples { gap: 5px !important; padding: 4px 0 !important; }
+            .agent-chip { padding: 7px 11px !important; font-size: 11px !important; }
+
+            /* Brief / portfolio-cards */
+            .brief-grid { grid-template-columns: 1fr; }
+
+            /* Sim portfolio-cards */
+            .sim-pcard { padding: 14px !important; }
+            .sim-pcard-value { font-size: 22px !important; }
+
+            /* Touch-targets — min 44x44 enligt WCAG */
+            button, .sidebar-item, .filter-chip, .period-chip, .signal-chip,
+            .agent-chip, .header-icon-btn {
+                min-height: 36px; touch-action: manipulation;
+            }
+
+            /* Modaler & dialoger edge-to-edge */
+            #histSyncDialog > div > div { width: 95% !important; padding: 16px !important; }
         }
-        .mobile-menu-btn { display: none; background: none; border: none; cursor: pointer; color: var(--text-muted); padding: 4px; border-radius: 6px; }
+
+        @media (max-width: 480px) {
+            /* Riktigt små skärmar (gamla iPhone, små Android) */
+            .container { padding: 10px; }
+            .header { padding: 0 10px; }
+            .page-title { font-size: 18px; }
+            .card-value { font-size: 20px; }
+            /* Edge Signals: ännu fler kolumner gömda < 480px */
+            .signals-table th:nth-child(n+7),
+            .signals-table td:nth-child(n+7) { display: none; }
+            /* Drawer-grid stackar helt */
+            .drawer-grid { grid-template-columns: 1fr !important; }
+            /* Macro/insider tabeller — gömma datum-kolumn */
+            .table-container th:nth-child(n+5),
+            .table-container td:nth-child(n+5) { font-size: 10px; }
+            /* v2-banner i drawer: stacka 4 axlar 2x2 */
+            .v2-axes-grid { grid-template-columns: 1fr 1fr !important; }
+        }
+
+        .mobile-menu-btn { display: none; background: none; border: none; cursor: pointer; color: var(--text-muted); padding: 8px; border-radius: 6px; min-width: 36px; min-height: 36px; align-items: center; justify-content: center; }
         .mobile-menu-btn:hover { background: var(--surface-low); }
     </style>
 </head>
@@ -1140,8 +1243,24 @@ function sidebarNav(tab, el) {
 }
 
 function toggleSidebar() {
-    document.getElementById('sidebar').classList.toggle('open');
+    const sb = document.getElementById('sidebar');
+    sb.classList.toggle('open');
+    // Lägg till overlay-state på body så CSS-overlay aktiveras
+    document.body.classList.toggle('sidebar-open', sb.classList.contains('open'));
 }
+
+// Stäng sidebar när man klickar utanför (på overlay)
+document.addEventListener('click', function(e) {
+    const sb = document.getElementById('sidebar');
+    const btn = document.querySelector('.mobile-menu-btn');
+    if (sb && sb.classList.contains('open') &&
+        !sb.contains(e.target) &&
+        btn && !btn.contains(e.target) &&
+        window.innerWidth <= 1024) {
+        sb.classList.remove('open');
+        document.body.classList.remove('sidebar-open');
+    }
+});
 
 // ── Filter Actions ──────────────────────────────────
 
@@ -1451,7 +1570,7 @@ function renderSignalsTable() {
     document.getElementById('content').innerHTML = `
         ${infoBanner}
         <div class="table-container">
-            <table><thead><tr>
+            <table class="signals-table"><thead><tr>
                 <th style="width:40px">#</th>
                 <th onclick="doSort('smart')" class="${thClass('smart')}" style="min-width:120px" title="Smart Score = 50% Meta (momentum) + 50% Bok-composite (fundamenta). En enkel score för att se köpvärde. ▲/▼ visar förändring från igår.">⭐ Smart Score${sortArrow('smart')}</th>
                 <th onclick="doSort('v2_quality')" class="${thClass('v2_quality')}" style="min-width:90px" title="v2 Setup-typ + Value/Quality/Momentum-axlar (klassificerings-baserad analys, asset_light/compounder/etc).">🎯 v2 Setup${sortArrow('v2_quality')}</th>
