@@ -5564,7 +5564,16 @@ def _startup():
     except Exception as e:
         print(f"  ⚠ Kunde inte starta warmup: {e}", flush=True)
 
-_startup()
+# Fail-safe: om _startup kraschar (DB-migration-fel etc) ska Flask ändå
+# kunna boota så Railway healthcheck passerar. Sync-funktioner kan
+# triggas manuellt via /api/borsdata/sync-* om något gick snett.
+try:
+    _startup()
+except Exception as _startup_err:
+    import traceback
+    print(f"[STARTUP] Fel vid uppstart (Flask startar ändå): {_startup_err}",
+          file=sys.stderr, flush=True)
+    traceback.print_exc()
 
 # ── Main (direct execution only) ─────────────────────────
 

@@ -495,11 +495,23 @@ def _create_tables(db):
             "CREATE INDEX IF NOT EXISTS idx_borsdata_prices_date ON borsdata_prices(date DESC)",
             "CREATE INDEX IF NOT EXISTS idx_borsdata_kpi ON borsdata_kpi_history(kpi_id, report_type, period_year DESC)",
             "CREATE INDEX IF NOT EXISTS idx_borsdata_map_ticker ON borsdata_instrument_map(ticker)",
-            "CREATE INDEX IF NOT EXISTS idx_borsdata_map_yahoo ON borsdata_instrument_map(yahoo_ticker)",
         ]:
-            cur.execute(idx_sql)
+            try:
+                cur.execute(idx_sql)
+            except Exception as e:
+                print(f"[index] {idx_sql[:60]}: {e}")
         cur.close()
         db.commit()
+        # Migration: lägg till nya kolumner i existing tabeller
+        _ensure_borsdata_columns(db)
+        # yahoo_ticker-index efter ALTER TABLE körts
+        try:
+            cur = db.cursor()
+            cur.execute("CREATE INDEX IF NOT EXISTS idx_borsdata_map_yahoo ON borsdata_instrument_map(yahoo_ticker)")
+            cur.close()
+            db.commit()
+        except Exception as e:
+            print(f"[migration] yahoo idx: {e}")
         _ensure_smart_score_columns(db)
     else:
         db.executescript("""
@@ -867,10 +879,83 @@ def _create_tables(db):
             CREATE INDEX IF NOT EXISTS idx_borsdata_prices_date ON borsdata_prices(date DESC);
             CREATE INDEX IF NOT EXISTS idx_borsdata_kpi ON borsdata_kpi_history(kpi_id, report_type, period_year DESC);
             CREATE INDEX IF NOT EXISTS idx_borsdata_map_ticker ON borsdata_instrument_map(ticker);
-            CREATE INDEX IF NOT EXISTS idx_borsdata_map_yahoo ON borsdata_instrument_map(yahoo_ticker);
         """)
         db.commit()
+        # Migration: lägg till nya kolumner i existing tabeller (yahoo_ticker etc.)
+        _ensure_borsdata_columns(db)
+        # Index på yahoo_ticker måste skapas EFTER att kolumnen finns
+        try:
+            db.execute("CREATE INDEX IF NOT EXISTS idx_borsdata_map_yahoo ON borsdata_instrument_map(yahoo_ticker)")
+            db.commit()
+        except Exception as e:
+            print(f"[migration] yahoo_ticker idx: {e}")
         _ensure_smart_score_columns(db)
+
+
+def _ensure_borsdata_columns(db):
+    """Idempotent migration: lägg till nya Börsdata-kolumner i existing tabeller.
+
+    CREATE TABLE IF NOT EXISTS uppgraderar ej schema. Vi måste ALTER TABLE
+    för att lägga till kolumner som tillkommit i v2/v3 (yahoo_ticker,
+    sector_id, branch_id, country_id, currencies, listing_date, is_global)
+    samt utökade reports-kolumner.
+    """
+    is_pg = _use_postgres()
+    real = "DOUBLE PRECISION" if is_pg else "REAL"
+
+    map_cols = [
+        ("yahoo_ticker", "TEXT"),
+        ("sector_id", "INTEGER"),
+        ("branch_id", "INTEGER"),
+        ("country_id", "INTEGER"),
+        ("stock_price_currency", "TEXT"),
+        ("report_currency", "TEXT"),
+        ("listing_date", "TEXT"),
+        ("is_global", "INTEGER DEFAULT 0"),
+    ]
+    reports_cols = [
+        ("gross_income", real),
+        ("profit_before_tax", real),
+        ("financing_cash_flow", real),
+        ("cash_flow_year", real),
+        ("current_assets", real),
+        ("non_current_assets", real),
+        ("tangible_assets", real),
+        ("intangible_assets", real),
+        ("financial_assets", real),
+        ("total_equity", real),
+        ("current_liabilities", real),
+        ("non_current_liabilities", real),
+        ("stock_price_high", real),
+        ("stock_price_low", real),
+        ("broken_fiscal_year", "INTEGER"),
+    ]
+
+    if is_pg:
+        cur = db.cursor()
+        for table, cols in [("borsdata_instrument_map", map_cols),
+                            ("borsdata_reports", reports_cols)]:
+            for name, typ in cols:
+                try:
+                    cur.execute(f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {name} {typ}")
+                except Exception as e:
+                    print(f"[borsdata migration PG] {table}.{name}: {e}")
+        cur.close()
+        db.commit()
+    else:
+        for table, cols in [("borsdata_instrument_map", map_cols),
+                            ("borsdata_reports", reports_cols)]:
+            try:
+                existing = {r[1] for r in db.execute(f"PRAGMA table_info({table})").fetchall()}
+            except Exception:
+                continue  # tabellen finns inte än, ok
+            for name, typ in cols:
+                if name not in existing:
+                    try:
+                        db.execute(f"ALTER TABLE {table} ADD COLUMN {name} {typ}")
+                    except Exception as e:
+                        print(f"[borsdata migration SQLite] {table}.{name}: {e}")
+        db.commit()
 
 
 def _ensure_smart_score_columns(db):
