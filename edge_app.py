@@ -440,6 +440,95 @@ def api_macro_history():
     return jsonify(payload)
 
 
+@app.route("/api/v2/setups")
+def api_v2_setups():
+    """Topplista per v2-setup-typ.
+
+    Query:
+        setup: trifecta|quality_full_price|deep_value|cigar_butt|balanced_value|...
+        country: SE|US|... (default alla)
+        min_owners: int (default 100)
+        limit: int (default 30)
+    """
+    setup = request.args.get("setup", "trifecta")
+    country = request.args.get("country", "")
+    min_owners = int(request.args.get("min_owners", 100))
+    limit = int(request.args.get("limit", 30))
+
+    ck = f"v2_setups|{setup}|{country}|{min_owners}|{limit}"
+    cached, hit = _cached_response(ck, ttl=300)
+    if hit:
+        return jsonify(cached)
+
+    db = get_db()
+    try:
+        from edge_db import _ph, _fetchall
+        ph = _ph()
+        where = f"v2_setup = {ph} AND number_of_owners >= {ph} AND last_price > 0"
+        params = [setup, min_owners]
+        if country:
+            where += f" AND country = {ph}"
+            params.append(country.upper())
+
+        # Sortering beroende på setup-typ
+        sort_clause = "v2_quality DESC" if setup in ("trifecta", "quality_full_price", "quality_fair", "balanced_quality") else \
+                      "v2_value DESC" if setup in ("deep_value", "cigar_butt", "balanced_value") else \
+                      "v2_momentum DESC"
+
+        sql = f"""SELECT orderbook_id, name, short_name, country, currency, last_price, market_cap,
+                         number_of_owners, smart_score, v2_setup, v2_value, v2_quality, v2_momentum,
+                         v2_confidence, v2_target_pct, v2_classification,
+                         pe_ratio, price_book_ratio, ev_ebit_ratio, return_on_equity,
+                         operating_cash_flow, ytd_change_pct, one_month_change_pct
+                  FROM stocks
+                  WHERE {where}
+                  ORDER BY {sort_clause} LIMIT {ph}"""
+        params.append(limit)
+        rows = _fetchall(db, sql, params)
+    finally:
+        db.close()
+
+    out = [dict(r) for r in rows]
+    # Parse v2_classification JSON
+    import json as _json
+    for r in out:
+        if r.get("v2_classification"):
+            try: r["classification"] = _json.loads(r["v2_classification"])
+            except: pass
+            r.pop("v2_classification", None)
+
+    payload = {
+        "setup": setup,
+        "country": country or "all",
+        "count": len(out),
+        "stocks": out,
+    }
+    _set_cache(ck, payload)
+    return jsonify(payload)
+
+
+@app.route("/api/v2/setup-distribution")
+def api_v2_setup_distribution():
+    """Hur fördelar sig aktierna över setup-typerna? Bra för en översikt-tile."""
+    ck = "v2_setup_distribution"
+    cached, hit = _cached_response(ck, ttl=300)
+    if hit:
+        return jsonify(cached)
+    db = get_db()
+    try:
+        rows = db.execute(
+            "SELECT v2_setup, COUNT(*) as n FROM stocks "
+            "WHERE v2_setup IS NOT NULL AND last_price > 0 AND number_of_owners >= 100 "
+            "GROUP BY v2_setup ORDER BY n DESC"
+        ).fetchall()
+        dist = [{"setup": r[0], "count": r[1]} for r in rows]
+    finally:
+        db.close()
+    payload = {"distribution": dist, "total": sum(d["count"] for d in dist)}
+    _set_cache(ck, payload)
+    return jsonify(payload)
+
+
 @app.route("/api/dashboard")
 def api_dashboard():
     ck = "dashboard|v1"
@@ -588,6 +677,7 @@ def api_stock_detail(orderbook_id):
                 "fcf_yield_score": sc.get("fcf_yield"),
                 "roic_implied_score": sc.get("roic_implied"),
                 "capital_alloc_score": sc.get("capital_alloc"),
+                "reverse_dcf_score": sc.get("reverse_dcf"),
                 "na_models": [k for k, v in (sc.get("v2_applicability") or {}).items() if v == "not_applicable"],
             }
             if sc.get("value_trap_score"):
@@ -923,6 +1013,7 @@ def api_signals():
         min_score=float(request.args.get("min_score", 0)),
         signal_filter=request.args.get("signal", ""),
         action_filter=request.args.get("action", ""),
+        setup_filter=request.args.get("setup", ""),
     )
 
     # Berika med book composite så frontend kan visa kolumn + rangordna
@@ -1663,6 +1754,12 @@ def api_simulation():
         # ── QUALITY_CONC: Buffett/Munger/Fisher koncentrerad kvalitet — max 8 aktier, halvårsvis rebalans ──
         _sim_init_quality_conc(db, today, CAPITAL)
 
+        # ── v2_TRIFECTA: Aktieagent v2 — alla axlar lyser, max 15, månatlig rebalans ──
+        _sim_init_v2_setup(db, today, CAPITAL, "v2_trifecta", "trifecta", limit=15)
+
+        # ── v2_QUALITY_CP: Aktieagent v2 — Quality Compounder vid fullt pris, max 12 ──
+        _sim_init_v2_setup(db, today, CAPITAL, "v2_quality_cp", "quality_full_price", limit=12)
+
         db.commit()
 
     # ── GET — backfill saknade portföljer (om sim startades innan nya modeller lades till) ──
@@ -1674,6 +1771,12 @@ def api_simulation():
             db.commit()
         if "quality_conc" not in existing:
             _sim_init_quality_conc(db, today_str, CAPITAL)
+            db.commit()
+        if "v2_trifecta" not in existing:
+            _sim_init_v2_setup(db, today_str, CAPITAL, "v2_trifecta", "trifecta", limit=15)
+            db.commit()
+        if "v2_quality_cp" not in existing:
+            _sim_init_v2_setup(db, today_str, CAPITAL, "v2_quality_cp", "quality_full_price", limit=12)
             db.commit()
 
     result = _sim_get_state(db)
@@ -1701,6 +1804,69 @@ def _sim_init_graham_def(db, today, capital):
             (trade_date, portfolio, orderbook_id, name, trade_type, price, shares, value, reason)
             VALUES ({_ph(9)})""",
             (today, "graham_def", oid, s["name"], "BUY", s["last_price"], shares, alloc, reason))
+
+
+def _sim_init_v2_setup(db, today, capital, portfolio_name, setup_key, limit=15):
+    """Initialisera en v2-baserad portfölj som filtrerar på v2_setup-kolumnen.
+
+    Reglerna enligt aktieagent_spec_v2.md:
+    - portfolio_name: 'v2_trifecta' eller 'v2_quality_cp'
+    - setup_key: 'trifecta' / 'quality_full_price' / 'deep_value' / 'cigar_butt'
+    - Endast aktier med v2_confidence > 0.4 (datatäckning OK)
+    - Sortering: trifecta → v2_quality DESC, quality_full_price → v2_quality DESC,
+                 deep_value → v2_value DESC, cigar_butt → v2_value DESC
+    - Position-sizing: använd v2_target_pct för att vikta (0% = skip)
+    """
+    sort_col = {
+        "trifecta": "v2_quality DESC, v2_value DESC",
+        "quality_full_price": "v2_quality DESC, v2_momentum DESC",
+        "deep_value": "v2_value DESC, v2_quality DESC",
+        "cigar_butt": "v2_value DESC, v2_momentum DESC",
+    }.get(setup_key, "v2_quality DESC")
+
+    rows = db.execute(f"""
+        SELECT * FROM stocks
+        WHERE v2_setup = {_ph()}
+          AND last_price > 0
+          AND number_of_owners >= 200
+          AND v2_confidence > 0.4
+          AND v2_target_pct > 0
+        ORDER BY {sort_col}
+        LIMIT {_ph()}
+    """, (setup_key, limit)).fetchall()
+
+    if not rows:
+        print(f"[sim] v2-setup '{setup_key}' hittade 0 aktier — skipping")
+        return
+
+    stocks_list = [dict(r) for r in rows]
+    # Dedup A/B-aktier
+    stocks_list = _dedup_share_classes(stocks_list, score_key="v2_quality")
+
+    # Position-sizing: vikta efter v2_target_pct (begränsat 1-10%)
+    weights = []
+    for s in stocks_list:
+        w = s.get("v2_target_pct") or 5.0
+        w = max(1.0, min(10.0, float(w)))
+        weights.append(w)
+    total_w = sum(weights)
+
+    for s, w in zip(stocks_list, weights):
+        alloc = capital * (w / total_w)
+        shares = alloc / s["last_price"]
+        oid = str(s["orderbook_id"])
+        v_v = s.get("v2_value") or 0
+        v_q = s.get("v2_quality") or 0
+        v_m = s.get("v2_momentum") or 0
+        reason = f"INITIAL · v2 {setup_key}: V={v_v:.0f} Q={v_q:.0f} M={v_m:.0f} · vikt {w:.1f}%"
+        db.execute(f"""INSERT INTO simulation_holdings
+            (portfolio, start_date, start_capital, orderbook_id, name, entry_price, shares, allocation, buy_date)
+            VALUES ({_ph(9)})""",
+            (portfolio_name, today, capital, oid, s["name"], s["last_price"], shares, alloc, today))
+        db.execute(f"""INSERT INTO simulation_trades
+            (trade_date, portfolio, orderbook_id, name, trade_type, price, shares, value, reason)
+            VALUES ({_ph(9)})""",
+            (today, portfolio_name, oid, s["name"], "BUY", s["last_price"], shares, alloc, reason))
 
 
 def _sim_init_quality_conc(db, today, capital):
@@ -3587,6 +3753,21 @@ def _agent_get_full_stock(db, query):
     # Trim raw _hist från output (för stort)
     d.pop("_hist", None)
     # Endast skickera det viktigaste — inte alla 80+ fält
+    # Bygg v2-block separat så agenten enkelt ser klassificering + axlar
+    v2 = {
+        "setup": sc.get("v2_setup"),
+        "setup_label": sc.get("v2_setup_label"),
+        "setup_action": sc.get("v2_setup_action"),
+        "axes": sc.get("v2_axes"),
+        "classification": sc.get("v2_classification"),
+        "confidence": sc.get("v2_confidence"),
+        "applicability": sc.get("v2_applicability"),
+        "fcf_yield_score": sc.get("fcf_yield"),
+        "roic_implied_score": sc.get("roic_implied"),
+        "capital_alloc_score": sc.get("capital_alloc"),
+        "reverse_dcf_score": sc.get("reverse_dcf"),
+        "position": sc.get("v2_position"),
+    }
     keep = {
         "name", "short_name", "ticker", "country", "currency", "orderbook_id",
         "last_price", "market_cap", "number_of_owners",
@@ -3606,7 +3787,9 @@ def _agent_get_full_stock(db, query):
         "discovery_score", "maturity_score",
         "insider_buys", "insider_sells", "insider_cluster_buy",
     }
-    return {k: d.get(k) for k in keep if k in d}
+    out = {k: d.get(k) for k in keep if k in d}
+    out["v2"] = v2
+    return out
 
 
 def _agent_get_quarterly_trends(db, query):

@@ -674,34 +674,51 @@ def _create_tables(db):
 
 
 def _ensure_smart_score_columns(db):
-    """Idempotent migration: lägg till smart_score-kolumner om de saknas.
-    Kolumner: smart_score, smart_score_yesterday, smart_score_at (YYYY-MM-DD).
-    Fungerar i både SQLite och PostgreSQL."""
-    columns = ["smart_score", "smart_score_yesterday", "smart_score_at"]
-    types = {"smart_score": "REAL", "smart_score_yesterday": "REAL", "smart_score_at": "TEXT"}
-    if _use_postgres():
-        types = {"smart_score": "DOUBLE PRECISION", "smart_score_yesterday": "DOUBLE PRECISION", "smart_score_at": "TEXT"}
+    """Idempotent migration: lägg till smart_score- + v2-kolumner om de saknas."""
+    is_pg = _use_postgres()
+    real = "DOUBLE PRECISION" if is_pg else "REAL"
+    cols = [
+        ("smart_score", real),
+        ("smart_score_yesterday", real),
+        ("smart_score_at", "TEXT"),
+        # v2-kolumner (Aktieagent v2)
+        ("v2_setup", "TEXT"),
+        ("v2_value", real),
+        ("v2_quality", real),
+        ("v2_momentum", real),
+        ("v2_confidence", real),
+        ("v2_target_pct", real),
+        ("v2_classification", "TEXT"),  # JSON med asset/quality/sector
+        ("v2_at", "TEXT"),
+    ]
 
-    if _use_postgres():
+    if is_pg:
         cur = db.cursor()
-        for col in columns:
+        for name, typ in cols:
             try:
-                cur.execute(f"ALTER TABLE stocks ADD COLUMN IF NOT EXISTS {col} {types[col]}")
+                cur.execute(f"ALTER TABLE stocks ADD COLUMN IF NOT EXISTS {name} {typ}")
             except Exception as e:
-                print(f"[smart_score migration] PG: {e}")
-        cur.execute("CREATE INDEX IF NOT EXISTS idx_stocks_smart_score ON stocks(smart_score DESC NULLS LAST)")
+                print(f"[v2 migration] PG: {e}")
+        for sql in [
+            "CREATE INDEX IF NOT EXISTS idx_stocks_smart_score ON stocks(smart_score DESC NULLS LAST)",
+            "CREATE INDEX IF NOT EXISTS idx_stocks_v2_setup ON stocks(v2_setup)",
+            "CREATE INDEX IF NOT EXISTS idx_stocks_v2_quality ON stocks(v2_quality DESC NULLS LAST)",
+        ]:
+            try: cur.execute(sql)
+            except Exception as e: print(f"[v2 idx] PG: {e}")
         cur.close()
         db.commit()
     else:
-        # SQLite: använd PRAGMA för att kolla existens
         existing = {r[1] for r in db.execute("PRAGMA table_info(stocks)").fetchall()}
-        for col in columns:
-            if col not in existing:
+        for name, typ in cols:
+            if name not in existing:
                 try:
-                    db.execute(f"ALTER TABLE stocks ADD COLUMN {col} {types[col]}")
+                    db.execute(f"ALTER TABLE stocks ADD COLUMN {name} {typ}")
                 except Exception as e:
-                    print(f"[smart_score migration] SQLite: {e}")
+                    print(f"[v2 migration] SQLite: {e}")
         db.execute("CREATE INDEX IF NOT EXISTS idx_stocks_smart_score ON stocks(smart_score DESC)")
+        db.execute("CREATE INDEX IF NOT EXISTS idx_stocks_v2_setup ON stocks(v2_setup)")
+        db.execute("CREATE INDEX IF NOT EXISTS idx_stocks_v2_quality ON stocks(v2_quality DESC)")
         db.commit()
 
 
@@ -2705,6 +2722,7 @@ def _model_applicability(classification):
         "roic_implied":  "applicable" if not is_bank and quality not in ("turnaround", "subpar") else
                          ("conditional" if quality == "subpar" else "not_applicable"),
         "capital_alloc": "applicable",
+        "reverse_dcf":   "applicable" if not is_bank else "not_applicable",
         "earnings_revision": "applicable",  # körs om data finns, annars N/A
     }
     return a
@@ -2783,6 +2801,64 @@ def _score_roic_implied(s, classification):
     elif discount > -0.10: base = 60
     elif discount > -0.30: base = 30
     else: base = 10
+    return _clamp(base)
+
+
+def _score_reverse_dcf(s, classification):
+    """Reverse DCF Score — vad implicit growth-rate kräver marknaden vid nuvarande pris?
+
+    Procedur (förenklad steady-state):
+        EV ≈ Market Cap (vi har inte nettoskuld separerat)
+        Implicit g lös ut ur: EV = FCF × (1 + g) / (WACC − g)
+        ⇒ g = (EV × WACC − FCF) / (EV + FCF)
+
+    Sen jämförs implicit g mot rimligt förväntad g (från quality_regime).
+    Stort gap (marknaden förväntar mycket mer än rimligt) = score 10.
+    Nära noll = rättvist prissatt = score 60.
+    Negativt gap (marknaden förväntar mindre än rimligt) = score 90+.
+    """
+    ocf = s.get("operating_cash_flow")  # FCF-proxy
+    market_cap = s.get("market_cap") or s.get("market_capitalization")
+    if not ocf or ocf <= 0 or not market_cap or market_cap <= 0:
+        return None
+
+    # WACC från storlek
+    if market_cap > 50e9: wacc = 0.08
+    elif market_cap > 5e9: wacc = 0.09
+    elif market_cap > 500e6: wacc = 0.11
+    else: wacc = 0.13
+
+    ev = market_cap  # approx (saknar nettoskuld separerad)
+    # Lös ut g från EV = FCF × (1+g) / (WACC - g) → g = (EV·WACC - FCF) / (EV + FCF)
+    try:
+        implied_g = (ev * wacc - ocf) / (ev + ocf)
+    except ZeroDivisionError:
+        return None
+
+    # Cap till rimliga bounds
+    implied_g = max(-0.20, min(0.50, implied_g))
+
+    # Rimlig förväntad g från quality_regime (samma som ROIC-implied)
+    quality = classification.get("quality_regime")
+    growth = classification.get("growth_profile")
+    if quality == "compounder":
+        reasonable_g = 0.06 if classification.get("asset_intensity") == "asset_light" else 0.05
+    elif quality == "average":
+        reasonable_g = 0.04
+    elif quality == "subpar":
+        reasonable_g = 0.02
+    else:
+        growth_map = {"hyper": 0.07, "growth": 0.05, "steady": 0.03, "mature": 0.02, "cyclical": 0.03}
+        reasonable_g = growth_map.get(growth, 0.03)
+
+    realism_gap = implied_g - reasonable_g
+
+    # Score per spec 5.3
+    if realism_gap < -0.05: base = 95   # marknaden förväntar mindre än rimligt → upside
+    elif realism_gap < 0.0: base = 75
+    elif realism_gap < 0.03: base = 55
+    elif realism_gap < 0.07: base = 30
+    else: base = 10                      # marknaden prisar in optimism → downside-risk
     return _clamp(base)
 
 
@@ -3281,9 +3357,11 @@ def _score_book_models(s):
     fcf = _score_fcf_yield(s, classification)
     roic_imp = _score_roic_implied(s, classification)
     cap_alloc = _score_capital_allocation(s, classification)
+    rev_dcf = _score_reverse_dcf(s, classification)
     if fcf is not None: scores["fcf_yield"] = round(fcf, 1)
     if roic_imp is not None: scores["roic_implied"] = round(roic_imp, 1)
     if cap_alloc is not None: scores["capital_alloc"] = round(cap_alloc, 1)
+    if rev_dcf is not None: scores["reverse_dcf"] = round(rev_dcf, 1)
 
     # ─── 3-axel composite (Value / Quality / Momentum) ───
     def _avg_applicable(keys, statuses):
@@ -3297,8 +3375,8 @@ def _score_book_models(s):
                 vals.append(v)
         return sum(vals) / len(vals) if vals else None
 
-    # Value: Klarman, Magic Formula, FCF Yield, (Reverse DCF saknas)
-    value_axis = _avg_applicable(["klarman", "magic", "fcf_yield"], applicability)
+    # Value: Klarman, Magic Formula, FCF Yield, Reverse DCF
+    value_axis = _avg_applicable(["klarman", "magic", "fcf_yield", "reverse_dcf"], applicability)
     # Quality: Buffett, ROIC-Implied, Capital Allocation
     quality_axis = _avg_applicable(["buffett", "roic_implied", "capital_alloc"], applicability)
     # Momentum: Trend, Owners (insider/retail), (Earnings Revision saknas)
@@ -4410,11 +4488,32 @@ def update_smart_scores_for_all(db, min_owners=100):
             meta = (e * META_W["edge"] + d * META_W["dsm"] + a * META_W["ace"]) / max(w3, 0.01)
         s["meta_score"] = round(max(0, min(100, meta)), 1)
 
-    # Berika med book composite
+    # Berika med book composite + v2-data (samma anrop, _score_book_models
+    # innehåller redan v2-axlar och setup-typ)
     try:
-        enrich_with_book_composite(db, stocks_list)
+        # Re-attach hist + räkna full book-models inkl v2 för alla
+        _attach_hist_bulk(db, stocks_list)
+        for s in stocks_list:
+            sc = _score_book_models(s)
+            s["book_composite"] = round(sc["composite"], 1) if sc.get("composite") is not None else None
+            s["book_models_available"] = sc.get("models_available", 0)
+            # v2-fält
+            s["_v2_setup"] = sc.get("v2_setup")
+            axes = sc.get("v2_axes") or {}
+            s["_v2_value"] = axes.get("value")
+            s["_v2_quality"] = axes.get("quality")
+            s["_v2_momentum"] = axes.get("momentum")
+            s["_v2_confidence"] = sc.get("v2_confidence")
+            pos = sc.get("v2_position") or {}
+            s["_v2_target_pct"] = pos.get("target_pct_of_portfolio")
+            cls = sc.get("v2_classification") or {}
+            s["_v2_classification"] = json.dumps({
+                "asset_intensity": cls.get("asset_intensity"),
+                "quality_regime": cls.get("quality_regime"),
+                "sector": cls.get("sector"),
+            })
     except Exception as e:
-        print(f"[smart_score] book_composite fel: {e}")
+        print(f"[smart_score] book/v2 fel: {e}")
 
     # Beräkna smart_score
     for s in stocks_list:
@@ -4441,26 +4540,50 @@ def update_smart_scores_for_all(db, min_owners=100):
                 except (KeyError, IndexError):
                     pass
 
+            # v2-fält
+            v2_setup = s.get("_v2_setup")
+            v2_value = s.get("_v2_value")
+            v2_quality = s.get("_v2_quality")
+            v2_momentum = s.get("_v2_momentum")
+            v2_conf = s.get("_v2_confidence")
+            v2_target = s.get("_v2_target_pct")
+            v2_cls = s.get("_v2_classification")
+
             if current_score is not None and current_date and current_date != today:
-                # Datumet har skiftat → snapshot
+                # Datumet har skiftat → snapshot smart_score → yesterday
                 if _use_postgres():
                     cursor.execute(
-                        f"UPDATE stocks SET smart_score_yesterday = {ph}, smart_score = {ph}, smart_score_at = {ph} WHERE orderbook_id = {ph}",
-                        (current_score, new_score, today, oid))
+                        f"UPDATE stocks SET smart_score_yesterday = {ph}, smart_score = {ph}, smart_score_at = {ph}, "
+                        f"v2_setup = {ph}, v2_value = {ph}, v2_quality = {ph}, v2_momentum = {ph}, "
+                        f"v2_confidence = {ph}, v2_target_pct = {ph}, v2_classification = {ph}, v2_at = {ph} "
+                        f"WHERE orderbook_id = {ph}",
+                        (current_score, new_score, today,
+                         v2_setup, v2_value, v2_quality, v2_momentum, v2_conf, v2_target, v2_cls, today, oid))
                 else:
                     db.execute(
-                        "UPDATE stocks SET smart_score_yesterday = ?, smart_score = ?, smart_score_at = ? WHERE orderbook_id = ?",
-                        (current_score, new_score, today, oid))
+                        "UPDATE stocks SET smart_score_yesterday = ?, smart_score = ?, smart_score_at = ?, "
+                        "v2_setup = ?, v2_value = ?, v2_quality = ?, v2_momentum = ?, "
+                        "v2_confidence = ?, v2_target_pct = ?, v2_classification = ?, v2_at = ? "
+                        "WHERE orderbook_id = ?",
+                        (current_score, new_score, today,
+                         v2_setup, v2_value, v2_quality, v2_momentum, v2_conf, v2_target, v2_cls, today, oid))
             else:
-                # Bara uppdatera current
                 if _use_postgres():
                     cursor.execute(
-                        f"UPDATE stocks SET smart_score = {ph}, smart_score_at = {ph} WHERE orderbook_id = {ph}",
-                        (new_score, today, oid))
+                        f"UPDATE stocks SET smart_score = {ph}, smart_score_at = {ph}, "
+                        f"v2_setup = {ph}, v2_value = {ph}, v2_quality = {ph}, v2_momentum = {ph}, "
+                        f"v2_confidence = {ph}, v2_target_pct = {ph}, v2_classification = {ph}, v2_at = {ph} "
+                        f"WHERE orderbook_id = {ph}",
+                        (new_score, today, v2_setup, v2_value, v2_quality, v2_momentum,
+                         v2_conf, v2_target, v2_cls, today, oid))
                 else:
                     db.execute(
-                        "UPDATE stocks SET smart_score = ?, smart_score_at = ? WHERE orderbook_id = ?",
-                        (new_score, today, oid))
+                        "UPDATE stocks SET smart_score = ?, smart_score_at = ?, "
+                        "v2_setup = ?, v2_value = ?, v2_quality = ?, v2_momentum = ?, "
+                        "v2_confidence = ?, v2_target_pct = ?, v2_classification = ?, v2_at = ? "
+                        "WHERE orderbook_id = ?",
+                        (new_score, today, v2_setup, v2_value, v2_quality, v2_momentum,
+                         v2_conf, v2_target, v2_cls, today, oid))
             updated += 1
         except Exception as e:
             print(f"[smart_score] update fel för {oid}: {e}")
@@ -5428,8 +5551,11 @@ def get_insider_summary(db, days_back=90):
 
 def get_signals(db, country="SE", sort="score", order="desc",
                 limit=50, offset=0, min_owners=10, min_score=0,
-                signal_filter="", action_filter=""):
-    """Get edge signals — stocks ranked by edge score."""
+                signal_filter="", action_filter="", setup_filter=""):
+    """Get edge signals — stocks ranked by edge score.
+
+    setup_filter: filtrera på v2_setup-kolumn (trifecta, quality_full_price, etc.)
+    """
     ph = _ph()
     where_parts = [f"number_of_owners >= {ph}"]
     params = [min_owners]
@@ -5537,13 +5663,10 @@ def get_signals(db, country="SE", sort="score", order="desc",
         stock["model_agreement"] = agree
         stock["model_agreement_total"] = len(scores)
 
-    # ── Smart Score (Meta + Bok-composite) + score-rörelse ──
-    # Använder primärt sparad smart_score från DB (uppdateras efter pris-refresh).
-    # Fallback: beräkna live om ingen sparad finns.
+    # ── Smart Score (Meta + Bok-composite) + score-rörelse + v2 ──
     for stock in signals:
-        # Beräkna live från meta + book_composite (om available i raden)
+        # Smart Score (sparat värde har företräde för korrekt delta)
         live_smart = compute_smart_score(stock)
-        # Använd sparad om den finns (för delta-beräkning), annars live
         saved = stock.get("smart_score")
         prev = stock.get("smart_score_yesterday")
         if saved is not None:
@@ -5552,17 +5675,27 @@ def get_signals(db, country="SE", sort="score", order="desc",
             stock["smart_score"] = live_smart
         else:
             stock["smart_score"] = None
-        # Delta = current - yesterday
         if stock["smart_score"] is not None and prev is not None:
             stock["smart_score_change"] = round(float(stock["smart_score"]) - float(prev), 1)
         else:
             stock["smart_score_change"] = None
-        # Label
         from_score = stock["smart_score"]
         if from_score is not None:
             label, color = smart_score_label(from_score)
             stock["smart_score_label"] = label
             stock["smart_score_color"] = color
+
+        # v2-fält direkt från DB-kolumner (uppdateras vid pris-refresh)
+        # Behållas som flat dict för enkel tabellvisning
+        if stock.get("v2_setup"):
+            stock["v2"] = {
+                "setup": stock.get("v2_setup"),
+                "value": stock.get("v2_value"),
+                "quality": stock.get("v2_quality"),
+                "momentum": stock.get("v2_momentum"),
+                "confidence": stock.get("v2_confidence"),
+                "target_pct": stock.get("v2_target_pct"),
+            }
 
     if min_score > 0:
         signals = [s for s in signals if s["edge_score"] >= min_score]
@@ -5573,12 +5706,17 @@ def get_signals(db, country="SE", sort="score", order="desc",
         elif action_filter == "EXIT": signals = [s for s in signals if s["action"].startswith("EXIT")]
         elif action_filter == "HOLD": signals = [s for s in signals if s["action"] == "HOLD"]
         elif action_filter == "WARNING": signals = [s for s in signals if s["action"] == "WARNING"]
+    if setup_filter:
+        signals = [s for s in signals if s.get("v2_setup") == setup_filter]
 
     total = len(signals)
 
     sort_map = {
         "smart": lambda s: s.get("smart_score") or 0,
         "smart_change": lambda s: s.get("smart_score_change") or 0,
+        "v2_quality": lambda s: s.get("v2_quality") or 0,
+        "v2_value": lambda s: s.get("v2_value") or 0,
+        "v2_target": lambda s: s.get("v2_target_pct") or 0,
         "meta": lambda s: s.get("meta_score", 0),
         "score": lambda s: s["edge_score"],
         "momentum": lambda s: s["components"]["owner_momentum"],

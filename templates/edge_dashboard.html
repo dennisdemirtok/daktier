@@ -677,6 +677,7 @@ let trendDirection = 'up';
 let minOwners = 0;
 let insiderType = '';
 let signalFilter = '';
+let setupFilter = '';  // v2 setup-typ-filter (trifecta/quality_full_price/...)
 let signalCountry = 'SE';
 let actionFilter = '';
 let hotLookback = 1;
@@ -793,7 +794,7 @@ async function fetchData(append = false) {
         let data, url, params, ck, cached, renderFn, dataKey;
 
         if (currentTab === 'signals') {
-            params = {country:signalCountry, sort:sortCol||'smart', order:sortOrder, limit:PAGE_SIZE, offset:currentOffset, min_owners:minOwners||10, signal:signalFilter, action:actionFilter};
+            params = {country:signalCountry, sort:sortCol||'smart', order:sortOrder, limit:PAGE_SIZE, offset:currentOffset, min_owners:minOwners||10, signal:signalFilter, action:actionFilter, setup:setupFilter};
             url = '/api/signals?' + new URLSearchParams(params);
             ck = cacheKey('signals', params);
             dataKey = 'signals';
@@ -961,7 +962,7 @@ function _chips(items, activeVal, cls, handler) {
     return items.map(it => `<button class="${cls} ${activeVal===it.v?'active':''}" onclick="${handler}('${it.v}')">${it.l}</button>`).join('');
 }
 function _hasActiveFilters() {
-    if (currentTab === 'signals') return actionFilter || signalFilter || signalCountry !== 'SE' || minOwners > 10;
+    if (currentTab === 'signals') return actionFilter || signalFilter || setupFilter || signalCountry !== 'SE' || minOwners > 10;
     if (currentTab === 'stocks') return searchQuery || countryFilter || minOwners > 0;
     if (currentTab === 'hotmovers') return momPeriod !== '1d' || hotDirection !== 'up' || hotCountry || minOwners > 100;
     if (currentTab === 'insiders') return searchQuery || insiderType;
@@ -970,7 +971,7 @@ function _hasActiveFilters() {
 }
 function resetFilters() {
     searchQuery = '';
-    if (currentTab === 'signals') { actionFilter=''; signalFilter=''; signalCountry='SE'; minOwners=10; }
+    if (currentTab === 'signals') { actionFilter=''; signalFilter=''; setupFilter=''; signalCountry='SE'; minOwners=10; }
     else if (currentTab === 'stocks') { countryFilter=''; minOwners=0; }
     else if (currentTab === 'hotmovers') { momPeriod='1d'; hotDirection='up'; hotCountry=''; minOwners=100; }
     else if (currentTab === 'insiders') { insiderType=''; }
@@ -984,6 +985,17 @@ function renderFilterBar() {
     const FLAG = {SE:'🇸🇪', US:'🇺🇸', NO:'🇳🇴', DK:'🇩🇰', FI:'🇫🇮', DE:'🇩🇪', CA:'🇨🇦', FR:'🇫🇷', GB:'🇬🇧'};
 
     if (currentTab === 'signals') {
+        // v2 Setup-filter — högst upp, det är den viktigaste signalen
+        const setupTypes = [
+            {v:'', l:'Alla'},
+            {v:'trifecta', l:'🎯 Trifecta'},
+            {v:'quality_full_price', l:'🏰 Quality CP'},
+            {v:'deep_value', l:'💎 Djup-värde'},
+            {v:'cigar_butt', l:'🚬 Cigarrfimp'},
+            {v:'balanced_value', l:'⚖️ Bal. värde'},
+        ];
+        html += _group('v2 Setup', _chips(setupTypes, setupFilter, 'signal-chip', 'setSetupFilter'));
+
         const actionTypes = [
             {v:'', l:'Alla'},
             {v:'ENTRY', l:'🟢 Entry'},
@@ -992,16 +1004,6 @@ function renderFilterBar() {
             {v:'EXIT', l:'🔴 Exit'},
         ];
         html += _group('Åtgärd', _chips(actionTypes, actionFilter, 'signal-chip', 'setActionFilter'));
-
-        const signalTypes = [
-            {v:'', l:'Alla'},
-            {v:'STRONG_BUY', l:'Stark Köp'},
-            {v:'BUY', l:'Köp'},
-            {v:'HOLD', l:'Neutral'},
-            {v:'SELL', l:'Sälj'},
-            {v:'STRONG_SELL', l:'Stark Sälj'},
-        ];
-        html += _group('Signal', _chips(signalTypes, signalFilter, 'signal-chip', 'setSignalFilter'));
 
         const countries = [{v:'SE',l:'🇸🇪 SE'},{v:'US',l:'🇺🇸 US'},{v:'NO',l:'🇳🇴 NO'},{v:'DK',l:'🇩🇰 DK'},{v:'FI',l:'🇫🇮 FI'},{v:'DE',l:'🇩🇪 DE'}];
         html += _group('Marknad', _chips(countries, signalCountry, 'filter-chip', 'setSignalCountry'));
@@ -1158,6 +1160,7 @@ function setHotCountry(c) { hotCountry = c; fetchData(); renderFilterBar(); }
 function setHotMode(m) { hotMode = m; fetchData(); renderFilterBar(); }
 function setInsiderType(t) { insiderType = t; fetchData(); renderFilterBar(); }
 function setSignalFilter(s) { signalFilter = s; fetchData(); renderFilterBar(); }
+function setSetupFilter(s) { setupFilter = s; fetchData(); renderFilterBar(); }
 function setSignalCountry(c) { signalCountry = c; fetchData(); renderFilterBar(); }
 function setActionFilter(a) { actionFilter = a; fetchData(); renderFilterBar(); }
 
@@ -1384,9 +1387,40 @@ function renderSignalsTable() {
                <div style="font-size:9px;color:var(--text-muted);margin-top:2px">${bookAvail}/10 modeller</div>`
             : '<span style="color:var(--text-muted);font-size:11px">–</span>';
 
+        // v2 Setup-cell — visar setup-typ + 3 mini-bars för Value/Quality/Momentum
+        const v2 = s.v2 || {};
+        const v2Setup = v2.setup || s.v2_setup;
+        const v2V = v2.value ?? s.v2_value;
+        const v2Q = v2.quality ?? s.v2_quality;
+        const v2M = v2.momentum ?? s.v2_momentum;
+        const SETUP_META = {
+            trifecta: { ic:'🎯', col:'#059669', short:'Trifecta' },
+            quality_full_price: { ic:'🏰', col:'#2563eb', short:'Quality CP' },
+            deep_value: { ic:'💎', col:'#ca8a04', short:'Djup-värde' },
+            cigar_butt: { ic:'🚬', col:'#ea580c', short:'Cigarrfimp' },
+            quality_fair: { ic:'📐', col:'#6366f1', short:'Quality fair' },
+            balanced_value: { ic:'⚖️', col:'#0891b2', short:'Bal. värde' },
+            balanced_quality: { ic:'⚖️', col:'#7c3aed', short:'Bal. kvalitet' },
+            mixed_signals: { ic:'🔄', col:'#6b7280', short:'Blandat' },
+            momentum_trap: { ic:'⚠️', col:'#dc2626', short:'Mom-fälla' },
+            value_destruction: { ic:'💀', col:'#7f1d1d', short:'Värdedestr' },
+            incomplete_data: { ic:'🤷', col:'#9ca3af', short:'Otillräcklig' },
+        };
+        const setupMeta = SETUP_META[v2Setup] || { ic:'?', col:'#9ca3af', short:'-' };
+        const setupCell = v2Setup
+            ? `<div style="font-size:14px;line-height:1">${setupMeta.ic}</div>
+               <div style="font-size:10px;color:${setupMeta.col};font-weight:700;margin-top:2px">${setupMeta.short}</div>
+               <div style="display:flex;gap:1px;margin-top:3px;height:4px">
+                 <div title="Value ${v2V?.toFixed(0) ?? '?'}" style="flex:1;background:#dc2626;opacity:${v2V ? Math.max(0.15, v2V/100) : 0.1};border-radius:1px"></div>
+                 <div title="Quality ${v2Q?.toFixed(0) ?? '?'}" style="flex:1;background:#059669;opacity:${v2Q ? Math.max(0.15, v2Q/100) : 0.1};border-radius:1px"></div>
+                 <div title="Momentum ${v2M?.toFixed(0) ?? '?'}" style="flex:1;background:#2563eb;opacity:${v2M ? Math.max(0.15, v2M/100) : 0.1};border-radius:1px"></div>
+               </div>`
+            : '<span style="color:var(--text-muted);font-size:11px">–</span>';
+
         return `<tr${s.action === 'ENTRY' ? ' style="background:#e6f9f1"' : s.action?.startsWith('EXIT') ? ' style="background:#ffeaee"' : ''}>
             <td>${i + 1}</td>
             <td>${smartCell}</td>
+            <td>${setupCell}</td>
             <td>
                 <span class="score-value" style="color:${mc}">${meta.toFixed(0)}</span>
                 <div class="score-bar"><div class="score-bar-fill" style="width:${meta}%;background:${mc}"></div></div>
@@ -1420,6 +1454,7 @@ function renderSignalsTable() {
             <table><thead><tr>
                 <th style="width:40px">#</th>
                 <th onclick="doSort('smart')" class="${thClass('smart')}" style="min-width:120px" title="Smart Score = 50% Meta (momentum) + 50% Bok-composite (fundamenta). En enkel score för att se köpvärde. ▲/▼ visar förändring från igår.">⭐ Smart Score${sortArrow('smart')}</th>
+                <th onclick="doSort('v2_quality')" class="${thClass('v2_quality')}" style="min-width:90px" title="v2 Setup-typ + Value/Quality/Momentum-axlar (klassificerings-baserad analys, asset_light/compounder/etc).">🎯 v2 Setup${sortArrow('v2_quality')}</th>
                 <th onclick="doSort('meta')" class="${thClass('meta')}" style="min-width:140px">Meta Score${sortArrow('meta')}</th>
                 <th onclick="doSort('score')" class="${thClass('score')}" style="min-width:80px">Edge${sortArrow('score')}</th>
                 <th style="min-width:90px" title="Viktat composite över 10 bokmodeller — Graham, Buffett, Lynch, Greenblatt, Klarman m.fl.">📚 Bok</th>
@@ -1816,6 +1851,8 @@ function renderSimulation(simData) {
         books:        { icon: '📚', label: 'Böckerna (10 aktier)',         color: '#8b5cf6',       borderColor: '#8b5cf6',  category: 'book' },
         graham_def:   { icon: '📘', label: 'Graham Defensive (20 st)',     color: '#1d4ed8',       borderColor: '#1d4ed8',  category: 'book' },
         quality_conc: { icon: '🏰', label: 'Buffett Quality (8 st)',       color: '#b45309',       borderColor: '#b45309',  category: 'book' },
+        v2_trifecta:  { icon: '🎯', label: 'v2 Trifecta (15 st)',          color: '#059669',       borderColor: '#059669',  category: 'v2' },
+        v2_quality_cp:{ icon: '🏰', label: 'v2 Quality Compounder (12 st)', color: '#2563eb',      borderColor: '#2563eb',  category: 'v2' },
     };
 
     function fmtKr(n) { return n.toLocaleString('sv-SE', {minimumFractionDigits: 0, maximumFractionDigits: 0}) + ' kr'; }
@@ -3443,6 +3480,8 @@ function renderMorningBriefResult(container) {
         dsm:   { icon: '🎯', label: 'DSM' },
         ace:   { icon: '⚡', label: 'ACE' },
         meta:  { icon: '🧠', label: 'Meta Score' },
+        v2_trifecta: { icon: '🎯', label: 'v2 Trifecta' },
+        v2_quality_cp: { icon: '🏰', label: 'v2 Quality CP' },
     };
 
     const portfoliosHtml = (b.portfolios || []).map(p => {
@@ -4264,6 +4303,92 @@ const _picksLookup = {};
 // ══════════════════════════════════════════════
 // Köpzon-watchlist — aktier nära köpzon idag
 // ══════════════════════════════════════════════
+// v2 Setup-topplistor på dashboarden — flikar med Trifecta / Quality CP / Djup-värde / Cigarrfimp
+let _v2ActiveSetup = 'trifecta';
+const V2_SETUP_TABS = [
+    { key: 'trifecta', label: '🎯 Trifecta', desc: 'Alla axlar lyser — aggressiv köp' },
+    { key: 'quality_full_price', label: '🏰 Quality Compounder', desc: 'Hög kvalitet, fullt pris — skala in' },
+    { key: 'deep_value', label: '💎 Djup-värde', desc: 'Billigt + kvalitativt, väntar momentum' },
+    { key: 'cigar_butt', label: '🚬 Cigarrfimp', desc: 'Billigt, snabb rotation' },
+    { key: 'balanced_value', label: '⚖️ Balanserat värde', desc: 'Värde + medelkvalitet' },
+];
+
+async function loadV2Setups() {
+    const wrap = document.getElementById('v2SetupsContent');
+    if (!wrap) return;
+    // Render flikar + lista för aktiv setup
+    const tabsHtml = V2_SETUP_TABS.map(t => `
+        <button class="v2-tab ${_v2ActiveSetup === t.key ? 'active' : ''}"
+                onclick="switchV2Setup('${t.key}')"
+                style="background:${_v2ActiveSetup === t.key ? 'linear-gradient(135deg,#1d4ed8,#3b82f6)' : 'white'};color:${_v2ActiveSetup === t.key ? 'white' : 'var(--text)'};border:1px solid ${_v2ActiveSetup === t.key ? '#1d4ed8' : 'var(--border)'};padding:8px 14px;border-radius:18px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;transition:all 0.15s">
+            ${t.label}
+        </button>
+    `).join('');
+    wrap.innerHTML = `
+        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">${tabsHtml}</div>
+        <div id="v2SetupContent" style="background:white;border:1px solid var(--border);border-radius:12px;padding:12px;min-height:180px">
+            <div style="color:var(--text-muted);font-size:13px;text-align:center;padding:40px 0">Laddar ${V2_SETUP_TABS.find(t => t.key === _v2ActiveSetup)?.label}...</div>
+        </div>
+    `;
+    await renderV2SetupList(_v2ActiveSetup);
+}
+
+async function switchV2Setup(key) {
+    _v2ActiveSetup = key;
+    await loadV2Setups();
+}
+
+async function renderV2SetupList(setupKey) {
+    const el = document.getElementById('v2SetupContent');
+    if (!el) return;
+    try {
+        const r = await fetch(`/api/v2/setups?setup=${setupKey}&min_owners=200&limit=12`);
+        const d = await r.json();
+        const stocks = d.stocks || [];
+        if (!stocks.length) {
+            el.innerHTML = `<div style="padding:30px;text-align:center;color:var(--text-muted);font-size:13px">
+                Inga aktier matchar denna setup-typ just nu. Kanske är marknaden i annan fas.
+            </div>`;
+            return;
+        }
+        const setupMeta = V2_SETUP_TABS.find(t => t.key === setupKey);
+        const flagMap = {SE:'🇸🇪',US:'🇺🇸',NO:'🇳🇴',DK:'🇩🇰',FI:'🇫🇮',DE:'🇩🇪',CA:'🇨🇦',FR:'🇫🇷',GB:'🇬🇧',NL:'🇳🇱',IT:'🇮🇹',CH:'🇨🇭'};
+        const cards = stocks.map(s => {
+            const flag = flagMap[s.country] || '';
+            const cls = s.classification || {};
+            const v = s.v2_value, q = s.v2_quality, m = s.v2_momentum;
+            const target = s.v2_target_pct;
+            return `<div onclick="_openPickStock('${s.orderbook_id}')" style="background:white;border:1px solid var(--border);border-radius:10px;padding:12px;cursor:pointer;transition:all 0.15s" onmouseover="this.style.boxShadow='0 4px 12px rgba(0,0,0,0.08)';this.style.transform='translateY(-1px)'" onmouseout="this.style.boxShadow='';this.style.transform=''">
+                <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px">
+                    <strong style="font-size:13px">${flag} ${s.name}</strong>
+                    ${target ? `<span style="font-size:10px;color:#1e40af;font-weight:700">${target.toFixed(1)}%</span>` : ''}
+                </div>
+                <div style="font-size:10px;color:var(--text-muted);margin-bottom:8px">
+                    ${s.last_price?.toFixed(2)} ${s.currency} · ${cls.asset_intensity || '–'}/${cls.quality_regime || '–'}
+                </div>
+                <div style="display:flex;gap:4px;font-size:9px">
+                    <div style="flex:1"><div style="color:#6b7280;margin-bottom:1px">V</div><div style="height:5px;background:#fee2e2;border-radius:2px"><div style="height:100%;background:#dc2626;border-radius:2px;width:${v||0}%"></div></div><div style="text-align:right;color:#dc2626;font-weight:600">${v?.toFixed(0) ?? '–'}</div></div>
+                    <div style="flex:1"><div style="color:#6b7280;margin-bottom:1px">Q</div><div style="height:5px;background:#d1fae5;border-radius:2px"><div style="height:100%;background:#059669;border-radius:2px;width:${q||0}%"></div></div><div style="text-align:right;color:#059669;font-weight:600">${q?.toFixed(0) ?? '–'}</div></div>
+                    <div style="flex:1"><div style="color:#6b7280;margin-bottom:1px">M</div><div style="height:5px;background:#dbeafe;border-radius:2px"><div style="height:100%;background:#2563eb;border-radius:2px;width:${m||0}%"></div></div><div style="text-align:right;color:#2563eb;font-weight:600">${m?.toFixed(0) ?? '–'}</div></div>
+                </div>
+                <div style="font-size:9px;color:var(--text-muted);margin-top:6px;display:flex;gap:8px">
+                    <span>P/E ${s.pe_ratio?.toFixed(1) ?? '–'}</span>
+                    <span>ROE ${s.return_on_equity ? (s.return_on_equity*100).toFixed(0)+'%' : '–'}</span>
+                    <span>Smart ${s.smart_score?.toFixed(0) ?? '–'}</span>
+                </div>
+            </div>`;
+        }).join('');
+        el.innerHTML = `
+            <div style="font-size:11px;color:var(--text-muted);margin-bottom:8px">
+                <strong>${setupMeta?.label}:</strong> ${setupMeta?.desc} · ${stocks.length} aktier matchar
+            </div>
+            <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:8px">${cards}</div>
+        `;
+    } catch (e) {
+        el.innerHTML = `<div style="padding:20px;color:var(--red);font-size:12px">Fel: ${e.message}</div>`;
+    }
+}
+
 async function loadBuyZoneWatchlist() {
     const el = document.getElementById('buyZoneWatchBanner');
     if (!el) return;
@@ -4540,6 +4665,10 @@ async function renderDashboard() {
             <div class="dash-section" id="buyZoneWatchWrap">
                 <div id="buyZoneWatchBanner" class="daily-picks-skel">Letar köpzon-kandidater...</div>
             </div>
+            <div class="dash-section" id="v2SetupsWrap">
+                <h3 class="dash-heading">🎯 v2 Setup-listor <span class="dash-sub">klassificerings-baserad analys (Aktieagent v2)</span></h3>
+                <div id="v2SetupsContent" style="margin-top:8px"></div>
+            </div>
             <div class="dash-section">
                 <h3 class="dash-heading">Marknadsöversikt</h3>
                 <div class="dash-top-stats" id="dashTopStats">
@@ -4666,6 +4795,9 @@ function renderDashboardContent(d) {
 
     // ── Köpzon-watchlist (nära köpzon idag) ──
     loadBuyZoneWatchlist();
+
+    // ── v2 Setup-topplistor ──
+    loadV2Setups();
 
     // ── Top-listor per modell ──
     const toplistsEl = document.getElementById('dashModelToplists');
