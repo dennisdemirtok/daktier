@@ -664,7 +664,7 @@ def api_stock_detail(orderbook_id):
                 m["key"]: round(sc[m["key"]], 1) if sc.get(m["key"]) is not None else None
                 for m in BOOK_MODELS
             }
-            # v2-output (klassificering, axlar, setup, position)
+            # v2/v2.1/v2.2-output
             d["v2"] = {
                 "classification": sc.get("v2_classification"),
                 "applicability": sc.get("v2_applicability"),
@@ -678,8 +678,56 @@ def api_stock_detail(orderbook_id):
                 "roic_implied_score": sc.get("roic_implied"),
                 "capital_alloc_score": sc.get("capital_alloc"),
                 "reverse_dcf_score": sc.get("reverse_dcf"),
-                "reverse_dcf_details": sc.get("v2_reverse_dcf"),  # implied_growth, realism_gap
+                "reverse_dcf_details": sc.get("v2_reverse_dcf"),
+                "earnings_revision_score": sc.get("earnings_revision"),
+                "earnings_revision_debug": sc.get("v2_earnings_revision_debug"),
+                "fcf_debug": sc.get("v2_fcf_debug"),
+                "consistency": sc.get("v2_2_consistency"),
+                "conflicts": sc.get("v2_2_conflicts"),
                 "na_models": [k for k, v in (sc.get("v2_applicability") or {}).items() if v == "not_applicable"],
+            }
+            # v2.2 Gate 5 — separerade ownership-signals
+            ins_buys = d.get("insider_buys", 0)
+            ins_sells = d.get("insider_sells", 0)
+            d["v2"]["ownership_signals"] = {
+                "insider_activity": {
+                    "data_available": (ins_buys + ins_sells) > 0,
+                    "buy_transactions": ins_buys,
+                    "sell_transactions": ins_sells,
+                    "net_value": d.get("insider_net_value"),
+                    "cluster_buys": d.get("insider_cluster_buy", False),
+                    "interpretation": (
+                        "cluster_buy_strong_signal" if d.get("insider_cluster_buy")
+                        else "moderate_buying" if ins_buys > ins_sells
+                        else "moderate_selling" if ins_sells > ins_buys
+                        else "no_clear_signal"
+                    ) if (ins_buys + ins_sells) > 0 else "no_data",
+                },
+                "retail_activity": {
+                    # Avanza-ägare = retail, INTE smart money
+                    "data_available": d.get("number_of_owners") is not None,
+                    "platform": "avanza",
+                    "owner_count": d.get("number_of_owners"),
+                    "owner_change_1m_pct": (d.get("owners_change_1m") or 0) * 100,
+                    "owner_change_3m_pct": (d.get("owners_change_3m") or 0) * 100,
+                    "owner_change_1y_pct": (d.get("owners_change_1y") or 0) * 100,
+                    "price_concurrent_ytd_pct": d.get("ytd_change_pct"),
+                    # Kontextuell tolkning: retail buys the dip = ofta negativ signal
+                    "contextual_interpretation": (
+                        "retail_buys_the_dip_historically_negative"
+                        if (d.get("owners_change_3m") or 0) > 0.05 and (d.get("ytd_change_pct") or 0) < -10
+                        else "retail_capitulation_potentially_positive"
+                        if (d.get("owners_change_3m") or 0) < -0.05 and (d.get("ytd_change_pct") or 0) < -10
+                        else "retail_chasing_uptrend_neutral"
+                        if (d.get("owners_change_3m") or 0) > 0.05 and (d.get("ytd_change_pct") or 0) > 10
+                        else "neutral"
+                    ),
+                },
+                # Institutional activity saknas — vi har inte 13F-data
+                "institutional_activity": {
+                    "data_available": False,
+                    "note": "13F-data ej integrerat (kräver SEC-feed för US-bolag)",
+                },
             }
             if sc.get("value_trap_score"):
                 d["value_trap_score"] = sc["value_trap_score"]
@@ -3596,7 +3644,35 @@ Vi har INTE estimat-data ännu. När den saknas, säg det rakt:
 "Earnings revision data ej tillgänglig — kan ej bedöma analytikers riktning."
 INTE substitut med "vad analytiker säger" från forum.
 
-**Patch 6 — Sentiment-hygien (KRITISK):**
+**Patch 6 — Sentiment-hygien (v2.2 GATE 2 — REGEX-NIVÅ ENFORCEMENT):**
+
+Output **VALIDERAS post-stream** mot förbjudna mönster. Om mönster hittas
+visas en VARNING i botten av svaret + förhöjd loggnivå.
+
+ABSOLUT FÖRBJUDNA mönster (oavsett kontext, disclaimer, "endast som referens"):
+- "Burry", "Ackman", "Stifel", "BNP Paribas", "Goldman Sachs", "Morgan Stanley"
+- "Reddit", "wallstreetbets", "Seeking Alpha", "Motley Fool", "Investing.com"
+- "Disclaimer:" eller "KONTEXT, ej signal" som ursäkt för regelbrott
+- Citerade narrativ som "bombed-out", "FOMO-stämning", "överreaktion"
+- Generic-fraser: "sentimentet på", "i forum diskuteras", "flera kommenterar"
+
+**Buffett/Klarman/Graham**: tillåtet ENDAST som modell-namn (t.ex. "enligt
+Buffett-kvalitetsmodellen"). FÖRBJUDET som källa/kommentator
+("Buffett har sagt", "Klarman köpte").
+
+Disclaimer-mönster räknas som regelbrott:
+> "Burry har köpt MSFT (KONTEXT, ej signal)"
+> "Stifel höjde target (sentiment-hygien)"
+
+Båda dessa är OGILTIGA. Disclaimer-prefix räddar inte regeln.
+
+TILLÅTET (kvantifierat, datum, källa):
+- "Insider net 6m: −$45M USD, 0 köpare, 4 säljare"
+- "Avanza-ägare 30d: +6.7% (förra månaden +2.1%)"
+- "13F: Berkshire 4.2% av portfölj (oförändrad senaste 4 kv)"
+- "EPS Q1 2026: $14.11 vs Q1 2024: $10.37 (+36% YoY)"
+
+
 FÖRBJUDET att använda i slutsats:
 - "Michael Burry har köpt"
 - "Stämningen på forum är positiv"
@@ -4236,6 +4312,60 @@ DEL 9 — DAGENS DB-SNAPSHOT (uppdateras var 5 min)
         return jsonify({"error": str(e)}), 500
 
 
+# ──────────────────────────────────────────────────────────────
+# v2.2 Gate 2 — Sentiment-validation (post-stream)
+# Scannar agentens output efter regelbrott. Returnerar lista med träffar.
+# ──────────────────────────────────────────────────────────────
+import re as _re_v22
+
+_V22_FORBIDDEN_PATTERNS = [
+    # Specifika personer som narrativ källa (ej som modell-namn)
+    (r"\b(Michael\s+)?Burry\b", "Michael Burry som källa"),
+    (r"\bBuffett\s+(har\s+(sagt|köpt|gjort)|säger|berättar)", "Buffett som kommentator (ej modell)"),
+    (r"\bAckman\b", "Bill Ackman som källa"),
+    (r"\bKlarman\s+(har\s+(köpt|sagt)|berättar)", "Klarman som kommentator (ej modell)"),
+    # Investmentbanker som källor
+    (r"\bStifel\b", "Stifel som analytiker-källa"),
+    (r"\bBNP\s+Paribas\b", "BNP Paribas som källa"),
+    (r"\bGoldman\s+Sachs\b", "Goldman Sachs som källa"),
+    (r"\bMorgan\s+Stanley\b", "Morgan Stanley som källa"),
+    (r"\bJ[\.\s]*P[\.\s]*Morgan\b", "JP Morgan som källa"),
+    (r"\bDeutsche\s+Bank\b", "Deutsche Bank som källa"),
+    # Forum
+    (r"\bwallstreet[Oo]nline\b", "wallstreetONLINE forum-källa"),
+    (r"\breddit\b", "Reddit-källa"),
+    (r"\br/wallstreetbets\b", "r/wallstreetbets-källa"),
+    (r"\bInvesting\.com\b", "Investing.com forum"),
+    (r"\bSeeking\s+Alpha\b", "Seeking Alpha"),
+    (r"\bMotley\s+Fool\b", "Motley Fool"),
+    # Disclaimer-mönster som signalerar regelbrott
+    (r"KONTEXT,?\s+ej\s+(signal|köpsignal|argument)", "Disclaimer 'KONTEXT, ej signal'"),
+    (r"Sentiment[-\s]hygien", "Disclaimer 'sentiment-hygien' som ursäkt"),
+    (r"⚠️\s+(Sentiment|Forum|Disclaimer)", "Disclaimer-flagga"),
+    # Generic narrativ-fraser
+    (r"\bsentimentet\s+(på|i)\b", "Generic 'sentimentet på/i'"),
+    (r"\bi\s+forum\s+diskuteras\b", "Generic 'i forum diskuteras'"),
+    (r"\bflera\s+(användare|investerare|analytiker)\s+(anser|menar|tycker)\b", "Generic 'flera användare/analytiker anser'"),
+    (r"\bnågra\s+kommenterar\b", "Generic 'några kommenterar'"),
+    # Citerade narrativ
+    (r'"[^"]*(?:bombed-out|överreaktion|gesündere|FOMO-stämning)[^"]*"', "Citerade narrativ"),
+]
+
+
+def _validate_v22_sentiment(output_text):
+    """Returnerar lista med (pattern_description, matched_text) per regelbrott."""
+    if not output_text:
+        return []
+    violations = []
+    for pattern, desc in _V22_FORBIDDEN_PATTERNS:
+        matches = _re_v22.findall(pattern, output_text, _re_v22.IGNORECASE)
+        if matches:
+            # Spara första matchen som exempel
+            sample = matches[0] if isinstance(matches[0], str) else " ".join(str(m) for m in matches[0])
+            violations.append({"rule": desc, "sample": sample[:80]})
+    return violations
+
+
 def _agent_run_tool(tool_name, tool_input):
     """Kör en tool för agenten — returnerar str-content för Anthropic API."""
     import json as _json
@@ -4579,8 +4709,18 @@ DEL 9 — DAGENS DB-SNAPSHOT (uppdateras var 5 min)
                         messages.append({"role": "user", "content": tool_results})
                     continue
 
-                # end_turn → vi är klara
+                # end_turn → vi är klara. v2.2 Gate 2 — validera output mot
+                # förbjudna sentiment-mönster och rapportera överträdelser.
+                full_text = "\n".join([
+                    b.get("text", "") for b in accumulator_blocks
+                    if b and b.get("type") == "text"
+                ])
+                v22_violations = _validate_v22_sentiment(full_text)
                 yield _sse({"type": "usage", **usage_info})
+                if v22_violations:
+                    yield _sse({"type": "v22_violation",
+                               "count": len(v22_violations),
+                               "violations": v22_violations[:5]})
                 yield _sse({"type": "done", "model": MODEL})
                 return
 

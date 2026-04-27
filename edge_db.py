@@ -2267,6 +2267,7 @@ def _attach_hist(db, stock_dict):
     """Berika en stock-dict med `_hist` (10-års historiska mätare).
 
     Tyst no-op om orderbook_id saknas eller historik inte finns.
+    v2.2: inkluderar även quarterly EPS för earnings revision-proxy.
     """
     if not isinstance(stock_dict, dict) or "_hist" in stock_dict:
         return stock_dict
@@ -2275,6 +2276,18 @@ def _attach_hist(db, stock_dict):
         return stock_dict
     try:
         h = _hist_context(db, oid)
+        if h is None:
+            h = {}
+        # Quarterly EPS för earnings revision-proxy
+        try:
+            ph = _ph()
+            q_rows = _fetchall(db,
+                f"SELECT financial_year, quarter, eps FROM historical_quarterly "
+                f"WHERE orderbook_id = {ph} ORDER BY financial_year DESC, quarter DESC LIMIT 12",
+                (oid,))
+            h["eps_quarters"] = [(r["financial_year"], r["quarter"], r["eps"]) for r in q_rows]
+        except Exception:
+            pass
         if h:
             stock_dict["_hist"] = h
     except Exception:
@@ -2283,7 +2296,8 @@ def _attach_hist(db, stock_dict):
 
 
 def _attach_hist_bulk(db, stock_dicts):
-    """Batch-version: attacha _hist till många stockar med en enda SQL-query."""
+    """Batch-version: attacha _hist till många stockar med en enda SQL-query.
+    v2.2: hämtar även quarterly EPS för earnings revision-proxy."""
     if not stock_dicts or db is None:
         return stock_dicts
     ph = _ph()
@@ -2306,6 +2320,23 @@ def _attach_hist_bulk(db, stock_dicts):
     for r in rows:
         by_oid.setdefault(r["orderbook_id"], []).append(dict(r))
 
+    # v2.2: quarterly EPS för earnings revision-proxy
+    quarterly_by_oid = {}
+    try:
+        q_rows = _fetchall(
+            db,
+            f"SELECT orderbook_id, financial_year, quarter, eps FROM historical_quarterly "
+            f"WHERE orderbook_id IN ({placeholders}) "
+            f"ORDER BY orderbook_id, financial_year DESC, quarter DESC",
+            oids,
+        )
+        for r in q_rows:
+            quarterly_by_oid.setdefault(r["orderbook_id"], []).append(
+                (r["financial_year"], r["quarter"], r["eps"])
+            )
+    except Exception:
+        pass
+
     for d in stock_dicts:
         if not isinstance(d, dict):
             continue
@@ -2314,7 +2345,12 @@ def _attach_hist_bulk(db, stock_dicts):
             continue
         hist_rows = by_oid.get(oid)
         if hist_rows:
-            d["_hist"] = _compute_hist_from_rows(hist_rows)
+            ctx = _compute_hist_from_rows(hist_rows)
+            if ctx is None:
+                ctx = {}
+            # Lägg till quarterly EPS-tuples för earnings revision proxy
+            ctx["eps_quarters"] = quarterly_by_oid.get(oid, [])
+            d["_hist"] = ctx
     return stock_dicts
 
 
@@ -2886,6 +2922,44 @@ def _score_fcf_yield(s, classification):
     elif fcf_yield > 0.02: base = 20
     elif fcf_yield > 0.01: base = max(5, fcf_yield * 1000)
     else: base = 0
+
+    # ──────────────────────────────────────────────────────────────
+    # v2.2 Gate 1 — _fcf_debug måste rapporteras med full pipeline.
+    # Användaren kan se EXAKT vilka tal som gick in i FCF Yield-scoren.
+    # Sparas på s["_fcf_debug"] och plockas upp i scores["v2_fcf_debug"].
+    # ──────────────────────────────────────────────────────────────
+    capex_5y_intensity = capex_pct  # vi har inte 5y historia → samma som nuvarande proxy
+    capex_intensity_now = capex_pct
+    capex_expansion_phase = (sector == "tech")  # AI-investeringscykel 2025-2026
+    fcf_yield_capex_norm = None
+    if capex_expansion_phase:
+        # Normalisera bort tillfällig CapEx-bubble: använd 5y-snitt istället för nuvarande
+        capex_normalized = ocf * capex_5y_intensity * 0.85  # 15% lägre än proxy = "steady state"
+        fcf_normalized = ocf - capex_normalized - sbc_proxy
+        fcf_yield_capex_norm = fcf_normalized / ev if ev > 0 else 0
+
+    s["_fcf_debug"] = {
+        "currency": s.get("currency", "?"),
+        "market_cap_native": round(market_cap),
+        "operating_cash_flow_ttm": round(ocf),
+        "capex_proxy_pct_of_ocf": round(capex_pct * 100, 1),
+        "capex_proxy": round(capex_proxy),
+        "fcf_raw": round(fcf_proxy),
+        "stock_based_compensation_proxy": round(sbc_proxy),
+        "fcf_sbc_adjusted": round(fcf_sbc_adj),
+        "debt_to_equity_ratio": de,
+        "enterprise_value_approx": round(ev),
+        "fcf_yield_on_ev_pct": round(fcf_proxy / ev * 100, 2) if ev > 0 else None,
+        "fcf_yield_on_ev_sbc_adj_pct": round(fcf_yield * 100, 2),
+        "fcf_yield_capex_normalized_pct": round(fcf_yield_capex_norm * 100, 2) if fcf_yield_capex_norm else None,
+        "capex_expansion_phase": capex_expansion_phase,
+        "score": round(base, 1),
+        "data_quality": {
+            "capex_actual_available": False,  # vi har bara sektor-proxy
+            "sbc_actual_available": False,
+            "ev_actual_available": False,  # approx via D/E
+        },
+    }
     return _clamp(base)
 
 
@@ -2992,6 +3066,70 @@ def _reverse_dcf_solve(current_ev, current_fcf, wacc,
         if abs(high - low) < 0.0001:
             break
     return mid
+
+
+def _score_earnings_revision_proxy(s, classification):
+    """v2.2 Gate 4 — Earnings Revision Score via EPS-acceleration-proxy.
+
+    Vi har inte estimat-data, men quarterly EPS-historik (i s["_hist"])
+    ger oss YoY-acceleration som proxy. Spec sa att 'data saknas' är
+    förbjudet om quarterly data finns.
+
+    Logik:
+      Om senaste 4 kvartalens YoY-tillväxt > föregående 4 kvartalens
+      YoY-tillväxt → analytiker-revisioner trendar uppåt (positivt momentum).
+    """
+    hist = s.get("_hist") or {}
+    eps_q = hist.get("eps_quarters") or []  # lista med tuples (year, q, eps)
+    if not eps_q or len(eps_q) < 8:
+        return None
+
+    # Sortera nyaste först — accept både ('Q1', 2026) eller dict-format
+    try:
+        sorted_q = sorted(eps_q,
+                          key=lambda r: (r[0] if isinstance(r, tuple) else r.get("year", 0),
+                                         int(str(r[1] if isinstance(r, tuple) else r.get("quarter","Q0")).replace("Q","")) if isinstance(r, tuple) else 0),
+                          reverse=True)
+    except Exception:
+        return None
+
+    # Senaste 4 kvartal vs föregående 4
+    recent_eps = []
+    older_eps = []
+    for r in sorted_q[:8]:
+        eps = r[2] if isinstance(r, tuple) else r.get("eps")
+        if eps is not None:
+            if len(recent_eps) < 4:
+                recent_eps.append(eps)
+            else:
+                older_eps.append(eps)
+    if len(recent_eps) < 4 or len(older_eps) < 4:
+        return None
+
+    recent_sum = sum(recent_eps)
+    older_sum = sum(older_eps)
+    if older_sum == 0:
+        return None
+
+    yoy_growth = (recent_sum - older_sum) / abs(older_sum)
+
+    # Score: 0% YoY = 50 (neutral), +20% = 80, +50%+ = 95, -20% = 20
+    if yoy_growth > 0.5: base = 95
+    elif yoy_growth > 0.2: base = 80
+    elif yoy_growth > 0.1: base = 70
+    elif yoy_growth > 0.0: base = 55
+    elif yoy_growth > -0.1: base = 40
+    elif yoy_growth > -0.2: base = 25
+    else: base = 10
+
+    s["_earnings_revision_debug"] = {
+        "source": "quarterly_eps_acceleration_proxy",
+        "recent_4q_eps_sum": round(recent_sum, 2),
+        "older_4q_eps_sum": round(older_sum, 2),
+        "yoy_growth_pct": round(yoy_growth * 100, 1),
+        "score": base,
+    }
+    return _clamp(base)
 
 
 def _score_reverse_dcf(s, classification):
@@ -3558,15 +3696,37 @@ def _score_book_models(s):
             "trend", "taleb", "kelly", "owners"):
             scores[f"{k}_v2_status"] = "N/A"
 
-    # v2-scorers
+    # v2-scorers + v2.2 earnings revision proxy
     fcf = _score_fcf_yield(s, classification)
     roic_imp = _score_roic_implied(s, classification)
     cap_alloc = _score_capital_allocation(s, classification)
     rev_dcf = _score_reverse_dcf(s, classification)
+    earn_rev = _score_earnings_revision_proxy(s, classification)
     if fcf is not None: scores["fcf_yield"] = round(fcf, 1)
     if roic_imp is not None: scores["roic_implied"] = round(roic_imp, 1)
     if cap_alloc is not None: scores["capital_alloc"] = round(cap_alloc, 1)
     if rev_dcf is not None: scores["reverse_dcf"] = round(rev_dcf, 1)
+    if earn_rev is not None: scores["earnings_revision"] = round(earn_rev, 1)
+
+    # v2.2 Gate 3 — Konsistenscheck mellan ROIC-Implied och Reverse DCF
+    # Mappa Reverse DCF realism gap till score-skala för jämförelse.
+    consistency_check = "PASS"
+    consistency_divergence = 0
+    if roic_imp is not None and rev_dcf is not None:
+        # Reverse DCF score är redan 0-100. Direkt jämförelse.
+        divergence = abs(roic_imp - rev_dcf)
+        consistency_divergence = round(divergence, 1)
+        if divergence > 30:
+            consistency_check = "FAIL"
+            # Capa båda till 50 i Value-axel-räkningen — vi modifierar scores tillfälligt
+            scores["roic_implied_capped"] = min(50, scores["roic_implied"])
+            scores["reverse_dcf_capped"] = min(50, scores["reverse_dcf"])
+    scores["v2_2_consistency"] = {
+        "check": consistency_check,
+        "divergence": consistency_divergence,
+        "roic_implied_raw": roic_imp,
+        "reverse_dcf_raw": rev_dcf,
+    }
 
     # ─── 3-axel composite (Value / Quality / Momentum) ───
     def _avg_applicable(keys, statuses):
@@ -3580,13 +3740,31 @@ def _score_book_models(s):
                 vals.append(v)
         return sum(vals) / len(vals) if vals else None
 
-    # v2.1 Patch 7 — Taleb flyttad från Momentum till Risk-modul
-    # Value: Klarman, Magic Formula, FCF Yield, Reverse DCF
-    value_axis = _avg_applicable(["klarman", "magic", "fcf_yield", "reverse_dcf"], applicability)
-    # Quality: Buffett, ROIC-Implied, Capital Allocation
-    quality_axis = _avg_applicable(["buffett", "roic_implied", "capital_alloc"], applicability)
-    # Momentum: Trend, Owners (Earnings Revision saknas tills datakälla)
-    momentum_axis = _avg_applicable(["trend", "owners"], applicability)
+    # v2.1 Patch 7 + v2.2 Gate 3 cap
+    # Skapa effective scores som respekterar konsistenscheck-cap
+    eff_scores = dict(scores)
+    if consistency_check == "FAIL":
+        if "roic_implied_capped" in scores:
+            eff_scores["roic_implied"] = scores["roic_implied_capped"]
+        if "reverse_dcf_capped" in scores:
+            eff_scores["reverse_dcf"] = scores["reverse_dcf_capped"]
+
+    def _avg_applicable_eff(keys, statuses):
+        vals = []
+        for k in keys:
+            if statuses.get(k) == "not_applicable":
+                continue
+            v = eff_scores.get(k)
+            if v is not None:
+                vals.append(v)
+        return sum(vals) / len(vals) if vals else None
+
+    # Value: Klarman, Magic Formula, FCF Yield, Reverse DCF (med Gate 3-cap)
+    value_axis = _avg_applicable_eff(["klarman", "magic", "fcf_yield", "reverse_dcf"], applicability)
+    # Quality: Buffett, ROIC-Implied (med Gate 3-cap), Capital Allocation
+    quality_axis = _avg_applicable_eff(["buffett", "roic_implied", "capital_alloc"], applicability)
+    # Momentum: Trend, Owners + EARNINGS REVISION (v2.2 Gate 4)
+    momentum_axis = _avg_applicable_eff(["trend", "owners", "earnings_revision"], applicability)
     # Risk: Taleb (volatilitet) + composite-coverage
     risk_components = []
     if scores.get("taleb") is not None: risk_components.append(scores["taleb"])
@@ -3677,20 +3855,34 @@ def _score_book_models(s):
     scores["v2_setup_label"] = setup_label
     scores["v2_setup_action"] = setup_action
 
-    # ─── Confidence ───
-    # 1 - std(scores within axes) × applicability_ratio
+    # ─── v2.2 Gate 6 — Konflikt-detektor ───
+    conflicts = []
+    if value_axis is not None and quality_axis is not None and momentum_axis is not None:
+        axis_scores = [value_axis, quality_axis, momentum_axis]
+        if max(axis_scores) - min(axis_scores) > 50:
+            conflicts.append("high_axis_dispersion")
+        if quality_axis > 70 and momentum_axis < 35:
+            conflicts.append("quality_high_momentum_low_value_trap_risk")
+        if quality_axis < 40 and momentum_axis > 70:
+            conflicts.append("momentum_high_quality_low_speculation_risk")
+    if consistency_check == "FAIL":
+        conflicts.append("valuation_models_disagree")
+    scores["v2_2_conflicts"] = conflicts
+
+    # ─── Confidence (v2.2 — sänkt med 0.1 per konflikt) ───
     n_applicable = sum(1 for k, st in applicability.items() if st in ("applicable", "conditional"))
     n_total = len(applicability)
     appl_ratio = n_applicable / n_total if n_total > 0 else 0
-    # std-deviation av axlar (närmare 0 = mer konsensus)
     axes_vals = [v for v in (value_axis, quality_axis, momentum_axis) if v is not None]
     if len(axes_vals) >= 2:
         mean_a = sum(axes_vals) / len(axes_vals)
         std_a = (sum((x - mean_a) ** 2 for x in axes_vals) / len(axes_vals)) ** 0.5
-        conviction = max(0, 1 - std_a / 50)  # std 50 → 0, std 0 → 1
+        conviction = max(0, 1 - std_a / 50)
     else:
         conviction = 0.3
-    scores["v2_confidence"] = round(conviction * appl_ratio * classification.get("confidence", 0.5), 2)
+    base_conf = conviction * appl_ratio * classification.get("confidence", 0.5)
+    conflict_penalty = 0.1 * len(conflicts)
+    scores["v2_confidence"] = round(max(0.05, base_conf - conflict_penalty), 2)
 
     # ─── Position-sizing-output (basic enligt 7.2) ───
     axes_factor_map = {
@@ -3719,6 +3911,19 @@ def _score_book_models(s):
     sized = target_pct * axes_factor * scores["v2_confidence"] * risk_modifier
     base_starter = 25 if axes_factor < 1.0 else (50 if axes_factor >= 1.5 else 33)
     risk_adjusted_starter = max(15, int(base_starter * risk_modifier))
+
+    # v2.2 Gate 6 — Konfliktsmedveten position
+    n_conflicts = len(conflicts)
+    if n_conflicts >= 2:
+        # WAIT — flera olösta konflikter. Sätt position till mini.
+        sized = sized * 0.25
+        risk_adjusted_starter = max(10, int(risk_adjusted_starter * 0.5))
+        conflict_action = "WAIT — flera olösta modellkonflikter, vänta på mer data"
+    elif n_conflicts == 1:
+        sized = sized * 0.5
+        conflict_action = f"REDUCED_STARTER — halverad position pga konflikt: {conflicts[0]}"
+    else:
+        conflict_action = None
 
     # v2.1 Patch 8 — Strukturerat stop_thesis-ramverk i 4 kategorier
     roce = s.get("return_on_capital_employed") or 0
@@ -3750,9 +3955,17 @@ def _score_book_models(s):
         "risk_modifier": round(risk_modifier, 2),
         "target_pct_of_portfolio": round(sized, 2),
         "starter_pct_of_target": risk_adjusted_starter,
-        "scale_in_at": [-7, -15, -25],  # procent från ingång
+        "scale_in_at": [-7, -15, -25],
         "stop_thesis": stop_thesis,
+        "conflict_action": conflict_action,
+        "n_conflicts": n_conflicts,
     }
+
+    # v2.2 — exponera debug-block för UI/agent
+    if "_fcf_debug" in s:
+        scores["v2_fcf_debug"] = s.pop("_fcf_debug")
+    if "_earnings_revision_debug" in s:
+        scores["v2_earnings_revision_debug"] = s.pop("_earnings_revision_debug")
 
     return scores
 

@@ -3141,6 +3141,57 @@ function openDrawer(s) {
                         `).join('')}
                     </div>
                 </details>` : ''}
+            ${(v.conflicts || []).length > 0 ? `
+                <div style="background:#fee2e2;color:#991b1b;border-radius:10px;padding:10px 12px;margin-top:10px;font-size:12px">
+                    <strong>⚠️ v2.2 Modellkonflikter (${v.conflicts.length}):</strong>
+                    <ul style="margin:4px 0 0 16px;padding:0">
+                        ${v.conflicts.map(c => `<li>${c.replace(/_/g,' ')}</li>`).join('')}
+                    </ul>
+                    ${pos.conflict_action ? `<div style="margin-top:6px;font-weight:700">${pos.conflict_action}</div>` : ''}
+                </div>` : ''}
+            ${v.consistency && v.consistency.check === 'FAIL' ? `
+                <div style="background:#fef3c7;color:#78350f;border-radius:10px;padding:8px 12px;margin-top:8px;font-size:11px">
+                    <strong>🔬 v2.2 Konsistenscheck FAIL:</strong> ROIC-Implied ${v.consistency.roic_implied_raw} vs Reverse DCF ${v.consistency.reverse_dcf_raw} (divergence ${v.consistency.divergence}). Båda capade till 50 i Value-axeln.
+                </div>` : ''}
+            ${v.fcf_debug ? `
+                <details style="background:rgba(255,255,255,0.6);border-radius:10px;padding:8px 12px;margin-top:8px;font-size:11px">
+                    <summary style="cursor:pointer;font-weight:600">🔍 v2.2 FCF Pipeline (debug-block)</summary>
+                    <div style="margin-top:6px;display:grid;grid-template-columns:1fr 1fr;gap:4px;font-family:monospace;font-size:10.5px">
+                        <span style="color:#6b7280">Currency:</span><span>${v.fcf_debug.currency}</span>
+                        <span style="color:#6b7280">MarketCap (native):</span><span>${(v.fcf_debug.market_cap_native/1e9).toFixed(1)}B</span>
+                        <span style="color:#6b7280">OCF TTM:</span><span>${(v.fcf_debug.operating_cash_flow_ttm/1e9).toFixed(1)}B</span>
+                        <span style="color:#6b7280">CapEx-proxy:</span><span>${v.fcf_debug.capex_proxy_pct_of_ocf}% av OCF = ${(v.fcf_debug.capex_proxy/1e9).toFixed(1)}B</span>
+                        <span style="color:#6b7280">FCF raw:</span><span>${(v.fcf_debug.fcf_raw/1e9).toFixed(1)}B</span>
+                        <span style="color:#6b7280">SBC-proxy:</span><span>${(v.fcf_debug.stock_based_compensation_proxy/1e9).toFixed(1)}B</span>
+                        <span style="color:#6b7280">FCF SBC-just:</span><span><strong>${(v.fcf_debug.fcf_sbc_adjusted/1e9).toFixed(1)}B</strong></span>
+                        <span style="color:#6b7280">EV (approx):</span><span>${(v.fcf_debug.enterprise_value_approx/1e9).toFixed(1)}B</span>
+                        <span style="color:#6b7280">FCF Yield SBC-adj:</span><span><strong>${v.fcf_debug.fcf_yield_on_ev_sbc_adj_pct}%</strong></span>
+                        ${v.fcf_debug.fcf_yield_capex_normalized_pct != null ? `
+                            <span style="color:#6b7280">FCF Yield (capex-norm):</span><span>${v.fcf_debug.fcf_yield_capex_normalized_pct}%</span>` : ''}
+                        ${v.fcf_debug.capex_expansion_phase ? `
+                            <span style="grid-column:1/-1;color:#92400e;font-style:italic">⚠️ CapEx expansion phase — visar både rapporterad och normaliserad</span>` : ''}
+                    </div>
+                </details>` : ''}
+            ${v.earnings_revision_debug ? `
+                <details style="background:rgba(255,255,255,0.6);border-radius:10px;padding:8px 12px;margin-top:8px;font-size:11px">
+                    <summary style="cursor:pointer;font-weight:600">📈 v2.2 Earnings Revision (proxy: ${v.earnings_revision_debug.source})</summary>
+                    <div style="margin-top:6px;font-family:monospace;font-size:10.5px">
+                        Senaste 4 kv EPS: ${v.earnings_revision_debug.recent_4q_eps_sum} ·
+                        Föregående 4 kv: ${v.earnings_revision_debug.older_4q_eps_sum} ·
+                        YoY-tillväxt: <strong>${v.earnings_revision_debug.yoy_growth_pct}%</strong> ·
+                        Score: ${v.earnings_revision_debug.score}
+                    </div>
+                </details>` : ''}
+            ${v.ownership_signals ? `
+                <details style="background:rgba(255,255,255,0.6);border-radius:10px;padding:8px 12px;margin-top:8px;font-size:11px">
+                    <summary style="cursor:pointer;font-weight:600">👥 v2.2 Ownership-signals (separerade)</summary>
+                    <div style="margin-top:6px;display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:10.5px">
+                        <div><strong>Insider:</strong> ${v.ownership_signals.insider_activity.data_available
+                            ? `${v.ownership_signals.insider_activity.buy_transactions} köp / ${v.ownership_signals.insider_activity.sell_transactions} sälj — <em>${v.ownership_signals.insider_activity.interpretation.replace(/_/g,' ')}</em>`
+                            : 'data saknas'}</div>
+                        <div><strong>Retail (Avanza):</strong> ${v.ownership_signals.retail_activity.owner_change_3m_pct?.toFixed(1)}% 3m, ${v.ownership_signals.retail_activity.owner_change_1y_pct?.toFixed(1)}% 1y — <em>${v.ownership_signals.retail_activity.contextual_interpretation.replace(/_/g,' ')}</em></div>
+                    </div>
+                </details>` : ''}
             ${(v.na_models || []).length > 0 ? `
                 <div style="font-size:10px;color:#4b5563;margin-top:8px;font-style:italic">
                     Ej tillämpliga modeller (N/A): ${v.na_models.join(', ')}
@@ -4012,6 +4063,15 @@ function renderAgentTurn(h, idx) {
         if (usage.cache_read_input_tokens > 0) footParts.push(`⚡ ${(usage.cache_read_input_tokens).toLocaleString('sv')} tokens från cache`);
         if (usage.output_tokens) footParts.push(`📤 ${usage.output_tokens} tokens svar`);
         if (footParts.length) footer = `<div class="agent-foot">${footParts.join(' · ')}</div>`;
+        // v2.2 Gate 2 — visa förbjudna sentiment-mönster om upptäckta
+        if (h.v22_violations && h.v22_violations.length) {
+            const list = h.v22_violations.map(v => `<li><strong>${v.rule}:</strong> "${escapeHtml(v.sample)}"</li>`).join('');
+            footer += `<div style="background:#fee2e2;color:#991b1b;border-radius:8px;padding:8px 12px;margin-top:8px;font-size:11px">
+                <strong>🚫 v2.2 Sentiment-regelbrott upptäckt (${h.v22_violations.length}):</strong>
+                <ul style="margin:4px 0 0 16px;padding:0">${list}</ul>
+                <div style="margin-top:4px;font-size:10px;font-style:italic">Disclaimer-prefix räddar inte regeln. Slutsatsen ska INTE förlita sig på dessa källor.</div>
+            </div>`;
+        }
 
         return `<div class="agent-msg ai">
             <div class="agent-avatar ai">E</div>
@@ -4213,6 +4273,10 @@ async function agentSend() {
 function handleAgentSSE(ev, turn) {
     if (!ev || !ev.type) return;
     switch (ev.type) {
+        case 'v22_violation':
+            // Visa varning post-stream om förbjudna sentiment-mönster hittades
+            turn.v22_violations = ev.violations || [];
+            break;
         case 'text_delta':
             turn.content = (turn.content || '') + (ev.text || '');
             break;
