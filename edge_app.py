@@ -5439,9 +5439,66 @@ def _startup():
 
         scheduler.add_job(scheduled_insider_sync, 'cron', hour=6, minute=30, id='insider_daily')
 
+        # Nattlig Börsdata-prissync (04:00 lokal, efter hist sync) — inkrementellt
+        # Hämtar bara nya datapunkter sedan senast (last_date+1), så det går snabbt.
+        def scheduled_borsdata_prices():
+            try:
+                from edge_db import sync_borsdata_prices
+                print(f"[AUTO] Börsdata-prissync start {datetime.now().strftime('%H:%M')}")
+                dbp = get_db()
+                try:
+                    # max_per_run=None = alla bolag, men inkrementellt så det är snabbt
+                    res = sync_borsdata_prices(dbp, max_per_run=None)
+                    print(f"[AUTO] Börsdata-prissync klar: {res}")
+                finally:
+                    dbp.close()
+            except Exception as e:
+                print(f"[AUTO] Börsdata-prissync fel: {e}")
+
+        scheduler.add_job(scheduled_borsdata_prices, 'cron', hour=4, minute=0,
+                          id='borsdata_prices_daily')
+
+        # Veckovis Börsdata-rapportsync (söndagar 04:30) — kvartalsrapporter uppdateras sällan
+        def scheduled_borsdata_reports():
+            try:
+                from edge_db import sync_borsdata_reports
+                print(f"[AUTO] Börsdata-rapportsync start {datetime.now().strftime('%H:%M')}")
+                dbr = get_db()
+                try:
+                    res = sync_borsdata_reports(dbr, max_age_days=7)
+                    print(f"[AUTO] Börsdata-rapportsync klar: {res}")
+                finally:
+                    dbr.close()
+            except Exception as e:
+                print(f"[AUTO] Börsdata-rapportsync fel: {e}")
+
+        # day_of_week=6 = söndag (apscheduler: 0=mon, 6=sun)
+        scheduler.add_job(scheduled_borsdata_reports, 'cron', day_of_week='sun',
+                          hour=4, minute=30, id='borsdata_reports_weekly')
+
+        # Månatlig Börsdata-metadata-sync (1:a varje månad 05:00) — sektorer/branscher
+        def scheduled_borsdata_metadata():
+            try:
+                from edge_db import sync_borsdata_metadata
+                print(f"[AUTO] Börsdata-metadata-sync start {datetime.now().strftime('%H:%M')}")
+                dbm = get_db()
+                try:
+                    res = sync_borsdata_metadata(dbm)
+                    print(f"[AUTO] Börsdata-metadata-sync klar: {res}")
+                finally:
+                    dbm.close()
+            except Exception as e:
+                print(f"[AUTO] Börsdata-metadata-sync fel: {e}")
+
+        scheduler.add_job(scheduled_borsdata_metadata, 'cron', day=1,
+                          hour=5, minute=0, id='borsdata_metadata_monthly')
+
         scheduler.start()
         print("  ✓ Auto-refresh scheduler aktiv (var 15:e min under marknadstid)")
         print("  ✓ Nightly historical sync schemalagd (03:30, extended tier)")
+        print("  ✓ Börsdata-prissync schemalagd (04:00 dagligen, inkrementellt)")
+        print("  ✓ Börsdata-rapportsync schemalagd (söndagar 04:30)")
+        print("  ✓ Börsdata-metadata-sync schemalagd (1:a/månad 05:00)")
         print("  ✓ Daily macro snapshot schemalagd (06:00)")
         print("  ✓ Daily insider sync schemalagd (06:30)")
     except ImportError:
