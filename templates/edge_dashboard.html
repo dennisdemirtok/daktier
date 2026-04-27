@@ -6,6 +6,8 @@
     <title>Edge Signals — DAKTIER</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet">
+    <!-- Markdown rendering för AI Agent -->
+    <script src="https://cdn.jsdelivr.net/npm/marked@12.0.0/marked.min.js"></script>
     <style>
         :root {
             --green: #00C281;
@@ -2709,6 +2711,24 @@ function renderBuyZoneSection(s) {
     </div>`;
 }
 
+async function checkHistSyncStatus() {
+    try {
+        const r = await fetch('/api/refresh-historical/status');
+        const d = await r.json();
+        if (d.running) {
+            const cur = d.current || 0, total = d.total || 0, name = d.name || '';
+            const pct = total > 0 ? ((cur/total)*100).toFixed(0) : 0;
+            alert(`Sync pågår: ${cur}/${total} (${pct}%)\n${name ? 'Just nu: ' + name : ''}`);
+        } else if (d.last_run) {
+            alert(`Senaste sync klar: ${JSON.stringify(d.last_run, null, 2)}`);
+        } else {
+            alert('Ingen pågående sync. Be admin att trigga POST /api/refresh-historical om datan saknas.');
+        }
+    } catch (e) {
+        alert('Kunde inte hämta sync-status: ' + e.message);
+    }
+}
+
 function renderQuarterlyTrendsSection(s) {
     // Visar vinst-, försäljnings- och marginal-utveckling per kvartal
     // (Avanza levererar ej FCF/cash flow per kvartal — vi visar net_profit som proxy)
@@ -2851,8 +2871,15 @@ function renderHistoricalSection(s) {
     if (!annual.length) {
         return `<div class="drawer-section">
             <div class="drawer-section-title">📊 10-års historik</div>
-            <div style="padding:16px;background:#f9fafb;border-radius:10px;text-align:center;color:var(--text-muted);font-size:12px">
-                Ingen historisk data tillgänglig. Kör <code style="background:#eee;padding:2px 6px;border-radius:4px">POST /api/refresh-historical</code> för att synka.
+            <div style="padding:16px;background:linear-gradient(135deg,#fef3c7,#fde68a);border-radius:10px;font-size:13px;color:#78350f">
+                <div style="font-weight:600;margin-bottom:6px">⏳ Historisk data hämtas i bakgrunden</div>
+                <div style="font-size:12px;line-height:1.5">
+                    Vi synkar 10 års historik från Avanza för alla bolag (~10-15 min totalt).
+                    Försök igen om några minuter — eller klicka <a href="#" onclick="event.preventDefault(); checkHistSyncStatus()" style="color:#1e40af;font-weight:600">visa sync-status</a>.
+                </div>
+                <div style="font-size:11px;color:#92400e;margin-top:6px;font-style:italic">
+                    Composite-score, buy-zone och vinst-historik är begränsade tills datan är klar.
+                </div>
             </div>
         </div>`;
     }
@@ -3671,40 +3698,32 @@ let _agentHistory = [];   // [{role:'user'|'assistant', content: ...}] för API
 let _agentImage = null;   // {b64, media_type, name}
 let _agentLoading = false;
 
+// Konfigurera marked.js för GFM (tabeller, etc.)
+if (typeof marked !== 'undefined') {
+    marked.setOptions({ gfm: true, breaks: true });
+}
+
+const TOOL_LABELS = {
+    search_stocks: { icon: '🔍', label: 'Söker bolag' },
+    get_full_stock: { icon: '📊', label: 'Hämtar fullständig data' },
+    get_quarterly_trends: { icon: '📈', label: 'Hämtar kvartalstrend' },
+    get_owner_history: { icon: '👥', label: 'Läser ägartrend' },
+    get_top_stocks: { icon: '🏆', label: 'Bygger topplista' },
+    web_search: { icon: '🌐', label: 'Söker på webben' },
+};
+
 function renderAgent() {
     const content = document.getElementById('content');
-    const loadingHint = _agentLoading ? '<span class="agent-typing">Claude tänker…</span>' : '';
 
-    const turns = _agentHistory.map(h => {
-        if (h.role === 'user') {
-            // h.content kan vara array (med ev. bild) eller sträng
-            let txt = '';
-            let imgHtml = '';
-            if (Array.isArray(h.content)) {
-                for (const c of h.content) {
-                    if (c.type === 'text') txt += c.text + '\n';
-                    if (c.type === 'image' && c.source?.data) {
-                        imgHtml = `<img src="data:${c.source.media_type};base64,${c.source.data}" class="agent-msg-img"/>`;
-                    }
-                }
-            } else txt = h.content;
-            return `<div class="agent-msg user"><div class="agent-msg-bubble">${imgHtml}${escapeHtml(txt).replace(/\n/g,'<br>')}</div></div>`;
-        } else {
-            // assistant: rendera text med markdown-light
-            let txt = '';
-            if (Array.isArray(h.content)) {
-                for (const c of h.content) if (c.type === 'text') txt += c.text;
-            } else txt = h.content;
-            return `<div class="agent-msg ai"><div class="agent-msg-bubble">${formatAgentText(txt)}</div></div>`;
-        }
-    }).join('');
+    const turns = _agentHistory.map((h, i) => renderAgentTurn(h, i)).join('');
 
     const exampleChips = `<div class="agent-examples">
-        <button class="agent-chip" onclick="agentSendExample(this.dataset.q)" data-q="Vilka bolag har bäst free cash flow-utveckling senaste 5 åren?">💰 Bästa FCF-utveckling</button>
-        <button class="agent-chip" onclick="agentSendExample(this.dataset.q)" data-q="Vilka kvalitetsbolag har tappat mest i värde i år och kan vara köpvärda nu?">📉 Sänkta kvalitetsbolag</button>
-        <button class="agent-chip" onclick="agentSendExample(this.dataset.q)" data-q="Hur ser Buffett-modellen på Investor B just nu?">🏰 Buffett-analys</button>
-        <button class="agent-chip" onclick="agentSendExample(this.dataset.q)" data-q="Topp 5 aktier som passar Magic Formula och har hög ROE">📊 Magic Formula favoriter</button>
-        <button class="agent-chip" onclick="agentSendExample(this.dataset.q)" data-q="Vad är dagens köp-rekommendationer och varför?">🎯 Dagens picks</button>
+        <button class="agent-chip" onclick="agentSendExample(this.dataset.q)" data-q="Vilka bolag har bäst free cash flow just nu?">💰 Bästa FCF</button>
+        <button class="agent-chip" onclick="agentSendExample(this.dataset.q)" data-q="Microsoft har tappat. Är det köpvärt nu? Kolla även vad folk skriver i forum.">📉 Microsoft analys</button>
+        <button class="agent-chip" onclick="agentSendExample(this.dataset.q)" data-q="Hur ser Investor B ut enligt böckerna? Visa kvartalstrend och ägarutveckling.">🏰 Investor B djupanalys</button>
+        <button class="agent-chip" onclick="agentSendExample(this.dataset.q)" data-q="Topp 5 svenska aktier som passar Magic Formula och har hög ROE">📊 Magic Formula SE</button>
+        <button class="agent-chip" onclick="agentSendExample(this.dataset.q)" data-q="Vilka kvalitetsbolag har tappat mest YTD och kan vara köpvärda nu? Inkludera vad analytiker säger.">🎯 Tappade kvalitetsbolag</button>
+        <button class="agent-chip" onclick="agentSendExample(this.dataset.q)" data-q="Jämför SEB, Swedbank och Handelsbanken — vilken är mest köpvärd just nu?">🏦 Bankjämförelse</button>
     </div>`;
 
     const imagePreview = _agentImage ? `
@@ -3718,79 +3737,158 @@ function renderAgent() {
 
     content.innerHTML = `
     <style>
-        .agent-wrap { display:flex; flex-direction:column; gap:14px; height:calc(100vh - 160px); max-width:900px; margin:0 auto; }
-        .agent-info { background:linear-gradient(135deg,#f0e8ff,#e8eeff); border-radius:12px; padding:14px 18px; font-size:13px; color:var(--text-sec); }
-        .agent-info strong { color:var(--text); }
+        .agent-wrap { display:flex; flex-direction:column; gap:14px; height:calc(100vh - 160px); max-width:920px; margin:0 auto; }
+        .agent-hero { background:linear-gradient(135deg,#1e3a8a 0%,#3b82f6 50%,#8b5cf6 100%); color:white; border-radius:14px; padding:14px 18px; font-size:13px; box-shadow:0 4px 12px rgba(30,58,138,0.15); }
+        .agent-hero strong { color:#fef3c7; }
         .agent-msgs { flex:1; overflow-y:auto; padding:10px 4px; display:flex; flex-direction:column; gap:14px; }
-        .agent-msg { display:flex; }
+        .agent-msg { display:flex; gap:10px; align-items:flex-end; }
         .agent-msg.user { justify-content:flex-end; }
-        .agent-msg-bubble { max-width:75%; padding:12px 16px; border-radius:14px; font-size:14px; line-height:1.5; box-shadow:0 1px 3px rgba(0,0,0,0.06); }
+        .agent-avatar { width:32px; height:32px; border-radius:50%; flex-shrink:0; display:flex; align-items:center; justify-content:center; font-size:16px; font-weight:700; }
+        .agent-avatar.ai { background:linear-gradient(135deg,#1e3a8a,#8b5cf6); color:white; }
+        .agent-avatar.user { background:#e5e7eb; color:#374151; order:2; }
+        .agent-msg-bubble { max-width:78%; padding:13px 17px; border-radius:14px; font-size:14px; line-height:1.55; box-shadow:0 1px 3px rgba(0,0,0,0.05); }
         .agent-msg.user .agent-msg-bubble { background:linear-gradient(135deg,#1d4ed8,#3b82f6); color:white; border-bottom-right-radius:4px; }
         .agent-msg.ai .agent-msg-bubble { background:white; border:1px solid var(--border); border-bottom-left-radius:4px; }
+        .agent-msg-bubble.streaming { background:linear-gradient(120deg,white 0%,#f8fafc 50%,white 100%); background-size:200% 100%; animation:agent-shimmer 2s linear infinite; }
+        @keyframes agent-shimmer { 0%{background-position:-200% 0;} 100%{background-position:200% 0;} }
         .agent-msg-img { max-width:280px; max-height:200px; display:block; border-radius:8px; margin-bottom:8px; }
-        .agent-typing { display:inline-block; font-style:italic; color:var(--text-muted); padding:8px 14px; }
-        .agent-typing::after { content:'...'; animation: agent-dot 1.2s infinite; }
+        .agent-tool-pill { display:inline-flex; align-items:center; gap:6px; background:#eff6ff; color:#1e40af; padding:4px 10px; border-radius:14px; font-size:11px; font-weight:600; margin:3px 4px 3px 0; }
+        .agent-tool-pill.running { background:#fef3c7; color:#78350f; }
+        .agent-tool-pill.running::after { content:'…'; animation:agent-dot 1s infinite; }
         @keyframes agent-dot { 0%,20%{content:'.';} 40%{content:'..';} 60%,100%{content:'...';} }
         .agent-input-row { display:flex; gap:8px; align-items:flex-end; padding:10px; background:white; border:1px solid var(--border); border-radius:14px; box-shadow:0 1px 4px rgba(0,0,0,0.04); }
         .agent-textarea { flex:1; border:none; outline:none; resize:none; font-family:inherit; font-size:14px; padding:8px 6px; max-height:120px; }
-        .agent-btn { background:linear-gradient(135deg,#1d4ed8,#3b82f6); color:white; border:none; padding:10px 18px; border-radius:10px; cursor:pointer; font-weight:600; font-family:inherit; }
+        .agent-btn { background:linear-gradient(135deg,#1d4ed8,#3b82f6); color:white; border:none; padding:10px 22px; border-radius:10px; cursor:pointer; font-weight:600; font-family:inherit; }
         .agent-btn:disabled { opacity:0.4; cursor:not-allowed; }
         .agent-icon-btn { background:#f3f4f6; border:none; padding:8px 10px; border-radius:8px; cursor:pointer; font-size:18px; }
         .agent-icon-btn:hover { background:#e5e7eb; }
-        .agent-examples { display:flex; flex-wrap:wrap; gap:6px; margin-top:6px; }
-        .agent-chip { background:white; border:1px solid var(--border); padding:6px 12px; border-radius:20px; font-size:12px; cursor:pointer; transition:all 0.15s; font-family:inherit; }
-        .agent-chip:hover { background:var(--green); color:white; border-color:var(--green); }
+        .agent-examples { display:flex; flex-wrap:wrap; gap:6px; padding:6px 0 4px; }
+        .agent-chip { background:white; border:1px solid var(--border); padding:7px 13px; border-radius:20px; font-size:12px; cursor:pointer; transition:all 0.15s; font-family:inherit; }
+        .agent-chip:hover { background:linear-gradient(135deg,#1d4ed8,#3b82f6); color:white; border-color:#1d4ed8; transform:translateY(-1px); }
         .agent-img-preview { display:flex; gap:10px; align-items:center; padding:8px 12px; background:#f9fafb; border-radius:10px; margin-bottom:6px; }
         .agent-img-preview img { width:60px; height:60px; object-fit:cover; border-radius:8px; }
         .agent-img-meta { flex:1; }
         .agent-img-clear { background:none; border:none; color:var(--red); cursor:pointer; font-size:12px; padding:0; margin-top:4px; }
-        .agent-msg-bubble code { background:rgba(0,0,0,0.06); padding:1px 5px; border-radius:4px; font-family:'SF Mono',monospace; font-size:13px; }
-        .agent-msg.user .agent-msg-bubble code { background:rgba(255,255,255,0.18); }
-        .agent-msg-bubble pre { background:rgba(0,0,0,0.04); padding:8px 10px; border-radius:6px; overflow-x:auto; font-size:12px; }
-        .agent-msg-bubble ul, .agent-msg-bubble ol { padding-left:20px; margin:6px 0; }
+        /* Markdown styling i agent-bubblor */
+        .agent-md h1, .agent-md h2 { font-size:18px; font-weight:800; margin:14px 0 8px; color:#111827; border-bottom:1px solid #e5e7eb; padding-bottom:4px; }
+        .agent-md h3 { font-size:15px; font-weight:700; margin:14px 0 6px; color:#1f2937; }
+        .agent-md h4 { font-size:13px; font-weight:700; margin:10px 0 4px; color:#374151; text-transform:uppercase; letter-spacing:0.05em; }
+        .agent-md p { margin:8px 0; }
+        .agent-md ul, .agent-md ol { padding-left:22px; margin:6px 0 8px; }
+        .agent-md li { margin:3px 0; }
+        .agent-md strong { font-weight:700; color:#0f172a; }
+        .agent-md code { background:rgba(99,102,241,0.10); color:#4338ca; padding:1px 6px; border-radius:4px; font-family:'SF Mono','Menlo',monospace; font-size:12.5px; }
+        .agent-md pre { background:#f8fafc; border:1px solid var(--border); padding:10px 12px; border-radius:8px; overflow-x:auto; font-size:12px; margin:8px 0; }
+        .agent-md pre code { background:none; padding:0; color:inherit; }
+        .agent-md blockquote { border-left:3px solid #6366f1; padding:4px 12px; color:#4b5563; background:#f9fafb; margin:8px 0; border-radius:0 6px 6px 0; }
+        .agent-md table { border-collapse:collapse; margin:10px 0; font-size:12.5px; width:100%; }
+        .agent-md th { background:#f1f5f9; text-align:left; padding:8px 10px; font-weight:700; border-bottom:2px solid #cbd5e1; }
+        .agent-md td { padding:6px 10px; border-bottom:1px solid #e5e7eb; }
+        .agent-md tr:hover td { background:#f9fafb; }
+        .agent-md hr { border:none; border-top:1px solid #e5e7eb; margin:14px 0; }
+        .agent-md a { color:#2563eb; text-decoration:underline; }
+        .agent-md em { font-style:italic; color:#6b7280; }
+        .agent-foot { font-size:10.5px; color:var(--text-muted); margin-top:10px; padding-top:8px; border-top:1px dashed #e5e7eb; display:flex; gap:10px; flex-wrap:wrap; }
+        .agent-cancel-btn { background:#fee2e2; border:none; color:#991b1b; padding:8px 14px; border-radius:8px; cursor:pointer; font-size:12px; font-family:inherit; }
     </style>
     <div class="agent-wrap">
-        <div class="agent-info">
-            <strong>🤖 Edge Agent</strong> — Claude Opus med tillgång till hela aktiedatabasen.
-            Fråga om bolag, jämförelser, fundamenta, eller ladda upp en skärmbild av din portfölj för analys.
+        <div class="agent-hero">
+            <strong>🤖 Edge Agent</strong> — Claude Opus med direktåtkomst till databasen.
+            Söker bolag, läser kvartalstrender, ägarhistorik, kollar forum/Reddit/nyheter via web search.
+            Ladda upp en skärmbild av din portfölj för analys.
         </div>
         <div id="agentMsgs" class="agent-msgs">
-            ${turns || `<div style="color:var(--text-muted);text-align:center;padding:30px">Börja en konversation eller välj ett exempel nedan.</div>`}
-            ${loadingHint ? `<div class="agent-msg ai"><div class="agent-msg-bubble">${loadingHint}</div></div>` : ''}
+            ${turns || `<div style="color:var(--text-muted);text-align:center;padding:30px">Ställ en fråga eller välj ett exempel.</div>`}
         </div>
-        ${turns ? '' : exampleChips}
+        ${turns.length === 0 ? exampleChips : ''}
         ${imagePreview}
         <div class="agent-input-row">
-            <button class="agent-icon-btn" title="Ladda upp bild (skärmbild av portfölj)" onclick="document.getElementById('agentImageInput').click()">📎</button>
+            <button class="agent-icon-btn" title="Ladda upp bild" onclick="document.getElementById('agentImageInput').click()">📎</button>
             <input type="file" id="agentImageInput" accept="image/*" style="display:none" onchange="agentHandleImage(event)"/>
-            <textarea id="agentInput" class="agent-textarea" placeholder="Fråga om en aktie, jämför bolag, eller analysera din portfölj..." rows="2"
+            <textarea id="agentInput" class="agent-textarea" placeholder="${_agentLoading ? 'Agenten skriver...' : 'Fråga om en aktie, jämför bolag, eller analysera din portfölj...'}" rows="2"
+                ${_agentLoading ? 'disabled' : ''}
                 onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();agentSend()}"></textarea>
-            <button class="agent-btn" onclick="agentSend()" ${_agentLoading?'disabled':''}>Skicka</button>
+            ${_agentLoading
+                ? `<button class="agent-cancel-btn" onclick="agentCancel()">Avbryt</button>`
+                : `<button class="agent-btn" onclick="agentSend()">Skicka</button>`}
         </div>
     </div>`;
 
-    // Auto-scroll till botten
     setTimeout(() => {
         const m = document.getElementById('agentMsgs');
         if (m) m.scrollTop = m.scrollHeight;
     }, 50);
 }
 
+function renderAgentTurn(h, idx) {
+    if (h.role === 'user') {
+        let txt = '';
+        let imgHtml = '';
+        if (Array.isArray(h.content)) {
+            for (const c of h.content) {
+                if (c.type === 'text') txt += c.text + '\n';
+                if (c.type === 'image' && c.source?.data) {
+                    imgHtml = `<img src="data:${c.source.media_type};base64,${c.source.data}" class="agent-msg-img"/>`;
+                }
+            }
+        } else txt = h.content || '';
+        return `<div class="agent-msg user">
+            <div class="agent-msg-bubble">${imgHtml}${escapeHtml(txt).replace(/\n/g,'<br>')}</div>
+            <div class="agent-avatar user">D</div>
+        </div>`;
+    } else {
+        // assistant
+        const isStreaming = h.streaming === true;
+        const text = typeof h.content === 'string' ? h.content : '';
+        const tools = h.tools || [];
+        const usage = h.usage || {};
+
+        const toolsHtml = tools.map(t => {
+            const meta = TOOL_LABELS[t.name] || { icon: '⚙️', label: t.name };
+            const cls = t.status === 'running' ? 'running' : '';
+            return `<span class="agent-tool-pill ${cls}">${meta.icon} ${meta.label}</span>`;
+        }).join('');
+
+        const md = text ? formatAgentText(text) : (isStreaming ? '<span style="color:var(--text-muted)">Tänker...</span>' : '');
+
+        let footer = '';
+        const footParts = [];
+        if (usage.cache_read_input_tokens > 0) footParts.push(`⚡ ${(usage.cache_read_input_tokens).toLocaleString('sv')} tokens från cache`);
+        if (usage.output_tokens) footParts.push(`📤 ${usage.output_tokens} tokens svar`);
+        if (footParts.length) footer = `<div class="agent-foot">${footParts.join(' · ')}</div>`;
+
+        return `<div class="agent-msg ai">
+            <div class="agent-avatar ai">E</div>
+            <div class="agent-msg-bubble ${isStreaming ? 'streaming' : ''}">
+                ${toolsHtml ? `<div style="margin-bottom:8px">${toolsHtml}</div>` : ''}
+                <div class="agent-md">${md}</div>
+                ${footer}
+            </div>
+        </div>`;
+    }
+}
+
 function escapeHtml(s) {
     return String(s||'').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
+
 function formatAgentText(s) {
-    // Enkel markdown: **bold**, `code`, --- bullets, paragraf
+    // Använd marked.js för full GFM-rendering med tabeller
+    if (typeof marked !== 'undefined') {
+        try {
+            return marked.parse(String(s || ''));
+        } catch (e) {
+            console.warn('marked parse failed', e);
+        }
+    }
+    // Fallback: enkel manuell markdown
     let t = escapeHtml(s);
     t = t.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
     t = t.replace(/`([^`]+)`/g, '<code>$1</code>');
-    // Bullets: rader som börjar med - eller •
-    t = t.replace(/(^|\n)[-•]\s+(.+)/g, '$1<li>$2</li>');
-    t = t.replace(/(<li>.*<\/li>(\n|$))+/g, m => '<ul>' + m.replace(/\n/g,'') + '</ul>');
     t = t.replace(/\n\n/g, '</p><p>');
-    t = '<p>' + t + '</p>';
-    return t;
+    return '<p>' + t + '</p>';
 }
+
 function agentSendExample(q) {
     const t = document.getElementById('agentInput');
     if (t) t.value = q;
@@ -3814,13 +3912,24 @@ function agentHandleImage(ev) {
     };
     fr.readAsDataURL(f);
 }
+
+let _agentAbortController = null;
+
+function agentCancel() {
+    if (_agentAbortController) {
+        _agentAbortController.abort();
+        _agentAbortController = null;
+    }
+    _agentLoading = false;
+    renderAgent();
+}
+
 async function agentSend() {
     const inp = document.getElementById('agentInput');
     const text = (inp?.value || '').trim();
     if (!text && !_agentImage) return;
     if (_agentLoading) return;
 
-    // Bygg user-content
     const userContent = [];
     if (_agentImage) userContent.push({
         type: 'image',
@@ -3829,10 +3938,16 @@ async function agentSend() {
     if (text) userContent.push({ type: 'text', text });
     _agentHistory.push({ role: 'user', content: userContent });
 
-    // Skicka payload (max 5 MB image handled av filhanteraren)
+    // Förbered streaming-bubbla för assistent
+    const assistantTurn = { role: 'assistant', content: '', tools: [], usage: {}, streaming: true };
+    _agentHistory.push(assistantTurn);
+
     const payload = {
         message: text,
-        history: _agentHistory.slice(0, -1),  // tidigare turns
+        history: _agentHistory.slice(0, -2).map(h => ({  // utan senaste user+streaming-assistant
+            role: h.role,
+            content: h.content,
+        })),
     };
     if (_agentImage) {
         payload.image_b64 = _agentImage.b64;
@@ -3844,34 +3959,94 @@ async function agentSend() {
     _agentImage = null;
     renderAgent();
 
+    _agentAbortController = new AbortController();
     try {
-        const r = await fetch('/api/agent/chat', {
+        const r = await fetch('/api/agent/chat/stream', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify(payload),
+            signal: _agentAbortController.signal,
         });
-        const data = await r.json();
-        if (data.error) {
-            _agentHistory.push({ role: 'assistant', content: '⚠ ' + data.error });
-        } else {
-            // Bygg svar + (valfri) cache-fotnot
-            let reply = data.reply || '(tomt svar)';
-            const c = data.cache || {};
-            if (c.cache_read_input_tokens > 0) {
-                reply += `\n\n_⚡ Cache hit: ${c.cache_read_input_tokens.toLocaleString('sv')} tokens läst från cache (sparat ~90%)_`;
-            } else if (c.cache_creation_input_tokens > 0) {
-                reply += `\n\n_📦 Cache skapad: ${c.cache_creation_input_tokens.toLocaleString('sv')} tokens — nästa fråga blir billigare_`;
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+
+        const reader = r.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+        let lastRender = 0;
+
+        while (true) {
+            const { value, done } = await reader.read();
+            if (done) break;
+            buffer += decoder.decode(value, { stream: true });
+            // Parse SSE events
+            const events = buffer.split('\n\n');
+            buffer = events.pop() || '';
+            for (const ev of events) {
+                if (!ev.startsWith('data:')) continue;
+                let data;
+                try { data = JSON.parse(ev.slice(5).trim()); } catch { continue; }
+                handleAgentSSE(data, assistantTurn);
             }
-            if (data.tool_calls?.length) {
-                reply += `\n_🔍 Slog upp ${data.tool_calls.length} bolag i DB:n_`;
+            // Re-render max 10ggr/sek för smooth typing utan att frusta CPU
+            const now = Date.now();
+            if (now - lastRender > 100) {
+                renderAgent();
+                lastRender = now;
             }
-            _agentHistory.push({ role: 'assistant', content: reply });
         }
     } catch (e) {
-        _agentHistory.push({ role: 'assistant', content: '⚠ Nätverksfel: ' + e.message });
+        if (e.name !== 'AbortError') {
+            assistantTurn.content = (assistantTurn.content || '') + '\n\n⚠ Fel: ' + e.message;
+        }
     } finally {
+        assistantTurn.streaming = false;
         _agentLoading = false;
+        _agentAbortController = null;
         renderAgent();
+    }
+}
+
+function handleAgentSSE(ev, turn) {
+    if (!ev || !ev.type) return;
+    switch (ev.type) {
+        case 'text_delta':
+            turn.content = (turn.content || '') + (ev.text || '');
+            break;
+        case 'tool_use_start':
+            turn.tools.push({ name: ev.name, status: 'running' });
+            break;
+        case 'tool_running':
+            // Markera senaste matching tool som running
+            for (let i = turn.tools.length - 1; i >= 0; i--) {
+                if (turn.tools[i].name === ev.name && turn.tools[i].status === 'running') break;
+            }
+            break;
+        case 'tool_result':
+            // Markera senaste matching tool som klar
+            for (let i = turn.tools.length - 1; i >= 0; i--) {
+                if (turn.tools[i].name === ev.name) {
+                    turn.tools[i].status = ev.is_error ? 'error' : 'done';
+                    break;
+                }
+            }
+            break;
+        case 'usage':
+            turn.usage = {
+                input_tokens: ev.input_tokens,
+                output_tokens: ev.output_tokens,
+                cache_read_input_tokens: ev.cache_read_input_tokens,
+                cache_creation_input_tokens: ev.cache_creation_input_tokens,
+            };
+            break;
+        case 'done':
+            turn.model = ev.model;
+            break;
+        case 'error':
+            turn.content = (turn.content || '') + '\n\n⚠ ' + (ev.error || 'Okänt fel');
+            break;
+        case 'info':
+            // Statusmeddelande, t.ex. modellbyte
+            break;
     }
 }
 

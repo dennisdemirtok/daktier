@@ -16,7 +16,7 @@ import threading
 import time as _time
 import requests
 from datetime import datetime, timedelta
-from flask import Flask, render_template, jsonify, request
+from flask import Flask, render_template, jsonify, request, Response, stream_with_context
 
 # Ladda .env automatiskt — appen behöver ANTHROPIC_API_KEY för AI-funktioner
 try:
@@ -3413,7 +3413,8 @@ def _agent_search_stocks(db, query, limit=15):
         # Trimma till nyckelfält
         out.append({
             "name": d.get("name"), "country": d.get("country"),
-            "ticker": d.get("ticker"), "last_price": d.get("last_price"),
+            "ticker": d.get("ticker"), "orderbook_id": d.get("orderbook_id"),
+            "last_price": d.get("last_price"),
             "currency": d.get("currency"), "number_of_owners": d.get("number_of_owners"),
             "pe_ratio": d.get("pe_ratio"), "price_book_ratio": d.get("price_book_ratio"),
             "ev_ebit_ratio": d.get("ev_ebit_ratio"), "direct_yield": d.get("direct_yield"),
@@ -3424,8 +3425,181 @@ def _agent_search_stocks(db, query, limit=15):
             "ytd_change_pct": d.get("ytd_change_pct"),
             "one_month_change_pct": d.get("one_month_change_pct"),
             "edge_score": d.get("edge_score"), "action": d.get("action"),
+            "smart_score": d.get("smart_score"),
+            "smart_score_change": (d.get("smart_score") - d.get("smart_score_yesterday"))
+                                   if d.get("smart_score") is not None and d.get("smart_score_yesterday") is not None else None,
         })
     return out
+
+
+def _agent_get_full_stock(db, query):
+    """Hämtar ALLA tillgängliga nyckeltal för EN aktie + composite + book-modeller.
+    Bättre än search_stocks när Claude vill djupanalysera ETT bolag."""
+    from edge_db import _ph, _score_book_models, _attach_hist
+    ph = _ph()
+    q = f"%{query}%"
+    row = db.execute(
+        f"SELECT * FROM stocks WHERE name LIKE {ph} OR short_name LIKE {ph} OR ticker LIKE {ph} "
+        f"ORDER BY number_of_owners DESC LIMIT 1",
+        (q, q, q),
+    ).fetchone()
+    if not row:
+        return {"error": f"Ingen aktie hittad för '{query}'"}
+    d = dict(row)
+    try:
+        _attach_hist(db, d)
+        sc = _score_book_models(d)
+        d["book_composite"] = sc.get("composite")
+        d["book_models_available"] = sc.get("models_available", 0)
+        d["book_model_scores"] = {k: sc.get(k) for k in
+                                   ("graham","buffett","lynch","magic","klarman",
+                                    "divq","trend","taleb","kelly","owners")}
+        d["composite_warning"] = sc.get("composite_coverage_warning")
+        if sc.get("value_trap_score", 0) >= 40:
+            d["value_trap_warning"] = f"Värdefälla-flagga ({sc['value_trap_score']:.0f}/100)"
+    except Exception as e:
+        d["book_error"] = str(e)
+    try:
+        ed = calculate_edge_score(d)
+        d.update({"edge_score": ed.get("edge_score"),
+                  "edge_action": ed.get("action"),
+                  "edge_signal": ed.get("signal_sv")})
+    except Exception:
+        pass
+    # Trim raw _hist från output (för stort)
+    d.pop("_hist", None)
+    # Endast skickera det viktigaste — inte alla 80+ fält
+    keep = {
+        "name", "short_name", "ticker", "country", "currency", "orderbook_id",
+        "last_price", "market_cap", "number_of_owners",
+        "pe_ratio", "price_book_ratio", "ev_ebit_ratio", "ps_ratio",
+        "direct_yield", "dividend_per_share", "return_on_equity",
+        "return_on_assets", "return_on_capital_employed",
+        "debt_to_equity_ratio", "net_debt_ebitda_ratio",
+        "operating_cash_flow", "net_profit", "sales", "eps",
+        "rsi14", "volatility", "sma200",
+        "owners_change_1d", "owners_change_1w", "owners_change_1m",
+        "owners_change_3m", "owners_change_ytd", "owners_change_1y",
+        "one_month_change_pct", "ytd_change_pct", "six_months_change_pct",
+        "edge_score", "edge_action", "edge_signal",
+        "smart_score", "smart_score_yesterday",
+        "book_composite", "book_models_available", "book_model_scores",
+        "composite_warning", "value_trap_warning",
+        "discovery_score", "maturity_score",
+        "insider_buys", "insider_sells", "insider_cluster_buy",
+    }
+    return {k: d.get(k) for k in keep if k in d}
+
+
+def _agent_get_quarterly_trends(db, query):
+    """Returnerar 10 kvartals vinst-/försäljnings-/marginal-utveckling för en aktie."""
+    from edge_db import _ph, get_historical_quarterly
+    ph = _ph()
+    q = f"%{query}%"
+    row = db.execute(
+        f"SELECT orderbook_id, name FROM stocks WHERE name LIKE {ph} OR short_name LIKE {ph} OR ticker LIKE {ph} "
+        f"ORDER BY number_of_owners DESC LIMIT 1",
+        (q, q, q),
+    ).fetchone()
+    if not row:
+        return {"error": f"Ingen aktie hittad för '{query}'"}
+    oid = row["orderbook_id"]
+    name = row["name"]
+    try:
+        rows = get_historical_quarterly(db, oid)
+    except Exception as e:
+        return {"error": f"Kunde inte hämta kvartal: {e}"}
+    if not rows:
+        return {"name": name, "quarterly_data": [], "note": "Ingen kvartalsdata synkad ännu"}
+    # Sortera nyaste först
+    sorted_rows = sorted(rows, key=lambda r: ((r.get("financial_year") or 0),
+                                                int((r.get("quarter") or "Q0").replace("Q",""))),
+                         reverse=True)[:10]
+    return {
+        "name": name,
+        "quarterly_data": [
+            {"period": f"{r['quarter']} {r['financial_year']}",
+             "sales": r.get("sales"), "net_profit": r.get("net_profit"),
+             "profit_margin": r.get("profit_margin"), "eps": r.get("eps"),
+             "roe": r.get("return_on_equity")}
+            for r in sorted_rows
+        ],
+        "note": "Avanza levererar ej cash flow per kvartal — net_profit är proxy för lönsamhet",
+    }
+
+
+def _agent_get_owner_history(db, query):
+    """Returnerar veckovis ägarhistorik (52 veckor) för en aktie."""
+    from edge_db import _ph
+    ph = _ph()
+    q = f"%{query}%"
+    row = db.execute(
+        f"SELECT orderbook_id, name, number_of_owners FROM stocks WHERE name LIKE {ph} OR short_name LIKE {ph} OR ticker LIKE {ph} "
+        f"ORDER BY number_of_owners DESC LIMIT 1",
+        (q, q, q),
+    ).fetchone()
+    if not row:
+        return {"error": f"Ingen aktie hittad för '{query}'"}
+    oid = row["orderbook_id"]
+    hist = db.execute(
+        f"SELECT week_date, number_of_owners FROM owner_history "
+        f"WHERE orderbook_id = {ph} ORDER BY week_date DESC LIMIT 52",
+        (oid,)
+    ).fetchall()
+    return {
+        "name": row["name"],
+        "current_owners": row["number_of_owners"],
+        "weekly_owners": [
+            {"date": h["week_date"], "owners": h["number_of_owners"]}
+            for h in hist
+        ],
+    }
+
+
+def _agent_get_top_stocks(db, criterion="composite", limit=10, country=""):
+    """Topplista efter kriterium: 'composite' (book), 'smart' (smart_score),
+    'edge' (edge_score), 'fcf' (operating_cash_flow), 'roe', 'growth' (1y owner-tillväxt),
+    'momentum' (1m kursförändring)."""
+    from edge_db import _ph
+    ph = _ph()
+    where = "WHERE last_price > 0 AND number_of_owners >= 100"
+    params = []
+    if country:
+        where += f" AND country = {ph}"
+        params.append(country.upper())
+
+    sort_map = {
+        "composite": ("smart_score DESC", None),  # smart_score är vår bästa proxy
+        "smart": ("smart_score DESC NULLS LAST" if False else "smart_score DESC", None),
+        "edge": ("number_of_owners DESC", None),  # edge beräknas live
+        "fcf": ("operating_cash_flow DESC", "operating_cash_flow IS NOT NULL"),
+        "roe": ("return_on_equity DESC", "return_on_equity IS NOT NULL AND return_on_equity < 5"),
+        "growth": ("owners_change_1y DESC", "owners_change_1y IS NOT NULL"),
+        "momentum": ("one_month_change_pct DESC", "one_month_change_pct IS NOT NULL"),
+        "value": ("pe_ratio ASC", "pe_ratio IS NOT NULL AND pe_ratio > 0 AND pe_ratio < 50"),
+    }
+    sort_clause, extra_where = sort_map.get(criterion, sort_map["composite"])
+    if extra_where:
+        where += f" AND {extra_where}"
+    sql = f"SELECT * FROM stocks {where} ORDER BY {sort_clause} LIMIT {ph}"
+    params.append(int(limit))
+    rows = db.execute(sql, params).fetchall()
+    out = []
+    for r in rows:
+        d = dict(r)
+        out.append({
+            "name": d.get("name"), "country": d.get("country"),
+            "last_price": d.get("last_price"), "currency": d.get("currency"),
+            "smart_score": d.get("smart_score"),
+            "pe_ratio": d.get("pe_ratio"),
+            "return_on_equity": d.get("return_on_equity"),
+            "operating_cash_flow": d.get("operating_cash_flow"),
+            "owners_change_1y": d.get("owners_change_1y"),
+            "one_month_change_pct": d.get("one_month_change_pct"),
+            "ytd_change_pct": d.get("ytd_change_pct"),
+            "number_of_owners": d.get("number_of_owners"),
+        })
+    return {"criterion": criterion, "country": country or "all", "stocks": out}
 
 
 @app.route("/api/agent/chat", methods=["POST"])
@@ -3619,6 +3793,365 @@ DEL 9 — DAGENS DB-SNAPSHOT (uppdateras var 5 min)
         return jsonify({"error": str(e)}), 500
 
 
+def _agent_run_tool(tool_name, tool_input):
+    """Kör en tool för agenten — returnerar str-content för Anthropic API."""
+    import json as _json
+    db = get_db()
+    try:
+        if tool_name == "search_stocks":
+            res = _agent_search_stocks(db, tool_input.get("query", ""), tool_input.get("limit", 5))
+        elif tool_name == "get_full_stock":
+            res = _agent_get_full_stock(db, tool_input.get("query", ""))
+        elif tool_name == "get_quarterly_trends":
+            res = _agent_get_quarterly_trends(db, tool_input.get("query", ""))
+        elif tool_name == "get_owner_history":
+            res = _agent_get_owner_history(db, tool_input.get("query", ""))
+        elif tool_name == "get_top_stocks":
+            res = _agent_get_top_stocks(db,
+                criterion=tool_input.get("criterion", "composite"),
+                limit=tool_input.get("limit", 10),
+                country=tool_input.get("country", ""))
+        else:
+            return _json.dumps({"error": f"Okänd tool: {tool_name}"}), True
+        return _json.dumps(res, ensure_ascii=False, default=str), False
+    except Exception as e:
+        import traceback; traceback.print_exc()
+        return _json.dumps({"error": str(e)}), True
+    finally:
+        db.close()
+
+
+def _agent_tools_definition():
+    """Definitionen av alla DB-tools agenten har tillgång till."""
+    return [
+        {
+            "name": "search_stocks",
+            "description": "Sök efter aktier i databasen. Bra för att hitta flera bolag som matchar (t.ex. 'sven bank' → SEB, Swedbank, Handelsbanken). Returnerar grundläggande nyckeltal.",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string", "description": "Bolagsnamn, ticker eller del av namn"},
+                    "limit": {"type": "integer", "description": "Max antal träffar (default 5)", "default": 5},
+                },
+                "required": ["query"],
+            },
+        },
+        {
+            "name": "get_full_stock",
+            "description": "Djupdyk i ETT specifikt bolag. Returnerar ALLA nyckeltal: P/E, P/B, ROE, ROCE, FCF (operating cash flow), book composite (10 modellers viktning), Smart Score, Edge Score, momentum, ägarutveckling, värdefälla-flagga, rsi, etc. Använd när användaren frågar 'hur ser X ut?' eller 'är X köpvärt?'.",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string", "description": "Bolagsnamn eller ticker (matchar närmaste)"},
+                },
+                "required": ["query"],
+            },
+        },
+        {
+            "name": "get_quarterly_trends",
+            "description": "Hämtar 10 senaste kvartalens nettoresultat, omsättning, vinstmarginal, EPS för ETT bolag. Bra för att svara på frågor om 'har X förbättrat sina marginaler?', 'tappar bolaget tempo?', 'vinst-trend de senaste två åren'.",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string", "description": "Bolagsnamn eller ticker"},
+                },
+                "required": ["query"],
+            },
+        },
+        {
+            "name": "get_owner_history",
+            "description": "Veckovis ägarhistorik (52 veckor) för ETT bolag — visar om Avanza-ägarna ackumulerar eller säljer. Smart money-indikator. Bra för 'lockar X smart money?', 'flyr ägarna?'.",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string", "description": "Bolagsnamn eller ticker"},
+                },
+                "required": ["query"],
+            },
+        },
+        {
+            "name": "get_top_stocks",
+            "description": "Topplista efter kriterium. Använd när användaren frågar 'vilka är bäst på X?'. criterion: 'composite' (smart score), 'smart' (smart_score), 'fcf' (op cash flow), 'roe' (return on equity), 'growth' (ägartillväxt 1y), 'momentum' (1m kursvinst), 'value' (lägst P/E).",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "criterion": {"type": "string", "description": "composite|smart|fcf|roe|growth|momentum|value", "default": "composite"},
+                    "limit": {"type": "integer", "description": "Antal aktier (default 10)", "default": 10},
+                    "country": {"type": "string", "description": "Landskod SE/US/DE/etc (tom = alla)", "default": ""},
+                },
+                "required": ["criterion"],
+            },
+        },
+        # Anthropic-hosted web search — för forum, Reddit, nyheter, blogginlägg
+        {
+            "type": "web_search_20250305",
+            "name": "web_search",
+            "max_uses": 5,
+        },
+    ]
+
+
+@app.route("/api/agent/chat/stream", methods=["POST"])
+def api_agent_chat_stream():
+    """Streaming agent — använder SSE för löpande textgenerering + tools.
+
+    Body samma som /api/agent/chat. Returnerar text/event-stream.
+    Event-typer som skickas till klienten:
+        - {type: 'tool_use', name: 'search_stocks', input: {...}}
+        - {type: 'tool_result', name: 'search_stocks', count: N}
+        - {type: 'text_delta', text: 'chunk text'}
+        - {type: 'usage', cache_read: N, cache_creation: N, output: N}
+        - {type: 'done', model: '...'}
+        - {type: 'error', error: '...'}
+    """
+    import httpx, json as _json
+
+    if not CLAUDE_API_KEY:
+        return jsonify({"error": "ANTHROPIC_API_KEY saknas"}), 500
+
+    data = request.json or {}
+    message = (data.get("message") or "").strip()
+    history = data.get("history") or []
+    image_b64 = data.get("image_b64")
+    image_media_type = data.get("image_media_type", "image/png")
+
+    if not message and not image_b64:
+        return jsonify({"error": "Tomt meddelande"}), 400
+
+    # Bygg system-prompt med DB-kontext (samma som non-streaming-routen)
+    db = get_db()
+    try:
+        ctx = _agent_context_cached(db)
+        from edge_db import get_stats as _gs
+        stats = _gs(db)
+    finally:
+        db.close()
+
+    static_system = _AGENT_KNOWLEDGE_BASE + f"""
+
+══════════════════════════════════════════════════════════════
+DEL 8 — DATABAS-SAMMANFATTNING
+══════════════════════════════════════════════════════════════
+- {stats.get('total_stocks', 0):,} aktier (SE/US/EU)
+- {stats.get('total_owners', 0):,.0f} Avanza-ägare totalt
+- 10 års historik per aktie
+- Daglig owner-momentum + insider-transaktioner
+
+DU HAR FÖLJANDE TOOLS:
+- `search_stocks(query, limit)` — hitta flera bolag som matchar
+- `get_full_stock(query)` — alla nyckeltal för ETT bolag (BÄSTA för djupanalys)
+- `get_quarterly_trends(query)` — 10 kvartals vinst/marginal-utveckling
+- `get_owner_history(query)` — 52 veckors ägartrend (smart money)
+- `get_top_stocks(criterion, limit, country)` — topplistor
+- `web_search(query)` — Reddit/forum/nyheter/blogginlägg via web search
+
+VID FRÅGOR OM KÖPVÄRDE: Använd ALLTID `get_full_stock(name)` först, sen
+`get_quarterly_trends(name)` om vinst-trend är relevant, och `web_search(name + ' aktie diskussion')`
+om användaren vill veta vad andra säger.
+
+FORMATKRAV (mycket viktigt):
+- Skriv svaret i strukturerad markdown med tabeller och rubriker
+- Använd `### Rubrik` för sektioner (inte stora ## eftersom UI:t kompakteras)
+- Tabellformat: `| Kol1 | Kol2 |\\n|---|---|\\n| val | val |`
+- Fetstilta nyckeltal i tabeller (`**12.3**`)
+- Korta punktlistor när lämpligt (`- punkt`)
+- Avsluta ALLTID med en KLAR rekommendation: "Slutsats: KÖP / VÄNTA / UNDVIK" + 1 mening varför
+- Använd 2-4 emojis sparsamt (inte i varje rad)
+- Skriv på svenska, talspråkligt men professionellt
+"""
+
+    dynamic_system = f"""\
+══════════════════════════════════════════════════════════════
+DEL 9 — DAGENS DB-SNAPSHOT (uppdateras var 5 min)
+══════════════════════════════════════════════════════════════
+{ctx}
+"""
+
+    # Bygg user message
+    user_content = []
+    if image_b64:
+        user_content.append({"type": "image", "source": {"type": "base64",
+                              "media_type": image_media_type, "data": image_b64}})
+    if message:
+        user_content.append({"type": "text", "text": message})
+
+    messages = []
+    for h in history:
+        if h.get("role") in ("user", "assistant") and h.get("content"):
+            messages.append({"role": h["role"], "content": h["content"]})
+    messages.append({"role": "user", "content": user_content})
+
+    tools = _agent_tools_definition()
+    MODEL = os.environ.get("AGENT_MODEL", "claude-opus-4-5")
+    headers = {
+        "x-api-key": CLAUDE_API_KEY,
+        "anthropic-version": "2023-06-01",
+        "content-type": "application/json",
+    }
+
+    def _sse(obj):
+        return f"data: {_json.dumps(obj, ensure_ascii=False, default=str)}\n\n"
+
+    def generate():
+        nonlocal MODEL
+        try:
+            for _iter in range(8):  # max 8 iterationer (multi-tool)
+                payload = {
+                    "model": MODEL,
+                    "max_tokens": 3072,
+                    "stream": True,
+                    "system": [
+                        {"type": "text", "text": static_system,
+                         "cache_control": {"type": "ephemeral"}},
+                        {"type": "text", "text": dynamic_system,
+                         "cache_control": {"type": "ephemeral"}},
+                    ],
+                    "messages": messages,
+                    "tools": tools,
+                }
+
+                # Streama från Anthropic API
+                accumulator_blocks = []   # vi rekonstruerar content för messages.append
+                current_block = None
+                stop_reason = None
+                usage_info = {}
+
+                try:
+                    with httpx.stream("POST", "https://api.anthropic.com/v1/messages",
+                                       headers=headers, json=payload, timeout=120.0) as resp:
+                        if resp.status_code != 200:
+                            # Fallback om Opus 4.5 inte finns
+                            err_text = resp.read().decode("utf-8", errors="ignore")
+                            if _iter == 0 and resp.status_code in (404, 400) and MODEL.startswith("claude-opus"):
+                                MODEL = "claude-sonnet-4-20250514"
+                                payload["model"] = MODEL
+                                yield _sse({"type": "info", "message": f"Bytte till {MODEL}"})
+                                continue  # börja om iterationen med ny modell
+                            yield _sse({"type": "error", "error": f"Claude API: {resp.status_code} {err_text[:300]}"})
+                            return
+
+                        for line in resp.iter_lines():
+                            if not line or not line.startswith("data:"):
+                                continue
+                            chunk = line[5:].strip()
+                            if not chunk or chunk == "[DONE]":
+                                continue
+                            try:
+                                event = _json.loads(chunk)
+                            except Exception:
+                                continue
+                            etype = event.get("type")
+
+                            if etype == "message_start":
+                                msg = event.get("message", {})
+                                u = msg.get("usage", {}) or {}
+                                usage_info["input_tokens"] = u.get("input_tokens")
+                                usage_info["cache_read_input_tokens"] = u.get("cache_read_input_tokens")
+                                usage_info["cache_creation_input_tokens"] = u.get("cache_creation_input_tokens")
+
+                            elif etype == "content_block_start":
+                                idx = event.get("index", 0)
+                                cb = event.get("content_block", {})
+                                cb_type = cb.get("type")
+                                if cb_type == "text":
+                                    current_block = {"type": "text", "text": ""}
+                                elif cb_type == "tool_use":
+                                    current_block = {"type": "tool_use", "id": cb.get("id"),
+                                                     "name": cb.get("name"), "input": {}}
+                                    yield _sse({"type": "tool_use_start", "name": cb.get("name")})
+                                elif cb_type == "server_tool_use":
+                                    # Anthropic web_search är server-side
+                                    current_block = {"type": "server_tool_use", "id": cb.get("id"),
+                                                     "name": cb.get("name"), "input": {}}
+                                    yield _sse({"type": "tool_use_start", "name": cb.get("name") or "web_search"})
+                                elif cb_type == "web_search_tool_result":
+                                    current_block = {"type": "web_search_tool_result",
+                                                     "tool_use_id": cb.get("tool_use_id"),
+                                                     "content": cb.get("content")}
+                                while len(accumulator_blocks) <= idx:
+                                    accumulator_blocks.append(None)
+                                accumulator_blocks[idx] = current_block
+
+                            elif etype == "content_block_delta":
+                                idx = event.get("index", 0)
+                                delta = event.get("delta", {})
+                                dtype = delta.get("type")
+                                if dtype == "text_delta":
+                                    text = delta.get("text", "")
+                                    if accumulator_blocks[idx]:
+                                        accumulator_blocks[idx]["text"] = (accumulator_blocks[idx].get("text") or "") + text
+                                    yield _sse({"type": "text_delta", "text": text})
+                                elif dtype == "input_json_delta":
+                                    # Tool input byggs upp som JSON-string
+                                    if accumulator_blocks[idx]:
+                                        accumulator_blocks[idx].setdefault("_partial_json", "")
+                                        accumulator_blocks[idx]["_partial_json"] += delta.get("partial_json", "")
+
+                            elif etype == "content_block_stop":
+                                idx = event.get("index", 0)
+                                blk = accumulator_blocks[idx] if idx < len(accumulator_blocks) else None
+                                if blk and blk.get("type") in ("tool_use", "server_tool_use"):
+                                    pj = blk.pop("_partial_json", "")
+                                    if pj:
+                                        try:
+                                            blk["input"] = _json.loads(pj)
+                                        except Exception:
+                                            blk["input"] = {}
+
+                            elif etype == "message_delta":
+                                d = event.get("delta", {})
+                                if d.get("stop_reason"):
+                                    stop_reason = d["stop_reason"]
+                                u = event.get("usage", {})
+                                if u.get("output_tokens") is not None:
+                                    usage_info["output_tokens"] = u["output_tokens"]
+
+                            elif etype == "message_stop":
+                                pass
+                except Exception as e:
+                    import traceback; traceback.print_exc()
+                    yield _sse({"type": "error", "error": f"Streaming-fel: {e}"})
+                    return
+
+                # Tool use → kör tools, fortsätt loop
+                if stop_reason == "tool_use":
+                    # Filtrera bort None-block
+                    asst_content = [b for b in accumulator_blocks if b]
+                    messages.append({"role": "assistant", "content": asst_content})
+                    tool_results = []
+                    for blk in asst_content:
+                        if blk.get("type") == "tool_use":
+                            tname = blk.get("name")
+                            tinput = blk.get("input", {})
+                            yield _sse({"type": "tool_running", "name": tname, "input": tinput})
+                            content_str, is_err = _agent_run_tool(tname, tinput)
+                            yield _sse({"type": "tool_result", "name": tname,
+                                       "is_error": is_err, "preview": content_str[:150]})
+                            tool_results.append({"type": "tool_result",
+                                                 "tool_use_id": blk.get("id"),
+                                                 "content": content_str,
+                                                 "is_error": is_err})
+                        # server_tool_use (web_search) hanteras automatiskt av Anthropic — ingen action här
+                    if tool_results:
+                        messages.append({"role": "user", "content": tool_results})
+                    continue
+
+                # end_turn → vi är klara
+                yield _sse({"type": "usage", **usage_info})
+                yield _sse({"type": "done", "model": MODEL})
+                return
+
+            # Max iterations nådda
+            yield _sse({"type": "error", "error": "Max tool-iterationer nått"})
+        except Exception as e:
+            import traceback; traceback.print_exc()
+            yield _sse({"type": "error", "error": str(e)})
+
+    return Response(stream_with_context(generate()),
+                    mimetype="text/event-stream",
+                    headers={"X-Accel-Buffering": "no", "Cache-Control": "no-cache"})
+
+
 # ── Startup (runs for both gunicorn and direct execution) ──
 
 def _startup():
@@ -3704,36 +4237,59 @@ def _startup():
     # använder 10-års-scoring utan att användaren behöver POST:a manuellt.
     try:
         if not _hist_sync_state.get("running"):
-            # Hoppa om vi kört de senaste 20 timmarna (max_age=1 dag med marginal)
             db = get_db()
             try:
                 from edge_db import _fetchone, _ph
-                recent = _fetchone(
-                    db,
+                # Total täckning — hur många aktier har historisk data?
+                total_row = _fetchone(db,
+                    "SELECT COUNT(DISTINCT orderbook_id) as n FROM historical_annual")
+                total_with_hist = 0
+                if total_row:
+                    try: total_with_hist = total_row["n"] or 0
+                    except (IndexError, KeyError): total_with_hist = 0
+
+                # Färsk data senaste 20 timmarna?
+                recent = _fetchone(db,
                     f"SELECT COUNT(*) as n FROM historical_fetch_log "
                     f"WHERE last_fetch_at > {_ph()} AND last_fetch_status = 'ok'",
-                    ((datetime.now() - timedelta(hours=20)).isoformat(),),
-                )
-                # sqlite3.Row stödjer [] men inte .get()
-                n = 0
+                    ((datetime.now() - timedelta(hours=20)).isoformat(),))
+                n_recent = 0
                 if recent:
-                    try: n = recent["n"] or 0
-                    except (IndexError, KeyError): n = 0
-                already_fresh = n >= 300
+                    try: n_recent = recent["n"] or 0
+                    except (IndexError, KeyError): n_recent = 0
             finally:
                 db.close()
-            if already_fresh:
-                print("  ✓ Historisk data redan färsk — skippar auto-sync vid start")
-            else:
-                t = threading.Thread(
-                    target=_run_hist_sync,
-                    kwargs={"limit": None, "max_age_days": 7, "tier": "priority"},
-                    daemon=True,
-                )
+
+            # Tier-val baserat på täckning:
+            # - Tom DB (< 100 aktier med historik) → FULL bootstrap (~10-15 min)
+            #   Händer på Railway första deploy, eller på fresh DB
+            # - Glesa data (100-2000 aktier) → EXTENDED (~5 min)
+            # - Bra täckning (>2000) men gammal → PRIORITY refresh (~2 min)
+            # - Färsk data (>=300 hits senaste 20h) → skip
+            if n_recent >= 300 and total_with_hist >= 2000:
+                print(f"  ✓ Historisk data färsk ({total_with_hist:,} aktier täckt) — skippar auto-sync")
+            elif total_with_hist < 100:
+                print(f"  ⚠ Historisk data saknas ({total_with_hist} aktier) — startar FULL bootstrap (~10-15 min)")
+                t = threading.Thread(target=_run_hist_sync,
+                    kwargs={"limit": None, "max_age_days": 30, "tier": "full"},
+                    daemon=True)
                 t.start()
-                print("  ✓ Auto-sync av historisk data startad i bakgrunden (priority tier)")
+                print("  ✓ Auto-sync FULL TIER startad — UI visar 'Ingen historisk data' tills klart")
+            elif total_with_hist < 2000:
+                print(f"  ⚠ Glesa data ({total_with_hist} aktier) — startar EXTENDED tier (~5 min)")
+                t = threading.Thread(target=_run_hist_sync,
+                    kwargs={"limit": None, "max_age_days": 7, "tier": "extended"},
+                    daemon=True)
+                t.start()
+            else:
+                print(f"  ✓ Bra täckning ({total_with_hist:,} aktier) — kör priority refresh i bakgrund")
+                t = threading.Thread(target=_run_hist_sync,
+                    kwargs={"limit": None, "max_age_days": 7, "tier": "priority"},
+                    daemon=True)
+                t.start()
     except Exception as e:
         print(f"  ⚠ Kunde inte starta auto-sync: {e}")
+        import traceback; traceback.print_exc()
 
     # ── Warmup-tråd: preloada både DB-caches OCH API-route-caches vid boot.
     # Strategi:
