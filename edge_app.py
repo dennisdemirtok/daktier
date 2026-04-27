@@ -14,8 +14,24 @@ import sys
 import os
 import threading
 import time as _time
-from datetime import datetime
+import requests
+from datetime import datetime, timedelta
 from flask import Flask, render_template, jsonify, request
+
+# Ladda .env automatiskt — appen behöver ANTHROPIC_API_KEY för AI-funktioner
+try:
+    from dotenv import load_dotenv
+    load_dotenv(os.path.join(os.path.dirname(__file__), '.env'))
+except ImportError:
+    # Manuell fallback
+    _env_path = os.path.join(os.path.dirname(__file__), '.env')
+    if os.path.exists(_env_path):
+        with open(_env_path) as _f:
+            for _line in _f:
+                _line = _line.strip()
+                if _line and not _line.startswith('#') and '=' in _line:
+                    _k, _v = _line.split('=', 1)
+                    os.environ.setdefault(_k.strip(), _v.strip().strip('"').strip("'"))
 
 from edge_db import get_db, fetch_all_stocks_from_avanza, fetch_insider_transactions
 from edge_db import search_stocks, get_trending, search_insiders, get_stats, get_signals
@@ -50,6 +66,12 @@ def _clear_api_cache():
     _api_cache.clear()
     _maturity_cache['data'] = None
     _maturity_cache['ts'] = 0
+    # Invalidera även edge_db-interna caches (maturity + insider-summary)
+    try:
+        from edge_db import _invalidate_expensive_caches
+        _invalidate_expensive_caches()
+    except Exception:
+        pass
 
 
 # ── Maturity scores cache ─────────────────────────────────
@@ -462,15 +484,59 @@ def api_stock_detail(orderbook_id):
         if not row:
             return jsonify({"error": "not found"}), 404
         d = dict(row)
+        # On-demand historisk fetch om det saknas (snabb, cache:as 7 dagar)
+        try:
+            from edge_db import (_attach_hist, get_historical_annual,
+                                  get_historical_quarterly,
+                                  ensure_historical_for_stock)
+            oid = d.get("orderbook_id")
+            if oid is not None:
+                # Tyst — om fetch fails så fortsätter vi ändå med TTM-scoring
+                try:
+                    ensure_historical_for_stock(db, oid, max_age_days=7)
+                except Exception as e:
+                    print(f"[stock detail] on-demand fetch failed: {e}", file=sys.stderr)
+            _attach_hist(db, d)
+            d["historical_annual"] = get_historical_annual(db, oid)
+            d["historical_quarterly"] = get_historical_quarterly(db, oid)
+            if d.get("_hist"):
+                # Exponera via tydligt namn för UI
+                d["historical_context"] = d.pop("_hist")
+        except Exception as e:
+            print(f"[stock detail] hist failed: {e}", file=sys.stderr)
         # Berika med book composite så drawer kan visa det
         try:
+            # Reattach internal _hist for scoring (removed above for API cleanliness)
+            if "historical_context" in d:
+                d["_hist"] = d["historical_context"]
             sc = _score_book_models(d)
+            if "_hist" in d and "historical_context" not in d:
+                d["historical_context"] = d["_hist"]
+            d.pop("_hist", None)
             d["book_composite"] = round(sc["composite"], 1) if sc.get("composite") is not None else None
             d["book_models_available"] = sc.get("models_available", 0)
             d["book_model_scores"] = {
                 m["key"]: round(sc[m["key"]], 1) if sc.get(m["key"]) is not None else None
                 for m in BOOK_MODELS
             }
+            if sc.get("value_trap_score"):
+                d["value_trap_score"] = sc["value_trap_score"]
+            if sc.get("graham_normalized_pe"):
+                d["graham_normalized_pe"] = sc["graham_normalized_pe"]
+            if sc.get("buffett_uses_hist_roe"):
+                d["buffett_uses_hist_roe"] = True
+            # Beräkna köpzon så detaljvyn kan visa riktpris
+            try:
+                from edge_db import _compute_buy_zone
+                # _hist behövs igen för korrekt simulation
+                if "historical_context" in d and "_hist" not in d:
+                    d["_hist"] = d["historical_context"]
+                bz = _compute_buy_zone(d)
+                d.pop("_hist", None)
+                if bz is not None:
+                    d["buy_zone"] = bz
+            except Exception as e:
+                print(f"[stock detail] buy_zone failed: {e}", file=sys.stderr)
         except Exception as e:
             print(f"[stock detail] composite failed: {e}", file=sys.stderr)
         return jsonify(d)
@@ -812,6 +878,11 @@ def api_portfolio():
     Simuleringsportfölj — Trav-modellen vs Magic Formula.
     Returnerar två portföljer med aktuell data.
     """
+    ck = "portfolio|v2"
+    cached, hit = _cached_response(ck)
+    if hit:
+        return jsonify(cached)
+
     db = get_db()
 
     # ── TRAV-MODELLEN: Nuvarande ENTRY-signaler (Global) ──
@@ -896,11 +967,13 @@ def api_portfolio():
 
     db.close()
 
-    return jsonify({
+    result = {
         "trav": {"stocks": trav_stocks, "stats": port_stats(trav_stocks)},
         "magic": {"stocks": magic_stocks, "stats": port_stats(magic_stocks)},
         "date": datetime.now().strftime("%Y-%m-%d"),
-    })
+    }
+    _set_cache(ck, result)
+    return jsonify(result)
 
 
 import re as _re_shareclass
@@ -1379,6 +1452,19 @@ def _sim_get_state(db):
         sells_val = sum(t["value"] for t in pt if t["trade_type"] == "SELL")
         cap = result["portfolios"].get(port_name, {}).get("start_capital", 1_000_000)
         result["cash"][port_name] = cap - buys + sells_val
+
+    # ── Berika varje portfölj med "totalt-värde-inkl-kassa" och avkastning på det.
+    # Detta är vad användaren förväntar sig se: Buffett Quality som har stor kassa
+    # ska inte visa -27% bara för att aktiedelen är ner — kassan dämpar tappet.
+    for pn, pd in result["portfolios"].items():
+        cap = pd["start_capital"]
+        cash_amt = result["cash"].get(pn, 0) or 0
+        holdings_val = pd["total_current_value"] or 0
+        total = holdings_val + cash_amt
+        pd["total_value_with_cash"] = total
+        pd["total_gain_with_cash"] = total - cap
+        pd["total_return_with_cash_pct"] = (total - cap) / cap if cap > 0 else 0
+        pd["cash_pct"] = (cash_amt / total) if total > 0 else 0
 
     return result
 
@@ -2525,6 +2611,141 @@ def api_refresh_insiders():
     return jsonify({"status": "refreshing_insiders"})
 
 
+# ── Historical financials (10-års fundamentaldata från Avanza /analysis) ──
+
+_hist_sync_state = {"running": False, "progress": 0, "total": 0, "current": "", "tier": None}
+
+
+def _run_hist_sync(limit=None, max_age_days=7, tier="priority"):
+    """Background-job: synka 10-års fundamentaldata från Avanza /analysis."""
+    from edge_db import sync_historical_financials
+    _hist_sync_state["running"] = True
+    _hist_sync_state["progress"] = 0
+    _hist_sync_state["total"] = 0
+    _hist_sync_state["current"] = ""
+    _hist_sync_state["tier"] = tier
+    db = get_db()
+    try:
+        def cb(current, total, name):
+            _hist_sync_state["progress"] = current
+            _hist_sync_state["total"] = total
+            _hist_sync_state["current"] = name
+        result = sync_historical_financials(
+            db, limit=limit, max_age_days=max_age_days,
+            progress_callback=cb, tier=tier,
+        )
+        _hist_sync_state["last_result"] = result
+        print(f"[HIST-SYNC {tier}] klar: {result}")
+    except Exception as e:
+        print(f"[HIST-SYNC {tier}] fel: {e}")
+        _hist_sync_state["last_error"] = str(e)
+    finally:
+        db.close()
+        _hist_sync_state["running"] = False
+
+
+@app.route("/api/refresh-historical", methods=["POST"])
+def api_refresh_historical():
+    """Synka 10-års EPS/ROE/utdelning från Avanza.
+
+    Body (JSON, valfritt):
+        tier: "priority" (default, ~500 aktier, ~2 min) | "extended" (~2000, ~8 min) | "full" (alla)
+        limit: int (override antal)
+        max_age_days: int (default 7, hoppa över nyligen synkade)
+    """
+    if _hist_sync_state["running"]:
+        return jsonify({"status": "already_running", "progress": _hist_sync_state})
+    body = request.json if request.is_json and request.json else {}
+    limit = body.get("limit")
+    max_age = body.get("max_age_days", 7)
+    tier = body.get("tier", "priority")
+    if tier not in ("priority", "extended", "full"):
+        return jsonify({"error": f"invalid tier: {tier}"}), 400
+    t = threading.Thread(target=_run_hist_sync, args=(limit, max_age, tier), daemon=True)
+    t.start()
+    return jsonify({"status": "started", "tier": tier})
+
+
+@app.route("/api/refresh-historical/status")
+def api_refresh_historical_status():
+    return jsonify(_hist_sync_state)
+
+
+@app.route("/api/watchlist/near-buy-zone")
+def api_watchlist_near_buy_zone():
+    """Aktier nära köpzon — "intressant under dagen"-feed.
+
+    Query-parametrar:
+        limit         — max antal träffar (default 30)
+        min_owners    — minst X ägare (default 200)
+        min_composite — lägsta composite för att ens overvägas (default 55)
+        max_distance  — hur långt bort (i %) aktien får vara från köpzon (default 10)
+        country       — filtrera på land (SE/US/…)
+    """
+    ck = f"near-buy-zone|{request.query_string.decode()}"
+    cached, hit = _cached_response(ck)
+    if hit:
+        return jsonify(cached)
+
+    from edge_db import get_near_buy_zone
+    db = get_db()
+    try:
+        limit = int(request.args.get("limit", 30))
+        min_owners = int(request.args.get("min_owners", 200))
+        min_composite = float(request.args.get("min_composite", 55))
+        max_distance = float(request.args.get("max_distance", 10))
+        country = request.args.get("country", "")
+        results = get_near_buy_zone(
+            db,
+            limit=limit,
+            min_owners=min_owners,
+            min_composite=min_composite,
+            max_distance_pct=max_distance,
+            country=country,
+        )
+        # Rensa interna fält innan JSON
+        for r in results:
+            r.pop("_hist", None)
+            r.pop("_buy_zone", None)
+        payload = {
+            "results": results,
+            "count": len(results),
+            "params": {
+                "limit": limit, "min_owners": min_owners,
+                "min_composite": min_composite, "max_distance": max_distance,
+                "country": country,
+            },
+        }
+        _set_cache(ck, payload)
+        return jsonify(payload)
+    except Exception as e:
+        print(f"[near-buy-zone] error: {e}", file=sys.stderr)
+        import traceback; traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
+    finally:
+        db.close()
+
+
+@app.route("/api/stock/<orderbook_id>/historical")
+def api_stock_historical(orderbook_id):
+    """Returnera 10-års årlig + 10-kvartals data för en aktie."""
+    from edge_db import get_historical_annual, get_historical_quarterly, _hist_context
+    db = get_db()
+    try:
+        oid = int(orderbook_id) if str(orderbook_id).isdigit() else orderbook_id
+        annual = get_historical_annual(db, oid)
+        quarterly = get_historical_quarterly(db, oid)
+        ctx = _hist_context(db, oid)
+        return jsonify({
+            "orderbook_id": oid,
+            "annual": annual,
+            "quarterly": quarterly,
+            "context": ctx,
+        })
+    finally:
+        db.close()
+
+
 # ── AI Morning Brief ─────────────────────────────────────
 
 def _gather_brief_data(db):
@@ -2847,6 +3068,278 @@ Svara EXAKT i JSON:
         return jsonify({"error": str(e)}), 500
 
 
+# ── AI Agent (chat med Claude Opus + DB-kontext) ─────────────
+
+def _build_agent_context(db, max_per_list=20):
+    """Bygger en text-snapshot av databasens viktigaste topplistor som
+    Claude får som kontext. Cachas 5 min."""
+    from edge_db import (
+        get_signals, get_books_portfolio_top10, get_graham_defensive_portfolio,
+        get_quality_concentrated_portfolio, get_daily_picks, search_stocks,
+    )
+    parts = []
+
+    # Topp Edge Signals (Sverige)
+    try:
+        sigs, _ = get_signals(db, country="SE", sort="meta", order="desc",
+                              limit=max_per_list, offset=0, min_owners=100)
+        lines = []
+        for s in sigs[:max_per_list]:
+            lines.append(
+                f"  - {s.get('name')} ({s.get('country')}) — meta={s.get('meta_score',0):.0f}, "
+                f"edge={s.get('edge_score',0):.0f}, action={s.get('action','')}, "
+                f"P/E={s.get('pe_ratio') or '-'}, ROE={(s.get('return_on_equity') or 0)*100:.0f}%, "
+                f"pris={s.get('last_price') or '-'} {s.get('currency') or ''}"
+            )
+        parts.append("TOPPEN AV EDGE SIGNALS (Sverige, sorterat på Meta Score):\n" + "\n".join(lines))
+    except Exception as e:
+        parts.append(f"(Kunde inte hämta signaler: {e})")
+
+    # Bokstrategier
+    try:
+        books = get_books_portfolio_top10(db)
+        lines = [f"  - {s.get('name')} — composite={s.get('composite_score',0):.0f}, "
+                 f"P/E={s.get('pe_ratio') or '-'}, P/B={s.get('price_book_ratio') or '-'}"
+                 for s in (books or [])[:10]]
+        parts.append("BÖCKERNAS TOP-10 (composite över Graham/Buffett/Lynch/Greenblatt/Klarman/Bogle/Stinsen/Taleb/Kelly/Spiltan):\n" + "\n".join(lines))
+    except Exception:
+        pass
+
+    # Daily picks
+    try:
+        picks = get_daily_picks(db, limit=10, min_owners=200, min_composite=68, min_models=6)
+        lines = [f"  - {s.get('name')} — composite={s.get('composite_score',0):.0f}, "
+                 f"konsensus_modeller={s.get('models_passing',0)}/{s.get('models_available',0)}, "
+                 f"pris={s.get('last_price') or '-'}"
+                 for s in (picks or [])[:10]]
+        parts.append("DAGENS KÖP-REKOMMENDATIONER (high-conviction, ≥6 modeller):\n" + "\n".join(lines))
+    except Exception:
+        pass
+
+    return "\n\n".join(parts)
+
+
+_AGENT_CTX_CACHE = {"data": None, "ts": 0.0}
+_AGENT_CTX_TTL = 300  # 5 min
+
+def _agent_context_cached(db):
+    now = _time.time()
+    if _AGENT_CTX_CACHE["data"] and (now - _AGENT_CTX_CACHE["ts"]) < _AGENT_CTX_TTL:
+        return _AGENT_CTX_CACHE["data"]
+    data = _build_agent_context(db)
+    _AGENT_CTX_CACHE["data"] = data
+    _AGENT_CTX_CACHE["ts"] = now
+    return data
+
+
+def _agent_search_stocks(db, query, limit=15):
+    """Sök i DB:n efter aktier vars namn/short_name/ticker matchar — för tool use."""
+    from edge_db import _ph
+    ph = _ph()
+    q = f"%{query}%"
+    rows = db.execute(
+        f"SELECT * FROM stocks WHERE name LIKE {ph} OR short_name LIKE {ph} OR ticker LIKE {ph} "
+        f"ORDER BY number_of_owners DESC LIMIT {ph}",
+        (q, q, q, limit),
+    ).fetchall()
+    out = []
+    for r in rows:
+        d = dict(r)
+        try:
+            ed = calculate_edge_score(d)
+            d["edge_score"] = round(ed.get("edge_score", 0), 1)
+            d["action"] = ed.get("action", "")
+        except Exception:
+            d["edge_score"] = None
+        # Trimma till nyckelfält
+        out.append({
+            "name": d.get("name"), "country": d.get("country"),
+            "ticker": d.get("ticker"), "last_price": d.get("last_price"),
+            "currency": d.get("currency"), "number_of_owners": d.get("number_of_owners"),
+            "pe_ratio": d.get("pe_ratio"), "price_book_ratio": d.get("price_book_ratio"),
+            "ev_ebit_ratio": d.get("ev_ebit_ratio"), "direct_yield": d.get("direct_yield"),
+            "return_on_equity": d.get("return_on_equity"),
+            "operating_cash_flow": d.get("operating_cash_flow"),
+            "net_profit": d.get("net_profit"), "sales": d.get("sales"),
+            "market_cap": d.get("market_cap"),
+            "ytd_change_pct": d.get("ytd_change_pct"),
+            "one_month_change_pct": d.get("one_month_change_pct"),
+            "edge_score": d.get("edge_score"), "action": d.get("action"),
+        })
+    return out
+
+
+@app.route("/api/agent/chat", methods=["POST"])
+def api_agent_chat():
+    """AI Agent — chat med Claude Opus över hela aktiedatabasen.
+
+    Body: {message: str, history: [{role, content}], image_b64: str? }
+    """
+    import httpx, json as _json
+
+    if not CLAUDE_API_KEY:
+        return jsonify({"error": "ANTHROPIC_API_KEY saknas"}), 500
+
+    data = request.json or {}
+    message = (data.get("message") or "").strip()
+    history = data.get("history") or []
+    image_b64 = data.get("image_b64")
+    image_media_type = data.get("image_media_type", "image/png")
+
+    if not message and not image_b64:
+        return jsonify({"error": "Tomt meddelande"}), 400
+
+    # Bygg system-prompt med DB-kontext
+    db = get_db()
+    try:
+        ctx = _agent_context_cached(db)
+        from edge_db import get_stats as _gs
+        stats = _gs(db)
+    finally:
+        db.close()
+
+    system_prompt = f"""Du är **Edge Agent** — en personlig analytiker för Dennis aktiedashboard.
+
+Du har full tillgång till en svensk databas över Avanza-noterade aktier:
+- {stats.get('total_stocks', 0):,} aktier (SE/US/EU)
+- {stats.get('total_owners', 0):,.0f} ägare totalt
+- 10 års historik (income statement, balance sheet, cash flow)
+- Daglig owner-momentum (snapshot av ägarförändring)
+- Insider-transaktioner från Finansinspektionen
+
+DU KAN ANVÄNDA TOOL `search_stocks(query)` för att slå upp specifika bolag i databasen — t.ex. när användaren nämner en aktie vid namn eller ticker. Returnerar exakta nyckeltal från DB.
+
+EDGE SCORE-MODELLERNA (kort):
+- **Edge Score** (Trav-modellen): ägardriven momentum + fundament. 80-100 = stark köp.
+- **Meta Score**: viktat snitt av Trav (30%) + DSM (25%) + ACE (25%) + Magic (20%).
+- **Composite (Bok)**: snitt över 10 bok-modeller — Graham Defensive, Buffett Quality, Lynch PEG, Magic Formula, Klarman Margin of Safety, Bogle Index, Spiltan Quality, Taleb Barbell, Kelly Sizing, Utdelningskvalitet.
+- **Composite ≥ 75 = high-conviction köp**, 65-74 = bra, 50-64 = neutralt, <50 = undvik.
+
+BEAKTA dessa principer i dina svar:
+- Var konkret med siffror (alltid valuta-suffix). Avstå från vag prognos.
+- Om data saknas, säg det rakt — gissa inte.
+- Föredra DB-data via search_stocks för att svara på "har bolag X bra cash flow?" — citera exakta siffror.
+- Om användaren laddar upp en portföljbild → tolka innehåll och kommentera viktning, koncentration, kvalitet enligt bokmodellerna.
+- Skriv på svenska. Använd punktlistor och fetstilta nyckeltal.
+
+NUVARANDE DB-SNAPSHOT (för referens utan att slå upp):
+{ctx}
+"""
+
+    # Bygg user message med valfri bild
+    user_content = []
+    if image_b64:
+        user_content.append({
+            "type": "image",
+            "source": {"type": "base64", "media_type": image_media_type, "data": image_b64},
+        })
+    if message:
+        user_content.append({"type": "text", "text": message})
+
+    # Sammanställ messages
+    messages = []
+    for h in history:
+        if h.get("role") in ("user", "assistant") and h.get("content"):
+            messages.append({"role": h["role"], "content": h["content"]})
+    messages.append({"role": "user", "content": user_content})
+
+    # Tool definition
+    tools = [{
+        "name": "search_stocks",
+        "description": "Sök efter aktier i databasen. Returnerar nyckeltal som P/E, P/B, ROE, OCF, kursförändring, ägare m.m.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string", "description": "Bolagsnamn, ticker eller del av namn"},
+                "limit": {"type": "integer", "description": "Max antal träffar (default 5)", "default": 5},
+            },
+            "required": ["query"],
+        },
+    }]
+
+    MODEL = os.environ.get("AGENT_MODEL", "claude-opus-4-5")
+    headers = {
+        "x-api-key": CLAUDE_API_KEY,
+        "anthropic-version": "2023-06-01",
+        "content-type": "application/json",
+    }
+
+    # Loop för tool use (max 5 iterationer)
+    final_text = ""
+    tool_calls_made = []
+    try:
+        for _iter in range(5):
+            payload = {
+                "model": MODEL,
+                "max_tokens": 2048,
+                "system": system_prompt,
+                "messages": messages,
+                "tools": tools,
+            }
+            resp = httpx.post(
+                "https://api.anthropic.com/v1/messages",
+                headers=headers, json=payload, timeout=60.0,
+            )
+            if resp.status_code != 200:
+                # Fallback till en mindre kapabel modell om Opus 4.5 inte finns
+                if _iter == 0 and resp.status_code in (404, 400) and MODEL.startswith("claude-opus"):
+                    MODEL = "claude-sonnet-4-20250514"
+                    payload["model"] = MODEL
+                    resp = httpx.post("https://api.anthropic.com/v1/messages",
+                                      headers=headers, json=payload, timeout=60.0)
+                if resp.status_code != 200:
+                    return jsonify({"error": f"Claude API: {resp.status_code} {resp.text[:200]}"}), 500
+
+            result = resp.json()
+            stop_reason = result.get("stop_reason")
+            content = result.get("content", [])
+
+            if stop_reason == "tool_use":
+                tool_uses = [c for c in content if c.get("type") == "tool_use"]
+                # Lägg till assistant-svaret i historiken
+                messages.append({"role": "assistant", "content": content})
+                # Kör verktygen
+                tool_results = []
+                for tu in tool_uses:
+                    tname = tu.get("name")
+                    inp = tu.get("input", {})
+                    if tname == "search_stocks":
+                        db2 = get_db()
+                        try:
+                            res = _agent_search_stocks(db2, inp.get("query", ""), inp.get("limit", 5))
+                        finally:
+                            db2.close()
+                        tool_calls_made.append({"name": tname, "input": inp, "result_count": len(res)})
+                        tool_results.append({
+                            "type": "tool_result",
+                            "tool_use_id": tu.get("id"),
+                            "content": _json.dumps(res, ensure_ascii=False),
+                        })
+                    else:
+                        tool_results.append({
+                            "type": "tool_result",
+                            "tool_use_id": tu.get("id"),
+                            "content": f"Okänd tool: {tname}",
+                            "is_error": True,
+                        })
+                messages.append({"role": "user", "content": tool_results})
+                continue  # Ny iteration efter tool-results
+            else:
+                # Vanlig sluttext
+                texts = [c.get("text", "") for c in content if c.get("type") == "text"]
+                final_text = "\n".join(texts).strip()
+                break
+
+        return jsonify({
+            "reply": final_text or "(tomt svar)",
+            "model": MODEL,
+            "tool_calls": tool_calls_made,
+        })
+    except Exception as e:
+        import traceback; traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
+
+
 # ── Startup (runs for both gunicorn and direct execution) ──
 
 def _startup():
@@ -2876,10 +3369,114 @@ def _startup():
 
         scheduler = BackgroundScheduler()
         scheduler.add_job(scheduled_price_refresh, 'interval', minutes=15, id='price_refresh')
+
+        # Nightly historical sync (03:30 lokal) — extended tier (~2000 aktier)
+        def scheduled_hist_sync():
+            if _hist_sync_state.get("running"):
+                return
+            print(f"[AUTO] Nightly historical sync start {datetime.now().strftime('%H:%M')}")
+            _run_hist_sync(limit=None, max_age_days=6, tier="extended")
+
+        scheduler.add_job(scheduled_hist_sync, 'cron', hour=3, minute=30, id='hist_sync_nightly')
         scheduler.start()
         print("  ✓ Auto-refresh scheduler aktiv (var 15:e min under marknadstid)")
+        print("  ✓ Nightly historical sync schemalagd (03:30, extended tier)")
     except ImportError:
         print("  ⚠ APScheduler ej installerat — auto-refresh inaktivt")
+
+    # Kickstart priority-tier historical sync i bakgrunden vid uppstart
+    # (ca 2 min för ~500 svenska aktier) — gör så att topplistorna direkt
+    # använder 10-års-scoring utan att användaren behöver POST:a manuellt.
+    try:
+        if not _hist_sync_state.get("running"):
+            # Hoppa om vi kört de senaste 20 timmarna (max_age=1 dag med marginal)
+            db = get_db()
+            try:
+                from edge_db import _fetchone, _ph
+                recent = _fetchone(
+                    db,
+                    f"SELECT COUNT(*) as n FROM historical_fetch_log "
+                    f"WHERE last_fetch_at > {_ph()} AND last_fetch_status = 'ok'",
+                    ((datetime.now() - timedelta(hours=20)).isoformat(),),
+                )
+                # sqlite3.Row stödjer [] men inte .get()
+                n = 0
+                if recent:
+                    try: n = recent["n"] or 0
+                    except (IndexError, KeyError): n = 0
+                already_fresh = n >= 300
+            finally:
+                db.close()
+            if already_fresh:
+                print("  ✓ Historisk data redan färsk — skippar auto-sync vid start")
+            else:
+                t = threading.Thread(
+                    target=_run_hist_sync,
+                    kwargs={"limit": None, "max_age_days": 7, "tier": "priority"},
+                    daemon=True,
+                )
+                t.start()
+                print("  ✓ Auto-sync av historisk data startad i bakgrunden (priority tier)")
+    except Exception as e:
+        print(f"  ⚠ Kunde inte starta auto-sync: {e}")
+
+    # ── Warmup-tråd: preloada både DB-caches OCH API-route-caches vid boot.
+    # Strategi:
+    #   Steg 1: direkta anrop till tunga DB-funktioner (modul-cache fylls)
+    #   Steg 2: HTTP-anrop till dashboard-tabbarnas default-URL:er så _api_cache
+    #           (per-URL) fylls — då blir första klick i UI:t <50ms istället för 500-1800ms.
+    def _warmup():
+        print("  ⏳ Warmup startar...", flush=True)
+        try:
+            _time.sleep(1.5)  # Låt Flask starta klart
+            t0 = _time.time()
+
+            # Steg 1: modul-nivå caches
+            dbw = get_db()
+            try:
+                _get_maturity_cached(dbw)
+                from edge_db import get_insider_summary as _gis
+                _gis(dbw, days_back=90)
+            finally:
+                dbw.close()
+            t_db = _time.time()
+
+            # Steg 2: API-route-caches via HTTP (trigga Flask-flödet)
+            port = int(os.environ.get("PORT", 5003))
+            base = f"http://127.0.0.1:{port}"
+            urls = [
+                "/api/dashboard",
+                "/api/signals?country=SE&sort=meta&order=desc&limit=50&offset=0&min_owners=10&signal=&action=",
+                "/api/stocks?q=&country=&sort=owners&order=desc&limit=50&offset=0&min_owners=0",
+                "/api/hot-movers?mode=daily&direction=up&lookback=1&limit=50&offset=0&min_owners=100&country=",
+                "/api/trending?period=1m&direction=up&limit=50&min_owners=100",
+                "/api/insiders?q=&type=&limit=50&offset=0",
+                "/api/daily-picks",
+                "/api/model-toplist?model=graham_defensive",
+                "/api/watchlist/near-buy-zone?limit=12&min_owners=200&min_composite=55&max_distance=10",
+                "/api/portfolio",
+                "/api/book-models",
+                "/api/simulation",
+            ]
+            for u in urls:
+                try:
+                    requests.get(base + u, timeout=20)
+                except Exception:
+                    pass
+
+            total_ms = (_time.time() - t0) * 1000
+            db_ms = (t_db - t0) * 1000
+            print(f"  ✓ Warmup klar ({total_ms:.0f}ms total, {db_ms:.0f}ms DB-scan — alla tabs förvarmade)", flush=True)
+        except Exception as e:
+            import traceback
+            print(f"  ⚠ Warmup misslyckades: {e}", flush=True)
+            traceback.print_exc()
+
+    try:
+        threading.Thread(target=_warmup, daemon=True).start()
+        print("  ⏳ Warmup-tråd initierad", flush=True)
+    except Exception as e:
+        print(f"  ⚠ Kunde inte starta warmup: {e}", flush=True)
 
 _startup()
 

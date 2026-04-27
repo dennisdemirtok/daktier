@@ -37,6 +37,22 @@ AVANZA_HEADERS = {
 
 FI_INSIDER_URL = "https://marknadssok.fi.se/publiceringsklient/sv-SE/Search/Search"
 
+# ── Module-level caches för tunga queries ──────────────────
+# Maturity: scannar 964k owner_history-rader + scoring på 11k aktier. ~1.5s tung.
+#   Data ändras max 1 ggr/dag (när snapshots körs). TTL 10 min.
+# Insider-summary: läser 90 dagars tx + fuzzy normalisering. ~300ms.
+#   Data ändras vid refresh-cycle (1 ggr/dag). TTL 5 min.
+_MATURITY_CACHE = {"data": None, "ts": 0.0}
+_MATURITY_TTL = 600  # 10 min
+_INSIDER_CACHE = {}  # {days_back: (data, ts)}
+_INSIDER_TTL = 300   # 5 min
+
+def _invalidate_expensive_caches():
+    """Kallas av refresh-flow för att tvinga ny scan."""
+    _MATURITY_CACHE["data"] = None
+    _MATURITY_CACHE["ts"] = 0.0
+    _INSIDER_CACHE.clear()
+
 
 _tables_created = False
 
@@ -296,6 +312,59 @@ def _create_tables(db):
                 analysis_date TEXT,
                 UNIQUE(stock_name, analysis_date)
             );
+
+            CREATE TABLE IF NOT EXISTS historical_annual (
+                orderbook_id INTEGER NOT NULL,
+                financial_year INTEGER NOT NULL,
+                report_date TEXT,
+                eps DOUBLE PRECISION,
+                sales DOUBLE PRECISION,
+                net_profit DOUBLE PRECISION,
+                profit_margin DOUBLE PRECISION,
+                total_assets DOUBLE PRECISION,
+                total_liabilities DOUBLE PRECISION,
+                debt_to_equity DOUBLE PRECISION,
+                equity_per_share DOUBLE PRECISION,
+                turnover_per_share DOUBLE PRECISION,
+                net_debt_ebitda DOUBLE PRECISION,
+                return_on_equity DOUBLE PRECISION,
+                pe_ratio DOUBLE PRECISION,
+                pb_ratio DOUBLE PRECISION,
+                ps_ratio DOUBLE PRECISION,
+                ev_ebit DOUBLE PRECISION,
+                dividend_per_share DOUBLE PRECISION,
+                direct_yield DOUBLE PRECISION,
+                dividend_payout_ratio DOUBLE PRECISION,
+                fetched_at TEXT,
+                PRIMARY KEY (orderbook_id, financial_year)
+            );
+
+            CREATE TABLE IF NOT EXISTS historical_quarterly (
+                orderbook_id INTEGER NOT NULL,
+                financial_year INTEGER NOT NULL,
+                quarter TEXT NOT NULL,
+                report_date TEXT,
+                eps DOUBLE PRECISION,
+                sales DOUBLE PRECISION,
+                net_profit DOUBLE PRECISION,
+                profit_margin DOUBLE PRECISION,
+                return_on_equity DOUBLE PRECISION,
+                equity_per_share DOUBLE PRECISION,
+                pe_ratio DOUBLE PRECISION,
+                pb_ratio DOUBLE PRECISION,
+                ev_ebit DOUBLE PRECISION,
+                fetched_at TEXT,
+                PRIMARY KEY (orderbook_id, financial_year, quarter)
+            );
+
+            CREATE TABLE IF NOT EXISTS historical_fetch_log (
+                orderbook_id INTEGER PRIMARY KEY,
+                last_fetch_at TEXT,
+                last_fetch_status TEXT,
+                years_available INTEGER,
+                quarters_available INTEGER,
+                error_message TEXT
+            );
         """)
         # Indexes
         for idx_sql in [
@@ -313,6 +382,9 @@ def _create_tables(db):
             "CREATE INDEX IF NOT EXISTS idx_insider_date ON insider_transactions(transaction_date DESC)",
             "CREATE INDEX IF NOT EXISTS idx_owner_snap ON owner_snapshots(orderbook_id, date)",
             "CREATE INDEX IF NOT EXISTS idx_owner_history ON owner_history(orderbook_id, week_date)",
+            "CREATE INDEX IF NOT EXISTS idx_hist_annual_oid ON historical_annual(orderbook_id)",
+            "CREATE INDEX IF NOT EXISTS idx_hist_quarterly_oid ON historical_quarterly(orderbook_id)",
+            "CREATE INDEX IF NOT EXISTS idx_hist_fetch_log_at ON historical_fetch_log(last_fetch_at)",
         ]:
             cur.execute(idx_sql)
         cur.close()
@@ -491,6 +563,59 @@ def _create_tables(db):
                 UNIQUE(stock_name, analysis_date)
             );
 
+            CREATE TABLE IF NOT EXISTS historical_annual (
+                orderbook_id INTEGER NOT NULL,
+                financial_year INTEGER NOT NULL,
+                report_date TEXT,
+                eps REAL,
+                sales REAL,
+                net_profit REAL,
+                profit_margin REAL,
+                total_assets REAL,
+                total_liabilities REAL,
+                debt_to_equity REAL,
+                equity_per_share REAL,
+                turnover_per_share REAL,
+                net_debt_ebitda REAL,
+                return_on_equity REAL,
+                pe_ratio REAL,
+                pb_ratio REAL,
+                ps_ratio REAL,
+                ev_ebit REAL,
+                dividend_per_share REAL,
+                direct_yield REAL,
+                dividend_payout_ratio REAL,
+                fetched_at TEXT,
+                PRIMARY KEY (orderbook_id, financial_year)
+            );
+
+            CREATE TABLE IF NOT EXISTS historical_quarterly (
+                orderbook_id INTEGER NOT NULL,
+                financial_year INTEGER NOT NULL,
+                quarter TEXT NOT NULL,
+                report_date TEXT,
+                eps REAL,
+                sales REAL,
+                net_profit REAL,
+                profit_margin REAL,
+                return_on_equity REAL,
+                equity_per_share REAL,
+                pe_ratio REAL,
+                pb_ratio REAL,
+                ev_ebit REAL,
+                fetched_at TEXT,
+                PRIMARY KEY (orderbook_id, financial_year, quarter)
+            );
+
+            CREATE TABLE IF NOT EXISTS historical_fetch_log (
+                orderbook_id INTEGER PRIMARY KEY,
+                last_fetch_at TEXT,
+                last_fetch_status TEXT,
+                years_available INTEGER,
+                quarters_available INTEGER,
+                error_message TEXT
+            );
+
             -- Indexes for fast queries
             CREATE INDEX IF NOT EXISTS idx_sim_portfolio ON simulation_holdings(portfolio);
             CREATE INDEX IF NOT EXISTS idx_sim_trades_portfolio ON simulation_trades(portfolio);
@@ -505,6 +630,9 @@ def _create_tables(db):
             CREATE INDEX IF NOT EXISTS idx_insider_issuer ON insider_transactions(issuer);
             CREATE INDEX IF NOT EXISTS idx_insider_date ON insider_transactions(transaction_date DESC);
             CREATE INDEX IF NOT EXISTS idx_owner_snap ON owner_snapshots(orderbook_id, date);
+            CREATE INDEX IF NOT EXISTS idx_hist_annual_oid ON historical_annual(orderbook_id);
+            CREATE INDEX IF NOT EXISTS idx_hist_quarterly_oid ON historical_quarterly(orderbook_id);
+            CREATE INDEX IF NOT EXISTS idx_hist_fetch_log_at ON historical_fetch_log(last_fetch_at);
         """)
         db.commit()
 
@@ -878,7 +1006,15 @@ def get_maturity_scores(db):
     """
     Beräknar ägarmognad-score för alla aktier med owner_history-data.
     Returnerar dict: {orderbook_id: {"maturity_score": 0-100, "maturity_label": str, ...}}
+
+    Modul-cached 10 min (data ändras max 1 ggr/dag — snapshots körs i daily_sync).
     """
+    # Modul-cache: alla call-sites drar nytta av samma cached scan.
+    now = time.time()
+    cached = _MATURITY_CACHE.get("data")
+    if cached is not None and (now - _MATURITY_CACHE.get("ts", 0)) < _MATURITY_TTL:
+        return cached
+
     import math
     ph = _ph()
 
@@ -1184,6 +1320,9 @@ def get_maturity_scores(db):
             "streak": streak,
         }
 
+    # Spara i modul-cache för alla efterföljande anrop (TTL 10 min)
+    _MATURITY_CACHE["data"] = result
+    _MATURITY_CACHE["ts"] = time.time()
     return result
 
 
@@ -1489,6 +1628,571 @@ def _clamp(v, lo=0.0, hi=100.0):
     return max(lo, min(hi, v))
 
 
+# ══════════════════════════════════════════════════════════════════
+# HISTORICAL FINANCIALS (Avanza /analysis endpoint — 10 years)
+# ══════════════════════════════════════════════════════════════════
+
+def sync_historical_financials(db, orderbook_ids=None, limit=None,
+                                max_age_days=7, progress_callback=None,
+                                fetcher=None, tier="priority"):
+    """Hämta och spara 10-års historik för listade aktier.
+
+    Args:
+        db: DB-connection
+        orderbook_ids: specifika ID:n att synka. None = auto-välj baserat på tier.
+        limit: max antal (None = alla inom tier).
+        max_age_days: hoppa över aktier som synkats nyligen.
+        progress_callback: callback(current, total, name).
+        fetcher: EdgeDataFetcher-instans (skapas om None).
+        tier: "priority" | "extended" | "full"
+              priority  = top 500 ägda (≥500 ägare) — körs vid startup (~2 min)
+              extended  = top 2000 ägda (≥200 ägare) — nightly
+              full      = alla med pris + ≥100 ägare — helgjob
+
+    Returns: {"updated": N, "skipped": N, "errors": N, "total": N, "tier": str}
+    """
+    if fetcher is None:
+        from edge_data_fetcher import EdgeDataFetcher
+        fetcher = EdgeDataFetcher()
+
+    ph = _ph()
+
+    if orderbook_ids is None:
+        tier_filters = {
+            "priority": ("number_of_owners >= 500", 500),
+            "extended": ("number_of_owners >= 200", 2000),
+            "full":     ("number_of_owners >= 100", None),
+        }
+        where_clause, default_limit = tier_filters.get(tier, tier_filters["priority"])
+        sql = (
+            f"SELECT orderbook_id, name FROM stocks "
+            f"WHERE {where_clause} AND last_price > 0 "
+            f"ORDER BY number_of_owners DESC"
+        )
+        rows = _fetchall(db, sql)
+        targets = [(r["orderbook_id"], r["name"]) for r in rows]
+        if default_limit and (limit is None or limit > default_limit):
+            targets = targets[:default_limit]
+    else:
+        placeholders = ",".join([_ph()] * len(orderbook_ids))
+        rows = _fetchall(
+            db,
+            f"SELECT orderbook_id, name FROM stocks WHERE orderbook_id IN ({placeholders})",
+            list(orderbook_ids),
+        )
+        targets = [(r["orderbook_id"], r["name"]) for r in rows]
+
+    if limit:
+        targets = targets[:limit]
+
+    now_iso = datetime.now().isoformat()
+    cutoff = (datetime.now() - timedelta(days=max_age_days)).isoformat()
+
+    updated = 0
+    skipped = 0
+    errors = 0
+    total = len(targets)
+
+    for i, (oid, name) in enumerate(targets):
+        if progress_callback:
+            try:
+                progress_callback(i, total, name)
+            except Exception:
+                pass
+
+        # Hoppa över om nyligen synkat
+        last = _fetchone(
+            db,
+            f"SELECT last_fetch_at FROM historical_fetch_log WHERE orderbook_id = {ph}",
+            (oid,),
+        )
+        if last:
+            # sqlite3.Row stödjer [] men inte .get() — dict (Postgres) stödjer båda
+            try:
+                last_at = last["last_fetch_at"]
+            except (IndexError, KeyError):
+                last_at = None
+            if last_at and last_at > cutoff:
+                skipped += 1
+                continue
+
+        try:
+            parsed = fetcher.fetch_avanza_analysis(oid)
+        except Exception as e:
+            _upsert_fetch_log(db, oid, now_iso, "error", 0, 0, str(e)[:200])
+            errors += 1
+            continue
+
+        if not parsed:
+            _upsert_fetch_log(db, oid, now_iso, "no_data", 0, 0, None)
+            errors += 1
+            continue
+
+        try:
+            _store_historical_annual(db, oid, parsed.get("annual", []), now_iso)
+            _store_historical_quarterly(db, oid, parsed.get("quarterly", []), now_iso)
+            _upsert_fetch_log(
+                db, oid, now_iso, "ok",
+                len(parsed.get("annual", [])),
+                len(parsed.get("quarterly", [])),
+                None,
+            )
+            updated += 1
+        except Exception as e:
+            _upsert_fetch_log(db, oid, now_iso, "store_error", 0, 0, str(e)[:200])
+            errors += 1
+
+        if (i + 1) % 25 == 0:
+            db.commit()
+
+    db.commit()
+    return {"updated": updated, "skipped": skipped, "errors": errors,
+            "total": total, "tier": tier}
+
+
+def ensure_historical_for_stock(db, orderbook_id, max_age_days=7, fetcher=None):
+    """On-demand: synka EN aktie om historik saknas eller är gammal.
+
+    Returnerar dict {"status": "ok"|"cached"|"error"|"no_data", ...}. Snabb om
+    redan cache:ad. Används av api_stock_detail innan vi renderar drawern så
+    att användaren ser 10-års historik utan att trycka "sync".
+    """
+    ph = _ph()
+    existing = _fetchone(
+        db, f"SELECT last_fetch_at, last_fetch_status FROM historical_fetch_log "
+            f"WHERE orderbook_id = {ph}",
+        (orderbook_id,),
+    )
+    from datetime import datetime, timedelta
+    cutoff = (datetime.now() - timedelta(days=max_age_days)).isoformat()
+    if existing:
+        try:
+            last_at = existing["last_fetch_at"]
+        except (IndexError, KeyError):
+            last_at = None
+        if last_at and last_at > cutoff:
+            return {"status": "cached", "last_fetch": last_at}
+
+    if fetcher is None:
+        from edge_data_fetcher import EdgeDataFetcher
+        fetcher = EdgeDataFetcher()
+    now_iso = datetime.now().isoformat()
+    try:
+        parsed = fetcher.fetch_avanza_analysis(orderbook_id)
+    except Exception as e:
+        _upsert_fetch_log(db, orderbook_id, now_iso, "error", 0, 0, str(e)[:200])
+        return {"status": "error", "error": str(e)[:200]}
+    if not parsed:
+        _upsert_fetch_log(db, orderbook_id, now_iso, "no_data", 0, 0, None)
+        return {"status": "no_data"}
+    try:
+        _store_historical_annual(db, orderbook_id, parsed.get("annual", []), now_iso)
+        _store_historical_quarterly(db, orderbook_id, parsed.get("quarterly", []), now_iso)
+        _upsert_fetch_log(
+            db, orderbook_id, now_iso, "ok",
+            len(parsed.get("annual", [])),
+            len(parsed.get("quarterly", [])),
+            None,
+        )
+        db.commit()
+        return {
+            "status": "ok",
+            "years": len(parsed.get("annual", [])),
+            "quarters": len(parsed.get("quarterly", [])),
+        }
+    except Exception as e:
+        _upsert_fetch_log(db, orderbook_id, now_iso, "store_error", 0, 0, str(e)[:200])
+        return {"status": "error", "error": str(e)[:200]}
+
+
+def _upsert_fetch_log(db, oid, now_iso, status, years, quarters, err):
+    ph = _ph()
+    existing = _fetchone(
+        db, f"SELECT orderbook_id FROM historical_fetch_log WHERE orderbook_id = {ph}",
+        (oid,),
+    )
+    if existing:
+        _exec(
+            db,
+            f"UPDATE historical_fetch_log SET last_fetch_at={ph}, last_fetch_status={ph}, "
+            f"years_available={ph}, quarters_available={ph}, error_message={ph} "
+            f"WHERE orderbook_id={ph}",
+            (now_iso, status, years, quarters, err, oid),
+        )
+    else:
+        _exec(
+            db,
+            f"INSERT INTO historical_fetch_log "
+            f"(orderbook_id, last_fetch_at, last_fetch_status, years_available, "
+            f"quarters_available, error_message) VALUES ({ph}, {ph}, {ph}, {ph}, {ph}, {ph})",
+            (oid, now_iso, status, years, quarters, err),
+        )
+
+
+def _store_historical_annual(db, oid, rows, now_iso):
+    ph = _ph()
+    for r in rows:
+        year = r.get("year")
+        if year is None:
+            continue
+        params = (
+            oid, year, r.get("report_date"),
+            r.get("eps"), r.get("sales"), r.get("net_profit"), r.get("profit_margin"),
+            r.get("total_assets"), r.get("total_liabilities"), r.get("debt_to_equity"),
+            r.get("equity_per_share"), r.get("turnover_per_share"),
+            r.get("net_debt_ebitda"), r.get("return_on_equity"),
+            r.get("pe_ratio"), r.get("pb_ratio"), r.get("ps_ratio"), r.get("ev_ebit"),
+            r.get("dividend_per_share"), r.get("direct_yield"),
+            r.get("dividend_payout_ratio"), now_iso,
+        )
+        if _use_postgres():
+            _exec(
+                db,
+                f"INSERT INTO historical_annual "
+                f"(orderbook_id, financial_year, report_date, eps, sales, net_profit, "
+                f"profit_margin, total_assets, total_liabilities, debt_to_equity, "
+                f"equity_per_share, turnover_per_share, net_debt_ebitda, return_on_equity, "
+                f"pe_ratio, pb_ratio, ps_ratio, ev_ebit, dividend_per_share, "
+                f"direct_yield, dividend_payout_ratio, fetched_at) "
+                f"VALUES ({', '.join([ph]*22)}) "
+                f"ON CONFLICT (orderbook_id, financial_year) DO UPDATE SET "
+                f"report_date=EXCLUDED.report_date, eps=EXCLUDED.eps, sales=EXCLUDED.sales, "
+                f"net_profit=EXCLUDED.net_profit, profit_margin=EXCLUDED.profit_margin, "
+                f"total_assets=EXCLUDED.total_assets, total_liabilities=EXCLUDED.total_liabilities, "
+                f"debt_to_equity=EXCLUDED.debt_to_equity, equity_per_share=EXCLUDED.equity_per_share, "
+                f"turnover_per_share=EXCLUDED.turnover_per_share, net_debt_ebitda=EXCLUDED.net_debt_ebitda, "
+                f"return_on_equity=EXCLUDED.return_on_equity, pe_ratio=EXCLUDED.pe_ratio, "
+                f"pb_ratio=EXCLUDED.pb_ratio, ps_ratio=EXCLUDED.ps_ratio, ev_ebit=EXCLUDED.ev_ebit, "
+                f"dividend_per_share=EXCLUDED.dividend_per_share, direct_yield=EXCLUDED.direct_yield, "
+                f"dividend_payout_ratio=EXCLUDED.dividend_payout_ratio, fetched_at=EXCLUDED.fetched_at",
+                params,
+            )
+        else:
+            _exec(
+                db,
+                f"INSERT OR REPLACE INTO historical_annual "
+                f"(orderbook_id, financial_year, report_date, eps, sales, net_profit, "
+                f"profit_margin, total_assets, total_liabilities, debt_to_equity, "
+                f"equity_per_share, turnover_per_share, net_debt_ebitda, return_on_equity, "
+                f"pe_ratio, pb_ratio, ps_ratio, ev_ebit, dividend_per_share, "
+                f"direct_yield, dividend_payout_ratio, fetched_at) "
+                f"VALUES ({', '.join([ph]*22)})",
+                params,
+            )
+
+
+def _store_historical_quarterly(db, oid, rows, now_iso):
+    ph = _ph()
+    for r in rows:
+        year = r.get("year"); q = r.get("quarter")
+        if year is None or not q:
+            continue
+        params = (
+            oid, year, q, r.get("report_date"),
+            r.get("eps"), r.get("sales"), r.get("net_profit"), r.get("profit_margin"),
+            r.get("return_on_equity"), r.get("equity_per_share"),
+            r.get("pe_ratio"), r.get("pb_ratio"), r.get("ev_ebit"), now_iso,
+        )
+        if _use_postgres():
+            _exec(
+                db,
+                f"INSERT INTO historical_quarterly "
+                f"(orderbook_id, financial_year, quarter, report_date, eps, sales, net_profit, "
+                f"profit_margin, return_on_equity, equity_per_share, pe_ratio, pb_ratio, "
+                f"ev_ebit, fetched_at) VALUES ({', '.join([ph]*14)}) "
+                f"ON CONFLICT (orderbook_id, financial_year, quarter) DO UPDATE SET "
+                f"report_date=EXCLUDED.report_date, eps=EXCLUDED.eps, sales=EXCLUDED.sales, "
+                f"net_profit=EXCLUDED.net_profit, profit_margin=EXCLUDED.profit_margin, "
+                f"return_on_equity=EXCLUDED.return_on_equity, equity_per_share=EXCLUDED.equity_per_share, "
+                f"pe_ratio=EXCLUDED.pe_ratio, pb_ratio=EXCLUDED.pb_ratio, "
+                f"ev_ebit=EXCLUDED.ev_ebit, fetched_at=EXCLUDED.fetched_at",
+                params,
+            )
+        else:
+            _exec(
+                db,
+                f"INSERT OR REPLACE INTO historical_quarterly "
+                f"(orderbook_id, financial_year, quarter, report_date, eps, sales, net_profit, "
+                f"profit_margin, return_on_equity, equity_per_share, pe_ratio, pb_ratio, "
+                f"ev_ebit, fetched_at) VALUES ({', '.join([ph]*14)})",
+                params,
+            )
+
+
+def get_historical_annual(db, orderbook_id):
+    """Returnerar lista (sorterad på år) av årliga rader för en aktie."""
+    ph = _ph()
+    rows = _fetchall(
+        db,
+        f"SELECT * FROM historical_annual WHERE orderbook_id = {ph} ORDER BY financial_year ASC",
+        (orderbook_id,),
+    )
+    return [dict(r) for r in rows]
+
+
+def get_historical_quarterly(db, orderbook_id):
+    """Returnerar lista (sorterad på år+kvartal) av kvartalsrader."""
+    ph = _ph()
+    rows = _fetchall(
+        db,
+        f"SELECT * FROM historical_quarterly WHERE orderbook_id = {ph} "
+        f"ORDER BY financial_year ASC, quarter ASC",
+        (orderbook_id,),
+    )
+    return [dict(r) for r in rows]
+
+
+def _median(values):
+    xs = sorted(v for v in values if v is not None)
+    n = len(xs)
+    if n == 0:
+        return None
+    if n % 2 == 1:
+        return xs[n // 2]
+    return (xs[n // 2 - 1] + xs[n // 2]) / 2
+
+
+def _hist_context(db, orderbook_id, max_years=10):
+    """Beräkna historisk kontext: 7-års EPS-snitt, 10-års median ROE, stabilitet.
+
+    Returnerar None om ingen historik finns (fallback till TTM-scoring).
+    Alla nycklar:
+      eps_7y_avg, eps_7y_median, eps_10y_median, eps_years, eps_loss_years,
+      roe_10y_median, roe_current_vs_median,
+      revenue_cagr_5y, revenue_growth_years,
+      dividend_years_paid, dividend_years_increased, dividend_10y_avg,
+      earnings_stability_pct, peak_ratio_eps
+    """
+    if orderbook_id is None:
+        return None
+    try:
+        rows = get_historical_annual(db, orderbook_id)
+    except Exception:
+        return None
+    if not rows:
+        return None
+
+    # Sortera deskenderande (senaste först)
+    rows = sorted(rows, key=lambda r: r.get("financial_year") or 0, reverse=True)
+    rows = rows[:max_years]
+    if not rows:
+        return None
+
+    eps_vals = [r.get("eps") for r in rows if r.get("eps") is not None]
+    roe_vals = [r.get("return_on_equity") for r in rows if r.get("return_on_equity") is not None]
+    sales_vals = [r.get("sales") for r in rows if r.get("sales") is not None]
+    div_vals = [(r.get("financial_year"), r.get("dividend_per_share")) for r in rows
+                if r.get("dividend_per_share") is not None]
+
+    ctx = {
+        "eps_years": len(eps_vals),
+        "roe_years": len(roe_vals),
+    }
+
+    # EPS: 7-års snitt + median (Graham kräver 7 år)
+    eps_7 = eps_vals[:7]
+    if len(eps_7) >= 5:
+        ctx["eps_7y_avg"] = sum(eps_7) / len(eps_7)
+        ctx["eps_7y_median"] = _median(eps_7)
+    if eps_vals:
+        ctx["eps_10y_median"] = _median(eps_vals)
+        ctx["eps_loss_years"] = sum(1 for e in eps_vals if e < 0)
+        # Earnings stability: % av år med positiv EPS
+        ctx["earnings_stability_pct"] = 100 * sum(1 for e in eps_vals if e > 0) / len(eps_vals)
+
+    # ROE: 10-års median (kan behöva divideras om ROE sparat som % istället för decimal)
+    if roe_vals:
+        # Normalisera: om värdena ser ut att vara % (>1), dela med 100
+        norm_roe = [v / 100 if abs(v) > 1.5 else v for v in roe_vals]
+        ctx["roe_10y_median"] = _median(norm_roe)
+        ctx["roe_10y_mean"] = sum(norm_roe) / len(norm_roe)
+        # Konsistens: antal år med ROE >= 15%
+        ctx["roe_years_above_15pct"] = sum(1 for v in norm_roe if v >= 0.15)
+        # Senaste ROE vs median — cyklisk peak-signal
+        latest_roe = norm_roe[0] if norm_roe else None
+        if latest_roe is not None and ctx["roe_10y_median"] and ctx["roe_10y_median"] > 0.01:
+            ctx["roe_current_vs_median"] = latest_roe / ctx["roe_10y_median"]
+
+    # Sales CAGR 5 år (senaste / för 5 år sedan)
+    if len(sales_vals) >= 5:
+        newest = sales_vals[0]
+        oldest = sales_vals[min(4, len(sales_vals) - 1)]
+        if newest and oldest and oldest > 0:
+            years = min(4, len(sales_vals) - 1)
+            try:
+                cagr = (newest / oldest) ** (1 / years) - 1
+                ctx["revenue_cagr_5y"] = cagr
+            except Exception:
+                pass
+
+    # Utdelningshistorik
+    if div_vals:
+        # Sortera stigande på år
+        div_vals.sort(key=lambda x: x[0] or 0)
+        paid = [d for _, d in div_vals if d is not None and d > 0]
+        ctx["dividend_years_paid"] = len(paid)
+        # Ökande utdelning: sum av år där utdelning > föregående år
+        increased = 0
+        for i in range(1, len(div_vals)):
+            prev = div_vals[i-1][1]
+            cur = div_vals[i][1]
+            if prev is not None and cur is not None and cur > prev:
+                increased += 1
+        ctx["dividend_years_increased"] = increased
+        if paid:
+            ctx["dividend_10y_avg"] = sum(paid) / len(paid)
+
+    # Peak-EPS-ratio: senaste EPS / 7-års median — om > 2.5 = cyklisk peak
+    if eps_vals and ctx.get("eps_7y_median") and abs(ctx["eps_7y_median"]) > 0.01:
+        try:
+            ctx["peak_ratio_eps"] = eps_vals[0] / ctx["eps_7y_median"]
+        except Exception:
+            pass
+
+    return ctx
+
+
+def _attach_hist(db, stock_dict):
+    """Berika en stock-dict med `_hist` (10-års historiska mätare).
+
+    Tyst no-op om orderbook_id saknas eller historik inte finns.
+    """
+    if not isinstance(stock_dict, dict) or "_hist" in stock_dict:
+        return stock_dict
+    oid = stock_dict.get("orderbook_id")
+    if oid is None or db is None:
+        return stock_dict
+    try:
+        h = _hist_context(db, oid)
+        if h:
+            stock_dict["_hist"] = h
+    except Exception:
+        pass
+    return stock_dict
+
+
+def _attach_hist_bulk(db, stock_dicts):
+    """Batch-version: attacha _hist till många stockar med en enda SQL-query."""
+    if not stock_dicts or db is None:
+        return stock_dicts
+    ph = _ph()
+    oids = [d.get("orderbook_id") for d in stock_dicts
+            if isinstance(d, dict) and d.get("orderbook_id") is not None and "_hist" not in d]
+    if not oids:
+        return stock_dicts
+    placeholders = ",".join([ph] * len(oids))
+    try:
+        rows = _fetchall(
+            db,
+            f"SELECT * FROM historical_annual WHERE orderbook_id IN ({placeholders}) "
+            f"ORDER BY orderbook_id, financial_year DESC",
+            oids,
+        )
+    except Exception:
+        return stock_dicts
+
+    by_oid = {}
+    for r in rows:
+        by_oid.setdefault(r["orderbook_id"], []).append(dict(r))
+
+    for d in stock_dicts:
+        if not isinstance(d, dict):
+            continue
+        oid = d.get("orderbook_id")
+        if oid is None or "_hist" in d:
+            continue
+        hist_rows = by_oid.get(oid)
+        if hist_rows:
+            d["_hist"] = _compute_hist_from_rows(hist_rows)
+    return stock_dicts
+
+
+def _attach_buy_zone_bulk(stock_dicts, target_composite=75):
+    """Lägg till _buy_zone på varje stock (ren beräkning, ingen DB).
+
+    Gör detta EFTER _attach_hist_bulk så att buy_zone-simuleringen använder
+    samma _hist-context som ordinarie scoring. Idempotent — hoppar över
+    stockar som redan har _buy_zone satt.
+    """
+    if not stock_dicts:
+        return stock_dicts
+    for d in stock_dicts:
+        if not isinstance(d, dict):
+            continue
+        if "_buy_zone" in d:
+            continue
+        try:
+            bz = _compute_buy_zone(d, target_composite=target_composite)
+            if bz is not None:
+                d["_buy_zone"] = bz
+        except Exception:
+            pass
+    return stock_dicts
+
+
+def _compute_hist_from_rows(rows, max_years=10):
+    """Samma logik som _hist_context men med färdig rad-lista (för batch)."""
+    if not rows:
+        return None
+    rows = sorted(rows, key=lambda r: r.get("financial_year") or 0, reverse=True)[:max_years]
+    eps_vals = [r.get("eps") for r in rows if r.get("eps") is not None]
+    roe_vals = [r.get("return_on_equity") for r in rows if r.get("return_on_equity") is not None]
+    sales_vals = [r.get("sales") for r in rows if r.get("sales") is not None]
+    div_vals = [(r.get("financial_year"), r.get("dividend_per_share")) for r in rows
+                if r.get("dividend_per_share") is not None]
+
+    ctx = {"eps_years": len(eps_vals), "roe_years": len(roe_vals)}
+
+    eps_7 = eps_vals[:7]
+    if len(eps_7) >= 5:
+        ctx["eps_7y_avg"] = sum(eps_7) / len(eps_7)
+        ctx["eps_7y_median"] = _median(eps_7)
+    if eps_vals:
+        ctx["eps_10y_median"] = _median(eps_vals)
+        ctx["eps_loss_years"] = sum(1 for e in eps_vals if e < 0)
+        ctx["earnings_stability_pct"] = 100 * sum(1 for e in eps_vals if e > 0) / len(eps_vals)
+
+    if roe_vals:
+        norm_roe = [v / 100 if abs(v) > 1.5 else v for v in roe_vals]
+        ctx["roe_10y_median"] = _median(norm_roe)
+        ctx["roe_10y_mean"] = sum(norm_roe) / len(norm_roe)
+        ctx["roe_years_above_15pct"] = sum(1 for v in norm_roe if v >= 0.15)
+        latest_roe = norm_roe[0] if norm_roe else None
+        if latest_roe is not None and ctx["roe_10y_median"] and ctx["roe_10y_median"] > 0.01:
+            ctx["roe_current_vs_median"] = latest_roe / ctx["roe_10y_median"]
+
+    if len(sales_vals) >= 5:
+        newest = sales_vals[0]
+        oldest = sales_vals[min(4, len(sales_vals) - 1)]
+        if newest and oldest and oldest > 0:
+            years = min(4, len(sales_vals) - 1)
+            try:
+                ctx["revenue_cagr_5y"] = (newest / oldest) ** (1 / years) - 1
+            except Exception:
+                pass
+
+    if div_vals:
+        div_vals.sort(key=lambda x: x[0] or 0)
+        paid = [d for _, d in div_vals if d is not None and d > 0]
+        ctx["dividend_years_paid"] = len(paid)
+        increased = 0
+        for i in range(1, len(div_vals)):
+            prev = div_vals[i-1][1]; cur = div_vals[i][1]
+            if prev is not None and cur is not None and cur > prev:
+                increased += 1
+        ctx["dividend_years_increased"] = increased
+        if paid:
+            ctx["dividend_10y_avg"] = sum(paid) / len(paid)
+
+    if eps_vals and ctx.get("eps_7y_median") and abs(ctx["eps_7y_median"]) > 0.01:
+        try:
+            ctx["peak_ratio_eps"] = eps_vals[0] / ctx["eps_7y_median"]
+        except Exception:
+            pass
+
+    return ctx
+
+
 def _is_pref_share(name):
     """True om aktien är preferens-/utdelningsaktie eller klass D.
 
@@ -1521,6 +2225,9 @@ def _value_trap_score(s):
     Klassiska exempel: äggproducenter efter fågelinfluensa, råvarubolag
     efter prisspik, cykliska industribolag sent i cykeln.
 
+    Om 10-års historik finns i s["_hist"] används den för att direkt mäta
+    cyklisk peak istället för att gissa från TTM-ROE > 30%.
+
     Högre score = högre risk för värdefälla.
     """
     g = s.get
@@ -1533,6 +2240,7 @@ def _value_trap_score(s):
     c_1m = g("one_month_change_pct")
     c_6m = g("six_months_change_pct")
     c_1y = g("one_year_change_pct")
+    hist = g("_hist") if isinstance(s, dict) else None
 
     pts = 0.0
     # 1. "För billig"-koincidens: BÅDA P/E < 8 OCH EV/EBIT < 5 (~30p)
@@ -1544,13 +2252,45 @@ def _value_trap_score(s):
         pts += 15
 
     # 2. Cyklisk peak-ROE (~20p): ROE eller ROCE över 30% är sällan uthålligt
+    # Om vi har 10 års historik använder vi DEN för att mäta peak (bättre).
     peak_quality = False
-    if roe is not None and roe > 0.30:
+    if hist and hist.get("roe_current_vs_median") is not None and hist.get("roe_10y_median"):
+        peak_ratio = hist["roe_current_vs_median"]
+        median = hist["roe_10y_median"]
+        # Klassisk cyklisk fälla: ROE > 2x 10y-median OCH median är låg (<15%)
+        if peak_ratio > 2.5 and median < 0.15:
+            pts += 25  # tydligt cyklisk peak
+            peak_quality = True
+        elif peak_ratio > 2.0 and median < 0.20:
+            pts += 15
+            peak_quality = True
+        elif peak_ratio > 1.5 and median < 0.12:
+            pts += 8
+    # Fallback till TTM-ROE om ingen historik finns
+    elif roe is not None and roe > 0.30:
         pts += 12
         peak_quality = True
-    if roce is not None and roce > 0.30:
+
+    if roce is not None and roce > 0.30 and not peak_quality:
         pts += 10
-        peak_quality = True
+
+    # 2b. Peak EPS: om senaste EPS > 2.5× 7-års median → starkt cyklisk signal
+    if hist and hist.get("peak_ratio_eps") is not None:
+        ratio = hist["peak_ratio_eps"]
+        if ratio > 3.0:
+            pts += 18
+        elif ratio > 2.0:
+            pts += 10
+        elif ratio > 1.5:
+            pts += 4
+
+    # 2c. Historiska förlustår — Graham kräver noll förlustår senaste 10 åren
+    if hist and hist.get("eps_loss_years") is not None and hist.get("eps_years", 0) >= 5:
+        loss_years = hist["eps_loss_years"]
+        if loss_years >= 3:
+            pts += 10  # instabil EPS-historik → peak kan vara tillfällig
+        elif loss_years >= 1:
+            pts += 4
 
     # 3. Fallande pris — marknaden VET något som TTM inte visar (~40p total)
     if c_1y is not None and c_1y < -15:
@@ -1574,10 +2314,13 @@ def _value_trap_score(s):
 
     # Regularisering: kräv MINST en värde-indikator + MINST en negativ
     # pris-indikator. Utan båda är det inte en "fälle"-signatur.
+    # UNDANTAG: om historiken TYDLIGT visar peak-EPS (>3x median) släpps
+    # kravet på pris-fall — då är det en uppenbar cyklisk topp oavsett pris.
     has_value_signal = (pe is not None and 0 < pe < 10) or (ev is not None and 0 < ev < 6)
     has_negative_price = (c_1y is not None and c_1y < -8) or (c_6m is not None and c_6m < -5) \
                          or (sma200 is not None and sma200 < -8)
-    if not (has_value_signal and has_negative_price):
+    strong_hist_peak = bool(hist and hist.get("peak_ratio_eps", 0) and hist["peak_ratio_eps"] > 3.0)
+    if not (has_value_signal and (has_negative_price or strong_hist_peak)):
         return 0.0
 
     return max(0.0, min(100.0, pts))
@@ -1605,6 +2348,7 @@ def _score_book_models(s):
     meta = g("meta_score") if "meta_score" in (s if isinstance(s, dict) else {}) else None
 
     scores = {}
+    hist = s.get("_hist") if isinstance(s, dict) else None
 
     # Graham Defensive — Den intelligente investeraren, kap 14.
     # Graham ger ingen exakt rankingformel; hans "tumregel" är:
@@ -1625,7 +2369,19 @@ def _score_book_models(s):
     #   P/B måste vara 0.1-20 (datafel diskas)
     if (pe is not None and pb is not None
         and 2 <= pe <= 80 and 0.1 <= pb <= 20):
-        prod = pe * pb
+        # Graham-normaliserad P/E: använd 7-års EPS-snitt om tillgängligt
+        # (Intelligent Investor kap 14 — undviker cyklisk peak)
+        effective_pe = pe
+        graham_normalized = False
+        if hist and hist.get("eps_7y_avg") and hist["eps_7y_avg"] > 0.01:
+            last_price = s.get("last_price")
+            if last_price and last_price > 0:
+                norm_pe = last_price / hist["eps_7y_avg"]
+                if 2 <= norm_pe <= 80:
+                    effective_pe = norm_pe
+                    graham_normalized = True
+
+        prod = effective_pe * pb
         if prod <= 6:
             base = 100
         elif prod <= 10:
@@ -1641,12 +2397,29 @@ def _score_book_models(s):
         else:
             base = 0
         # Straffa om en enskild komponent är absurt över Grahams gräns
-        # (P/B > 3 = mycket mer än 2x bokvärde; P/E > 25 = högt PE)
         if pb > 3:
             base *= max(0.4, 1 - (pb - 3) * 0.15)
-        if pe > 25:
-            base *= max(0.4, 1 - (pe - 25) * 0.03)
+        if effective_pe > 25:
+            base *= max(0.4, 1 - (effective_pe - 25) * 0.03)
+
+        # Graham-specifika historiska krav (Intelligent Investor kap 14):
+        # - Minst 10 års positiv EPS (tolerant: få förlustår)
+        # - Minst 20 års kontinuerlig utdelning (tolerant: någon utdelningshistorik)
+        if hist:
+            loss_years = hist.get("eps_loss_years", 0) or 0
+            eps_yrs = hist.get("eps_years", 0) or 0
+            if eps_yrs >= 5:
+                if loss_years >= 3:
+                    base *= 0.55  # instabil vinst — Graham-diskvalificering
+                elif loss_years >= 1:
+                    base *= 0.85
+            div_paid = hist.get("dividend_years_paid", 0) or 0
+            if eps_yrs >= 5 and div_paid == 0:
+                base *= 0.60  # Graham kräver utdelning
+
         scores["graham"] = _clamp(base)
+        if graham_normalized:
+            scores["graham_normalized_pe"] = round(effective_pe, 2)
     else:
         scores["graham"] = None
 
@@ -1658,7 +2431,15 @@ def _score_book_models(s):
         and 3 <= pe <= 50          # måste vara lönsam, men inte extrem bubbla
         and roe >= 0.10             # Buffett: minst 10% ROE (helst 15%+)
         and (de is not None or nd is not None)):
-        roe_pct = roe * 100
+        # Använd 10-års median-ROE om tillgängligt (dämpar cyklisk peak).
+        # Buffett: "we look for 15%+ ROE CONSISTENTLY over 10 years".
+        effective_roe = roe
+        buffett_uses_hist = False
+        if hist and hist.get("roe_10y_median") is not None and hist.get("roe_years", 0) >= 5:
+            effective_roe = hist["roe_10y_median"]
+            buffett_uses_hist = True
+
+        roe_pct = effective_roe * 100
         # Kalibrerad kurva: 15% = 50, 25% = 75, 35% = 90, 50%+ = 95
         if roe_pct < 15:
             base = roe_pct * 3.3          # 10%=33, 15%=50
@@ -1682,7 +2463,29 @@ def _score_book_models(s):
         # Extra straff på mycket hög P/E (Buffett betalar inte P/E 40+ för kvalitet)
         if pe > 30:
             base *= max(0.6, 1 - (pe - 30) * 0.03)  # P/E 40 → 0.7x, P/E 50 → 0.4x
+
+        # Historisk konsistens: Buffett kräver STABIL kvalitet
+        if hist:
+            years_above_15 = hist.get("roe_years_above_15pct", 0) or 0
+            roe_yrs = hist.get("roe_years", 0) or 0
+            loss_years = hist.get("eps_loss_years", 0) or 0
+            if roe_yrs >= 5:
+                hit_rate = years_above_15 / roe_yrs if roe_yrs else 0
+                if hit_rate >= 0.8 and loss_years == 0:
+                    base = min(100, base * 1.10)  # bonus för konsistens
+                elif hit_rate < 0.3:
+                    base *= 0.75  # inkonsistent kvalitet
+            # Cyklisk peak-straff
+            if (hist.get("roe_current_vs_median") and
+                hist.get("roe_10y_median", 1) < 0.15 and
+                hist["roe_current_vs_median"] > 2.0):
+                base *= 0.60
+            if loss_years >= 3:
+                base *= 0.50  # Buffett diskvalificerar instabila bolag
+
         scores["buffett"] = _clamp(base)
+        if buffett_uses_hist:
+            scores["buffett_uses_hist_roe"] = True
     else:
         scores["buffett"] = None
 
@@ -1916,6 +2719,94 @@ def _score_book_models(s):
     return scores
 
 
+def _compute_buy_zone(stock, target_composite=75, max_discount_pct=25):
+    """Beräknar "köpzon"-pris: priset där composite book score skulle passera target_composite.
+
+    Idé: användaren tittar på en aktie som idag ligger strax under köpsignal. Om priset
+    faller X % under dagen korsar vi tröskeln → trigga köpläge NU.
+
+    Simulerar pris-sänkningar i steg (2, 5, 8, 10, 12, 15, 18, 20, 25 %) och
+    skalar priskänsliga nyckeltal (P/E, P/B, EV/EBIT linjärt nedåt, DY inverst uppåt).
+    Hittar minsta diskonteringen där composite >= target_composite.
+
+    Returnerar dict eller None om data saknas:
+        {
+            "current_price": float,
+            "current_composite": float,
+            "buy_zone_price": float | None,   # None = >max_discount behövs
+            "buy_zone_composite": float | None,
+            "distance_pct": float | None,     # % priset behöver falla
+            "in_buy_zone": bool,              # redan köpzon?
+        }
+    """
+    last_price = stock.get("last_price")
+    if not last_price or last_price <= 0:
+        return None
+
+    # Beräkna current composite (om det inte redan finns i stock-dicten)
+    current_scores = _score_book_models(stock)
+    current_comp = current_scores.get("composite")
+    if current_comp is None:
+        return None
+
+    # Redan i köpzon?
+    if current_comp >= target_composite:
+        return {
+            "current_price": round(last_price, 2),
+            "current_composite": round(current_comp, 1),
+            "buy_zone_price": round(last_price, 2),
+            "buy_zone_composite": round(current_comp, 1),
+            "distance_pct": 0.0,
+            "in_buy_zone": True,
+        }
+
+    # Simulera pris-sänkningar — hitta minsta diskontering där composite >= target
+    steps = [0.02, 0.05, 0.08, 0.10, 0.12, 0.15, 0.18, 0.20, 0.25]
+    steps = [s for s in steps if s * 100 <= max_discount_pct]
+
+    for discount in steps:
+        scale = 1.0 - discount
+        t = dict(stock)
+        t["last_price"] = last_price * scale
+        # Priskänsliga nyckeltal
+        if stock.get("pe_ratio") is not None and stock.get("pe_ratio", 0) > 0:
+            t["pe_ratio"] = stock["pe_ratio"] * scale
+        if stock.get("price_book_ratio") is not None and stock.get("price_book_ratio", 0) > 0:
+            t["price_book_ratio"] = stock["price_book_ratio"] * scale
+        # EV/EBIT: EV = marketcap + nettoskuld. Approx: skala linjärt
+        # (exakt skulle kräva netto-skulden separat; approximation räcker för zon-uppskattning)
+        if stock.get("ev_ebit_ratio") is not None and stock.get("ev_ebit_ratio", 0) > 0:
+            t["ev_ebit_ratio"] = stock["ev_ebit_ratio"] * scale
+        # Direct yield = DPS / pris → skalas inverst
+        if stock.get("direct_yield") is not None and stock.get("direct_yield", 0) > 0:
+            t["direct_yield"] = stock["direct_yield"] / scale
+        # Bevara _hist så historisk context används igen (annars blir det dubbelräkning)
+        if "_hist" in stock:
+            t["_hist"] = stock["_hist"]
+
+        test_scores = _score_book_models(t)
+        test_comp = test_scores.get("composite")
+        if test_comp is not None and test_comp >= target_composite:
+            return {
+                "current_price": round(last_price, 2),
+                "current_composite": round(current_comp, 1),
+                "buy_zone_price": round(last_price * scale, 2),
+                "buy_zone_composite": round(test_comp, 1),
+                "distance_pct": round(discount * 100, 1),
+                "in_buy_zone": False,
+            }
+
+    # Nådde inte köpzon ens vid max-rabatt — returnera metadata så UI vet
+    return {
+        "current_price": round(last_price, 2),
+        "current_composite": round(current_comp, 1),
+        "buy_zone_price": None,
+        "buy_zone_composite": None,
+        "distance_pct": None,
+        "in_buy_zone": False,
+    }
+
+
 def _detect_trigger_reason(stock, scores):
     """Identifierar VAD som triggar köprekommendationen NU — "why now".
 
@@ -1939,6 +2830,43 @@ def _detect_trigger_reason(stock, scores):
     klarman = scores.get("klarman")
     graham = scores.get("graham")
     buffett = scores.get("buffett")
+
+    # 0) KÖPZON NÅDD IDAG — priset föll idag precis under beräknat köpzon-pris.
+    #    Högst prio: det är exakt den "intressant under dagen"-signalen vi bygger för.
+    buy_zone = stock.get("_buy_zone") if isinstance(stock, dict) else None
+    if buy_zone and buy_zone.get("in_buy_zone") and d1 is not None and d1 < 0:
+        # Beräkna gårdagens pris ≈ idag / (1 + d1%). Om gårdagen låg ÖVER buy_zone_price
+        # och idag ligger UNDER → vi korsade tröskeln idag.
+        curr = buy_zone.get("current_price")
+        zone = buy_zone.get("buy_zone_price")
+        if curr and zone and d1 is not None:
+            try:
+                yesterday_price = curr / (1.0 + d1 / 100.0)
+                if yesterday_price > zone * 1.001:  # gårdagen var över zon
+                    return {
+                        "icon": "🎯", "kind": "buy_zone_crossed",
+                        "title": "Köpzon korsad idag",
+                        "text": f"Priset föll {d1:+.1f}% idag och ligger nu under köpzon ({zone:.2f}). Composite {comp:.0f} bekräftar — köpläge NU.",
+                    }
+            except Exception:
+                pass
+        # Annars: redan i köpzon men ingen intraday-korsning → mjukare
+        return {
+            "icon": "🎯", "kind": "buy_zone_active",
+            "title": "I köpzonen",
+            "text": f"Pris {curr:.2f} ligger i köpzon (tröskel {zone:.2f}). Composite {comp:.0f}.",
+        }
+
+    # 0b) NÄRA KÖPZON + dagens rörelse — priset faller mot köpzon men inte under än
+    if buy_zone and not buy_zone.get("in_buy_zone") and buy_zone.get("distance_pct") is not None:
+        dist = buy_zone.get("distance_pct")
+        zone = buy_zone.get("buy_zone_price")
+        if dist is not None and dist <= 5 and d1 is not None and d1 < -1 and zone:
+            return {
+                "icon": "⏳", "kind": "buy_zone_approaching",
+                "title": "Nära köpzon",
+                "text": f"Idag {d1:+.1f}% — endast {dist:.1f}% kvar till köpzon ({zone:.2f} kr). Bevaka intraday.",
+            }
 
     # 1) Rea på kvalitet: pris ned senaste månaden MEN fundamenta/värde starka
     if m1 is not None and m1 < -5 and comp is not None and comp >= 70:
@@ -2311,6 +3239,7 @@ def get_graham_defensive_portfolio(db, limit=20, country=""):
         if not debt_ok:
             continue
         d["graham_product"] = pe * pb
+        _attach_hist(db, d)
         sc = _score_book_models(d)
         d["composite_score"] = round(sc["composite"], 1) if sc.get("composite") is not None else None
         d["graham_score"] = round(sc.get("graham"), 1) if sc.get("graham") is not None else None
@@ -2334,7 +3263,13 @@ def get_graham_defensive_portfolio(db, limit=20, country=""):
         seen_base.add(base)
         deduped.append(s)
 
-    return deduped[:limit]
+    # Buy-zone för final-listan
+    final = deduped[:limit]
+    _attach_buy_zone_bulk(final)
+    for s in final:
+        if s.get("_buy_zone"):
+            s["buy_zone"] = s["_buy_zone"]
+    return final
 
 
 def get_quality_concentrated_portfolio(db, limit=8, country=""):
@@ -2380,6 +3315,7 @@ def get_quality_concentrated_portfolio(db, limit=8, country=""):
         debt_ok = (de is not None and de < 0.5) or (nd is not None and nd < 3.0)
         if not debt_ok:
             continue
+        _attach_hist(db, d)
         sc = _score_book_models(d)
         comp = sc.get("composite")
         if comp is None or comp < 70:
@@ -2414,7 +3350,13 @@ def get_quality_concentrated_portfolio(db, limit=8, country=""):
         seen_base.add(base)
         deduped.append(s)
 
-    return deduped[:limit]
+    # Buy-zone för final-listan
+    final = deduped[:limit]
+    _attach_buy_zone_bulk(final)
+    for s in final:
+        if s.get("_buy_zone"):
+            s["buy_zone"] = s["_buy_zone"]
+    return final
 
 
 def get_books_portfolio_top10(db, limit=10, min_owners=200, min_composite=65, min_models=7, country=""):
@@ -2433,20 +3375,31 @@ def get_books_portfolio_top10(db, limit=10, min_owners=200, min_composite=65, mi
 
     rows = _fetchall(db, f"SELECT * FROM stocks {where}", params)
 
-    scored = []
-    for r in rows:
-        d = dict(r)
+    dicts = [dict(r) for r in rows]
+    _attach_hist_bulk(db, dicts)
+
+    pre = []
+    for d in dicts:
         sc = _score_book_models(d)
         comp = sc.get("composite")
         avail = sc.get("models_available", 0)
         if comp is None or avail < min_models or comp < min_composite:
             continue
+        pre.append((d, sc, comp, avail))
+
+    # Buy-zone bara för filtrerade kandidater (billigt)
+    _attach_buy_zone_bulk([x[0] for x in pre])
+
+    scored = []
+    for d, sc, comp, avail in pre:
         pass_count = sum(1 for m in BOOK_MODELS if (sc.get(m["key"]) or 0) >= 65)
         d["composite_score"] = round(comp, 1)
         d["models_available"] = avail
         d["models_passing"] = pass_count
         d["model_scores"] = {m["key"]: round(sc[m["key"]], 1) if sc.get(m["key"]) is not None else None for m in BOOK_MODELS}
         d["_book_reasons"] = _build_pick_reasons(d, sc)
+        if d.get("_buy_zone"):
+            d["buy_zone"] = d["_buy_zone"]
         scored.append(d)
 
     scored.sort(key=lambda x: (x["composite_score"], x["models_passing"]), reverse=True)
@@ -2480,12 +3433,11 @@ def get_model_toplist(db, model="composite", limit=20, min_owners=100, country="
 
     rows = _fetchall(db, f"SELECT * FROM stocks {where}", params)
 
+    dicts = [dict(r) for r in rows if not _is_pref_share(dict(r).get("name") or "")]
+    _attach_hist_bulk(db, dicts)
+
     scored = []
-    for r in rows:
-        d = dict(r)
-        # Filtrera bort pref-aktier och klass-D — bokmodellerna handlar om stamaktier
-        if _is_pref_share(d.get("name") or ""):
-            continue
+    for d in dicts:
         sc = _score_book_models(d)
         v = sc.get(model)
         if v is None:
@@ -2525,12 +3477,12 @@ def get_daily_picks(db, limit=5, min_owners=200, min_composite=70, min_models=7)
         [min_owners],
     )
 
-    picks = []
-    for r in rows:
-        d = dict(r)
-        # Pref-aktier hör inte hemma i dagens picks (bokmodellerna antar stamaktier)
-        if _is_pref_share(d.get("name") or ""):
-            continue
+    dicts = [dict(r) for r in rows if not _is_pref_share(dict(r).get("name") or "")]
+    _attach_hist_bulk(db, dicts)
+
+    # Pre-score alla i en passage så vi kan filtrera billigt innan buy_zone-simulering
+    pre_scored = []
+    for d in dicts:
         sc = _score_book_models(d)
         comp = sc.get("composite")
         avail = sc.get("models_available", 0)
@@ -2538,6 +3490,14 @@ def get_daily_picks(db, limit=5, min_owners=200, min_composite=70, min_models=7)
             continue
         if comp < min_composite:
             continue
+        pre_scored.append((d, sc, comp, avail))
+
+    # Attacha buy_zone bara för de som passerat filtret (billigt — typiskt < 50 stockar)
+    candidates = [x[0] for x in pre_scored]
+    _attach_buy_zone_bulk(candidates)
+
+    picks = []
+    for d, sc, comp, avail in pre_scored:
         # Räkna hur många modeller som "passar" (score >= 65)
         pass_count = sum(1 for m in BOOK_MODELS if (sc.get(m["key"]) or 0) >= 65)
         d["composite_score"] = round(comp, 1)
@@ -2545,7 +3505,11 @@ def get_daily_picks(db, limit=5, min_owners=200, min_composite=70, min_models=7)
         d["models_passing"] = pass_count
         d["model_scores"] = {m["key"]: round(sc[m["key"]], 1) if sc.get(m["key"]) is not None else None for m in BOOK_MODELS}
         d["reasons"] = _build_pick_reasons(d, sc)
-        # "Why now"-trigger direkt på pick-objektet (används av banner-UI)
+        # Exponera buy_zone till UI (round-trip via dict)
+        bz = d.get("_buy_zone")
+        if bz:
+            d["buy_zone"] = bz
+        # "Why now"-trigger direkt på pick-objektet (använder _buy_zone om det finns)
         trig = _detect_trigger_reason(d, sc)
         if trig is not None:
             d["trigger"] = trig
@@ -2555,8 +3519,89 @@ def get_daily_picks(db, limit=5, min_owners=200, min_composite=70, min_models=7)
     return picks[:limit]
 
 
+def get_near_buy_zone(db, limit=30, min_owners=200, min_composite=55,
+                      max_distance_pct=10.0, include_in_zone=True, country=""):
+    """Aktier som ligger NÄRA köpzon — användaren vill veta "om priset faller X% idag blir detta köp".
+
+    Filter:
+      - composite mellan min_composite och target (75) → de som nästan kvalificerar
+      - distance_pct <= max_distance_pct (hur mycket priset behöver falla)
+      - include_in_zone=True → ta också med de som REDAN är i köpzon (flagga färskt i UI)
+
+    Returnerar lista sorterad på (in_buy_zone DESC, distance_pct ASC, composite_score DESC).
+    Varje element har buy_zone-metadata samt trigger-info.
+    """
+    ph = _ph()
+    where = f"WHERE number_of_owners >= {ph} AND last_price IS NOT NULL AND last_price > 0"
+    params = [min_owners]
+    if country:
+        where += f" AND country = {ph}"
+        params.append(country)
+
+    rows = _fetchall(db, f"SELECT * FROM stocks {where}", params)
+    dicts = [dict(r) for r in rows if not _is_pref_share(dict(r).get("name") or "")]
+    _attach_hist_bulk(db, dicts)
+
+    # Pre-scoring: filtrera bort aktier långt från zon (composite < min_composite)
+    pre = []
+    for d in dicts:
+        sc = _score_book_models(d)
+        comp = sc.get("composite")
+        if comp is None or comp < min_composite:
+            continue
+        pre.append((d, sc, comp))
+
+    # Buy zone-simulering — bara för kandidater
+    candidates = [x[0] for x in pre]
+    _attach_buy_zone_bulk(candidates)
+
+    results = []
+    for d, sc, comp in pre:
+        bz = d.get("_buy_zone")
+        if not bz:
+            continue
+        dist = bz.get("distance_pct")
+        if dist is None:
+            continue
+        in_zone = bool(bz.get("in_buy_zone"))
+        if not include_in_zone and in_zone:
+            continue
+        if dist > max_distance_pct:
+            continue
+        d["composite_score"] = round(comp, 1)
+        d["models_available"] = sc.get("models_available", 0)
+        d["model_scores"] = {m["key"]: round(sc[m["key"]], 1) if sc.get(m["key"]) is not None else None for m in BOOK_MODELS}
+        d["buy_zone"] = bz
+        # Beräkna hur "akut" det är: hur nära d1 är distance
+        d1 = d.get("one_day_change_pct")
+        d["buy_zone_urgency"] = None
+        if d1 is not None and dist > 0:
+            # Om dagens nedgång redan är > halva avståndet → "aktiv"
+            if d1 <= -dist:
+                d["buy_zone_urgency"] = "crossed_today"
+            elif d1 <= -dist / 2:
+                d["buy_zone_urgency"] = "approaching_today"
+        if in_zone:
+            d["buy_zone_urgency"] = "in_zone"
+        # Trigger för UI-banner
+        trig = _detect_trigger_reason(d, sc)
+        if trig is not None:
+            d["trigger"] = trig
+        results.append(d)
+
+    # Sort: i-zon först, sen minst avstånd, sen högst composite
+    def _sort_key(x):
+        bz = x["buy_zone"]
+        in_zone = 1 if bz.get("in_buy_zone") else 0
+        dist = bz.get("distance_pct") or 99
+        return (-in_zone, dist, -(x["composite_score"] or 0))
+    results.sort(key=_sort_key)
+    return results[:limit]
+
+
 def enrich_with_book_composite(db, stocks):
     """Tar en lista av stock-dicts och lägger till book_composite_score i varje."""
+    _attach_hist_bulk(db, stocks)
     for s in stocks:
         sc = _score_book_models(s)
         s["book_composite"] = round(sc["composite"], 1) if sc.get("composite") is not None else None
@@ -3438,7 +4483,18 @@ def _normalize_name(name):
 
 
 def get_insider_summary(db, days_back=90):
-    """Beräkna insider-köp/sälj-summary med fuzzy namnmatchning."""
+    """Beräkna insider-köp/sälj-summary med fuzzy namnmatchning.
+
+    Modul-cached 5 min per days_back-nyckel (refresh-cycle körs 1 ggr/dag).
+    """
+    # Cache per days_back (anropas oftast med 90)
+    now = time.time()
+    entry = _INSIDER_CACHE.get(days_back)
+    if entry is not None:
+        data, ts = entry
+        if (now - ts) < _INSIDER_TTL:
+            return data
+
     from collections import defaultdict
     ph = _ph()
     from_date = (datetime.now() - timedelta(days=days_back)).strftime("%Y-%m-%d")
@@ -3501,6 +4557,7 @@ def get_insider_summary(db, days_back=90):
         del s["sell_persons"]
         summary[norm] = s
 
+    _INSIDER_CACHE[days_back] = (summary, time.time())
     return summary
 
 

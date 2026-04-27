@@ -618,6 +618,10 @@
             <span class="material-symbols-outlined">smart_toy</span>
             AI Topplista
         </button>
+        <button class="sidebar-item" onclick="sidebarNav('agent', this)" data-tab="agent">
+            <span class="material-symbols-outlined">forum</span>
+            AI Agent
+        </button>
     </nav>
     <div class="sidebar-footer">
         <div class="sidebar-footer-card">
@@ -676,11 +680,11 @@ let actionFilter = '';
 let hotLookback = 1;
 let hotDirection = 'up';
 let hotCountry = '';
-let hotMode = 'live';  // 'live' = intraday (stocks vs senaste snapshot), 'daily' = snapshot-mot-snapshot
+let hotMode = 'daily';  // 'daily' = snapshot-mot-snapshot (live-läget borttaget — vi uppdaterar inte löpande)
 let hotDateFrom = '';
 let hotDateTo = '';
-// Unified momentum period: live/1d/3d/1w → hot-movers API, 1m/3m/ytd/1y → trending API
-let momPeriod = 'live';
+// Unified momentum period: 1d/3d/1w → hot-movers API, 1m/3m/ytd/1y → trending API
+let momPeriod = '1d';
 
 // Pagination
 let currentOffset = 0;
@@ -861,6 +865,9 @@ async function fetchData(append = false) {
         } else if (currentTab === 'aitoplist') {
             await fetchAIToplist();
             return;
+        } else if (currentTab === 'agent') {
+            renderAgent();
+            return;
         }
 
         // Generic cached fetch for table tabs
@@ -996,7 +1003,7 @@ function _chips(items, activeVal, cls, handler) {
 function _hasActiveFilters() {
     if (currentTab === 'signals') return actionFilter || signalFilter || signalCountry !== 'SE' || minOwners > 10;
     if (currentTab === 'stocks') return searchQuery || countryFilter || minOwners > 0;
-    if (currentTab === 'hotmovers') return momPeriod !== 'live' || hotDirection !== 'up' || hotCountry || minOwners > 100;
+    if (currentTab === 'hotmovers') return momPeriod !== '1d' || hotDirection !== 'up' || hotCountry || minOwners > 100;
     if (currentTab === 'insiders') return searchQuery || insiderType;
     if (currentTab === 'ocf') return searchQuery || (countryFilter && countryFilter !== 'SE') || minOwners > 100;
     return false;
@@ -1005,7 +1012,7 @@ function resetFilters() {
     searchQuery = '';
     if (currentTab === 'signals') { actionFilter=''; signalFilter=''; signalCountry='SE'; minOwners=10; }
     else if (currentTab === 'stocks') { countryFilter=''; minOwners=0; }
-    else if (currentTab === 'hotmovers') { momPeriod='live'; hotDirection='up'; hotCountry=''; minOwners=100; }
+    else if (currentTab === 'hotmovers') { momPeriod='1d'; hotDirection='up'; hotCountry=''; minOwners=100; }
     else if (currentTab === 'insiders') { insiderType=''; }
     else if (currentTab === 'ocf') { countryFilter='SE'; minOwners=100; }
     fetchData();
@@ -1048,9 +1055,8 @@ function renderFilterBar() {
 
     } else if (currentTab === 'hotmovers') {
         // Enhetlig period-väljare: kort sikt via /api/hot-movers, lång sikt via /api/trending.
-        // 'live' uppdateras löpande (intraday), alla andra är snapshot-baserade.
+        // Alla perioder är snapshot-baserade (en snapshot per dag).
         const periods = [
-            {v:'live', l:'⚡ Live'},
             {v:'1d',   l:'Idag'},
             {v:'3d',   l:'3 dagar'},
             {v:'1w',   l:'1 vecka'},
@@ -1061,7 +1067,7 @@ function renderFilterBar() {
         ];
         html += `<div class="filter-group tight">
             <span class="filter-label">Period</span>
-            ${periods.map(p => `<button class="period-chip ${momPeriod===p.v?'active':''}" onclick="setMomPeriod('${p.v}')" ${p.v==='live'?'title="Intraday: live vs senaste snapshot"':''}>${p.l}</button>`).join('')}
+            ${periods.map(p => `<button class="period-chip ${momPeriod===p.v?'active':''}" onclick="setMomPeriod('${p.v}')">${p.l}</button>`).join('')}
         </div>`;
         html += `<div class="filter-group tight">
             <span class="filter-label">Riktning</span>
@@ -1119,19 +1125,10 @@ const TAB_META = {
     portfolio:   { title: 'Simulering',      sub: 'Backtesta strategier mot historisk data' },
     myportfolio: { title: 'Min Portfölj',    sub: 'Ditt bevakade innehav' },
     aitoplist:   { title: 'AI Topplista',    sub: 'AI-rankning av alla bolag' },
+    agent:       { title: 'AI Agent',         sub: 'Chatta med Claude Opus över hela databasen' },
 };
 
-let _hotLiveTimer = null;
-function _stopHotLiveTimer() { if (_hotLiveTimer) { clearInterval(_hotLiveTimer); _hotLiveTimer = null; } }
-function _startHotLiveTimer() {
-    _stopHotLiveTimer();
-    // Refresh var 60:e sekund när Ägarmomentum i live-läge visas
-    _hotLiveTimer = setInterval(() => {
-        if (currentTab === 'hotmovers' && momPeriod === 'live' && document.visibilityState === 'visible') {
-            fetchData();
-        }
-    }, 60 * 1000);
-}
+// NOTE: Live-läge borttaget — vi uppdaterar inte owner-snapshots löpande, så auto-refresh-timer avvecklad.
 
 function switchTab(tab, el) {
     // Backwards-compat: "trending" är numera merged med "hotmovers" under Ägarmomentum
@@ -1154,21 +1151,21 @@ function switchTab(tab, el) {
     else if (tab === 'stocks') { sortCol = 'owners'; sortOrder = 'desc'; }
     else if (tab === 'hotmovers') {
         // Short periods sorterar på hot_diff_pct, long periods på change-kolumn
-        sortCol = (['live','1d','3d','1w'].includes(momPeriod)) ? 'hot_diff_pct' : 'change_1m';
+        sortCol = (['1d','3d','1w'].includes(momPeriod)) ? 'hot_diff_pct' : 'change_1m';
         sortOrder = 'desc';
     }
     else if (tab === 'ocf') { sortCol = 'ocf'; sortOrder = 'desc'; }
     else { sortCol = 'date'; sortOrder = 'desc'; }
-
-    // Auto-refresh bara när Ägarmomentum + Live
-    if (tab === 'hotmovers' && momPeriod === 'live') _startHotLiveTimer();
-    else _stopHotLiveTimer();
 
     // Client-side only tabs (no API fetch)
     if (tab === 'dashboard') { renderFilterBar(); renderDashboard(); return; }
     if (tab === 'metrics')   { renderFilterBar(); renderMetricsTool(); return; }
 
     renderFilterBar();
+    // Visa loading-spinner direkt så att gamla flikens content inte ligger kvar
+    // medan fetchData() väntar på servern eller cachen.
+    const _content = document.getElementById('content');
+    if (_content) _content.innerHTML = '<div class="loading-wrap"><div class="spinner"></div></div>';
     fetchData();
 }
 
@@ -1204,10 +1201,9 @@ function setSignalFilter(s) { signalFilter = s; fetchData(); renderFilterBar(); 
 function setSignalCountry(c) { signalCountry = c; fetchData(); renderFilterBar(); }
 function setActionFilter(a) { actionFilter = a; fetchData(); renderFilterBar(); }
 
-// Ägarmomentum — enhetlig period-väljare. Styr live-timer: bara live triggar auto-refresh.
+// Ägarmomentum — enhetlig period-väljare.
 function setMomPeriod(p) {
     momPeriod = p;
-    if (p === 'live') _startHotLiveTimer(); else _stopHotLiveTimer();
     fetchData();
     renderFilterBar();
 }
@@ -1862,14 +1858,21 @@ function renderSimulation(simData) {
 
     function bigCard(label, icon, color, port, portKey, category) {
         if (!port) return '';
-        const val = port.total_current_value;
-        const gain = port.total_gain;
-        const ret = port.total_return_pct;
-        const r = realized[portKey] || {total_sells:0, wins:0, losses:0, win_rate:0, total_gain_kr:0};
         const c = cash[portKey] || 0;
+        // Visa totalt portföljvärde inkl. kassa (matchar vad användaren faktiskt har)
+        // Buffett Quality med 30% kassa ska inte se ut som -27% när aktierna är -27%.
+        const valHoldings = port.total_current_value;
+        const val = port.total_value_with_cash != null ? port.total_value_with_cash : (valHoldings + c);
+        const gain = port.total_gain_with_cash != null ? port.total_gain_with_cash : (val - port.start_capital);
+        const ret = port.total_return_with_cash_pct != null ? port.total_return_with_cash_pct : (gain / (port.start_capital || 1));
+        // Aktiedel-avkastning (utan kassa) — visa som sekundär info
+        const aktieRet = port.total_return_pct;
+        const aktieGain = port.total_gain;
+        const r = realized[portKey] || {total_sells:0, wins:0, losses:0, win_rate:0, total_gain_kr:0};
         const retClass = ret > 0 ? 'pos' : ret < 0 ? 'neg' : 'neu';
         const retArrow = ret > 0 ? '▲' : ret < 0 ? '▼' : '●';
         const badgeLabel = category === 'book' ? 'Bokstrategi' : 'Signalmodell';
+        const cashPct = port.cash_pct != null ? port.cash_pct : (val > 0 ? c/val : 0);
 
         return `<div class="sim-pcard" style="--accent:${color}" onclick="showModelDetail('${portKey}')" title="Klicka för detaljerad vy, plan och transaktioner">
             <span class="sim-pcard-detail-hint">DETALJER →</span>
@@ -1885,31 +1888,39 @@ function renderSimulation(simData) {
                 <span>Start: ${fmtKr(port.start_capital)}</span>
             </div>
             <div class="sim-pcard-stats">
+                <span class="sim-pcard-stat-label">Aktier</span>
+                <span class="sim-pcard-stat-val" style="color:${aktieGain !== 0 ? rc(aktieGain) : 'var(--text-muted)'}">
+                    ${fmtKr(valHoldings)} <span style="opacity:0.6;font-weight:500">(${fmtRet(aktieRet)})</span>
+                </span>
+                <span class="sim-pcard-stat-label">Kassa</span>
+                <span class="sim-pcard-stat-val" style="color:${c > 100 ? 'var(--blue)' : 'var(--text-muted)'}">
+                    ${fmtKr(c)} <span style="opacity:0.6;font-weight:500">(${(cashPct*100).toFixed(0)}%)</span>
+                </span>
                 <span class="sim-pcard-stat-label">Realiserat</span>
                 <span class="sim-pcard-stat-val" style="color:${r.total_gain_kr !== 0 ? rc(r.total_gain_kr) : 'var(--text-muted)'}">
                     ${r.total_gain_kr !== 0 ? (r.total_gain_kr>=0?'+':'')+fmtKr(r.total_gain_kr) : '—'}
-                </span>
-                <span class="sim-pcard-stat-label">Orealiserat</span>
-                <span class="sim-pcard-stat-val" style="color:${gain !== 0 ? rc(gain) : 'var(--text-muted)'}">
-                    ${gain !== 0 ? (gain>=0?'+':'')+fmtKr(gain) : '—'}
                 </span>
                 <span class="sim-pcard-stat-label">Win rate</span>
                 <span class="sim-pcard-stat-val" style="color:${r.total_sells > 0 ? (r.win_rate >= 0.5 ? 'var(--green-dark)' : 'var(--red)') : 'var(--text-muted)'}">
                     ${r.total_sells > 0 ? r.wins+'/'+r.total_sells+' ('+(r.win_rate*100).toFixed(0)+'%)' : 'Inga sälj'}
                 </span>
-                <span class="sim-pcard-stat-label">Kassa</span>
-                <span class="sim-pcard-stat-val" style="color:${c > 100 ? 'var(--blue)' : 'var(--text-muted)'}">${fmtKr(c)}</span>
             </div>
         </div>`;
     }
 
-    // Ranking-panel: alla portföljer sorterade på avkastning
+    // Ranking-panel: alla portföljer sorterade på avkastning (inkl. kassa)
     let rankingHtml = '';
     let hero = { totalVal: 0, totalCap: 0, totalRealized: 0, best: null, worst: null };
     if (portKeys.length >= 1) {
         const sorted = portKeys
             .filter(k => portfolios[k])
-            .map(k => ({ key: k, ret: portfolios[k].total_return_pct, val: portfolios[k].total_current_value, n: portfolios[k].holdings.length }))
+            .map(k => {
+                const p = portfolios[k];
+                const c = cash[k] || 0;
+                const v = p.total_value_with_cash != null ? p.total_value_with_cash : (p.total_current_value + c);
+                const r = p.total_return_with_cash_pct != null ? p.total_return_with_cash_pct : ((v - p.start_capital) / (p.start_capital || 1));
+                return { key: k, ret: r, val: v, n: p.holdings.length };
+            })
             .sort((a,b) => b.ret - a.ret);
         hero.best = sorted[0];
         hero.worst = sorted[sorted.length - 1];
@@ -2637,6 +2648,159 @@ function renderBookModelSection(s) {
     </div>`;
 }
 
+function renderBuyZoneSection(s) {
+    const bz = s.buy_zone;
+    if (!bz) return '';
+    const curr = bz.current_price;
+    const zone = bz.buy_zone_price;
+    const dist = bz.distance_pct;
+    const inZone = bz.in_buy_zone;
+    const currComp = bz.current_composite;
+    const zoneComp = bz.buy_zone_composite;
+    const currency = s.currency || '';
+
+    let headerBg, headerTitle, headerIcon, bodyText;
+    if (inZone) {
+        headerBg = 'linear-gradient(135deg,#d1fae5,#a7f3d0)';
+        headerIcon = '🎯';
+        headerTitle = 'I köpzon nu';
+        bodyText = `Aktien ligger redan på eller under beräknat köpzonspris (<b>${zone?.toFixed(2)} ${currency}</b>). Composite ${currComp?.toFixed(0)} bekräftar köpsignal.`;
+    } else if (zone == null) {
+        headerBg = 'linear-gradient(135deg,#f3f4f6,#e5e7eb)';
+        headerIcon = '⏸';
+        headerTitle = 'Långt från köpzon';
+        bodyText = `Priset behöver falla mer än 25% för att composite ska nå köpsignal (75). Composite just nu: ${currComp?.toFixed(0)}.`;
+    } else {
+        headerBg = 'linear-gradient(135deg,#fef3c7,#fde68a)';
+        headerIcon = '⏳';
+        headerTitle = 'Nära köpzon';
+        bodyText = `Priset behöver falla <b>${dist?.toFixed(1)}%</b> (från ${curr?.toFixed(2)} → <b>${zone?.toFixed(2)} ${currency}</b>) för att composite ska gå från ${currComp?.toFixed(0)} till ${zoneComp?.toFixed(0)} (köpsignal).`;
+    }
+
+    return `<div class="drawer-section" style="background:${headerBg};border-radius:12px;padding:14px 16px;margin-top:12px">
+        <div class="drawer-section-title" style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+            <span style="font-size:20px">${headerIcon}</span>
+            <span>${headerTitle} — simulerat riktpris</span>
+        </div>
+        <div style="font-size:13px;line-height:1.5;color:#1f2937">${bodyText}</div>
+        ${zone != null && !inZone ? `
+            <div style="display:flex;gap:14px;margin-top:10px;font-size:12px">
+                <div><span style="opacity:0.7">Nuvarande:</span> <b>${curr?.toFixed(2)} ${currency}</b></div>
+                <div><span style="opacity:0.7">Köpzon:</span> <b>${zone?.toFixed(2)} ${currency}</b></div>
+                <div><span style="opacity:0.7">Avstånd:</span> <b>${dist?.toFixed(1)}%</b></div>
+            </div>` : ''}
+        <div style="font-size:11px;color:var(--text-muted);margin-top:8px;font-style:italic">
+            Köpzonen är det pris där composite (viktat av 10 bokmodeller) skulle passera 75. Beräknas genom att simulera pris-sänkningar och rescora — fångar in läget där Graham, Buffett, Klarman, Greenblatt m.fl. tillsammans flaggar köp.
+        </div>
+    </div>`;
+}
+
+function renderHistoricalSection(s) {
+    const annual = s.historical_annual || [];
+    const ctx = s.historical_context || {};
+    if (!annual.length) {
+        return `<div class="drawer-section">
+            <div class="drawer-section-title">📊 10-års historik</div>
+            <div style="padding:16px;background:#f9fafb;border-radius:10px;text-align:center;color:var(--text-muted);font-size:12px">
+                Ingen historisk data tillgänglig. Kör <code style="background:#eee;padding:2px 6px;border-radius:4px">POST /api/refresh-historical</code> för att synka.
+            </div>
+        </div>`;
+    }
+
+    // Sortera stigande på år
+    const sorted = [...annual].sort((a, b) => (a.financial_year||0) - (b.financial_year||0));
+    const years = sorted.map(r => r.financial_year);
+    const eps = sorted.map(r => r.eps);
+    const roe = sorted.map(r => r.return_on_equity != null ? (Math.abs(r.return_on_equity) > 1.5 ? r.return_on_equity : r.return_on_equity * 100) : null);
+    const sales = sorted.map(r => r.sales);
+    const divs = sorted.map(r => r.dividend_per_share);
+
+    // Enkel sparkline-SVG
+    function sparkline(data, color, fmt) {
+        const vals = data.map(v => v == null ? null : Number(v));
+        const nn = vals.filter(v => v != null && !isNaN(v));
+        if (nn.length < 2) return '<div style="color:var(--text-muted);font-size:11px">Otillräcklig data</div>';
+        const min = Math.min(...nn), max = Math.max(...nn);
+        const range = max - min || 1;
+        const w = 360, h = 50, pad = 4;
+        const step = (w - 2*pad) / (vals.length - 1);
+        const pts = vals.map((v, i) => {
+            if (v == null || isNaN(v)) return null;
+            const x = pad + i * step;
+            const y = h - pad - ((v - min) / range) * (h - 2*pad);
+            return `${x},${y}`;
+        }).filter(p => p);
+        const baselineY = min < 0 && max > 0 ? h - pad - ((0 - min) / range) * (h - 2*pad) : null;
+        return `<svg viewBox="0 0 ${w} ${h}" style="width:100%;height:${h}px">
+            ${baselineY != null ? `<line x1="0" y1="${baselineY}" x2="${w}" y2="${baselineY}" stroke="#ccc" stroke-dasharray="2,2"/>` : ''}
+            <polyline points="${pts.join(' ')}" fill="none" stroke="${color}" stroke-width="2"/>
+            ${vals.map((v, i) => {
+                if (v == null) return '';
+                const x = pad + i * step;
+                const y = h - pad - ((v - min) / range) * (h - 2*pad);
+                return `<circle cx="${x}" cy="${y}" r="2.5" fill="${color}"/>`;
+            }).join('')}
+        </svg>`;
+    }
+
+    function miniRow(label, data, color, fmtFn) {
+        const latest = data[data.length - 1];
+        const latestStr = latest != null ? fmtFn(latest) : '-';
+        return `<div style="padding:10px 12px;background:#f9fafb;border-radius:8px;margin-bottom:8px">
+            <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px">
+                <span style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px">${label}</span>
+                <span style="font-size:14px;font-weight:700;color:${color}">${latestStr}</span>
+            </div>
+            ${sparkline(data, color, fmtFn)}
+            <div style="display:flex;justify-content:space-between;font-size:9px;color:var(--text-muted);margin-top:2px">
+                <span>${years[0] || ''}</span>
+                <span>${years[years.length-1] || ''}</span>
+            </div>
+        </div>`;
+    }
+
+    const fmtEps = v => v.toFixed(2);
+    const fmtRoe = v => v.toFixed(1) + '%';
+    const fmtSales = v => {
+        if (Math.abs(v) > 1e9) return (v/1e9).toFixed(1) + ' Mdr';
+        if (Math.abs(v) > 1e6) return (v/1e6).toFixed(0) + ' M';
+        return v.toFixed(0);
+    };
+    const fmtDiv = v => v.toFixed(2);
+
+    // Kontext-kort
+    let contextPills = [];
+    if (ctx.eps_7y_avg != null) contextPills.push(`<span style="padding:3px 8px;background:#dbeafe;color:#1e40af;border-radius:12px;font-size:11px;font-weight:600">7Y avg EPS: ${ctx.eps_7y_avg.toFixed(2)}</span>`);
+    if (ctx.roe_10y_median != null) contextPills.push(`<span style="padding:3px 8px;background:#dbeafe;color:#1e40af;border-radius:12px;font-size:11px;font-weight:600">10Y median ROE: ${(ctx.roe_10y_median*100).toFixed(1)}%</span>`);
+    if (ctx.revenue_cagr_5y != null) {
+        const cagrColor = ctx.revenue_cagr_5y > 0 ? '#065f46' : '#991b1b';
+        const cagrBg = ctx.revenue_cagr_5y > 0 ? '#d1fae5' : '#fee2e2';
+        contextPills.push(`<span style="padding:3px 8px;background:${cagrBg};color:${cagrColor};border-radius:12px;font-size:11px;font-weight:600">5Y rev CAGR: ${(ctx.revenue_cagr_5y*100).toFixed(1)}%</span>`);
+    }
+    if (ctx.eps_loss_years != null && ctx.eps_years) {
+        const stable = ctx.eps_loss_years === 0;
+        contextPills.push(`<span style="padding:3px 8px;background:${stable?'#d1fae5':'#fef3c7'};color:${stable?'#065f46':'#92400e'};border-radius:12px;font-size:11px;font-weight:600">${ctx.eps_loss_years} förlustår / ${ctx.eps_years} år</span>`);
+    }
+    if (ctx.dividend_years_paid != null) {
+        contextPills.push(`<span style="padding:3px 8px;background:#f3e8ff;color:#6b21a8;border-radius:12px;font-size:11px;font-weight:600">Utdelning ${ctx.dividend_years_paid} av 10 år</span>`);
+    }
+    if (ctx.peak_ratio_eps != null && ctx.peak_ratio_eps > 1.5) {
+        const peak = ctx.peak_ratio_eps;
+        const peakColor = peak > 2.5 ? '#991b1b' : '#92400e';
+        const peakBg = peak > 2.5 ? '#fee2e2' : '#fef3c7';
+        contextPills.push(`<span style="padding:3px 8px;background:${peakBg};color:${peakColor};border-radius:12px;font-size:11px;font-weight:600">⚠️ Peak EPS: ${peak.toFixed(1)}× 7Y-median</span>`);
+    }
+
+    return `<div class="drawer-section">
+        <div class="drawer-section-title">📊 10-års historik (Avanza)</div>
+        ${contextPills.length ? `<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px">${contextPills.join('')}</div>` : ''}
+        ${miniRow('EPS per aktie', eps, '#3b82f6', fmtEps)}
+        ${miniRow('Return on Equity', roe, '#10b981', fmtRoe)}
+        ${miniRow('Omsättning', sales, '#8b5cf6', fmtSales)}
+        ${miniRow('Utdelning per aktie', divs, '#f59e0b', fmtDiv)}
+    </div>`;
+}
+
 function openDrawer(s) {
     if (!s) return;
     _currentDrawerStock = s;
@@ -2851,6 +3015,12 @@ function openDrawer(s) {
 
     // ── BOKMODELLER (Graham, Buffett, Lynch, Greenblatt, Klarman, Taleb, Kelly m.fl.) ──
     html += renderBookModelSection(s);
+
+    // ── KÖPZON (simulerat riktpris) ──
+    html += renderBuyZoneSection(s);
+
+    // ── 10-års HISTORIK (Avanza /analysis) ──
+    html += renderHistoricalSection(s);
 
     // ── AI ANALYS-KNAPP ──
     html += `<div class="drawer-section">
@@ -3315,6 +3485,205 @@ function renderAIToplist() {
     `;
 }
 
+// ── AI Agent (chat med Claude Opus) ──────────────────────────
+
+let _agentHistory = [];   // [{role:'user'|'assistant', content: ...}] för API
+let _agentImage = null;   // {b64, media_type, name}
+let _agentLoading = false;
+
+function renderAgent() {
+    const content = document.getElementById('content');
+    const loadingHint = _agentLoading ? '<span class="agent-typing">Claude tänker…</span>' : '';
+
+    const turns = _agentHistory.map(h => {
+        if (h.role === 'user') {
+            // h.content kan vara array (med ev. bild) eller sträng
+            let txt = '';
+            let imgHtml = '';
+            if (Array.isArray(h.content)) {
+                for (const c of h.content) {
+                    if (c.type === 'text') txt += c.text + '\n';
+                    if (c.type === 'image' && c.source?.data) {
+                        imgHtml = `<img src="data:${c.source.media_type};base64,${c.source.data}" class="agent-msg-img"/>`;
+                    }
+                }
+            } else txt = h.content;
+            return `<div class="agent-msg user"><div class="agent-msg-bubble">${imgHtml}${escapeHtml(txt).replace(/\n/g,'<br>')}</div></div>`;
+        } else {
+            // assistant: rendera text med markdown-light
+            let txt = '';
+            if (Array.isArray(h.content)) {
+                for (const c of h.content) if (c.type === 'text') txt += c.text;
+            } else txt = h.content;
+            return `<div class="agent-msg ai"><div class="agent-msg-bubble">${formatAgentText(txt)}</div></div>`;
+        }
+    }).join('');
+
+    const exampleChips = `<div class="agent-examples">
+        <button class="agent-chip" onclick="agentSendExample(this.dataset.q)" data-q="Vilka bolag har bäst free cash flow-utveckling senaste 5 åren?">💰 Bästa FCF-utveckling</button>
+        <button class="agent-chip" onclick="agentSendExample(this.dataset.q)" data-q="Vilka kvalitetsbolag har tappat mest i värde i år och kan vara köpvärda nu?">📉 Sänkta kvalitetsbolag</button>
+        <button class="agent-chip" onclick="agentSendExample(this.dataset.q)" data-q="Hur ser Buffett-modellen på Investor B just nu?">🏰 Buffett-analys</button>
+        <button class="agent-chip" onclick="agentSendExample(this.dataset.q)" data-q="Topp 5 aktier som passar Magic Formula och har hög ROE">📊 Magic Formula favoriter</button>
+        <button class="agent-chip" onclick="agentSendExample(this.dataset.q)" data-q="Vad är dagens köp-rekommendationer och varför?">🎯 Dagens picks</button>
+    </div>`;
+
+    const imagePreview = _agentImage ? `
+        <div class="agent-img-preview">
+            <img src="data:${_agentImage.media_type};base64,${_agentImage.b64}"/>
+            <div class="agent-img-meta">
+                <strong>${escapeHtml(_agentImage.name || 'Bild')}</strong>
+                <button onclick="agentClearImage()" class="agent-img-clear">Ta bort</button>
+            </div>
+        </div>` : '';
+
+    content.innerHTML = `
+    <style>
+        .agent-wrap { display:flex; flex-direction:column; gap:14px; height:calc(100vh - 160px); max-width:900px; margin:0 auto; }
+        .agent-info { background:linear-gradient(135deg,#f0e8ff,#e8eeff); border-radius:12px; padding:14px 18px; font-size:13px; color:var(--text-sec); }
+        .agent-info strong { color:var(--text); }
+        .agent-msgs { flex:1; overflow-y:auto; padding:10px 4px; display:flex; flex-direction:column; gap:14px; }
+        .agent-msg { display:flex; }
+        .agent-msg.user { justify-content:flex-end; }
+        .agent-msg-bubble { max-width:75%; padding:12px 16px; border-radius:14px; font-size:14px; line-height:1.5; box-shadow:0 1px 3px rgba(0,0,0,0.06); }
+        .agent-msg.user .agent-msg-bubble { background:linear-gradient(135deg,#1d4ed8,#3b82f6); color:white; border-bottom-right-radius:4px; }
+        .agent-msg.ai .agent-msg-bubble { background:white; border:1px solid var(--border); border-bottom-left-radius:4px; }
+        .agent-msg-img { max-width:280px; max-height:200px; display:block; border-radius:8px; margin-bottom:8px; }
+        .agent-typing { display:inline-block; font-style:italic; color:var(--text-muted); padding:8px 14px; }
+        .agent-typing::after { content:'...'; animation: agent-dot 1.2s infinite; }
+        @keyframes agent-dot { 0%,20%{content:'.';} 40%{content:'..';} 60%,100%{content:'...';} }
+        .agent-input-row { display:flex; gap:8px; align-items:flex-end; padding:10px; background:white; border:1px solid var(--border); border-radius:14px; box-shadow:0 1px 4px rgba(0,0,0,0.04); }
+        .agent-textarea { flex:1; border:none; outline:none; resize:none; font-family:inherit; font-size:14px; padding:8px 6px; max-height:120px; }
+        .agent-btn { background:linear-gradient(135deg,#1d4ed8,#3b82f6); color:white; border:none; padding:10px 18px; border-radius:10px; cursor:pointer; font-weight:600; font-family:inherit; }
+        .agent-btn:disabled { opacity:0.4; cursor:not-allowed; }
+        .agent-icon-btn { background:#f3f4f6; border:none; padding:8px 10px; border-radius:8px; cursor:pointer; font-size:18px; }
+        .agent-icon-btn:hover { background:#e5e7eb; }
+        .agent-examples { display:flex; flex-wrap:wrap; gap:6px; margin-top:6px; }
+        .agent-chip { background:white; border:1px solid var(--border); padding:6px 12px; border-radius:20px; font-size:12px; cursor:pointer; transition:all 0.15s; font-family:inherit; }
+        .agent-chip:hover { background:var(--green); color:white; border-color:var(--green); }
+        .agent-img-preview { display:flex; gap:10px; align-items:center; padding:8px 12px; background:#f9fafb; border-radius:10px; margin-bottom:6px; }
+        .agent-img-preview img { width:60px; height:60px; object-fit:cover; border-radius:8px; }
+        .agent-img-meta { flex:1; }
+        .agent-img-clear { background:none; border:none; color:var(--red); cursor:pointer; font-size:12px; padding:0; margin-top:4px; }
+        .agent-msg-bubble code { background:rgba(0,0,0,0.06); padding:1px 5px; border-radius:4px; font-family:'SF Mono',monospace; font-size:13px; }
+        .agent-msg.user .agent-msg-bubble code { background:rgba(255,255,255,0.18); }
+        .agent-msg-bubble pre { background:rgba(0,0,0,0.04); padding:8px 10px; border-radius:6px; overflow-x:auto; font-size:12px; }
+        .agent-msg-bubble ul, .agent-msg-bubble ol { padding-left:20px; margin:6px 0; }
+    </style>
+    <div class="agent-wrap">
+        <div class="agent-info">
+            <strong>🤖 Edge Agent</strong> — Claude Opus med tillgång till hela aktiedatabasen.
+            Fråga om bolag, jämförelser, fundamenta, eller ladda upp en skärmbild av din portfölj för analys.
+        </div>
+        <div id="agentMsgs" class="agent-msgs">
+            ${turns || `<div style="color:var(--text-muted);text-align:center;padding:30px">Börja en konversation eller välj ett exempel nedan.</div>`}
+            ${loadingHint ? `<div class="agent-msg ai"><div class="agent-msg-bubble">${loadingHint}</div></div>` : ''}
+        </div>
+        ${turns ? '' : exampleChips}
+        ${imagePreview}
+        <div class="agent-input-row">
+            <button class="agent-icon-btn" title="Ladda upp bild (skärmbild av portfölj)" onclick="document.getElementById('agentImageInput').click()">📎</button>
+            <input type="file" id="agentImageInput" accept="image/*" style="display:none" onchange="agentHandleImage(event)"/>
+            <textarea id="agentInput" class="agent-textarea" placeholder="Fråga om en aktie, jämför bolag, eller analysera din portfölj..." rows="2"
+                onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();agentSend()}"></textarea>
+            <button class="agent-btn" onclick="agentSend()" ${_agentLoading?'disabled':''}>Skicka</button>
+        </div>
+    </div>`;
+
+    // Auto-scroll till botten
+    setTimeout(() => {
+        const m = document.getElementById('agentMsgs');
+        if (m) m.scrollTop = m.scrollHeight;
+    }, 50);
+}
+
+function escapeHtml(s) {
+    return String(s||'').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+function formatAgentText(s) {
+    // Enkel markdown: **bold**, `code`, --- bullets, paragraf
+    let t = escapeHtml(s);
+    t = t.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+    t = t.replace(/`([^`]+)`/g, '<code>$1</code>');
+    // Bullets: rader som börjar med - eller •
+    t = t.replace(/(^|\n)[-•]\s+(.+)/g, '$1<li>$2</li>');
+    t = t.replace(/(<li>.*<\/li>(\n|$))+/g, m => '<ul>' + m.replace(/\n/g,'') + '</ul>');
+    t = t.replace(/\n\n/g, '</p><p>');
+    t = '<p>' + t + '</p>';
+    return t;
+}
+function agentSendExample(q) {
+    const t = document.getElementById('agentInput');
+    if (t) t.value = q;
+    agentSend();
+}
+function agentClearImage() { _agentImage = null; renderAgent(); }
+function agentHandleImage(ev) {
+    const f = ev.target.files?.[0];
+    if (!f) return;
+    if (f.size > 5 * 1024 * 1024) { alert('Max 5 MB'); return; }
+    const fr = new FileReader();
+    fr.onload = e => {
+        const dataUrl = e.target.result;
+        const idx = dataUrl.indexOf(',');
+        _agentImage = {
+            b64: dataUrl.slice(idx + 1),
+            media_type: f.type || 'image/png',
+            name: f.name,
+        };
+        renderAgent();
+    };
+    fr.readAsDataURL(f);
+}
+async function agentSend() {
+    const inp = document.getElementById('agentInput');
+    const text = (inp?.value || '').trim();
+    if (!text && !_agentImage) return;
+    if (_agentLoading) return;
+
+    // Bygg user-content
+    const userContent = [];
+    if (_agentImage) userContent.push({
+        type: 'image',
+        source: { type: 'base64', media_type: _agentImage.media_type, data: _agentImage.b64 },
+    });
+    if (text) userContent.push({ type: 'text', text });
+    _agentHistory.push({ role: 'user', content: userContent });
+
+    // Skicka payload (max 5 MB image handled av filhanteraren)
+    const payload = {
+        message: text,
+        history: _agentHistory.slice(0, -1),  // tidigare turns
+    };
+    if (_agentImage) {
+        payload.image_b64 = _agentImage.b64;
+        payload.image_media_type = _agentImage.media_type;
+    }
+
+    _agentLoading = true;
+    if (inp) inp.value = '';
+    _agentImage = null;
+    renderAgent();
+
+    try {
+        const r = await fetch('/api/agent/chat', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(payload),
+        });
+        const data = await r.json();
+        if (data.error) {
+            _agentHistory.push({ role: 'assistant', content: '⚠ ' + data.error });
+        } else {
+            _agentHistory.push({ role: 'assistant', content: data.reply || '(tomt svar)' });
+        }
+    } catch (e) {
+        _agentHistory.push({ role: 'assistant', content: '⚠ Nätverksfel: ' + e.message });
+    } finally {
+        _agentLoading = false;
+        renderAgent();
+    }
+}
+
 // ── Dashboard (landing) ─────────────────────────────────
 
 let _dashCache = null;
@@ -3378,6 +3747,89 @@ function renderModelToplistRows(el, stocks, limit, expandView) {
 }
 
 const _picksLookup = {};
+
+// ══════════════════════════════════════════════
+// Köpzon-watchlist — aktier nära köpzon idag
+// ══════════════════════════════════════════════
+async function loadBuyZoneWatchlist() {
+    const el = document.getElementById('buyZoneWatchBanner');
+    if (!el) return;
+    try {
+        const r = await fetch('/api/watchlist/near-buy-zone?limit=12&min_owners=200&min_composite=55&max_distance=10');
+        const data = await r.json();
+        const items = data.results || [];
+        if (items.length === 0) {
+            el.outerHTML = `<div class="daily-picks-empty">
+                <div style="display:flex;align-items:center;gap:10px">
+                    <span class="material-symbols-outlined" style="font-size:28px;color:#92400e">radar</span>
+                    <div>
+                        <div style="font-weight:700;color:#92400e">Inga aktier inom 10% från köpzon just nu</div>
+                        <div style="font-size:12px;color:var(--text-muted)">Ingen övervakad aktie ligger tillräckligt nära sitt beräknade köpzonspris (där composite ≥ 75).</div>
+                    </div>
+                </div>
+            </div>`;
+            return;
+        }
+        items.forEach(p => { if (p.orderbook_id) _picksLookup[p.orderbook_id] = p; });
+        const cards = items.map(p => {
+            const bz = p.buy_zone || {};
+            const flag = FLAGS[p.country] || '';
+            const d1 = p.one_day_change_pct;
+            const d1Str = d1 != null ? `<span class="${pctClass(d1)}" style="font-size:12px;font-weight:700">${fmtPct(d1)}</span>` : '';
+            const inZone = bz.in_buy_zone;
+            const urgency = p.buy_zone_urgency;
+            const curPrice = bz.current_price != null ? bz.current_price.toFixed(2) : '–';
+            const zonePrice = bz.buy_zone_price != null ? bz.buy_zone_price.toFixed(2) : '–';
+            const dist = bz.distance_pct;
+
+            let badgeColor = '#92400e', badgeText = 'Nära zon', badgeIcon = '⏳';
+            if (inZone || urgency === 'in_zone') {
+                badgeColor = '#166534'; badgeText = 'I KÖPZON'; badgeIcon = '🎯';
+            } else if (urgency === 'crossed_today') {
+                badgeColor = '#166534'; badgeText = 'KORSADE IDAG'; badgeIcon = '🎯';
+            } else if (urgency === 'approaching_today') {
+                badgeColor = '#c2410c'; badgeText = 'Faller mot zon'; badgeIcon = '⚡';
+            }
+            const distText = inZone
+                ? `<span style="color:#166534;font-weight:700">Redan i köpzon</span>`
+                : dist != null
+                  ? `<span>Faller <b>${dist.toFixed(1)}%</b> → köpläge vid <b>${zonePrice} ${p.currency||''}</b></span>`
+                  : '';
+            const compScore = p.composite_score != null ? p.composite_score.toFixed(0) : '–';
+            return `<div class="daily-pick-card" data-obid="${p.orderbook_id}" onclick='_openPickStock(${p.orderbook_id})' title="Klicka för analys">
+                <div class="dp-row">
+                    <div class="dp-rank" style="background:${badgeColor};color:#fff;min-width:48px;font-size:10px;line-height:1.1;padding:4px 6px;text-align:center;border-radius:6px">
+                        <div style="font-size:16px">${badgeIcon}</div>
+                        <div style="font-weight:800">${badgeText}</div>
+                    </div>
+                    <div class="dp-main">
+                        <div class="dp-name">${flag} ${p.name}</div>
+                        <div class="dp-meta">${p.short_name||''} · ${curPrice} ${p.currency||''} ${d1Str}</div>
+                        <div class="dp-headline" style="font-size:12px;margin-top:4px">${distText}</div>
+                    </div>
+                    <div class="dp-score" style="color:${badgeColor}">
+                        <div style="font-size:22px;font-weight:900;line-height:1">${compScore}</div>
+                        <div style="font-size:9px;text-transform:uppercase;letter-spacing:0.5px;font-weight:700;opacity:0.8">composite</div>
+                    </div>
+                </div>
+            </div>`;
+        }).join('');
+        el.outerHTML = `<div class="daily-picks-banner" style="background:linear-gradient(135deg,#fef3c7 0%,#fde68a 100%)">
+            <div class="dpb-hd">
+                <span style="font-size:28px">🎯</span>
+                <div>
+                    <div class="dpb-title">Nära köpzon idag</div>
+                    <div class="dpb-sub">Aktier där composite är nära 75 — om priset faller under <b>köpzon-priset</b> idag blir de köpläge. Bevaka intraday.</div>
+                </div>
+                <span class="dpb-live"><span class="live-dot" style="background:#c2410c"></span>BEVAKA</span>
+            </div>
+            <div class="daily-picks-grid">${cards}</div>
+        </div>`;
+    } catch(e) {
+        console.warn('buy-zone watchlist fetch failed', e);
+        el.outerHTML = '';
+    }
+}
 
 async function _openPickStock(orderbookId) {
     // Hämta FULL aktiedata via dedikerad endpoint (annars saknar drawer fundamentala nyckeltal)
@@ -3572,6 +4024,9 @@ async function renderDashboard() {
             <div class="dash-section" id="dailyPicksWrap">
                 <div id="dailyPicksBanner" class="daily-picks-skel">Hämtar dagens köp-rekommendationer...</div>
             </div>
+            <div class="dash-section" id="buyZoneWatchWrap">
+                <div id="buyZoneWatchBanner" class="daily-picks-skel">Letar köpzon-kandidater...</div>
+            </div>
             <div class="dash-section">
                 <h3 class="dash-heading">Marknadsöversikt</h3>
                 <div class="dash-top-stats" id="dashTopStats">
@@ -3691,6 +4146,9 @@ function renderDashboardContent(d) {
             </div>`;
         }
     }
+
+    // ── Köpzon-watchlist (nära köpzon idag) ──
+    loadBuyZoneWatchlist();
 
     // ── Top-listor per modell ──
     const toplistsEl = document.getElementById('dashModelToplists');
@@ -4032,12 +4490,12 @@ function renderMetricsContent(market) {
 // ── Prefetch all tabs for instant switching ──────────────
 
 async function prefetchAllTabs() {
-    // Prefetcha bara de tyngsta tabbarna som ofta öppnas. Hot Movers prefetcha-:s
-    // med livedata (match med default momPeriod='live'). Trending är merged in.
+    // Prefetcha bara de tyngsta tabbarna som ofta öppnas. Hot Movers prefetchas med
+    // daily-mode (match med default momPeriod='1d'). Trending är merged in.
     const urls = [
         {tab:'signals', url:'/api/signals?country=SE&sort=meta&order=desc&limit=50&offset=0&min_owners=10&signal=&action=', dataKey:'signals'},
         {tab:'stocks', url:'/api/stocks?q=&country=&sort=owners&order=desc&limit=50&offset=0&min_owners=0', dataKey:'stocks'},
-        {tab:'hotmovers', url:'/api/hot-movers?mode=live&direction=up&lookback=1&limit=50&offset=0&min_owners=100&country=', dataKey:'stocks'},
+        {tab:'hotmovers', url:'/api/hot-movers?mode=daily&direction=up&lookback=1&limit=50&offset=0&min_owners=100&country=', dataKey:'stocks'},
         {tab:'insiders', url:'/api/insiders?q=&type=&limit=50&offset=0', dataKey:'transactions'},
         {tab:'portfolio', url:'/api/simulation', dataKey:null},
     ];
@@ -4053,8 +4511,8 @@ async function prefetchAllTabs() {
                 const params = {q:'', country:'', sort:'owners', order:'desc', limit:50, offset:0, min_owners:0};
                 setCache(cacheKey('stocks', params), data);
             } else if (tab === 'hotmovers') {
-                // Match med short-period live-URL som fetchData bygger
-                const params = {mode:'live', direction:'up', lookback:1, limit:50, offset:0, min_owners:100, country:''};
+                // Match med short-period daily-URL som fetchData bygger (default momPeriod='1d')
+                const params = {mode:'daily', direction:'up', lookback:1, limit:50, offset:0, min_owners:100, country:''};
                 setCache(cacheKey('hotmovers_short', params), data);
             } else if (tab === 'insiders') {
                 const params = {q:'', type:'', limit:50, offset:0};
