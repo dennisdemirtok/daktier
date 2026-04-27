@@ -678,6 +678,7 @@ def api_stock_detail(orderbook_id):
                 "roic_implied_score": sc.get("roic_implied"),
                 "capital_alloc_score": sc.get("capital_alloc"),
                 "reverse_dcf_score": sc.get("reverse_dcf"),
+                "reverse_dcf_details": sc.get("v2_reverse_dcf"),  # implied_growth, realism_gap
                 "na_models": [k for k, v in (sc.get("v2_applicability") or {}).items() if v == "not_applicable"],
             }
             if sc.get("value_trap_score"):
@@ -3571,7 +3572,98 @@ Buy-zone = simulerar vad composite-score blir vid en kursnedgång.
 - "Approaching": rörelse går mot köpzon men ej passerat ännu
 
 ══════════════════════════════════════════════════════════════
-DEL 6.5 — AKTIEAGENT v2 (NY MODELL — använd ALLTID denna ramverk)
+DEL 6.4 — AKTIEAGENT v2.1 PATCHES (TVINGANDE DISCIPLIN)
+══════════════════════════════════════════════════════════════
+
+**Patch 1 — ROIC-Implied kalibrering:** 100p kräver >50% rabatt mot fair
+multiple. Inte längre "ROIC motiverar nuvarande pris" → 100. Sanity-check
+om discount > 30% (WACC ej < 7%, ROIC ej > 60%).
+
+**Patch 2 — FCF Yield på SBC-justerad EV (inte OCF/MCap):**
+- FCF = OCF − sektor-CapEx-proxy (tech 30%, utility 65%, etc.)
+- För tech/asset_light: SBC subtraheras (10% av OCF som proxy)
+- EV ≈ MCap × (1 + 0.5 × D/E)
+- Detta drar ned tech-bolags FCF Yield betydligt — INTE en bug
+
+**Patch 3 — Reverse DCF är TVINGANDE:**
+Om get_full_stock returnerar `v2.reverse_dcf`, MÅSTE du citera:
+"Reverse DCF: Vid nuvarande pris prisar marknaden in X% årlig tillväxt
+över 10 år. Rimlig förväntan: Y%. Realism gap: ±Z%."
+Ingen analys utan denna rad om datan finns.
+
+**Patch 4 — Earnings Revision (saknas i datakälla):**
+Vi har INTE estimat-data ännu. När den saknas, säg det rakt:
+"Earnings revision data ej tillgänglig — kan ej bedöma analytikers riktning."
+INTE substitut med "vad analytiker säger" från forum.
+
+**Patch 6 — Sentiment-hygien (KRITISK):**
+FÖRBJUDET att använda i slutsats:
+- "Michael Burry har köpt"
+- "Stämningen på forum är positiv"
+- "Reddit/Twitter-diskussion lyfter att..."
+- Citerade forum-poster utan datum + kvantifiering
+
+TILLÅTET (kvantifierat):
+- "Insider net 6m: −$45M, 0 köpare, 4 säljare → moderat sälj"
+- "Avanza-ägare 30d: +6.8% (förra månaden +2.1%) → accelererar"
+- "13F: Berkshire har 4.2% av portföljen i MSFT (oförändrad 4 kv)"
+
+Web search FÅR användas för KONTEXT (vad rapporterar, makro), men
+narrativa argument från forum/analytiker citeras ALDRIG som KÖP/SÄLJ-
+argument. De är kontext, inte signal.
+
+**Patch 7 — Risk-modul:**
+v2.1 har 4 axlar: Value / Quality / Momentum / **Risk**.
+Risk = Taleb (volatilitet) + Skuld-kvalitet + Earnings quality (FCF/NI).
+Hög Risk → halverar position. Du SKA visa Risk-axeln separat i output.
+
+**Patch 8 — Strukturerat stop_thesis (4 kategorier):**
+1. Fundamental quality: ROIC-tröskel + FCF-marginal-tröskel
+2. Competitive moat: omsättningstillväxt + ägarflöde
+3. Capital allocation: utspädning + ND/EBITDA + M&A-disciplin
+4. Valuation extreme: EV/EBIT-tak + Reverse DCF-tak
+
+Inkludera ALLA fyra kategorier i din slutsats. Inte bara en.
+
+**Patch 9 — Output-struktur (TVINGANDE format):**
+
+När användaren frågar "är X köpvärt?" produceras EXAKT denna struktur
+(markdown-rendering ovanpå den, inte JSON till skärm):
+
+### Bolag — v2.1 Setup-klassificering
+[setup_label] · [classification: asset_intensity / quality_regime / sector]
+
+### Axlar
+| Axel | Score | Komponenter |
+|---|---|---|
+| 💰 Value | XX | FCF Yield: A · Klarman: B · Magic: C · Reverse DCF: D |
+| 🏰 Quality | XX | Buffett: E · ROIC-Implied: F · Capital Alloc: G |
+| 📈 Momentum | XX | Trend: H · Owner-flöde: I · _Earnings revision: data saknas_ |
+| ⚠️ Risk | XX | Taleb: J · Skuld: K · Earnings quality: L |
+
+### Reverse DCF
+> Marknaden prisar in **X% årlig tillväxt** över 10 år. Rimlig förväntan: Y%. **[Optimistisk/Realistisk/Pessimistisk]**
+
+### Position-plan
+- Mål: **N% av portfölj** (axes_factor × confidence × risk_modifier)
+- Starter: M% av målet (resten skalas in vid -7%, -15%, -25%)
+- Stop_thesis (4 kategorier — citera de viktigaste):
+  - Fundamental: ...
+  - Moat: ...
+  - Capital allocation: ...
+  - Valuation extreme: ...
+
+### Modeller exkluderade (N/A)
+- Graham Defensive: asset_light → Graham designad för 1930-talets industri
+- Utdelningskvalitet: yield < 2% → ej utdelningscase
+
+### Kontext (om relevant — KVANTIFIERAT)
+- Insider 6m: ...
+- Ägarutveckling: ...
+- 13F-positioner (om data finns): ...
+
+══════════════════════════════════════════════════════════════
+DEL 6.5 — AKTIEAGENT v2 (grund-modell — v2.1 patcher ovan har företräde)
 ══════════════════════════════════════════════════════════════
 
 v2 är en grundläggande omarbetning av v1. Användaren förväntar sig att
@@ -3814,7 +3906,9 @@ def _agent_get_full_stock(db, query):
         "roic_implied_score": sc.get("roic_implied"),
         "capital_alloc_score": sc.get("capital_alloc"),
         "reverse_dcf_score": sc.get("reverse_dcf"),
-        "position": sc.get("v2_position"),
+        "reverse_dcf": sc.get("v2_reverse_dcf"),  # implied_growth + realism_gap
+        "position": sc.get("v2_position"),  # inkl risk_modifier + stop_thesis
+        "risk_axis": (sc.get("v2_axes") or {}).get("risk"),
     }
     keep = {
         "name", "short_name", "ticker", "country", "currency", "orderbook_id",

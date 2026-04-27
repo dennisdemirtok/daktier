@@ -3112,17 +3112,35 @@ function openDrawer(s) {
                     <div style="color:#374151">${cls.sector || 'sektor okänd'}</div>
                 </div>
             </div>
-            <div style="display:flex;gap:14px;background:rgba(255,255,255,0.5);padding:10px;border-radius:10px">
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;background:rgba(255,255,255,0.5);padding:10px;border-radius:10px">
                 ${axisBar('💰 Value', axes.value, '#dc2626')}
                 ${axisBar('🏰 Quality', axes.quality, '#059669')}
                 ${axisBar('📈 Momentum', axes.momentum, '#2563eb')}
+                ${axisBar('⚠️ Risk', axes.risk, '#9333ea')}
             </div>
+            ${v.reverse_dcf ? `
+                <div style="background:rgba(255,255,255,0.6);border-radius:10px;padding:10px 12px;margin-top:10px;font-size:12px">
+                    <strong>🧮 Reverse DCF:</strong> Marknaden prisar in <b>${v.reverse_dcf.implied_growth}%</b> årlig FCF-tillväxt över 10 år
+                    (rimlig förväntan: ${v.reverse_dcf.reasonable_g}%, gap ${v.reverse_dcf.realism_gap > 0 ? '+' : ''}${v.reverse_dcf.realism_gap}%)
+                    · WACC ${v.reverse_dcf.wacc_used}%
+                </div>` : ''}
             ${pos.target_pct_of_portfolio > 0 ? `
                 <div style="background:rgba(255,255,255,0.6);border-radius:10px;padding:10px 12px;margin-top:10px;font-size:12px">
                     <strong>📊 Position-plan:</strong> mål ${pos.target_pct_of_portfolio}% av portföljen ·
                     starter ${pos.starter_pct_of_target}% av målet ·
                     skala in vid ${(pos.scale_in_at || []).map(x => x + '%').join(' / ')}
+                    ${pos.risk_modifier ? ` · risk-modifier ${(pos.risk_modifier * 100).toFixed(0)}%` : ''}
                 </div>` : ''}
+            ${pos.stop_thesis ? `
+                <details style="background:rgba(255,255,255,0.6);border-radius:10px;padding:8px 12px;margin-top:8px;font-size:11px">
+                    <summary style="cursor:pointer;font-weight:600">🛑 Stop_thesis (4 kategorier)</summary>
+                    <div style="margin-top:6px;display:grid;grid-template-columns:1fr 1fr;gap:6px">
+                        ${Object.entries(pos.stop_thesis).map(([cat, items]) => `
+                            <div><strong style="text-transform:capitalize">${cat.replace(/_/g, ' ')}:</strong>
+                            <ul style="margin:2px 0 0 12px;padding:0">${(items||[]).map(it => `<li>${it}</li>`).join('')}</ul></div>
+                        `).join('')}
+                    </div>
+                </details>` : ''}
             ${(v.na_models || []).length > 0 ? `
                 <div style="font-size:10px;color:#4b5563;margin-top:8px;font-style:italic">
                     Ej tillämpliga modeller (N/A): ${v.na_models.join(', ')}

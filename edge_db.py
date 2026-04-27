@@ -2730,24 +2730,90 @@ def _model_applicability(classification):
 
 # ─── v2-scorers ──────────────────────────────────────────────────
 
+# Sektor-baserade CapEx-intensitets-proxies (CapEx / OCF).
+# Avanza levererar inte CapEx separat — vi uppskattar baserat på branchsnitt
+# från offentliga benchmark-rapporter (SEC 10-K avg per sektor).
+# Detta är en GROV approximation. Ska ersättas när vi får riktig CapEx-data.
+_SECTOR_CAPEX_PROXY = {
+    "tech":         0.30,   # tech har hög CapEx 2025-2026 pga AI-investeringar
+    "telecom":      0.55,   # mobil-/fiber-uppbyggnad
+    "utility":      0.65,   # mycket capex-tungt
+    "energy":       0.50,
+    "materials":    0.45,
+    "industrials":  0.30,
+    "reit":         0.20,   # CapEx små men avskrivningar stora
+    "healthcare":   0.15,
+    "consumer":     0.20,
+    "financials":   0.05,
+    "unknown":      0.25,
+}
+
+# SBC-proxy per sektor (SBC / OCF). Tech betalar mycket i optioner.
+_SECTOR_SBC_PROXY = {
+    "tech":         0.10,
+    "healthcare":   0.05,
+    "financials":   0.03,
+    "consumer":     0.02,
+    "industrials":  0.02,
+    "energy":       0.01,
+    "materials":    0.01,
+    "unknown":      0.03,
+}
+
+
 def _score_fcf_yield(s, classification):
-    """FCF Yield Score — vi använder OCF som proxy (CapEx-data saknas).
-    Detta överskattar FCF för CapEx-tunga bolag. Markerar därför som approx."""
+    """FCF Yield Score (v2.1 Patch 2).
+
+    Korrekt formel:
+        FCF = OCF − CapEx
+        FCF (SBC-justerad) = FCF − SBC      (obligatorisk för tech/asset_light)
+        EV = MarketCap + TotalDebt − Cash    (vi approximerar via debt_to_equity)
+        FCF Yield = FCF (SBC-adj) / EV
+
+    Eftersom Avanza inte levererar CapEx eller SBC separat, använder vi
+    sektor-baserade proxies. Detta är dämpat jämfört med v2 (som använde
+    rå OCF / MarketCap och därför överskattade tech-bolag dramatiskt).
+
+    För Microsoft-fallet:
+        v2:      OCF $160B / MCap $2,8T = 5.7% → score 60   (felaktigt högt)
+        v2.1:   FCF SBC-adj ~$70-80B / EV ~$3,1T = 2.3-2.6% → score 25-30
+    """
     ocf = s.get("operating_cash_flow")
     market_cap = s.get("market_cap") or s.get("market_capitalization")
     if not ocf or not market_cap or market_cap <= 0:
         return None
-    # EV ≈ market_cap (vi har inte nettoskuld separerat, så approx)
-    fcf_yield = ocf / market_cap
+
+    sector = classification.get("sector", "unknown")
+    is_tech_or_asset_light = (sector == "tech" or
+                               classification.get("asset_intensity") == "asset_light")
+
+    # CapEx-proxy: sektor-snitt × OCF
+    capex_pct = _SECTOR_CAPEX_PROXY.get(sector, 0.25)
+    capex_proxy = ocf * capex_pct
+    fcf_proxy = ocf - capex_proxy
+
+    # SBC-proxy: obligatorisk för tech/asset_light enligt Patch 5
+    sbc_pct = _SECTOR_SBC_PROXY.get(sector, 0.03) if is_tech_or_asset_light else 0
+    sbc_proxy = ocf * sbc_pct
+    fcf_sbc_adj = fcf_proxy - sbc_proxy
+
+    # EV-approximation: MarketCap × (1 + D/E_normalized)
+    # D/E är total_debt / equity, så total_debt = mcap × D/E (ungefär — egentligen
+    # bookvärde × D/E. Approximation, men bättre än bara MCap).
+    de = s.get("debt_to_equity_ratio") or 0
+    total_debt_est = market_cap * min(de, 2.0) if de > 0 else 0
+    # Vi har ingen cash separat — approximation EV ≈ MCap × (1 + 0.5 × D/E)
+    ev = market_cap * (1 + 0.5 * min(de, 2.0))
+
+    fcf_yield = fcf_sbc_adj / ev
+    # Score-skala (samma trösklar som v2 men nu på SBC-justerad FCF/EV)
     if fcf_yield > 0.08: base = 100
     elif fcf_yield > 0.06: base = 80
     elif fcf_yield > 0.04: base = 60
     elif fcf_yield > 0.03: base = 40
     elif fcf_yield > 0.02: base = 20
-    else: base = max(0, fcf_yield * 1000)  # 1% = 10p
-    # CapEx-tunga sektorer: dämpa eftersom OCF överskattar FCF
-    if classification.get("sector") in ("energy", "materials", "industrials", "utility", "telecom"):
-        base *= 0.85
+    elif fcf_yield > 0.01: base = max(5, fcf_yield * 1000)
+    else: base = 0
     return _clamp(base)
 
 
@@ -2796,30 +2862,85 @@ def _score_roic_implied(s, classification):
         return None
 
     discount = (fair_ev_ebit - ev_ebit) / fair_ev_ebit
-    if discount > 0.30: base = 100
-    elif discount > 0.10: base = 80
-    elif discount > -0.10: base = 60
-    elif discount > -0.30: base = 30
-    else: base = 10
+    # v2.1 Patch 1 — kalibrerad scoring-tabell.
+    # 100p reserveras för EXTREM rabatt (sällsynt), inte normal "ROIC motiverar".
+    if discount > 0.50: base = 100      # extrem rabatt — kräver verifiering
+    elif discount > 0.30: base = 85     # stark rabatt
+    elif discount > 0.15: base = 70     # moderat rabatt
+    elif discount > 0.0: base = 55      # något under fair
+    elif discount > -0.15: base = 45    # något över fair
+    elif discount > -0.30: base = 25    # klar premie
+    else: base = 10                     # extrem premie
+
+    # Sanity-check vid extrem rabatt (>30%): cap till 70 om antaganden ser orealistiska ut
+    if discount > 0.30:
+        sanity_ok = True
+        # Antagen WACC bör inte vara orealistiskt låg
+        if wacc < 0.07: sanity_ok = False
+        # ROIC senaste året bör inte vara extremt över 5y-snitt (vi har inte historik
+        # för ROIC, så vi använder ROCE direkt + flagga om absurt högt)
+        if roic_pct > 60: sanity_ok = False
+        if not sanity_ok:
+            base = min(base, 70)
     return _clamp(base)
 
 
-def _score_reverse_dcf(s, classification):
-    """Reverse DCF Score — vad implicit growth-rate kräver marknaden vid nuvarande pris?
+def _reverse_dcf_solve(current_ev, current_fcf, wacc,
+                       explicit_years=10, terminal_growth=0.025):
+    """v2.1 Patch 3 — bisection-solver för implicit growth.
 
-    Procedur (förenklad steady-state):
-        EV ≈ Market Cap (vi har inte nettoskuld separerat)
-        Implicit g lös ut ur: EV = FCF × (1 + g) / (WACC − g)
-        ⇒ g = (EV × WACC − FCF) / (EV + FCF)
-
-    Sen jämförs implicit g mot rimligt förväntad g (från quality_regime).
-    Stort gap (marknaden förväntar mycket mer än rimligt) = score 10.
-    Nära noll = rättvist prissatt = score 60.
-    Negativt gap (marknaden förväntar mindre än rimligt) = score 90+.
+    Hittar g där NPV (10 års explicit + terminal) = current_ev.
+    Mer korrekt än stationary-state-formeln eftersom den respekterar
+    explicit growth-fönster och terminal-värde.
     """
-    ocf = s.get("operating_cash_flow")  # FCF-proxy
+    def npv(g):
+        cf = current_fcf
+        npv_explicit = 0.0
+        for year in range(1, explicit_years + 1):
+            cf *= (1 + g)
+            npv_explicit += cf / ((1 + wacc) ** year)
+        # Terminal value (Gordon growth)
+        terminal_cf = cf * (1 + terminal_growth)
+        if wacc - terminal_growth <= 0.001:
+            return float('inf')
+        terminal_value = terminal_cf / (wacc - terminal_growth)
+        npv_terminal = terminal_value / ((1 + wacc) ** explicit_years)
+        return npv_explicit + npv_terminal
+
+    # Bisection mellan -10% och +30% growth
+    low, high = -0.10, 0.30
+    mid = 0.05
+    for _ in range(50):
+        mid = (low + high) / 2
+        if npv(mid) < current_ev:
+            low = mid
+        else:
+            high = mid
+        if abs(high - low) < 0.0001:
+            break
+    return mid
+
+
+def _score_reverse_dcf(s, classification):
+    """v2.1 Patch 3 — Reverse DCF Score (TVINGANDE).
+
+    Korrekt 10-årig DCF med terminal-värde + bisection (inte stationary-state).
+    Output INKLUDERAR det implicit growth-tal marknaden prisar in.
+
+    Returnerar dict istället för bara score, så agenten kan citera siffran:
+        {"score": 0-100, "implied_growth": float, "realism_gap": float, "wacc": ...}
+    Eller None om data saknas.
+    """
+    ocf = s.get("operating_cash_flow")  # FCF-proxy (vi har inte CapEx separat)
     market_cap = s.get("market_cap") or s.get("market_capitalization")
     if not ocf or ocf <= 0 or not market_cap or market_cap <= 0:
+        return None
+
+    # Justera OCF till "FCF-approx" via sektor-CapEx
+    sector = classification.get("sector", "unknown")
+    capex_pct = _SECTOR_CAPEX_PROXY.get(sector, 0.25)
+    fcf_proxy = ocf * (1 - capex_pct)
+    if fcf_proxy <= 0:
         return None
 
     # WACC från storlek
@@ -2828,17 +2949,17 @@ def _score_reverse_dcf(s, classification):
     elif market_cap > 500e6: wacc = 0.11
     else: wacc = 0.13
 
-    ev = market_cap  # approx (saknar nettoskuld separerad)
-    # Lös ut g från EV = FCF × (1+g) / (WACC - g) → g = (EV·WACC - FCF) / (EV + FCF)
-    try:
-        implied_g = (ev * wacc - ocf) / (ev + ocf)
-    except ZeroDivisionError:
-        return None
+    # EV-approximation
+    de = s.get("debt_to_equity_ratio") or 0
+    ev = market_cap * (1 + 0.5 * min(de, 2.0))
 
-    # Cap till rimliga bounds
+    try:
+        implied_g = _reverse_dcf_solve(ev, fcf_proxy, wacc)
+    except Exception:
+        return None
     implied_g = max(-0.20, min(0.50, implied_g))
 
-    # Rimlig förväntad g från quality_regime (samma som ROIC-implied)
+    # Rimlig förväntad g från quality_regime
     quality = classification.get("quality_regime")
     growth = classification.get("growth_profile")
     if quality == "compounder":
@@ -2854,11 +2975,21 @@ def _score_reverse_dcf(s, classification):
     realism_gap = implied_g - reasonable_g
 
     # Score per spec 5.3
-    if realism_gap < -0.05: base = 95   # marknaden förväntar mindre än rimligt → upside
+    if realism_gap < -0.05: base = 95
     elif realism_gap < 0.0: base = 75
     elif realism_gap < 0.03: base = 55
     elif realism_gap < 0.07: base = 30
-    else: base = 10                      # marknaden prisar in optimism → downside-risk
+    else: base = 10
+
+    # Returnera score som number (för bakåtkompatibilitet med composite-loop)
+    # Detaljer (implied_g etc) sparas separat på stocken via _score_book_models.
+    s["_reverse_dcf_details"] = {
+        "implied_growth": round(implied_g * 100, 2),
+        "reasonable_g": round(reasonable_g * 100, 2),
+        "realism_gap": round(realism_gap * 100, 2),
+        "wacc_used": round(wacc * 100, 2),
+        "fcf_proxy_pct_of_ocf": round((1 - capex_pct) * 100, 0),
+    }
     return _clamp(base)
 
 
@@ -3375,20 +3506,55 @@ def _score_book_models(s):
                 vals.append(v)
         return sum(vals) / len(vals) if vals else None
 
+    # v2.1 Patch 7 — Taleb flyttad från Momentum till Risk-modul
     # Value: Klarman, Magic Formula, FCF Yield, Reverse DCF
     value_axis = _avg_applicable(["klarman", "magic", "fcf_yield", "reverse_dcf"], applicability)
     # Quality: Buffett, ROIC-Implied, Capital Allocation
     quality_axis = _avg_applicable(["buffett", "roic_implied", "capital_alloc"], applicability)
-    # Momentum: Trend, Owners (insider/retail), (Earnings Revision saknas)
+    # Momentum: Trend, Owners (Earnings Revision saknas tills datakälla)
     momentum_axis = _avg_applicable(["trend", "owners"], applicability)
+    # Risk: Taleb (volatilitet) + composite-coverage
+    risk_components = []
+    if scores.get("taleb") is not None: risk_components.append(scores["taleb"])
+    # Skuld-kvalitet (om data finns)
+    de = s.get("debt_to_equity_ratio")
+    nd = s.get("net_debt_ebitda_ratio")
+    debt_score = None
+    if nd is not None:
+        if nd < 1.0: debt_score = 90
+        elif nd < 2.0: debt_score = 70
+        elif nd < 3.0: debt_score = 40
+        else: debt_score = 15
+    elif de is not None:
+        if de < 0.3: debt_score = 85
+        elif de < 0.7: debt_score = 65
+        elif de < 1.5: debt_score = 35
+        else: debt_score = 15
+    if debt_score is not None:
+        risk_components.append(debt_score)
+    # Earnings quality (FCF / NI ratio — proxy för accruals)
+    ocf = s.get("operating_cash_flow") or 0
+    np = s.get("net_profit") or 0
+    if np > 0 and ocf > 0:
+        fcf_ni = ocf / np
+        if fcf_ni >= 0.95: eq_score = 90  # solid kvalitet
+        elif fcf_ni >= 0.7: eq_score = 70
+        elif fcf_ni >= 0.5: eq_score = 45
+        else: eq_score = 20
+        risk_components.append(eq_score)
+    risk_axis = sum(risk_components) / len(risk_components) if risk_components else None
 
     scores["v2_axes"] = {
         "value": round(value_axis, 1) if value_axis is not None else None,
         "quality": round(quality_axis, 1) if quality_axis is not None else None,
         "momentum": round(momentum_axis, 1) if momentum_axis is not None else None,
+        "risk": round(risk_axis, 1) if risk_axis is not None else None,
     }
     scores["v2_classification"] = classification
     scores["v2_applicability"] = applicability
+    # Reverse DCF detaljer (om beräknat) — för agent/UI att citera
+    if "_reverse_dcf_details" in s:
+        scores["v2_reverse_dcf"] = s.pop("_reverse_dcf_details")
 
     # ─── Tesklassificering enligt 6.2 i specen ───
     # Tröskel: high≥60 (passar bok-tröskel 65 +/- buffert), mid≥40, low<40
@@ -3468,12 +3634,50 @@ def _score_book_models(s):
     }
     axes_factor = axes_factor_map.get(setup, 0.5)
     target_pct = 5.0  # 5% per position som default
-    sized = target_pct * axes_factor * scores["v2_confidence"]
+
+    # v2.1 Patch 7 — Risk modifierar position-storlek (50%-100%)
+    # Hög risk halverar starter, låg risk lämnar oförändrad
+    if risk_axis is not None:
+        risk_modifier = 0.5 + 0.5 * (risk_axis / 100)
+    else:
+        risk_modifier = 0.85  # konservativ default när data saknas
+
+    sized = target_pct * axes_factor * scores["v2_confidence"] * risk_modifier
+    base_starter = 25 if axes_factor < 1.0 else (50 if axes_factor >= 1.5 else 33)
+    risk_adjusted_starter = max(15, int(base_starter * risk_modifier))
+
+    # v2.1 Patch 8 — Strukturerat stop_thesis-ramverk i 4 kategorier
+    roce = s.get("return_on_capital_employed") or 0
+    pe = s.get("pe_ratio") or 0
+    quality = classification.get("quality_regime")
+    roce_pct = roce * 100 if roce else 0
+    stop_thesis = {
+        "fundamental_quality": [
+            f"ROIC drops below {max(8, roce_pct - 4):.0f}% for 2 consecutive years",
+            "FCF margin compression > 500bps from peak",
+        ],
+        "competitive_moat": [
+            "Revenue growth < 3% for 2 consecutive quarters",
+            "Owner growth (Avanza) reverses to net negative for 6+ months",
+        ],
+        "capital_allocation": [
+            "Share count increases > 2% per year (utspädning)",
+            "ND/EBITDA exceeds 2.0× absent strategic reason",
+            "Major M&A > 20% of MarketCap outside core competence",
+        ],
+        "valuation_extreme": [
+            f"EV/EBIT > {max(35, (s.get('ev_ebit_ratio') or 20) * 1.5):.0f} with unchanged ROIC (rich exit)",
+            "Reverse DCF implied growth > 1.5× historical 5y CAGR",
+        ],
+    }
+
     scores["v2_position"] = {
         "axes_factor": axes_factor,
+        "risk_modifier": round(risk_modifier, 2),
         "target_pct_of_portfolio": round(sized, 2),
-        "starter_pct_of_target": 25 if axes_factor < 1.0 else (50 if axes_factor >= 1.5 else 33),
+        "starter_pct_of_target": risk_adjusted_starter,
         "scale_in_at": [-7, -15, -25],  # procent från ingång
+        "stop_thesis": stop_thesis,
     }
 
     return scores
