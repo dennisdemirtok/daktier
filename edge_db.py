@@ -365,6 +365,21 @@ def _create_tables(db):
                 quarters_available INTEGER,
                 error_message TEXT
             );
+
+            CREATE TABLE IF NOT EXISTS macro_history (
+                period TEXT NOT NULL,
+                period_type TEXT NOT NULL,
+                cape DOUBLE PRECISION,
+                buffett_indicator DOUBLE PRECISION,
+                vix DOUBLE PRECISION,
+                us_10y DOUBLE PRECISION,
+                sp500 DOUBLE PRECISION,
+                gold_ratio DOUBLE PRECISION,
+                fear_greed DOUBLE PRECISION,
+                source TEXT,
+                fetched_at TEXT,
+                PRIMARY KEY (period, period_type)
+            );
         """)
         # Indexes
         for idx_sql in [
@@ -385,10 +400,12 @@ def _create_tables(db):
             "CREATE INDEX IF NOT EXISTS idx_hist_annual_oid ON historical_annual(orderbook_id)",
             "CREATE INDEX IF NOT EXISTS idx_hist_quarterly_oid ON historical_quarterly(orderbook_id)",
             "CREATE INDEX IF NOT EXISTS idx_hist_fetch_log_at ON historical_fetch_log(last_fetch_at)",
+            "CREATE INDEX IF NOT EXISTS idx_macro_period_type ON macro_history(period_type, period DESC)",
         ]:
             cur.execute(idx_sql)
         cur.close()
         db.commit()
+        _ensure_smart_score_columns(db)
     else:
         db.executescript("""
             CREATE TABLE IF NOT EXISTS stocks (
@@ -652,6 +669,39 @@ def _create_tables(db):
             CREATE INDEX IF NOT EXISTS idx_hist_fetch_log_at ON historical_fetch_log(last_fetch_at);
             CREATE INDEX IF NOT EXISTS idx_macro_period_type ON macro_history(period_type, period DESC);
         """)
+        db.commit()
+        _ensure_smart_score_columns(db)
+
+
+def _ensure_smart_score_columns(db):
+    """Idempotent migration: lägg till smart_score-kolumner om de saknas.
+    Kolumner: smart_score, smart_score_yesterday, smart_score_at (YYYY-MM-DD).
+    Fungerar i både SQLite och PostgreSQL."""
+    columns = ["smart_score", "smart_score_yesterday", "smart_score_at"]
+    types = {"smart_score": "REAL", "smart_score_yesterday": "REAL", "smart_score_at": "TEXT"}
+    if _use_postgres():
+        types = {"smart_score": "DOUBLE PRECISION", "smart_score_yesterday": "DOUBLE PRECISION", "smart_score_at": "TEXT"}
+
+    if _use_postgres():
+        cur = db.cursor()
+        for col in columns:
+            try:
+                cur.execute(f"ALTER TABLE stocks ADD COLUMN IF NOT EXISTS {col} {types[col]}")
+            except Exception as e:
+                print(f"[smart_score migration] PG: {e}")
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_stocks_smart_score ON stocks(smart_score DESC NULLS LAST)")
+        cur.close()
+        db.commit()
+    else:
+        # SQLite: använd PRAGMA för att kolla existens
+        existing = {r[1] for r in db.execute("PRAGMA table_info(stocks)").fetchall()}
+        for col in columns:
+            if col not in existing:
+                try:
+                    db.execute(f"ALTER TABLE stocks ADD COLUMN {col} {types[col]}")
+                except Exception as e:
+                    print(f"[smart_score migration] SQLite: {e}")
+        db.execute("CREATE INDEX IF NOT EXISTS idx_stocks_smart_score ON stocks(smart_score DESC)")
         db.commit()
 
 
@@ -3753,6 +3803,189 @@ def enrich_with_book_composite(db, stocks):
     return stocks
 
 
+# ── Smart Score (Meta + Bok-composite, en enkel score) ────────
+
+def compute_smart_score(stock):
+    """Returnerar en enkel sammanvägd score 0-100 baserat på:
+    - 50% Meta Score (Trav 30% + DSM 25% + ACE 25% + Magic 20%)
+    - 50% Bok-Composite (10 bok-modeller — Graham, Buffett, Lynch, ...)
+
+    Fallback: om endera saknas, returnera den andra. Om båda saknas, None.
+
+    Smart Score är meningen att vara EN enkel "är detta köpvärt?"-siffra som
+    blandar momentum (Meta) med fundamental kvalitet (böcker)."""
+    meta = stock.get("meta_score")
+    bc = stock.get("book_composite")
+
+    has_meta = meta is not None and meta != 0
+    has_bc = bc is not None
+
+    if has_meta and has_bc:
+        smart = 0.5 * float(meta) + 0.5 * float(bc)
+    elif has_bc:
+        smart = float(bc)
+    elif has_meta:
+        smart = float(meta)
+    else:
+        return None
+
+    return round(max(0, min(100, smart)), 1)
+
+
+def smart_score_label(score):
+    """Returnerar (label, color) för en smart_score."""
+    if score is None:
+        return ("–", "#888")
+    if score >= 80: return ("STARK KÖP", "#006c46")
+    if score >= 70: return ("KÖP", "#00a870")
+    if score >= 55: return ("OK", "#888")
+    if score >= 40: return ("VÄNTA", "#e67700")
+    return ("UNDVIK", "#c0392b")
+
+
+def update_smart_scores_for_all(db, min_owners=100):
+    """Beräknar smart_score för alla aktier och sparar i stocks-tabellen.
+
+    Logik för score-rörelse:
+    - Om smart_score_at är annat datum än idag (eller None), kopiera nuvarande
+      smart_score → smart_score_yesterday FÖRST (snapshot av igårs värde).
+    - Sen uppdatera smart_score med nytt värde och smart_score_at = idag.
+
+    Resultat: smart_score_yesterday innehåller alltid värdet från senaste
+    föregående DAG vi körde detta jobb. delta = smart_score - smart_score_yesterday.
+
+    Returnerar dict {updated, unchanged, errors}."""
+    from datetime import datetime as _dt
+    today = _dt.now().strftime("%Y-%m-%d")
+    ph = _ph()
+    updated = 0
+    unchanged = 0
+    errors = 0
+
+    # Hämta alla aktier som har lite likviditet (begränsa till min_owners)
+    rows = _fetchall(db,
+        f"SELECT * FROM stocks WHERE number_of_owners >= {ph} AND last_price > 0",
+        (min_owners,))
+    stocks_list = [dict(r) for r in rows]
+
+    if not stocks_list:
+        return {"updated": 0, "unchanged": 0, "errors": 0}
+
+    # Beräkna meta_score (samma flöde som get_signals)
+    insider_summary = get_insider_summary(db, days_back=90)
+    try:
+        maturity_data = get_maturity_scores(db)
+    except Exception:
+        maturity_data = {}
+
+    for stock in stocks_list:
+        oid = stock.get("orderbook_id")
+        if oid and oid in maturity_data:
+            m = maturity_data[oid]
+            stock["maturity_score"] = m.get("maturity_score", 0)
+            stock["discovery_score"] = m.get("discovery_score", 0)
+        # Insider-info
+        sname_norm = _normalize_name(stock.get("name") or "")
+        ins = insider_summary.get(sname_norm)
+        if ins:
+            stock["insider_buys"] = ins["buys"]
+            stock["insider_sells"] = ins["sells"]
+            stock["insider_cluster_buy"] = ins["cluster_buy"]
+        # Edge + DSM
+        try:
+            edge = calculate_edge_score(stock)
+            stock.update(edge)
+            dsm = calculate_dsm_score(stock)
+            stock["dsm_score"] = dsm.get("dsm_score", 0)
+        except Exception:
+            errors += 1
+            continue
+
+    # ACE + Magic + Meta (bulk)
+    try:
+        compute_ace_scores(stocks_list)
+        compute_magic_scores(stocks_list)
+    except Exception as e:
+        print(f"[smart_score] ACE/Magic fel: {e}")
+
+    # Compute meta_score samma som i get_signals
+    META_W = {"edge": 0.30, "dsm": 0.25, "ace": 0.25, "magic": 0.20}
+    for s in stocks_list:
+        e = s.get("edge_score") or 0
+        d = s.get("dsm_score") or 0
+        a = s.get("ace_score") or 0
+        m = s.get("magic_score")
+        if m is not None:
+            meta = e * META_W["edge"] + d * META_W["dsm"] + a * META_W["ace"] + m * META_W["magic"]
+        else:
+            w3 = META_W["edge"] + META_W["dsm"] + META_W["ace"]
+            meta = (e * META_W["edge"] + d * META_W["dsm"] + a * META_W["ace"]) / max(w3, 0.01)
+        s["meta_score"] = round(max(0, min(100, meta)), 1)
+
+    # Berika med book composite
+    try:
+        enrich_with_book_composite(db, stocks_list)
+    except Exception as e:
+        print(f"[smart_score] book_composite fel: {e}")
+
+    # Beräkna smart_score
+    for s in stocks_list:
+        s["_smart_new"] = compute_smart_score(s)
+
+    # Bulk-update DB. Snapshotta yesterday → om datumet skiftat.
+    cursor = db.cursor() if _use_postgres() else db
+    for s in stocks_list:
+        oid = s.get("orderbook_id")
+        new_score = s.get("_smart_new")
+        if new_score is None or oid is None:
+            continue
+        try:
+            # Hämta nuvarande
+            cur_row = _fetchone(db,
+                f"SELECT smart_score, smart_score_at FROM stocks WHERE orderbook_id = {ph}",
+                (oid,))
+            current_score = None
+            current_date = None
+            if cur_row:
+                try:
+                    current_score = cur_row["smart_score"]
+                    current_date = cur_row["smart_score_at"]
+                except (KeyError, IndexError):
+                    pass
+
+            if current_score is not None and current_date and current_date != today:
+                # Datumet har skiftat → snapshot
+                if _use_postgres():
+                    cursor.execute(
+                        f"UPDATE stocks SET smart_score_yesterday = {ph}, smart_score = {ph}, smart_score_at = {ph} WHERE orderbook_id = {ph}",
+                        (current_score, new_score, today, oid))
+                else:
+                    db.execute(
+                        "UPDATE stocks SET smart_score_yesterday = ?, smart_score = ?, smart_score_at = ? WHERE orderbook_id = ?",
+                        (current_score, new_score, today, oid))
+            else:
+                # Bara uppdatera current
+                if _use_postgres():
+                    cursor.execute(
+                        f"UPDATE stocks SET smart_score = {ph}, smart_score_at = {ph} WHERE orderbook_id = {ph}",
+                        (new_score, today, oid))
+                else:
+                    db.execute(
+                        "UPDATE stocks SET smart_score = ?, smart_score_at = ? WHERE orderbook_id = ?",
+                        (new_score, today, oid))
+            updated += 1
+        except Exception as e:
+            print(f"[smart_score] update fel för {oid}: {e}")
+            errors += 1
+
+    if _use_postgres():
+        cursor.close()
+    db.commit()
+
+    return {"updated": updated, "unchanged": unchanged, "errors": errors,
+            "total": len(stocks_list)}
+
+
 def get_hot_movers(db, direction="up", lookback=1, min_owners=100, limit=50, offset=0, country="", mode="daily"):
     """Hot Movers — ägarförändring.
 
@@ -4816,6 +5049,33 @@ def get_signals(db, country="SE", sort="score", order="desc",
         stock["model_agreement"] = agree
         stock["model_agreement_total"] = len(scores)
 
+    # ── Smart Score (Meta + Bok-composite) + score-rörelse ──
+    # Använder primärt sparad smart_score från DB (uppdateras efter pris-refresh).
+    # Fallback: beräkna live om ingen sparad finns.
+    for stock in signals:
+        # Beräkna live från meta + book_composite (om available i raden)
+        live_smart = compute_smart_score(stock)
+        # Använd sparad om den finns (för delta-beräkning), annars live
+        saved = stock.get("smart_score")
+        prev = stock.get("smart_score_yesterday")
+        if saved is not None:
+            stock["smart_score"] = round(float(saved), 1)
+        elif live_smart is not None:
+            stock["smart_score"] = live_smart
+        else:
+            stock["smart_score"] = None
+        # Delta = current - yesterday
+        if stock["smart_score"] is not None and prev is not None:
+            stock["smart_score_change"] = round(float(stock["smart_score"]) - float(prev), 1)
+        else:
+            stock["smart_score_change"] = None
+        # Label
+        from_score = stock["smart_score"]
+        if from_score is not None:
+            label, color = smart_score_label(from_score)
+            stock["smart_score_label"] = label
+            stock["smart_score_color"] = color
+
     if min_score > 0:
         signals = [s for s in signals if s["edge_score"] >= min_score]
     if signal_filter:
@@ -4829,6 +5089,8 @@ def get_signals(db, country="SE", sort="score", order="desc",
     total = len(signals)
 
     sort_map = {
+        "smart": lambda s: s.get("smart_score") or 0,
+        "smart_change": lambda s: s.get("smart_score_change") or 0,
         "meta": lambda s: s.get("meta_score", 0),
         "score": lambda s: s["edge_score"],
         "momentum": lambda s: s["components"]["owner_momentum"],

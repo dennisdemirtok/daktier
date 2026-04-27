@@ -791,7 +791,7 @@ async function fetchData(append = false) {
         let data, url, params, ck, cached, renderFn, dataKey;
 
         if (currentTab === 'signals') {
-            params = {country:signalCountry, sort:sortCol, order:sortOrder, limit:PAGE_SIZE, offset:currentOffset, min_owners:minOwners||10, signal:signalFilter, action:actionFilter};
+            params = {country:signalCountry, sort:sortCol||'smart', order:sortOrder, limit:PAGE_SIZE, offset:currentOffset, min_owners:minOwners||10, signal:signalFilter, action:actionFilter};
             url = '/api/signals?' + new URLSearchParams(params);
             ck = cacheKey('signals', params);
             dataKey = 'signals';
@@ -1147,7 +1147,7 @@ function switchTab(tab, el) {
 
     searchQuery = '';
 
-    if (tab === 'signals') { sortCol = 'meta'; sortOrder = 'desc'; }
+    if (tab === 'signals') { sortCol = 'smart'; sortOrder = 'desc'; }
     else if (tab === 'stocks') { sortCol = 'owners'; sortOrder = 'desc'; }
     else if (tab === 'hotmovers') {
         // Short periods sorterar på hot_diff_pct, long periods på change-kolumn
@@ -1376,12 +1376,12 @@ function insiderBadge(s) {
 
 function renderSignalsTable() {
     const infoBanner = `<div class="info-banner">
-        <div class="info-banner-icon">🎯</div>
+        <div class="info-banner-icon">⭐</div>
         <div class="info-banner-text">
-            <strong>Meta Score v1:</strong> Viktat snitt av 4 modeller — Trav 30% + DSM 25% + ACE 25% + Magic Formula 20%.<br>
-            <strong>🏇 Trav:</strong> Ägardriven momentum + lönsamhet · <strong>🎯 DSM:</strong> Kontrarian + värde · <strong>⚡ ACE:</strong> Percentil multi-faktor · <strong>📊 Magic:</strong> EV/EBIT + ROCE.<br>
-            <strong>📚 Bok-composite:</strong> Viktat snitt över 10 bokmodeller (Graham, Buffett, Lynch, Greenblatt, Klarman, Bogle, Stinsen, Taleb, Kelly, Spiltan) — grönt ≥65 = köpvärde enligt böckerna.<br>
-            <strong>Enighet:</strong> Antal modeller med score ≥65. Hög enighet = starkare signal.<br>
+            <strong>⭐ Smart Score (NY):</strong> Den enkla siffran — 50% Meta Score + 50% Bok-composite. ≥80 = STARK KÖP, ≥70 = KÖP, ≥55 = OK, ≥40 = VÄNTA, &lt;40 = UNDVIK. <strong>▲/▼-pilen visar förändring från igår</strong> — så du ser direkt när NVidia eller Investor B blir mer köpvärt på en kursnedgång.<br>
+            <strong>Meta Score:</strong> Viktat snitt av 4 modeller — Trav 30% + DSM 25% + ACE 25% + Magic Formula 20%.<br>
+            <strong>🏇 Trav:</strong> Ägardriven momentum · <strong>🎯 DSM:</strong> Kontrarian + värde · <strong>⚡ ACE:</strong> Percentil multi-faktor · <strong>📊 Magic:</strong> EV/EBIT + ROCE.<br>
+            <strong>📚 Bok-composite:</strong> Viktat snitt över 10 bokmodeller (Graham, Buffett, Lynch, Greenblatt, Klarman, Bogle, Stinsen, Taleb, Kelly, Spiltan).<br>
             <strong>DD-skydd:</strong> Blockerar entry vid hög DD-risk (≥60) eller extrem pris-spike (6M >150%, YTD >200%).
         </div>
     </div>`;
@@ -1392,6 +1392,18 @@ function renderSignalsTable() {
         const meta = s.meta_score || 0;
         const mc = scoreColor(meta);
         const sc = scoreColor(score);
+
+        // Smart Score (50% Meta + 50% Bok-composite)
+        const smart = s.smart_score;
+        const smartChange = s.smart_score_change;
+        const smartLabel = s.smart_score_label || (smart == null ? '–' : smart >= 80 ? 'STARK KÖP' : smart >= 70 ? 'KÖP' : smart >= 55 ? 'OK' : smart >= 40 ? 'VÄNTA' : 'UNDVIK');
+        const smartColor = s.smart_score_color || (smart == null ? '#888' : smart >= 80 ? '#006c46' : smart >= 70 ? '#00a870' : smart >= 55 ? '#888' : smart >= 40 ? '#e67700' : '#c0392b');
+        const smartArrow = smartChange == null ? '' : smartChange > 0.5 ? `<span style="color:#00a870;font-size:11px;font-weight:700">▲ ${smartChange.toFixed(1)}</span>` : smartChange < -0.5 ? `<span style="color:#c0392b;font-size:11px;font-weight:700">▼ ${Math.abs(smartChange).toFixed(1)}</span>` : `<span style="color:#888;font-size:11px">●</span>`;
+        const smartCell = smart != null
+            ? `<span class="score-value" style="color:${smartColor};font-size:15px;font-weight:800">${smart.toFixed(0)}</span>
+               <div class="score-bar"><div class="score-bar-fill" style="width:${smart}%;background:${smartColor}"></div></div>
+               <div style="font-size:9px;color:${smartColor};margin-top:2px;font-weight:600">${smartLabel} ${smartArrow}</div>`
+            : '<span style="color:var(--text-muted);font-size:11px">–</span>';
         const ch1w = s.owners_change_1w;
         const ch1m = s.owners_change_1m;
         const ch3m = s.owners_change_3m;
@@ -1414,6 +1426,7 @@ function renderSignalsTable() {
 
         return `<tr${s.action === 'ENTRY' ? ' style="background:#e6f9f1"' : s.action?.startsWith('EXIT') ? ' style="background:#ffeaee"' : ''}>
             <td>${i + 1}</td>
+            <td>${smartCell}</td>
             <td>
                 <span class="score-value" style="color:${mc}">${meta.toFixed(0)}</span>
                 <div class="score-bar"><div class="score-bar-fill" style="width:${meta}%;background:${mc}"></div></div>
@@ -1446,7 +1459,8 @@ function renderSignalsTable() {
         <div class="table-container">
             <table><thead><tr>
                 <th style="width:40px">#</th>
-                <th onclick="doSort('meta')" class="${thClass('meta')}" style="min-width:140px">Meta Score ↓${sortArrow('meta')}</th>
+                <th onclick="doSort('smart')" class="${thClass('smart')}" style="min-width:120px" title="Smart Score = 50% Meta (momentum) + 50% Bok-composite (fundamenta). En enkel score för att se köpvärde. ▲/▼ visar förändring från igår.">⭐ Smart Score${sortArrow('smart')}</th>
+                <th onclick="doSort('meta')" class="${thClass('meta')}" style="min-width:140px">Meta Score${sortArrow('meta')}</th>
                 <th onclick="doSort('score')" class="${thClass('score')}" style="min-width:80px">Edge${sortArrow('score')}</th>
                 <th style="min-width:90px" title="Viktat composite över 10 bokmodeller — Graham, Buffett, Lynch, Greenblatt, Klarman m.fl.">📚 Bok</th>
                 <th>Action / Fas</th>
@@ -2816,6 +2830,33 @@ function openDrawer(s) {
     `;
 
     let html = '';
+
+    // ── ⭐ SMART SCORE (sammanvägd, nya hjältescoren) ──
+    if (s.smart_score != null) {
+        const ss = s.smart_score;
+        const ssLabel = s.smart_score_label || (ss >= 80 ? 'STARK KÖP' : ss >= 70 ? 'KÖP' : ss >= 55 ? 'OK' : ss >= 40 ? 'VÄNTA' : 'UNDVIK');
+        const ssColor = s.smart_score_color || (ss >= 80 ? '#006c46' : ss >= 70 ? '#00a870' : ss >= 55 ? '#888' : ss >= 40 ? '#e67700' : '#c0392b');
+        const sd = s.smart_score_change;
+        const sdHtml = sd == null ? '<span style="color:#888;font-size:14px;font-weight:500">— ingen historik ännu —</span>'
+            : sd > 0.5 ? `<span style="color:#00a870;font-weight:700;font-size:18px">▲ ${sd.toFixed(1)}p sedan igår</span>`
+            : sd < -0.5 ? `<span style="color:#c0392b;font-weight:700;font-size:18px">▼ ${Math.abs(sd).toFixed(1)}p sedan igår</span>`
+            : `<span style="color:#888;font-size:14px">● Oförändrad sedan igår</span>`;
+        const ssBg = ss >= 70 ? 'linear-gradient(135deg, #ecfdf5, #d1fae5)' : ss >= 55 ? 'linear-gradient(135deg, #f9fafb, #f3f4f6)' : ss >= 40 ? 'linear-gradient(135deg, #fef3c7, #fde68a)' : 'linear-gradient(135deg, #fee2e2, #fecaca)';
+        html += `<div class="drawer-section" style="background:${ssBg};border-radius:12px;padding:18px;margin-bottom:14px">
+            <div style="display:flex;align-items:baseline;justify-content:space-between;gap:14px">
+                <div>
+                    <div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.08em;font-weight:700">⭐ Smart Score</div>
+                    <div style="font-size:42px;font-weight:800;color:${ssColor};line-height:1">${ss.toFixed(0)}</div>
+                    <div style="font-size:14px;color:${ssColor};font-weight:700;margin-top:2px">${ssLabel}</div>
+                </div>
+                <div style="text-align:right">
+                    <div style="font-size:11px;color:var(--text-muted)">Förändring</div>
+                    ${sdHtml}
+                    <div style="font-size:10px;color:var(--text-muted);margin-top:4px">50% Meta + 50% Bok-composite</div>
+                </div>
+            </div>
+        </div>`;
+    }
 
     // ── EDGE MODEL (if available) ──
     if (s.edge_score != null) {
@@ -4659,7 +4700,7 @@ async function prefetchAllTabs() {
     // Prefetcha bara de tyngsta tabbarna som ofta öppnas. Hot Movers prefetchas med
     // daily-mode (match med default momPeriod='1d'). Trending är merged in.
     const urls = [
-        {tab:'signals', url:'/api/signals?country=SE&sort=meta&order=desc&limit=50&offset=0&min_owners=10&signal=&action=', dataKey:'signals'},
+        {tab:'signals', url:'/api/signals?country=SE&sort=smart&order=desc&limit=50&offset=0&min_owners=10&signal=&action=', dataKey:'signals'},
         {tab:'stocks', url:'/api/stocks?q=&country=&sort=owners&order=desc&limit=50&offset=0&min_owners=0', dataKey:'stocks'},
         {tab:'hotmovers', url:'/api/hot-movers?mode=daily&direction=up&lookback=1&limit=50&offset=0&min_owners=100&country=', dataKey:'stocks'},
         {tab:'insiders', url:'/api/insiders?q=&type=&limit=50&offset=0', dataKey:'transactions'},
@@ -4671,7 +4712,7 @@ async function prefetchAllTabs() {
             const data = await (await fetch(url)).json();
             // Build cache keys that match what fetchData() generates
             if (tab === 'signals') {
-                const params = {country:'SE', sort:'meta', order:'desc', limit:50, offset:0, min_owners:10, signal:'', action:''};
+                const params = {country:'SE', sort:'smart', order:'desc', limit:50, offset:0, min_owners:10, signal:'', action:''};
                 setCache(cacheKey('signals', params), data);
             } else if (tab === 'stocks') {
                 const params = {q:'', country:'', sort:'owners', order:'desc', limit:50, offset:0, min_owners:0};

@@ -175,6 +175,21 @@ def refresh_prices():
                 except Exception as e:
                     print(f"[AUTO] Rebalansering misslyckades: {e}")
 
+        # ── Smart Score uppdatering efter prisförändring (i bakgrundstråd) ──
+        # Reflekterar nya priser i scorerna, sparar yesterday-snapshot för delta.
+        def _update_smart_async():
+            try:
+                from edge_db import update_smart_scores_for_all
+                db_s = get_db()
+                try:
+                    res = update_smart_scores_for_all(db_s, min_owners=100)
+                    print(f"[AUTO] Smart Scores uppdaterade: {res}")
+                finally:
+                    db_s.close()
+            except Exception as e:
+                print(f"[AUTO] Smart Score fel: {e}")
+        threading.Thread(target=_update_smart_async, daemon=True).start()
+
         db.close()
     except Exception as e:
         state["error"] = str(e)
@@ -3746,7 +3761,7 @@ def _startup():
             base = f"http://127.0.0.1:{port}"
             urls = [
                 "/api/dashboard",
-                "/api/signals?country=SE&sort=meta&order=desc&limit=50&offset=0&min_owners=10&signal=&action=",
+                "/api/signals?country=SE&sort=smart&order=desc&limit=50&offset=0&min_owners=10&signal=&action=",
                 "/api/stocks?q=&country=&sort=owners&order=desc&limit=50&offset=0&min_owners=0",
                 "/api/hot-movers?mode=daily&direction=up&lookback=1&limit=50&offset=0&min_owners=100&country=",
                 "/api/trending?period=1m&direction=up&limit=50&min_owners=100",
