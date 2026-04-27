@@ -189,6 +189,96 @@ def fetch_kpi_metadata():
 
 
 # ──────────────────────────────────────────────────────────────
+# Stock prices — daglig prishistorik (för backtesting)
+# ──────────────────────────────────────────────────────────────
+
+def fetch_stock_prices(insId, is_global=False, from_date=None, to_date=None):
+    """Daglig prishistorik. from/to format: YYYY-MM-DD.
+
+    OBS: stockprices-endpoint använder INTE /global/-prefix — bara reports
+    och instrument-listan har separata endpoints. Stockprices fungerar
+    via /v1/instruments/{insId}/stockprices oavsett nordisk eller global.
+
+    Returnerar lista: [{d, o, h, l, c, v}, ...]
+    """
+    url = f"{BORSDATA_BASE}/instruments/{insId}/stockprices"
+    params = {}
+    if from_date:
+        params["from"] = from_date
+    if to_date:
+        params["to"] = to_date
+    data = _rate_limited_get(url, params=params)
+    return data.get("stockPricesList") or data.get("stockPrices") or []
+
+
+def fetch_stock_prices_bulk_last(is_global=False):
+    """Bulk: senaste dagens stängningskurs för ALLA bolag (nordiska eller globala).
+    Mycket effektivare än individuella anrop. Bra för daglig uppdatering.
+
+    Returnerar lista: [{i: insId, d: date, o, h, l, c, v}, ...]
+    """
+    if is_global:
+        url = f"{BORSDATA_BASE}/instruments/stockprices/global/last"
+    else:
+        url = f"{BORSDATA_BASE}/instruments/stockprices/last"
+    data = _rate_limited_get(url)
+    return data.get("stockPricesList", [])
+
+
+def fetch_stock_prices_bulk_date(date, is_global=False):
+    """Bulk: stängningskurs på ett specifikt datum för ALLA bolag."""
+    base = f"{BORSDATA_BASE}/instruments"
+    if is_global:
+        base += "/global"
+    url = f"{base}/stockprices/date"
+    data = _rate_limited_get(url, params={"date": date})
+    return data.get("stockPricesList", [])
+
+
+def fetch_sectors():
+    """Sektor-metadata."""
+    data = _rate_limited_get(f"{BORSDATA_BASE}/sectors")
+    return data.get("sectors", [])
+
+
+def fetch_branches():
+    """Bransch-metadata (under sektorer)."""
+    data = _rate_limited_get(f"{BORSDATA_BASE}/branches")
+    return data.get("branches", [])
+
+
+# Top 15 KPIs vi vill ha historik på (verifierat mot Börsdata KPI-katalog)
+# Dessa kompletterar reports-data med fördefinierade ratios.
+TOP_KPIS = {
+    1:  "P/E",
+    2:  "P/S",
+    3:  "P/B",
+    4:  "ROE",
+    7:  "Direct Yield",
+    13: "EV/FCF",
+    25: "CapEx % of Sales",
+    37: "ROIC",
+    63: "Free Cash Flow",
+    64: "CapEx",
+    76: "P/FCF",
+    33: "Net Debt / EBITDA",
+    50: "Operating Margin",
+    51: "Net Margin",
+    61: "EBIT",
+}
+
+
+def fetch_kpi_history_for_instrument(insId, kpiId, report_type="year", is_global=False):
+    """Hämta historik för en KPI för ett instrument (alla år tillgängliga)."""
+    base = f"{BORSDATA_BASE}/instruments"
+    if is_global:
+        base += "/global"
+    url = f"{base}/{insId}/kpis/{kpiId}/{report_type}/history"
+    data = _rate_limited_get(url)
+    return data.get("values", [])
+
+
+# ──────────────────────────────────────────────────────────────
 # Kompakt extractor — extraherar de v2.1-relevanta nyckeltalen
 # ──────────────────────────────────────────────────────────────
 

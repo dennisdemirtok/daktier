@@ -3026,7 +3026,7 @@ def api_borsdata_sync():
 
 @app.route("/api/borsdata/status")
 def api_borsdata_status():
-    """Returnerar hur många bolag har Börsdata-data."""
+    """Returnerar hur mycket Börsdata-data vi har."""
     db = get_db()
     try:
         from edge_db import _fetchone
@@ -3036,8 +3036,17 @@ def api_borsdata_status():
         last = _fetchone(db, "SELECT MAX(fetched_at) as t FROM borsdata_reports")
         n_se = _fetchone(db,
             "SELECT COUNT(DISTINCT s.orderbook_id) as n FROM stocks s "
-            "JOIN borsdata_reports b ON s.isin = b.isin "
+            "JOIN borsdata_instrument_map m ON s.short_name = m.ticker "
             "WHERE s.country = 'SE'")
+        # v3 — utöver reports
+        n_prices = _fetchone(db, "SELECT COUNT(*) as n FROM borsdata_prices")
+        n_prices_isins = _fetchone(db, "SELECT COUNT(DISTINCT isin) as n FROM borsdata_prices")
+        last_price_date = _fetchone(db, "SELECT MAX(date) as d FROM borsdata_prices")
+        n_kpi = _fetchone(db, "SELECT COUNT(*) as n FROM borsdata_kpi_history")
+        n_sectors = _fetchone(db, "SELECT COUNT(*) as n FROM borsdata_sectors")
+        n_branches = _fetchone(db, "SELECT COUNT(*) as n FROM borsdata_branches")
+        n_global = _fetchone(db, "SELECT COUNT(*) as n FROM borsdata_instrument_map WHERE is_global = 1")
+        n_nordic = _fetchone(db, "SELECT COUNT(*) as n FROM borsdata_instrument_map WHERE is_global = 0")
     finally:
         db.close()
     def _n(r):
@@ -3049,12 +3058,80 @@ def api_borsdata_status():
         try: return r[k]
         except (KeyError, IndexError): return None
     return jsonify({
-        "borsdata_companies_total": _n(n_total),
-        "annual_reports": _n(n_year),
-        "quarterly_reports": _n(n_q),
-        "last_fetch": _t(last, "t"),
+        "reports": {
+            "companies_total": _n(n_total),
+            "annual_reports": _n(n_year),
+            "quarterly_reports": _n(n_q),
+            "last_fetch": _t(last, "t"),
+        },
+        "prices": {
+            "total_rows": _n(n_prices),
+            "companies_covered": _n(n_prices_isins),
+            "latest_date": _t(last_price_date, "d"),
+        },
+        "kpi_history_rows": _n(n_kpi),
+        "sectors": _n(n_sectors),
+        "branches": _n(n_branches),
+        "instruments_mapped": {
+            "nordic": _n(n_nordic),
+            "global": _n(n_global),
+        },
         "swedish_stocks_with_borsdata": _n(n_se),
     })
+
+
+@app.route("/api/borsdata/sync-prices", methods=["POST"])
+def api_borsdata_sync_prices():
+    """Sync daglig prishistorik (default 10 år bakåt eller från senaste).
+
+    Body: {max_per_run: int (default 500), from_date: 'YYYY-MM-DD'}
+    """
+    body = request.json if request.is_json else {}
+    max_per_run = body.get("max_per_run", 500)
+    from_date = body.get("from_date")
+
+    def _run():
+        from edge_db import sync_borsdata_prices
+        db = get_db()
+        try:
+            res = sync_borsdata_prices(db, max_per_run=max_per_run, from_date=from_date)
+            print(f"[Börsdata prices] Sync klar: {res}")
+        finally:
+            db.close()
+
+    threading.Thread(target=_run, daemon=True).start()
+    return jsonify({"status": "started", "max_per_run": max_per_run})
+
+
+@app.route("/api/borsdata/sync-kpis", methods=["POST"])
+def api_borsdata_sync_kpis():
+    """Sync KPI-historik (top 15 KPIs default)."""
+    body = request.json if request.is_json else {}
+    max_per_run = body.get("max_per_run", 500)
+
+    def _run():
+        from edge_db import sync_borsdata_kpis
+        db = get_db()
+        try:
+            res = sync_borsdata_kpis(db, max_per_run=max_per_run)
+            print(f"[Börsdata KPIs] Sync klar: {res}")
+        finally:
+            db.close()
+
+    threading.Thread(target=_run, daemon=True).start()
+    return jsonify({"status": "started"})
+
+
+@app.route("/api/borsdata/sync-metadata", methods=["POST"])
+def api_borsdata_sync_metadata():
+    """Sync sektor + bransch-metadata (en gång)."""
+    db = get_db()
+    try:
+        from edge_db import sync_borsdata_metadata
+        res = sync_borsdata_metadata(db)
+        return jsonify(res)
+    finally:
+        db.close()
 
 
 @app.route("/api/refresh-historical/status")

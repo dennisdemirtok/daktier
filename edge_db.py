@@ -389,31 +389,84 @@ def _create_tables(db):
                 period_q INTEGER,
                 report_end_date TEXT,
                 currency TEXT,
-                operating_cash_flow DOUBLE PRECISION,
-                free_cash_flow DOUBLE PRECISION,
-                investing_cash_flow DOUBLE PRECISION,
+                revenues DOUBLE PRECISION,
+                gross_income DOUBLE PRECISION,
                 operating_income DOUBLE PRECISION,
+                profit_before_tax DOUBLE PRECISION,
                 net_profit DOUBLE PRECISION,
                 eps DOUBLE PRECISION,
-                revenues DOUBLE PRECISION,
+                operating_cash_flow DOUBLE PRECISION,
+                investing_cash_flow DOUBLE PRECISION,
+                financing_cash_flow DOUBLE PRECISION,
+                free_cash_flow DOUBLE PRECISION,
+                cash_flow_year DOUBLE PRECISION,
                 total_assets DOUBLE PRECISION,
+                current_assets DOUBLE PRECISION,
+                non_current_assets DOUBLE PRECISION,
+                tangible_assets DOUBLE PRECISION,
+                intangible_assets DOUBLE PRECISION,
+                financial_assets DOUBLE PRECISION,
                 total_equity DOUBLE PRECISION,
                 total_liabilities DOUBLE PRECISION,
+                current_liabilities DOUBLE PRECISION,
+                non_current_liabilities DOUBLE PRECISION,
                 cash_and_equivalents DOUBLE PRECISION,
                 net_debt DOUBLE PRECISION,
                 shares_outstanding DOUBLE PRECISION,
                 dividend DOUBLE PRECISION,
                 stock_price_avg DOUBLE PRECISION,
+                stock_price_high DOUBLE PRECISION,
+                stock_price_low DOUBLE PRECISION,
+                broken_fiscal_year INTEGER,
                 fetched_at TEXT,
                 PRIMARY KEY (isin, report_type, period_year, period_q)
+            );
+
+            CREATE TABLE IF NOT EXISTS borsdata_prices (
+                isin TEXT NOT NULL,
+                date TEXT NOT NULL,
+                open DOUBLE PRECISION,
+                high DOUBLE PRECISION,
+                low DOUBLE PRECISION,
+                close DOUBLE PRECISION,
+                volume DOUBLE PRECISION,
+                PRIMARY KEY (isin, date)
+            );
+
+            CREATE TABLE IF NOT EXISTS borsdata_kpi_history (
+                isin TEXT NOT NULL,
+                kpi_id INTEGER NOT NULL,
+                report_type TEXT NOT NULL,
+                period_year INTEGER NOT NULL,
+                period_q INTEGER,
+                value DOUBLE PRECISION,
+                PRIMARY KEY (isin, kpi_id, report_type, period_year, period_q)
+            );
+
+            CREATE TABLE IF NOT EXISTS borsdata_sectors (
+                sector_id INTEGER PRIMARY KEY,
+                name TEXT
+            );
+            CREATE TABLE IF NOT EXISTS borsdata_branches (
+                branch_id INTEGER PRIMARY KEY,
+                sector_id INTEGER,
+                name TEXT
             );
 
             CREATE TABLE IF NOT EXISTS borsdata_instrument_map (
                 isin TEXT PRIMARY KEY,
                 ins_id INTEGER NOT NULL,
                 ticker TEXT,
+                yahoo_ticker TEXT,
                 name TEXT,
                 market_id INTEGER,
+                sector_id INTEGER,
+                branch_id INTEGER,
+                country_id INTEGER,
+                stock_price_currency TEXT,
+                report_currency TEXT,
+                listing_date TEXT,
+                is_global INTEGER DEFAULT 0,
                 fetched_at TEXT
             );
         """)
@@ -439,6 +492,10 @@ def _create_tables(db):
             "CREATE INDEX IF NOT EXISTS idx_macro_period_type ON macro_history(period_type, period DESC)",
             "CREATE INDEX IF NOT EXISTS idx_borsdata_isin ON borsdata_reports(isin)",
             "CREATE INDEX IF NOT EXISTS idx_borsdata_period ON borsdata_reports(report_type, period_year DESC)",
+            "CREATE INDEX IF NOT EXISTS idx_borsdata_prices_date ON borsdata_prices(date DESC)",
+            "CREATE INDEX IF NOT EXISTS idx_borsdata_kpi ON borsdata_kpi_history(kpi_id, report_type, period_year DESC)",
+            "CREATE INDEX IF NOT EXISTS idx_borsdata_map_ticker ON borsdata_instrument_map(ticker)",
+            "CREATE INDEX IF NOT EXISTS idx_borsdata_map_yahoo ON borsdata_instrument_map(yahoo_ticker)",
         ]:
             cur.execute(idx_sql)
         cur.close()
@@ -707,46 +764,110 @@ def _create_tables(db):
             CREATE INDEX IF NOT EXISTS idx_hist_fetch_log_at ON historical_fetch_log(last_fetch_at);
             CREATE INDEX IF NOT EXISTS idx_macro_period_type ON macro_history(period_type, period DESC);
 
-            -- Börsdata-data per bolag och period (riktig FCF, EBIT, nettoskuld m.m.)
+            -- Börsdata-data per bolag och period (utökad v2 med alla balance sheet-fält)
             CREATE TABLE IF NOT EXISTS borsdata_reports (
                 isin TEXT NOT NULL,
                 ins_id INTEGER NOT NULL,
                 report_type TEXT NOT NULL,  -- 'year' | 'quarter' | 'r12' (TTM)
                 period_year INTEGER NOT NULL,
-                period_q INTEGER,  -- NULL för år, 1-4 för kvartal
+                period_q INTEGER,
                 report_end_date TEXT,
                 currency TEXT,
-                operating_cash_flow REAL,
-                free_cash_flow REAL,
-                investing_cash_flow REAL,
+                -- Income statement
+                revenues REAL,
+                gross_income REAL,
                 operating_income REAL,
+                profit_before_tax REAL,
                 net_profit REAL,
                 eps REAL,
-                revenues REAL,
+                -- Cash flow
+                operating_cash_flow REAL,
+                investing_cash_flow REAL,
+                financing_cash_flow REAL,
+                free_cash_flow REAL,
+                cash_flow_year REAL,
+                -- Balance sheet (huvudposter)
                 total_assets REAL,
+                current_assets REAL,
+                non_current_assets REAL,
+                tangible_assets REAL,
+                intangible_assets REAL,
+                financial_assets REAL,
                 total_equity REAL,
                 total_liabilities REAL,
+                current_liabilities REAL,
+                non_current_liabilities REAL,
                 cash_and_equivalents REAL,
                 net_debt REAL,
+                -- Övrigt
                 shares_outstanding REAL,
                 dividend REAL,
                 stock_price_avg REAL,
+                stock_price_high REAL,
+                stock_price_low REAL,
+                broken_fiscal_year INTEGER,
                 fetched_at TEXT,
                 PRIMARY KEY (isin, report_type, period_year, period_q)
             );
 
-            -- Mappnings-cache Avanza orderbook_id → Börsdata insId via ISIN
+            -- Daglig prishistorik (för backtesting)
+            CREATE TABLE IF NOT EXISTS borsdata_prices (
+                isin TEXT NOT NULL,
+                date TEXT NOT NULL,  -- YYYY-MM-DD
+                open REAL,
+                high REAL,
+                low REAL,
+                close REAL,
+                volume REAL,
+                PRIMARY KEY (isin, date)
+            );
+
+            -- KPI-historik (FCF Yield, ROIC, P/E etc per period)
+            CREATE TABLE IF NOT EXISTS borsdata_kpi_history (
+                isin TEXT NOT NULL,
+                kpi_id INTEGER NOT NULL,
+                report_type TEXT NOT NULL,  -- 'year' | 'quarter' | 'r12'
+                period_year INTEGER NOT NULL,
+                period_q INTEGER,
+                value REAL,
+                PRIMARY KEY (isin, kpi_id, report_type, period_year, period_q)
+            );
+
+            -- Sektor + bransch-metadata (riktig data från Börsdata)
+            CREATE TABLE IF NOT EXISTS borsdata_sectors (
+                sector_id INTEGER PRIMARY KEY,
+                name TEXT
+            );
+            CREATE TABLE IF NOT EXISTS borsdata_branches (
+                branch_id INTEGER PRIMARY KEY,
+                sector_id INTEGER,
+                name TEXT
+            );
+
+            -- Mappnings-cache Avanza ↔ Börsdata + utökad metadata per instrument
             CREATE TABLE IF NOT EXISTS borsdata_instrument_map (
                 isin TEXT PRIMARY KEY,
                 ins_id INTEGER NOT NULL,
                 ticker TEXT,
+                yahoo_ticker TEXT,
                 name TEXT,
                 market_id INTEGER,
+                sector_id INTEGER,
+                branch_id INTEGER,
+                country_id INTEGER,
+                stock_price_currency TEXT,
+                report_currency TEXT,
+                listing_date TEXT,
+                is_global INTEGER DEFAULT 0,
                 fetched_at TEXT
             );
 
             CREATE INDEX IF NOT EXISTS idx_borsdata_isin ON borsdata_reports(isin);
             CREATE INDEX IF NOT EXISTS idx_borsdata_period ON borsdata_reports(report_type, period_year DESC);
+            CREATE INDEX IF NOT EXISTS idx_borsdata_prices_date ON borsdata_prices(date DESC);
+            CREATE INDEX IF NOT EXISTS idx_borsdata_kpi ON borsdata_kpi_history(kpi_id, report_type, period_year DESC);
+            CREATE INDEX IF NOT EXISTS idx_borsdata_map_ticker ON borsdata_instrument_map(ticker);
+            CREATE INDEX IF NOT EXISTS idx_borsdata_map_yahoo ON borsdata_instrument_map(yahoo_ticker);
         """)
         db.commit()
         _ensure_smart_score_columns(db)
@@ -3042,18 +3163,23 @@ def sync_borsdata_reports(db, limit=None, max_age_days=7):
     skipped = 0
     errors = 0
 
-    # Spara mappnings-cache
-    for isin, bd_inst, _, _ in matched:
+    # Spara mappnings-cache med utökad metadata
+    for isin, bd_inst, _, is_global in matched:
         ins_id = bd_inst.get("insId")
         try:
-            # ticker-fältet i map: globala använder yahoo som ticker
-            map_ticker = bd_inst.get("ticker") or bd_inst.get("yahoo")
             db.execute(
                 f"INSERT OR REPLACE INTO borsdata_instrument_map "
-                f"(isin, ins_id, ticker, name, market_id, fetched_at) "
-                f"VALUES ({ph}, {ph}, {ph}, {ph}, {ph}, {ph})",
-                (isin, ins_id, map_ticker, bd_inst.get("name"),
-                 bd_inst.get("marketId"), now_iso))
+                f"(isin, ins_id, ticker, yahoo_ticker, name, market_id, sector_id, "
+                f"branch_id, country_id, stock_price_currency, report_currency, "
+                f"listing_date, is_global, fetched_at) "
+                f"VALUES ({ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph}, "
+                f"{ph}, {ph}, {ph}, {ph}, {ph})",
+                (isin, ins_id, bd_inst.get("ticker"), bd_inst.get("yahoo"),
+                 bd_inst.get("name"), bd_inst.get("marketId"),
+                 bd_inst.get("sectorId"), bd_inst.get("branchId"),
+                 bd_inst.get("countryId"), bd_inst.get("stockPriceCurrency"),
+                 bd_inst.get("reportCurrency"), bd_inst.get("listingDate"),
+                 1 if is_global else 0, now_iso))
         except Exception as e:
             print(f"[Börsdata] map-insert fel: {e}")
     db.commit()
@@ -3094,21 +3220,37 @@ def sync_borsdata_reports(db, limit=None, max_age_days=7):
                     db.execute(
                         f"INSERT OR REPLACE INTO borsdata_reports "
                         f"(isin, ins_id, report_type, period_year, period_q, "
-                        f"report_end_date, currency, operating_cash_flow, free_cash_flow, "
-                        f"investing_cash_flow, operating_income, net_profit, eps, revenues, "
-                        f"total_assets, total_equity, total_liabilities, cash_and_equivalents, "
-                        f"net_debt, shares_outstanding, dividend, stock_price_avg, fetched_at) "
-                        f"VALUES ({', '.join([ph]*23)})",
+                        f"report_end_date, currency, "
+                        f"revenues, gross_income, operating_income, profit_before_tax, "
+                        f"net_profit, eps, "
+                        f"operating_cash_flow, investing_cash_flow, financing_cash_flow, "
+                        f"free_cash_flow, cash_flow_year, "
+                        f"total_assets, current_assets, non_current_assets, tangible_assets, "
+                        f"intangible_assets, financial_assets, total_equity, total_liabilities, "
+                        f"current_liabilities, non_current_liabilities, "
+                        f"cash_and_equivalents, net_debt, shares_outstanding, dividend, "
+                        f"stock_price_avg, stock_price_high, stock_price_low, "
+                        f"broken_fiscal_year, fetched_at) "
+                        f"VALUES ({', '.join([ph]*37)})",
                         (isin, ins_id, report_type, period_year, period_q,
                          metrics.get("report_end_date"), metrics.get("currency"),
-                         metrics.get("operating_cash_flow"), metrics.get("free_cash_flow"),
-                         metrics.get("investing_cash_flow"), metrics.get("operating_income"),
+                         metrics.get("revenues"), metrics.get("gross_income"),
+                         metrics.get("operating_income"), metrics.get("profit_before_tax"),
                          metrics.get("net_profit"), metrics.get("earnings_per_share"),
-                         metrics.get("revenues"), metrics.get("total_assets"),
+                         metrics.get("operating_cash_flow"), metrics.get("investing_cash_flow"),
+                         metrics.get("financing_cash_flow"), metrics.get("free_cash_flow"),
+                         metrics.get("cash_flow_year"),
+                         metrics.get("total_assets"), metrics.get("current_assets"),
+                         metrics.get("non_current_assets"), metrics.get("tangible_assets"),
+                         metrics.get("intangible_assets"), metrics.get("financial_assets"),
                          metrics.get("total_equity"), metrics.get("total_liabilities"),
+                         metrics.get("current_liabilities"), metrics.get("non_current_liabilities"),
                          metrics.get("cash_and_equivalents"), metrics.get("net_debt"),
                          metrics.get("shares_outstanding"), metrics.get("dividend"),
-                         metrics.get("stock_price_avg"), now_iso))
+                         metrics.get("stock_price_avg"), metrics.get("stock_price_high"),
+                         metrics.get("stock_price_low"),
+                         1 if metrics.get("broken_fiscal_year") else 0,
+                         now_iso))
             synced += 1
         except Exception as e:
             print(f"[Börsdata] {avz['name']}: {e}")
@@ -3118,6 +3260,180 @@ def sync_borsdata_reports(db, limit=None, max_age_days=7):
 
     db.commit()
     return {"synced": synced, "skipped": skipped, "errors": errors, "total": len(matched)}
+
+
+def sync_borsdata_metadata(db):
+    """Synkar sektor + bransch-metadata (en gång)."""
+    try:
+        from borsdata_fetcher import fetch_sectors, fetch_branches
+    except ImportError:
+        return {"error": "borsdata_fetcher saknas"}
+    ph = _ph()
+    n_sec = 0
+    n_br = 0
+    try:
+        sectors = fetch_sectors()
+        for s in sectors:
+            db.execute(f"INSERT OR REPLACE INTO borsdata_sectors (sector_id, name) VALUES ({ph}, {ph})",
+                       (s.get("id"), s.get("name")))
+            n_sec += 1
+    except Exception as e:
+        print(f"[Börsdata sectors] {e}")
+
+    try:
+        branches = fetch_branches()
+        for b in branches:
+            db.execute(f"INSERT OR REPLACE INTO borsdata_branches (branch_id, sector_id, name) VALUES ({ph}, {ph}, {ph})",
+                       (b.get("id"), b.get("sectorId"), b.get("name")))
+            n_br += 1
+    except Exception as e:
+        print(f"[Börsdata branches] {e}")
+    db.commit()
+    return {"sectors": n_sec, "branches": n_br}
+
+
+def sync_borsdata_prices(db, isin_list=None, from_date=None, max_per_run=500,
+                         progress_callback=None):
+    """Synkar daglig prishistorik per bolag.
+
+    Args:
+        isin_list: lista med ISIN att sync:a (None = alla i borsdata_instrument_map)
+        from_date: 'YYYY-MM-DD' (None = från senaste vi har, eller 10 år tillbaka)
+        max_per_run: max antal bolag per körning (för att inte hänga timmar)
+
+    Returnerar {synced, total_rows, errors, total}.
+    """
+    try:
+        from borsdata_fetcher import fetch_stock_prices, BORSDATA_KEY
+    except ImportError:
+        return {"error": "borsdata_fetcher saknas"}
+    if not BORSDATA_KEY:
+        return {"error": "BORSDATA_API_KEY saknas"}
+
+    ph = _ph()
+
+    # Hämta alla bolag att synka
+    if isin_list is None:
+        rows = _fetchall(db,
+            "SELECT isin, ins_id, is_global FROM borsdata_instrument_map "
+            "ORDER BY market_id, isin")
+        targets = [(r["isin"], r["ins_id"], r["is_global"]) for r in rows]
+    else:
+        placeholders = ",".join([ph] * len(isin_list))
+        rows = _fetchall(db,
+            f"SELECT isin, ins_id, is_global FROM borsdata_instrument_map "
+            f"WHERE isin IN ({placeholders})", isin_list)
+        targets = [(r["isin"], r["ins_id"], r["is_global"]) for r in rows]
+
+    if max_per_run:
+        targets = targets[:max_per_run]
+
+    synced = 0
+    total_rows = 0
+    errors = 0
+
+    for i, (isin, ins_id, is_global) in enumerate(targets):
+        if progress_callback and i % 20 == 0:
+            try: progress_callback(i, len(targets), isin)
+            except Exception: pass
+
+        # Bestäm from_date: senaste vi har + 1 dag, eller 10 år tillbaka
+        if from_date is None:
+            last = _fetchone(db,
+                f"SELECT MAX(date) as d FROM borsdata_prices WHERE isin = {ph}", (isin,))
+            try:
+                last_date = last["d"] if last else None
+            except (IndexError, KeyError):
+                last_date = None
+            if last_date:
+                from datetime import datetime, timedelta
+                d = datetime.strptime(last_date, "%Y-%m-%d") + timedelta(days=1)
+                fd = d.strftime("%Y-%m-%d")
+            else:
+                fd = (datetime.now() - timedelta(days=365 * 10)).strftime("%Y-%m-%d")
+        else:
+            fd = from_date
+
+        try:
+            prices = fetch_stock_prices(ins_id, is_global=bool(is_global), from_date=fd)
+            if not prices:
+                synced += 1
+                continue
+            for p in prices:
+                date_str = (p.get("d") or "")[:10]  # YYYY-MM-DD
+                if not date_str:
+                    continue
+                db.execute(
+                    f"INSERT OR REPLACE INTO borsdata_prices "
+                    f"(isin, date, open, high, low, close, volume) "
+                    f"VALUES ({ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph})",
+                    (isin, date_str, p.get("o"), p.get("h"), p.get("l"),
+                     p.get("c"), p.get("v")))
+                total_rows += 1
+            synced += 1
+            if i % 50 == 0:
+                db.commit()
+        except Exception as e:
+            print(f"[prices] {isin} fel: {e}")
+            errors += 1
+    db.commit()
+    return {"synced": synced, "total_rows": total_rows, "errors": errors,
+            "total": len(targets)}
+
+
+def sync_borsdata_kpis(db, kpi_ids=None, isin_list=None, max_per_run=500):
+    """Synkar KPI-historik. Default: top 15 KPIs (FCF, ROIC, P/E, etc.)."""
+    try:
+        from borsdata_fetcher import (fetch_kpi_history_for_instrument,
+                                       TOP_KPIS, BORSDATA_KEY)
+    except ImportError:
+        return {"error": "borsdata_fetcher saknas"}
+    if not BORSDATA_KEY:
+        return {"error": "BORSDATA_API_KEY saknas"}
+
+    ph = _ph()
+    if kpi_ids is None:
+        kpi_ids = list(TOP_KPIS.keys())
+
+    if isin_list is None:
+        rows = _fetchall(db, "SELECT isin, ins_id, is_global FROM borsdata_instrument_map")
+        targets = [(r["isin"], r["ins_id"], r["is_global"]) for r in rows]
+    else:
+        placeholders = ",".join([ph] * len(isin_list))
+        rows = _fetchall(db,
+            f"SELECT isin, ins_id, is_global FROM borsdata_instrument_map "
+            f"WHERE isin IN ({placeholders})", isin_list)
+        targets = [(r["isin"], r["ins_id"], r["is_global"]) for r in rows]
+
+    if max_per_run:
+        targets = targets[:max_per_run]
+
+    synced = 0
+    total_rows = 0
+    errors = 0
+    for i, (isin, ins_id, is_global) in enumerate(targets):
+        for kpi_id in kpi_ids:
+            try:
+                values = fetch_kpi_history_for_instrument(ins_id, kpi_id, "year",
+                                                            is_global=bool(is_global))
+                for v in values:
+                    year = v.get("y")
+                    val = v.get("v")
+                    if year is None: continue
+                    db.execute(
+                        f"INSERT OR REPLACE INTO borsdata_kpi_history "
+                        f"(isin, kpi_id, report_type, period_year, period_q, value) "
+                        f"VALUES ({ph}, {ph}, 'year', {ph}, NULL, {ph})",
+                        (isin, kpi_id, year, val))
+                    total_rows += 1
+            except Exception as e:
+                errors += 1
+        synced += 1
+        if i % 50 == 0:
+            db.commit()
+    db.commit()
+    return {"synced": synced, "total_rows": total_rows, "errors": errors,
+            "total": len(targets)}
 
 
 def get_borsdata_latest(db, isin, report_type="year"):
