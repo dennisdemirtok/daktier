@@ -2730,6 +2730,80 @@ def _model_applicability(classification):
 
 # ─── v2-scorers ──────────────────────────────────────────────────
 
+# ──────────────────────────────────────────────────────────────
+# FX-rate helper (för v2.1 valuta-fix)
+# Avanza lagrar market_cap omräknat till SEK, men OCF/sales/net_profit
+# ligger kvar i bolagets nativa valuta. Detta gör ratios som FCF/MCap
+# fel för utländska bolag (MSFT FCF Yield blev 0.55% istället för ~5%).
+# Fix: konvertera market_cap till nativ currency innan beräkningar.
+# Frankfurter (ECB-baserad gratis-API) — uppdateras dagligen.
+# ──────────────────────────────────────────────────────────────
+_FX_CACHE = {"rates": None, "ts": 0.0}
+_FX_TTL = 3600 * 6  # 6 timmar
+
+def _fetch_fx_rates():
+    """Hämtar USD-baserade rates för vanliga valutor. Returnerar dict."""
+    try:
+        url = ("https://api.frankfurter.dev/v1/latest?from=USD"
+               "&to=SEK,EUR,GBP,CHF,NOK,DKK,CAD,JPY,AUD,HKD,SGD,PLN,CNY")
+        r = requests.get(url, timeout=8)
+        if r.status_code != 200:
+            return None
+        data = r.json()
+        rates = data.get("rates", {})
+        rates["USD"] = 1.0  # bas-valuta
+        return rates
+    except Exception as e:
+        print(f"[FX] kunde inte hämta valutakurser: {e}")
+        return None
+
+
+def _fx_rate(from_currency, to_currency="SEK"):
+    """Konverteringsfaktor: 1 from_currency = X to_currency.
+
+    Använder Frankfurter API (ECB) med 6h cache.
+    Fallback 1.0 om data saknas (för t.ex. exotiska valutor).
+    """
+    if not from_currency or not to_currency:
+        return 1.0
+    if from_currency == to_currency:
+        return 1.0
+    now = time.time()
+    if (_FX_CACHE.get("rates") is None or
+        now - _FX_CACHE.get("ts", 0) > _FX_TTL):
+        rates = _fetch_fx_rates()
+        if rates:
+            _FX_CACHE["rates"] = rates
+            _FX_CACHE["ts"] = now
+    rates = _FX_CACHE.get("rates") or {}
+    # USD-baserade: "1 USD = rates[X] X-currency"
+    from_per_usd = rates.get(from_currency)
+    to_per_usd = rates.get(to_currency)
+    if from_per_usd and to_per_usd:
+        return to_per_usd / from_per_usd
+    return 1.0
+
+
+def _market_cap_native(s):
+    """Returnerar market_cap i bolagets nativa valuta.
+
+    Avanza screener returnerar market_cap omräknat till SEK för utländska
+    bolag, men last_price/OCF/sales är i nativ currency. Detta orsakar
+    skala-mismatch i FCF Yield, Reverse DCF, ROIC-implied multiple m.fl.
+
+    Lösning: dela SEK-mcap med fx-rate native→SEK för att få mcap i nativ.
+    """
+    mcap = s.get("market_cap") or s.get("market_capitalization") or 0
+    currency = (s.get("currency") or "SEK").upper()
+    if currency == "SEK" or mcap <= 0:
+        return mcap
+    # market_cap_SEK / (SEK per native) = market_cap_native
+    rate = _fx_rate(currency, "SEK")
+    if rate <= 0:
+        return mcap
+    return mcap / rate
+
+
 # Sektor-baserade CapEx-intensitets-proxies (CapEx / OCF).
 # Avanza levererar inte CapEx separat — vi uppskattar baserat på branchsnitt
 # från offentliga benchmark-rapporter (SEC 10-K avg per sektor).
@@ -2779,7 +2853,9 @@ def _score_fcf_yield(s, classification):
         v2.1:   FCF SBC-adj ~$70-80B / EV ~$3,1T = 2.3-2.6% → score 25-30
     """
     ocf = s.get("operating_cash_flow")
-    market_cap = s.get("market_cap") or s.get("market_capitalization")
+    # v2.1 valuta-fix: använd market_cap i bolagets nativa valuta
+    # (Avanza lagrar mcap i SEK för utländska bolag → skala-mismatch annars)
+    market_cap = _market_cap_native(s)
     if not ocf or not market_cap or market_cap <= 0:
         return None
 
@@ -2797,12 +2873,8 @@ def _score_fcf_yield(s, classification):
     sbc_proxy = ocf * sbc_pct
     fcf_sbc_adj = fcf_proxy - sbc_proxy
 
-    # EV-approximation: MarketCap × (1 + D/E_normalized)
-    # D/E är total_debt / equity, så total_debt = mcap × D/E (ungefär — egentligen
-    # bookvärde × D/E. Approximation, men bättre än bara MCap).
+    # EV-approximation i nativ valuta
     de = s.get("debt_to_equity_ratio") or 0
-    total_debt_est = market_cap * min(de, 2.0) if de > 0 else 0
-    # Vi har ingen cash separat — approximation EV ≈ MCap × (1 + 0.5 × D/E)
     ev = market_cap * (1 + 0.5 * min(de, 2.0))
 
     fcf_yield = fcf_sbc_adj / ev
@@ -2845,8 +2917,9 @@ def _score_roic_implied(s, classification):
         growth_map = {"hyper": 0.07, "growth": 0.05, "steady": 0.03, "mature": 0.02, "cyclical": 0.03}
         g = growth_map.get(growth, 0.03)
 
-    # WACC baserat på market cap
-    market_cap = s.get("market_cap") or 0
+    # WACC baserat på market cap i NATIV valuta (annars är thresholds fel
+    # — utländska bolag har mcap i SEK vilket är 9-12× större tal)
+    market_cap = _market_cap_native(s)
     if market_cap > 50e9: wacc = 0.08    # large cap
     elif market_cap > 5e9: wacc = 0.09   # mid cap
     elif market_cap > 500e6: wacc = 0.11 # small cap
@@ -2932,7 +3005,8 @@ def _score_reverse_dcf(s, classification):
     Eller None om data saknas.
     """
     ocf = s.get("operating_cash_flow")  # FCF-proxy (vi har inte CapEx separat)
-    market_cap = s.get("market_cap") or s.get("market_capitalization")
+    # v2.1 valuta-fix: använd market_cap i bolagets nativa valuta
+    market_cap = _market_cap_native(s)
     if not ocf or ocf <= 0 or not market_cap or market_cap <= 0:
         return None
 
@@ -2943,7 +3017,7 @@ def _score_reverse_dcf(s, classification):
     if fcf_proxy <= 0:
         return None
 
-    # WACC från storlek
+    # WACC från storlek (i nativ valuta-skala — large cap är 50B+ USD/EUR/etc)
     if market_cap > 50e9: wacc = 0.08
     elif market_cap > 5e9: wacc = 0.09
     elif market_cap > 500e6: wacc = 0.11
