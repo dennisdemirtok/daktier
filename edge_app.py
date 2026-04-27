@@ -4205,8 +4205,9 @@ DEL 9 — DAGENS DB-SNAPSHOT (uppdateras var 5 min)
         },
     }]
 
-    MODEL = os.environ.get("AGENT_MODEL", "claude-opus-4-5")
-    # Prompt-caching kräver 1024+ tokens i stat-blocket → vi har ~3000 tokens i KB
+    # Sonnet 4.5 default — högre rate limits än Opus (30k → 200k tokens/min)
+    # och fortfarande mycket kompetent. Opus är opt-in via env.
+    MODEL = os.environ.get("AGENT_MODEL", "claude-sonnet-4-5")
     headers = {
         "x-api-key": CLAUDE_API_KEY,
         "anthropic-version": "2023-06-01",
@@ -4555,7 +4556,8 @@ DEL 9 — DAGENS DB-SNAPSHOT (uppdateras var 5 min)
     messages.append({"role": "user", "content": user_content})
 
     tools = _agent_tools_definition()
-    MODEL = os.environ.get("AGENT_MODEL", "claude-opus-4-5")
+    # Sonnet 4.5 default (200k tokens/min vs Opus 30k/min). Opus opt-in via env.
+    MODEL = os.environ.get("AGENT_MODEL", "claude-sonnet-4-5")
     headers = {
         "x-api-key": CLAUDE_API_KEY,
         "anthropic-version": "2023-06-01",
@@ -4567,6 +4569,7 @@ DEL 9 — DAGENS DB-SNAPSHOT (uppdateras var 5 min)
 
     def generate():
         nonlocal MODEL
+        rate_limit_retries = 0
         try:
             for _iter in range(8):  # max 8 iterationer (multi-tool)
                 payload = {
@@ -4593,14 +4596,35 @@ DEL 9 — DAGENS DB-SNAPSHOT (uppdateras var 5 min)
                     with httpx.stream("POST", "https://api.anthropic.com/v1/messages",
                                        headers=headers, json=payload, timeout=120.0) as resp:
                         if resp.status_code != 200:
-                            # Fallback om Opus 4.5 inte finns
                             err_text = resp.read().decode("utf-8", errors="ignore")
+                            # Modell-fallback: 404/400 om Opus-modell inte tillgänglig
                             if _iter == 0 and resp.status_code in (404, 400) and MODEL.startswith("claude-opus"):
-                                MODEL = "claude-sonnet-4-20250514"
+                                MODEL = "claude-sonnet-4-5"
                                 payload["model"] = MODEL
-                                yield _sse({"type": "info", "message": f"Bytte till {MODEL}"})
-                                continue  # börja om iterationen med ny modell
-                            yield _sse({"type": "error", "error": f"Claude API: {resp.status_code} {err_text[:300]}"})
+                                yield _sse({"type": "info", "message": f"Bytte till {MODEL} (Opus ej tillgänglig)"})
+                                continue
+                            # Rate limit-fallback: byt till Sonnet om Opus rate-limitas
+                            if resp.status_code == 429 and MODEL.startswith("claude-opus"):
+                                MODEL = "claude-sonnet-4-5"
+                                payload["model"] = MODEL
+                                yield _sse({"type": "info", "message": f"Opus rate-limitat — bytte till {MODEL}"})
+                                continue
+                            # 429 även för Sonnet — vänta 30s och försök igen ENDAST en gång
+                            if resp.status_code == 429 and rate_limit_retries < 1:
+                                import time as _t
+                                yield _sse({"type": "info", "message": "Rate limit nått — väntar 30s..."})
+                                _t.sleep(30)
+                                rate_limit_retries += 1
+                                continue
+                            # Alla andra fel: meddela användaren tydligt
+                            user_msg = f"API-fel ({resp.status_code})"
+                            if resp.status_code == 429:
+                                user_msg = "Rate limit nått — försök igen om en minut, eller byt till mindre kontext."
+                            elif resp.status_code == 401:
+                                user_msg = "API-nyckel ogiltig"
+                            elif resp.status_code == 529:
+                                user_msg = "Anthropic överbelastat — försök igen"
+                            yield _sse({"type": "error", "error": f"{user_msg}: {err_text[:200]}"})
                             return
 
                         for line in resp.iter_lines():
