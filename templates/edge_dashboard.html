@@ -4155,6 +4155,114 @@ function renderAIToplist() {
 let _agentHistory = [];   // [{role:'user'|'assistant', content: ...}] för API
 let _agentImage = null;   // {b64, media_type, name}
 let _agentLoading = false;
+let _agentChatId = null;  // aktiv chat-id (null = ny chatt, ej sparad än)
+let _agentShowHistory = false;  // dropdown öppen?
+
+// ── Chat history (localStorage) ──────────────────────────
+const AGENT_CHATS_KEY = 'daktier_agent_chats_v1';
+const AGENT_MAX_CHATS = 30;  // håll bara 30 senaste
+
+function _loadChats() {
+    try {
+        const raw = localStorage.getItem(AGENT_CHATS_KEY);
+        return raw ? JSON.parse(raw) : {};
+    } catch (e) { return {}; }
+}
+
+function _saveChats(chats) {
+    try {
+        // Sortera och kapa till AGENT_MAX_CHATS senaste
+        const sorted = Object.values(chats).sort((a,b) => b.updated_at - a.updated_at);
+        const kept = sorted.slice(0, AGENT_MAX_CHATS);
+        const out = {};
+        for (const c of kept) out[c.id] = c;
+        localStorage.setItem(AGENT_CHATS_KEY, JSON.stringify(out));
+    } catch (e) { console.warn('Kunde ej spara chat:', e); }
+}
+
+function _saveCurrentChat() {
+    if (!_agentHistory.length) return;
+    const chats = _loadChats();
+    const now = Date.now();
+    if (!_agentChatId) {
+        _agentChatId = 'chat_' + now;
+    }
+    // Härled titel från första user-meddelandet
+    let title = 'Ny chatt';
+    for (const h of _agentHistory) {
+        if (h.role === 'user') {
+            const text = Array.isArray(h.content)
+                ? (h.content.find(c => c.type === 'text')?.text || '')
+                : (typeof h.content === 'string' ? h.content : '');
+            if (text) { title = text.slice(0, 80); break; }
+        }
+    }
+    chats[_agentChatId] = {
+        id: _agentChatId,
+        title,
+        created_at: chats[_agentChatId]?.created_at || now,
+        updated_at: now,
+        history: _agentHistory,
+    };
+    _saveChats(chats);
+}
+
+function agentNewChat() {
+    _agentHistory = [];
+    _agentChatId = null;
+    _agentImage = null;
+    _agentShowHistory = false;
+    renderAgent();
+}
+
+function agentLoadChat(chatId) {
+    const chats = _loadChats();
+    const c = chats[chatId];
+    if (!c) return;
+    _agentHistory = c.history || [];
+    _agentChatId = chatId;
+    _agentShowHistory = false;
+    _agentImage = null;
+    renderAgent();
+}
+
+function agentDeleteChat(chatId, ev) {
+    if (ev) ev.stopPropagation();
+    const chats = _loadChats();
+    delete chats[chatId];
+    _saveChats(chats);
+    if (_agentChatId === chatId) agentNewChat();
+    else renderAgent();
+}
+
+function agentToggleHistory() {
+    _agentShowHistory = !_agentShowHistory;
+    renderAgent();
+}
+
+function _agentDropdownDismiss(ev) {
+    // Stäng dropdown om klick utanför
+    if (!ev.target.closest('.agent-history-dropdown') &&
+        !ev.target.closest('[onclick*="agentToggleHistory"]')) {
+        _agentShowHistory = false;
+        renderAgent();
+    }
+}
+
+function _formatRelativeTime(ts) {
+    const diff = Date.now() - ts;
+    const sec = Math.floor(diff / 1000);
+    if (sec < 60) return 'just nu';
+    const min = Math.floor(sec / 60);
+    if (min < 60) return `${min} min sen`;
+    const h = Math.floor(min / 60);
+    if (h < 24) return `${h} h sen`;
+    const d = Math.floor(h / 24);
+    if (d < 7) return `${d} d sen`;
+    const w = Math.floor(d / 7);
+    if (w < 4) return `${w} v sen`;
+    return new Date(ts).toLocaleDateString('sv-SE');
+}
 
 // Konfigurera marked.js för GFM (tabeller, etc.)
 if (typeof marked !== 'undefined') {
@@ -4162,13 +4270,102 @@ if (typeof marked !== 'undefined') {
 }
 
 const TOOL_LABELS = {
-    search_stocks: { icon: '🔍', label: 'Söker bolag' },
-    get_full_stock: { icon: '📊', label: 'Hämtar fullständig data' },
-    get_quarterly_trends: { icon: '📈', label: 'Hämtar kvartalstrend' },
-    get_owner_history: { icon: '👥', label: 'Läser ägartrend' },
-    get_top_stocks: { icon: '🏆', label: 'Bygger topplista' },
-    web_search: { icon: '🌐', label: 'Söker på webben' },
+    search_stocks:        { icon: '🔍', label: 'Söker bolag',        labelDone: 'Sökte bolag' },
+    get_full_stock:       { icon: '📊', label: 'Hämtar data',        labelDone: 'Hämtade data' },
+    get_quarterly_trends: { icon: '📈', label: 'Läser kvartalstrend', labelDone: 'Läste kvartalstrend' },
+    get_owner_history:    { icon: '👥', label: 'Läser ägartrend',    labelDone: 'Läste ägartrend' },
+    get_top_stocks:       { icon: '🏆', label: 'Bygger topplista',   labelDone: 'Byggde topplista' },
+    get_borsdata_history: { icon: '📐', label: 'Hämtar Börsdata-historik', labelDone: 'Börsdata-historik' },
+    get_sector_peers:     { icon: '🧭', label: 'Jämför sektor-peers', labelDone: 'Sektor-peers' },
+    get_backtest:         { icon: '⏪', label: 'Kör backtest',       labelDone: 'Backtestade' },
+    web_search:           { icon: '🌐', label: 'Söker på webben',    labelDone: 'Webb-sökning' },
 };
+
+// Hämta ett kort namn ur tool-input för visning ("MSFT", "Microsoft", "SE" etc.)
+function _toolInputLabel(name, input) {
+    if (!input || typeof input !== 'object') return null;
+    return input.short_name
+        || input.ticker
+        || input.symbol
+        || input.query
+        || input.orderbook_id
+        || input.country
+        || input.setup
+        || null;
+}
+
+// Gruppera tools per name så identiska anrop slås ihop till EN pill
+// med räknare + namn-lista. Ger en mycket mindre rörig UI.
+function _groupTools(tools) {
+    if (!tools || !tools.length) return [];
+    const groups = new Map();
+    for (const t of tools) {
+        const key = t.name || 'unknown';
+        if (!groups.has(key)) {
+            groups.set(key, { name: key, items: [], running: 0, done: 0, error: 0 });
+        }
+        const g = groups.get(key);
+        g.items.push(t);
+        if (t.status === 'running') g.running++;
+        else if (t.status === 'error') g.error++;
+        else g.done++;
+    }
+    return Array.from(groups.values());
+}
+
+function _renderToolGroup(g) {
+    const meta = TOOL_LABELS[g.name] || { icon: '⚙️', label: g.name, labelDone: g.name };
+    const total = g.items.length;
+    const isRunning = g.running > 0;
+    const allDone = !isRunning && g.error === 0;
+    const hasError = g.error > 0;
+
+    // Plocka unika input-labels (max 3 visade)
+    const labels = [];
+    const seen = new Set();
+    for (const t of g.items) {
+        const lbl = _toolInputLabel(t.name, t.input);
+        if (lbl && !seen.has(lbl)) { seen.add(lbl); labels.push(lbl); }
+    }
+    let namesHtml = '';
+    if (labels.length) {
+        const shown = labels.slice(0, 3).map(l => escapeHtml(String(l))).join(', ');
+        const extra = labels.length > 3 ? ` +${labels.length - 3}` : '';
+        namesHtml = `<span class="pill-names">${shown}${extra}</span>`;
+    }
+
+    let cls = 'running';
+    let labelText = meta.label;
+    let countHtml = '';
+    let icon = `<span class="pill-spin"></span>`;
+
+    if (allDone) {
+        cls = 'done';
+        labelText = meta.labelDone || meta.label;
+        icon = '✓';
+    } else if (hasError) {
+        cls = 'error';
+        labelText = meta.labelDone || meta.label;
+        icon = '✕';
+    }
+
+    if (total > 1) {
+        if (isRunning) {
+            countHtml = `<span class="pill-count">${g.done}/${total}</span>`;
+        } else {
+            countHtml = `<span class="pill-count">${total}</span>`;
+        }
+    }
+
+    return `<span class="agent-tool-pill ${cls}">
+        ${meta.icon} ${labelText} ${countHtml} ${namesHtml} ${isRunning ? icon : ''}
+    </span>`;
+}
+
+function renderToolPills(tools) {
+    const groups = _groupTools(tools);
+    return groups.map(_renderToolGroup).join('');
+}
 
 function renderAgent() {
     const content = document.getElementById('content');
@@ -4210,10 +4407,90 @@ function renderAgent() {
         .agent-msg-bubble.streaming { background:linear-gradient(120deg,white 0%,#f8fafc 50%,white 100%); background-size:200% 100%; animation:agent-shimmer 2s linear infinite; }
         @keyframes agent-shimmer { 0%{background-position:-200% 0;} 100%{background-position:200% 0;} }
         .agent-msg-img { max-width:280px; max-height:200px; display:block; border-radius:8px; margin-bottom:8px; }
-        .agent-tool-pill { display:inline-flex; align-items:center; gap:6px; background:#eff6ff; color:#1e40af; padding:4px 10px; border-radius:14px; font-size:11px; font-weight:600; margin:3px 4px 3px 0; }
-        .agent-tool-pill.running { background:#fef3c7; color:#78350f; }
-        .agent-tool-pill.running::after { content:'…'; animation:agent-dot 1s infinite; }
-        @keyframes agent-dot { 0%,20%{content:'.';} 40%{content:'..';} 60%,100%{content:'...';} }
+        .agent-tools-container { display:flex; flex-wrap:wrap; gap:6px; align-items:center; }
+        .agent-tool-pill {
+            display:inline-flex; align-items:center; gap:6px;
+            background:linear-gradient(135deg,#eff6ff,#dbeafe); color:#1e40af;
+            padding:5px 12px; border-radius:14px; font-size:11.5px; font-weight:600;
+            transition:all 0.25s cubic-bezier(0.4,0,0.2,1);
+            animation:agent-pill-in 0.35s cubic-bezier(0.34,1.56,0.64,1);
+            border:1px solid rgba(59,130,246,0.15);
+            white-space:nowrap;
+        }
+        .agent-tool-pill .pill-count { font-size:10px; background:rgba(255,255,255,0.7); padding:1px 6px; border-radius:8px; font-weight:700; }
+        .agent-tool-pill .pill-names { font-weight:500; opacity:0.85; font-size:10.5px; }
+        .agent-tool-pill.running {
+            background:linear-gradient(135deg,#fef3c7,#fde68a); color:#78350f;
+            border-color:rgba(245,158,11,0.3);
+            box-shadow:0 0 0 0 rgba(251,191,36,0.5);
+            animation:agent-pill-in 0.35s cubic-bezier(0.34,1.56,0.64,1), agent-pulse 1.8s ease-in-out infinite;
+        }
+        .agent-tool-pill.running .pill-spin {
+            display:inline-block; width:8px; height:8px; border-radius:50%;
+            border:2px solid rgba(120,53,15,0.3); border-top-color:#78350f;
+            animation:agent-spin 0.8s linear infinite;
+        }
+        .agent-tool-pill.done {
+            background:linear-gradient(135deg,#d1fae5,#a7f3d0); color:#065f46;
+            border-color:rgba(16,185,129,0.2);
+        }
+        .agent-tool-pill.error {
+            background:linear-gradient(135deg,#fee2e2,#fecaca); color:#991b1b;
+            border-color:rgba(220,38,38,0.2);
+        }
+        @keyframes agent-pill-in {
+            from { opacity:0; transform:translateY(4px) scale(0.9); }
+            to { opacity:1; transform:translateY(0) scale(1); }
+        }
+        @keyframes agent-pulse {
+            0%,100% { box-shadow:0 0 0 0 rgba(251,191,36,0); }
+            50% { box-shadow:0 0 0 4px rgba(251,191,36,0.2); }
+        }
+        @keyframes agent-spin {
+            to { transform:rotate(360deg); }
+        }
+        /* Chat history dropdown */
+        .agent-history-dropdown {
+            position:absolute; top:50px; right:0; width:340px; max-height:480px; overflow-y:auto;
+            background:white; border:1px solid var(--border); border-radius:12px;
+            box-shadow:0 8px 24px rgba(0,0,0,0.12); z-index:50;
+            animation:agent-pill-in 0.2s ease-out;
+        }
+        .agent-history-item {
+            padding:10px 14px; border-bottom:1px solid var(--border-light);
+            cursor:pointer; transition:background 0.12s;
+            display:flex; align-items:flex-start; gap:8px;
+        }
+        .agent-history-item:hover { background:#f8fafc; }
+        .agent-history-item.active { background:linear-gradient(135deg,#dbeafe,#eff6ff); }
+        .agent-history-item-content { flex:1; min-width:0; }
+        .agent-history-title { font-size:13px; font-weight:600; color:var(--text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+        .agent-history-meta { font-size:10.5px; color:var(--text-muted); margin-top:2px; }
+        .agent-history-del {
+            opacity:0; transition:opacity 0.15s; background:transparent; border:none; color:#dc2626;
+            cursor:pointer; padding:2px 6px; border-radius:6px; font-size:14px; line-height:1;
+        }
+        .agent-history-item:hover .agent-history-del { opacity:0.6; }
+        .agent-history-del:hover { opacity:1 !important; background:#fee2e2; }
+        .agent-history-empty { padding:20px; text-align:center; color:var(--text-muted); font-size:12px; }
+        .agent-history-header {
+            padding:10px 14px; background:linear-gradient(135deg,#f8fafc,#f1f5f9);
+            border-bottom:1px solid var(--border); display:flex; justify-content:space-between; align-items:center;
+            position:sticky; top:0; z-index:1;
+        }
+        .agent-icon-btn {
+            background:white; border:1px solid var(--border); border-radius:10px;
+            padding:8px 12px; cursor:pointer; font-size:13px; font-weight:600;
+            display:inline-flex; align-items:center; gap:6px;
+            transition:all 0.15s;
+        }
+        .agent-icon-btn:hover { background:#f8fafc; border-color:#3b82f6; }
+        .agent-icon-btn.primary { background:linear-gradient(135deg,#3b82f6,#2563eb); color:white; border-color:transparent; }
+        .agent-icon-btn.primary:hover { box-shadow:0 4px 12px rgba(59,130,246,0.3); }
+        .agent-toolbar {
+            display:flex; gap:8px; align-items:center; justify-content:space-between;
+            padding-bottom:6px; position:relative;
+        }
         .agent-input-row { display:flex; gap:8px; align-items:flex-end; padding:10px; background:white; border:1px solid var(--border); border-radius:14px; box-shadow:0 1px 4px rgba(0,0,0,0.04); }
         .agent-textarea { flex:1; border:none; outline:none; resize:none; font-family:inherit; font-size:14px; padding:8px 6px; max-height:120px; }
         .agent-btn { background:linear-gradient(135deg,#1d4ed8,#3b82f6); color:white; border:none; padding:10px 22px; border-radius:10px; cursor:pointer; font-weight:600; font-family:inherit; }
@@ -4249,12 +4526,60 @@ function renderAgent() {
         .agent-foot { font-size:10.5px; color:var(--text-muted); margin-top:10px; padding-top:8px; border-top:1px dashed #e5e7eb; display:flex; gap:10px; flex-wrap:wrap; }
         .agent-cancel-btn { background:#fee2e2; border:none; color:#991b1b; padding:8px 14px; border-radius:8px; cursor:pointer; font-size:12px; font-family:inherit; }
     </style>
+    // Bygg history-dropdown
+    const chats = _loadChats();
+    const sortedChats = Object.values(chats).sort((a,b) => b.updated_at - a.updated_at);
+    let historyDropdown = '';
+    if (_agentShowHistory) {
+        const items = sortedChats.length === 0
+            ? `<div class="agent-history-empty">Inga sparade chattar än.<br><span style="font-size:10.5px">Varje konversation sparas automatiskt.</span></div>`
+            : sortedChats.map(c => `
+                <div class="agent-history-item ${c.id === _agentChatId ? 'active' : ''}"
+                     onclick="agentLoadChat('${c.id}')">
+                    <div class="agent-history-item-content">
+                        <div class="agent-history-title">${escapeHtml(c.title)}</div>
+                        <div class="agent-history-meta">${_formatRelativeTime(c.updated_at)} · ${(c.history?.length || 0)} meddelanden</div>
+                    </div>
+                    <button class="agent-history-del" title="Radera" onclick="agentDeleteChat('${c.id}', event)">×</button>
+                </div>
+            `).join('');
+        historyDropdown = `
+            <div class="agent-history-dropdown">
+                <div class="agent-history-header">
+                    <strong style="font-size:12px">📋 Senaste chattar</strong>
+                    <button class="agent-icon-btn" style="padding:4px 10px;font-size:11px" onclick="agentNewChat()">+ Ny chatt</button>
+                </div>
+                ${items}
+            </div>`;
+    }
+
+    const activeTitle = (() => {
+        if (!_agentChatId) return null;
+        const c = chats[_agentChatId];
+        return c ? c.title : null;
+    })();
+
+    content.innerHTML = `
     <div class="agent-wrap">
-        <div class="agent-hero">
+        <div class="agent-toolbar">
+            <div style="display:flex;align-items:center;gap:8px;min-width:0">
+                <span style="font-size:18px">🤖</span>
+                <div style="min-width:0">
+                    <div style="font-weight:700;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(activeTitle || 'Ny chatt')}</div>
+                    <div style="font-size:10.5px;color:var(--text-muted)">${_agentHistory.length === 0 ? 'Edge Agent är redo' : `${_agentHistory.length} meddelanden`}</div>
+                </div>
+            </div>
+            <div style="display:flex;gap:6px;position:relative">
+                <button class="agent-icon-btn" onclick="agentNewChat()" title="Ny chatt">＋ Ny</button>
+                <button class="agent-icon-btn" onclick="agentToggleHistory()" title="Historik">📋 Historik</button>
+                ${historyDropdown}
+            </div>
+        </div>
+        ${_agentHistory.length === 0 ? `<div class="agent-hero">
             <strong>🤖 Edge Agent</strong> — Claude Opus med direktåtkomst till databasen.
             Söker bolag, läser kvartalstrender, ägarhistorik, kollar forum/Reddit/nyheter via web search.
             Ladda upp en skärmbild av din portfölj för analys.
-        </div>
+        </div>` : ''}
         <div id="agentMsgs" class="agent-msgs">
             ${turns || `<div style="color:var(--text-muted);text-align:center;padding:30px">Ställ en fråga eller välj ett exempel.</div>`}
         </div>
@@ -4271,6 +4596,13 @@ function renderAgent() {
                 : `<button class="agent-btn" onclick="agentSend()">Skicka</button>`}
         </div>
     </div>`;
+
+    // Stäng dropdown vid klick utanför
+    if (_agentShowHistory) {
+        setTimeout(() => {
+            document.addEventListener('click', _agentDropdownDismiss, { once: true });
+        }, 0);
+    }
 
     setTimeout(() => {
         const m = document.getElementById('agentMsgs');
@@ -4301,11 +4633,7 @@ function renderAgentTurn(h, idx) {
         const tools = h.tools || [];
         const usage = h.usage || {};
 
-        const toolsHtml = tools.map(t => {
-            const meta = TOOL_LABELS[t.name] || { icon: '⚙️', label: t.name };
-            const cls = t.status === 'running' ? 'running' : '';
-            return `<span class="agent-tool-pill ${cls}">${meta.icon} ${meta.label}</span>`;
-        }).join('');
+        const toolsHtml = renderToolPills(tools);
 
         const md = text ? formatAgentText(text) : (isStreaming ? '<span style="color:var(--text-muted)">Tänker...</span>' : '');
 
@@ -4480,13 +4808,9 @@ async function agentSend() {
                     streamingMd.innerHTML = newHtml;
                 }
             }
-            // 2) Tool-pills
+            // 2) Tool-pills (grupperade)
             if (streamingToolsContainer) {
-                const html = (assistantTurn.tools || []).map(t => {
-                    const meta = TOOL_LABELS[t.name] || { icon: '⚙️', label: t.name };
-                    const cls = t.status === 'running' ? 'running' : '';
-                    return `<span class="agent-tool-pill ${cls}">${meta.icon} ${meta.label}</span>`;
-                }).join('');
+                const html = renderToolPills(assistantTurn.tools || []);
                 if (streamingToolsContainer.innerHTML !== html) {
                     streamingToolsContainer.innerHTML = html;
                 }
@@ -4539,6 +4863,8 @@ async function agentSend() {
         assistantTurn.streaming = false;
         _agentLoading = false;
         _agentAbortController = null;
+        // Spara chatten i localStorage (efter varje färdig tur)
+        try { _saveCurrentChat(); } catch (e) { console.warn('save chat:', e); }
         // Sista re-render gör full rebuild så footer/usage etc kommer in
         renderAgent();
     }
@@ -4573,18 +4899,23 @@ function handleAgentSSE(ev, turn) {
             turn.content = (turn.content || '') + (ev.text || '');
             break;
         case 'tool_use_start':
-            turn.tools.push({ name: ev.name, status: 'running' });
+            // Skapas i pending-state innan input parsats
+            turn.tools.push({ name: ev.name, status: 'running', input: null });
             break;
         case 'tool_running':
-            // Markera senaste matching tool som running
+            // Vid det här eventet vet vi tool-input → uppdatera senaste pending
             for (let i = turn.tools.length - 1; i >= 0; i--) {
-                if (turn.tools[i].name === ev.name && turn.tools[i].status === 'running') break;
+                if (turn.tools[i].name === ev.name && turn.tools[i].status === 'running'
+                    && turn.tools[i].input == null) {
+                    turn.tools[i].input = ev.input || {};
+                    break;
+                }
             }
             break;
         case 'tool_result':
-            // Markera senaste matching tool som klar
+            // Markera senaste matching tool som klar (utan input-check så done också matchar)
             for (let i = turn.tools.length - 1; i >= 0; i--) {
-                if (turn.tools[i].name === ev.name) {
+                if (turn.tools[i].name === ev.name && turn.tools[i].status === 'running') {
                     turn.tools[i].status = ev.is_error ? 'error' : 'done';
                     break;
                 }
