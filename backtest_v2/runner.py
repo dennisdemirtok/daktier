@@ -73,8 +73,13 @@ DEFAULT_UNIVERSE = [
 ]
 
 
-def get_analysis_dates(start_year=2015, end_year=2024):
-    """Generera halvårsvisa analysdatum: 1 januari + 1 juli per år."""
+def get_analysis_dates(start_year=2017, end_year=2024):
+    """Generera halvårsvisa analysdatum: 1 januari + 1 juli per år.
+
+    Default startar 2017 — Börsdata-rapporterna i Railway-DB:n täcker
+    typiskt 2017+ för annual reports. För quarterly är historiken kortare
+    (~2-3 år), så de tidigaste datumen kan ge skip pga otillräcklig PIT-data.
+    """
     dates = []
     for y in range(start_year, end_year + 1):
         dates.append(f"{y}-01-15")  # mid-januari (årsrapport från i fjor + Q4 typisk klar)
