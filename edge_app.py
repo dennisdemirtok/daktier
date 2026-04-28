@@ -3605,11 +3605,15 @@ _BT2_DEFAULT = {
 
 def _bt2_load():
     """Läs state från fil. Returnerar default om fil saknas."""
+    import json as _json
     try:
         with open(_BACKTEST_V2_STATE_FILE) as f:
-            import json as _json
             return {**_BT2_DEFAULT, **_json.load(f)}
-    except (FileNotFoundError, json.JSONDecodeError, ValueError):
+    except FileNotFoundError:
+        return dict(_BT2_DEFAULT)
+    except (_json.JSONDecodeError, ValueError):
+        return dict(_BT2_DEFAULT)
+    except Exception:
         return dict(_BT2_DEFAULT)
 
 
