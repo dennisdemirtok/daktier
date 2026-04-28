@@ -802,6 +802,47 @@ def api_stock_detail(orderbook_id):
                 print(f"[stock detail] buy_zone failed: {e}", file=sys.stderr)
         except Exception as e:
             print(f"[stock detail] composite failed: {e}", file=sys.stderr)
+
+        # v2.4 — Macro-overlay (kontext, påverkar inte score)
+        try:
+            macro = _fetch_macro_indicators()
+            sector = (d.get("v2", {}).get("classification") or {}).get("sector")
+            us_10y = macro.get("us_10y")
+            se_rate = macro.get("se_rate")
+            cape = macro.get("cape")
+            # Sektor-relevans: hur kassaräntor påverkar denna sektor
+            relevance = "neutral"
+            note = ""
+            if sector in ("real_estate", "utilities", "investment_company"):
+                # Räntekänsliga sektorer
+                if us_10y and us_10y > 4.5:
+                    relevance = "negative"
+                    note = "Hög 10y-ränta → ökat avkastningskrav, NAV-rabatt vidgas typiskt."
+                elif us_10y and us_10y < 3.5:
+                    relevance = "positive"
+                    note = "Fallande 10y-ränta → bättre miljö för räntekänsliga tillgångar."
+            elif sector == "financials":
+                # Banker gynnas av höga räntor (NIM)
+                if us_10y and us_10y > 4.0:
+                    relevance = "positive"
+                    note = "Hög 10y-ränta → bredare räntemarginaler för banker."
+            elif sector == "tech":
+                # Tech (lång duration cash flow) skadas av höga räntor
+                if us_10y and us_10y > 4.5:
+                    relevance = "negative"
+                    note = "Hög 10y-ränta → multipel-kompression för lång-duration tillväxtbolag."
+            d["macro_context"] = {
+                "us_10y": us_10y,
+                "se_rate": se_rate,
+                "cape": cape,
+                "vix": macro.get("vix"),
+                "sector_relevance": relevance,
+                "note": note,
+                "source": macro.get("source", "fallback"),
+            }
+        except Exception as e:
+            print(f"[stock detail] macro: {e}", file=sys.stderr)
+
         return jsonify(d)
     finally:
         db.close()
@@ -1081,6 +1122,168 @@ def api_insiders():
     }
     _set_cache(ck, result)
     return jsonify(result)
+
+
+@app.route("/api/stock/<orderbook_id>/price-history")
+def api_stock_price_history(orderbook_id):
+    """Returnerar daglig prishistorik från borsdata_prices för en stock.
+
+    Query params: days (default 180 = ~6 mån)
+    """
+    days = int(request.args.get("days", 180))
+    db = get_db()
+    try:
+        from edge_db import _ph as ph_fn, _fetchone, _fetchall
+        # Hämta isin
+        row = _fetchone(db,
+            f"SELECT isin FROM stocks WHERE CAST(orderbook_id AS TEXT) = CAST({_ph()} AS TEXT) LIMIT 1",
+            (str(orderbook_id),))
+        if not row:
+            return jsonify({"error": "stock not found"}), 404
+        isin = row["isin"] if "isin" in row.keys() else None
+        if not isin:
+            return jsonify({"prices": [], "note": "no_isin"})
+
+        # Hämta senaste {days} dagar från borsdata_prices
+        rows = _fetchall(db,
+            f"SELECT date, close FROM borsdata_prices "
+            f"WHERE isin = {_ph()} ORDER BY date DESC LIMIT {_ph()}",
+            (isin, days))
+        prices = [{"date": r["date"], "close": r["close"]} for r in rows]
+        prices.reverse()  # ASC
+        return jsonify({"isin": isin, "prices": prices, "count": len(prices)})
+    finally:
+        db.close()
+
+
+@app.route("/api/peers/<orderbook_id>")
+def api_peers(orderbook_id):
+    """Returnera peer-grupp för en aktie.
+
+    För investmentbolag: returnerar alla andra investmentbolag i SE/Norden.
+    För övriga: returnerar bolag i samma sector + country.
+
+    Returnerar tabell med nyckeltal sida vid sida.
+    """
+    db = get_db()
+    try:
+        from edge_db import _ph as ph, _fetchall
+        from edge_db import _is_investment_company, compute_investment_company_nav, _classify_stock
+        # Hämta target-bolaget
+        row = db.execute(
+            f"SELECT * FROM stocks WHERE CAST(orderbook_id AS TEXT) = CAST({_ph()} AS TEXT) LIMIT 1",
+            (str(orderbook_id),)
+        ).fetchone()
+        if not row:
+            return jsonify({"error": "not found"}), 404
+        target = dict(row)
+
+        # Berika target med Börsdata via bulk-hist (sätter _borsdata_latest)
+        try:
+            from edge_db import _attach_hist_bulk
+            _attach_hist_bulk(db, [target])
+        except Exception:
+            pass
+
+        is_inv = _is_investment_company(target)
+        peers = []
+
+        if is_inv:
+            # Hämta alla bolag i samma kandidat-pool (SE + ev. NO/FI/DK)
+            country = target.get("country") or "SE"
+            rows = _fetchall(db,
+                "SELECT * FROM stocks WHERE country IN ('SE','NO','FI','DK') "
+                "AND last_price > 0 AND number_of_owners >= 100 "
+                "ORDER BY market_cap DESC LIMIT 200")
+            cands = [dict(r) for r in rows]
+            try:
+                from edge_db import _attach_hist_bulk as _ab
+                _ab(db, cands)
+            except Exception:
+                pass
+            # Filtrera till investmentbolag (skip target själv)
+            for c in cands:
+                if c.get("orderbook_id") == target.get("orderbook_id"):
+                    continue
+                if _is_investment_company(c):
+                    nav = compute_investment_company_nav(c)
+                    peers.append({
+                        "orderbook_id": c.get("orderbook_id"),
+                        "name": c.get("name"),
+                        "short_name": c.get("short_name"),
+                        "country": c.get("country"),
+                        "last_price": c.get("last_price"),
+                        "currency": c.get("currency"),
+                        "market_cap": c.get("market_cap"),
+                        "pe_ratio": c.get("pe_ratio"),
+                        "price_book_ratio": c.get("price_book_ratio"),
+                        "direct_yield": c.get("direct_yield"),
+                        "return_on_equity": c.get("return_on_equity"),
+                        "ytd_change_pct": c.get("ytd_change_pct"),
+                        "smart_score": c.get("smart_score"),
+                        "nav_data": nav,
+                    })
+            # Sortera efter market_cap desc, max 8
+            peers.sort(key=lambda p: -(p.get("market_cap") or 0))
+            peers = peers[:8]
+        else:
+            # Standard peer: samma sector + country
+            classification = _classify_stock(target)
+            sector = classification.get("sector", "unknown")
+            country = target.get("country") or "SE"
+            rows = _fetchall(db,
+                f"SELECT * FROM stocks WHERE country = {ph()} "
+                f"AND sector = {ph()} "
+                f"AND last_price > 0 AND number_of_owners >= 100 "
+                f"AND CAST(orderbook_id AS TEXT) != CAST({ph()} AS TEXT) "
+                f"ORDER BY market_cap DESC LIMIT 8",
+                (country, target.get("sector") or "", str(target.get("orderbook_id"))))
+            for r in rows:
+                c = dict(r)
+                peers.append({
+                    "orderbook_id": c.get("orderbook_id"),
+                    "name": c.get("name"),
+                    "short_name": c.get("short_name"),
+                    "country": c.get("country"),
+                    "last_price": c.get("last_price"),
+                    "currency": c.get("currency"),
+                    "market_cap": c.get("market_cap"),
+                    "pe_ratio": c.get("pe_ratio"),
+                    "price_book_ratio": c.get("price_book_ratio"),
+                    "direct_yield": c.get("direct_yield"),
+                    "return_on_equity": c.get("return_on_equity"),
+                    "ytd_change_pct": c.get("ytd_change_pct"),
+                    "smart_score": c.get("smart_score"),
+                })
+
+        # Inkludera target själv i listan (alltid först)
+        target_summary = {
+            "orderbook_id": target.get("orderbook_id"),
+            "name": target.get("name"),
+            "short_name": target.get("short_name"),
+            "country": target.get("country"),
+            "last_price": target.get("last_price"),
+            "currency": target.get("currency"),
+            "market_cap": target.get("market_cap"),
+            "pe_ratio": target.get("pe_ratio"),
+            "price_book_ratio": target.get("price_book_ratio"),
+            "direct_yield": target.get("direct_yield"),
+            "return_on_equity": target.get("return_on_equity"),
+            "ytd_change_pct": target.get("ytd_change_pct"),
+            "smart_score": target.get("smart_score"),
+            "_is_target": True,
+        }
+        if is_inv:
+            target_summary["nav_data"] = compute_investment_company_nav(target)
+
+        return jsonify({
+            "target": target_summary,
+            "peers": peers,
+            "type": "investment_company" if is_inv else "sector",
+            "count": len(peers),
+        })
+    finally:
+        db.close()
 
 
 @app.route("/api/preset/<mode>")

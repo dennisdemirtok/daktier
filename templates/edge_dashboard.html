@@ -2847,6 +2847,9 @@ function renderBuyZoneSection(s) {
         bodyText = `Priset behöver falla <b>${dist?.toFixed(1)}%</b> (från ${curr?.toFixed(2)} → <b>${zone?.toFixed(2)} ${currency}</b>) för att composite ska gå från ${currComp?.toFixed(0)} till ${zoneComp?.toFixed(0)} (köpsignal).`;
     }
 
+    // ID för price chart container — laddas async
+    const chartId = `priceChart_${s.orderbook_id || 'x'}`;
+
     return `<div class="drawer-section" style="background:${headerBg};border-radius:12px;padding:14px 16px;margin-top:12px">
         <div class="drawer-section-title" style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
             <span style="font-size:20px">${headerIcon}</span>
@@ -2859,10 +2862,126 @@ function renderBuyZoneSection(s) {
                 <div><span style="opacity:0.7">Köpzon:</span> <b>${zone?.toFixed(2)} ${currency}</b></div>
                 <div><span style="opacity:0.7">Avstånd:</span> <b>${dist?.toFixed(1)}%</b></div>
             </div>` : ''}
+        <div id="${chartId}" data-orderbook-id="${s.orderbook_id || ''}" data-zone="${zone || ''}" data-curr="${curr || ''}" data-currency="${currency}" data-in-zone="${inZone ? '1' : '0'}" class="buy-zone-chart-pending" style="margin-top:12px;min-height:120px">
+            <div style="text-align:center;color:var(--text-muted);font-size:11px;padding:14px">
+                <span class="material-symbols-outlined" style="font-size:14px;animation:spin 1s linear infinite">progress_activity</span>
+                Laddar prishistorik...
+            </div>
+        </div>
         <div style="font-size:11px;color:var(--text-muted);margin-top:8px;font-style:italic">
             Köpzonen är det pris där composite (viktat av 10 bokmodeller) skulle passera 75. Beräknas genom att simulera pris-sänkningar och rescora — fångar in läget där Graham, Buffett, Klarman, Greenblatt m.fl. tillsammans flaggar köp.
         </div>
     </div>`;
+}
+
+// Anropas efter att drawer-HTML har satts in i DOM:en
+function _hydratePendingBuyZoneCharts() {
+    document.querySelectorAll('.buy-zone-chart-pending').forEach(el => {
+        el.classList.remove('buy-zone-chart-pending');  // markera som hanterad
+        const oid = el.dataset.orderbookId;
+        const zone = el.dataset.zone ? parseFloat(el.dataset.zone) : null;
+        const curr = el.dataset.curr ? parseFloat(el.dataset.curr) : null;
+        const currency = el.dataset.currency || '';
+        const inZone = el.dataset.inZone === '1';
+        if (oid) {
+            loadPriceChartForBuyZone(parseInt(oid), el.id, zone, curr, currency, inZone);
+        }
+    });
+}
+
+async function loadPriceChartForBuyZone(orderbookId, containerId, zonePrice, currentPrice, currency, inZone) {
+    if (!orderbookId) return;
+    const container = document.getElementById(containerId);
+    if (!container) return;
+    try {
+        const r = await fetch(`/api/stock/${orderbookId}/price-history?days=180`);
+        const data = await r.json();
+        const prices = data.prices || [];
+        if (prices.length < 5) {
+            container.innerHTML = `<div style="font-size:11px;color:var(--text-muted);text-align:center;padding:8px">Otillräcklig prishistorik (Börsdata-prisbulk pågår fortfarande).</div>`;
+            return;
+        }
+        const closes = prices.map(p => p.close).filter(v => v != null);
+        if (closes.length < 5) {
+            container.innerHTML = `<div style="font-size:11px;color:var(--text-muted);text-align:center;padding:8px">Otillräcklig prishistorik.</div>`;
+            return;
+        }
+
+        // Bestäm Y-skala: inkludera både pris-range och köpzon
+        const allValues = closes.concat([zonePrice, currentPrice].filter(v => v != null));
+        const min = Math.min(...allValues) * 0.97;
+        const max = Math.max(...allValues) * 1.03;
+        const range = max - min || 1;
+        const w = 360, h = 130, padX = 8, padTop = 16, padBot = 22;
+        const innerH = h - padTop - padBot;
+        const step = (w - 2 * padX) / Math.max(closes.length - 1, 1);
+
+        const yPos = (v) => padTop + innerH - ((v - min) / range) * innerH;
+
+        // Linje för pris
+        const pricePts = closes.map((v, i) => `${padX + i*step},${yPos(v)}`).join(' ');
+
+        // Köpzon-linje
+        const zoneY = zonePrice != null ? yPos(zonePrice) : null;
+        const currentY = currentPrice != null ? yPos(currentPrice) : null;
+
+        // Datum-labels (start + slut)
+        const startDate = prices[0]?.date || '';
+        const endDate = prices[prices.length-1]?.date || '';
+
+        // Areafyll under prislinjen
+        const areaPath = `M ${padX},${yPos(closes[0])} ` +
+            closes.slice(1).map((v, i) => `L ${padX + (i+1)*step},${yPos(v)}`).join(' ') +
+            ` L ${padX + (closes.length-1)*step},${h - padBot} L ${padX},${h - padBot} Z`;
+
+        const lineColor = inZone ? '#059669' : '#3b82f6';
+
+        container.innerHTML = `
+            <svg viewBox="0 0 ${w} ${h}" style="width:100%;height:${h}px;background:white;border-radius:8px">
+                <defs>
+                    <linearGradient id="priceGrad-${containerId}" x1="0" x2="0" y1="0" y2="1">
+                        <stop offset="0%" stop-color="${lineColor}" stop-opacity="0.25"/>
+                        <stop offset="100%" stop-color="${lineColor}" stop-opacity="0.02"/>
+                    </linearGradient>
+                </defs>
+                <!-- Areafyll -->
+                <path d="${areaPath}" fill="url(#priceGrad-${containerId})"/>
+                <!-- Pris-linje -->
+                <polyline points="${pricePts}" fill="none" stroke="${lineColor}" stroke-width="1.8"/>
+
+                ${zoneY != null ? `
+                    <!-- Köpzon-linje (grön streckad) -->
+                    <line x1="${padX}" y1="${zoneY}" x2="${w - padX}" y2="${zoneY}"
+                          stroke="#059669" stroke-width="1.5" stroke-dasharray="5,3"/>
+                    <text x="${w - padX - 4}" y="${zoneY - 4}" text-anchor="end"
+                          font-size="10" font-weight="700" fill="#059669">
+                        Köpzon ${zonePrice.toFixed(2)}
+                    </text>
+                ` : ''}
+
+                ${currentY != null ? `
+                    <!-- Nuvarande pris-prick + label -->
+                    <circle cx="${padX + (closes.length-1)*step}" cy="${currentY}"
+                            r="4" fill="${lineColor}" stroke="white" stroke-width="2"/>
+                    <text x="${padX + (closes.length-1)*step - 4}" y="${currentY - 8}"
+                          text-anchor="end" font-size="10" font-weight="700" fill="${lineColor}">
+                        ${currentPrice.toFixed(2)} ${currency}
+                    </text>
+                ` : ''}
+
+                <!-- Datum-axis -->
+                <text x="${padX}" y="${h - 6}" font-size="9" fill="#6b7280">${startDate}</text>
+                <text x="${w - padX}" y="${h - 6}" text-anchor="end" font-size="9" fill="#6b7280">${endDate}</text>
+            </svg>
+            <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--text-muted);margin-top:4px">
+                <span>📊 ${closes.length} handelsdagar</span>
+                <span>💚 Streckad grön = köpzonspris</span>
+            </div>
+        `;
+    } catch (e) {
+        console.warn('[buy-zone chart] fel:', e);
+        container.innerHTML = `<div style="font-size:11px;color:var(--text-muted);text-align:center;padding:8px">Kunde ej ladda prishistorik.</div>`;
+    }
 }
 
 async function checkHistSyncStatus() {
@@ -3059,14 +3178,64 @@ function renderQuarterlyTrendsSection(s) {
         const np = r.net_profit;
         const sales = r.sales;
         const margin = r.profit_margin;
+        const roe = r.return_on_equity;
         const npCol = np == null ? '#888' : np > 0 ? '#00a870' : '#c0392b';
         return `<tr>
             <td style="padding:6px 10px;font-weight:600">${r.quarter} ${r.financial_year}</td>
             <td style="padding:6px 10px;text-align:right">${fmtMoney(sales)}</td>
             <td style="padding:6px 10px;text-align:right;color:${npCol};font-weight:600">${fmtMoney(np)}</td>
             <td style="padding:6px 10px;text-align:right">${fmtPct(margin)}</td>
+            <td style="padding:6px 10px;text-align:right">${roe != null ? (roe < 1 ? (roe*100).toFixed(1) : roe.toFixed(1)) + '%' : '–'}</td>
         </tr>`;
     }).join('');
+
+    // v2.4 — ROE och YoY-tillväxt per kvartal (utbyggd kvartalshistorik)
+    const roeYoY = latest && yoyQ
+        ? deltaPct(latest.return_on_equity, yoyQ.return_on_equity) : null;
+    // ROE per kvartal sparkline (8 senaste, ASC ordning)
+    const recent8 = sortedDesc.slice(0, 8).reverse();
+    const roeSeries = recent8.map(r => r.return_on_equity);
+    const salesYoYSeries = recent8.map((r, i) => {
+        // Hitta motsvarande kvartal i föregående år för YoY
+        const prevYear = sortedDesc.find(p =>
+            p.quarter === r.quarter && p.financial_year === (r.financial_year || 0) - 1);
+        if (!prevYear || !prevYear.sales || prevYear.sales === 0) return null;
+        return ((r.sales - prevYear.sales) / Math.abs(prevYear.sales));
+    });
+
+    function tinyTrendCell(label, series, color, fmtFn) {
+        const valid = series.filter(v => v != null && !isNaN(v));
+        if (valid.length < 2) return '<span style="color:var(--text-muted);font-size:11px">–</span>';
+        const min = Math.min(...valid), max = Math.max(...valid);
+        const range = max - min || 1;
+        const w = 60, h = 18, pad = 1;
+        const step = (w - 2*pad) / Math.max(series.length - 1, 1);
+        const pts = series.map((v, i) => {
+            if (v == null) return null;
+            const x = pad + i * step;
+            const y = h - pad - ((v - min) / range) * (h - 2*pad);
+            return `${x},${y}`;
+        }).filter(p => p);
+        const last = valid[valid.length - 1];
+        return `
+            <div style="display:flex;align-items:center;gap:6px">
+                <svg viewBox="0 0 ${w} ${h}" style="width:${w}px;height:${h}px;flex-shrink:0">
+                    <polyline points="${pts.join(' ')}" fill="none" stroke="${color}" stroke-width="1.5"/>
+                </svg>
+                <span style="font-size:11px;font-weight:600;color:${color}">${fmtFn(last)}</span>
+            </div>`;
+    }
+
+    // Tre extra mini-stats: ROE-trend + Sales YoY + Margin YoY
+    const roeStatHtml = `<div style="flex:1;min-width:140px;padding:10px;background:white;border:1px solid var(--border);border-radius:10px">
+        <div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;font-weight:700;margin-bottom:4px">📊 ROE-trend (8 kv)</div>
+        ${tinyTrendCell('ROE', roeSeries, '#10b981', v => fmtPct(v))}
+        ${roeYoY != null ? `<div style="margin-top:4px;font-size:10px">YoY: ${deltaTag(roeYoY, '')}</div>` : ''}
+    </div>`;
+    const salesYoyStatHtml = `<div style="flex:1;min-width:140px;padding:10px;background:white;border:1px solid var(--border);border-radius:10px">
+        <div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;font-weight:700;margin-bottom:4px">📈 Omsättning YoY</div>
+        ${tinyTrendCell('Sales YoY', salesYoYSeries, '#3b82f6', v => v != null ? (v*100).toFixed(1) + '%' : '–')}
+    </div>`;
 
     return `<div class="drawer-section">
         <div class="drawer-section-title">📈 Vinst- och tillväxtutveckling per kvartal</div>
@@ -3076,6 +3245,10 @@ function renderQuarterlyTrendsSection(s) {
             ${bigStat('Omsättning', fmtMoney(latest.sales), '#3b82f6', salesQoQ, salesYoY, sortedAsc.map(r => r.sales))}
             ${bigStat('Vinstmarginal', fmtPct(latest.profit_margin), '#8b5cf6', marginQoQ, null, sortedAsc.map(r => r.profit_margin))}
         </div>
+        <div style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:12px">
+            ${roeStatHtml}
+            ${salesYoyStatHtml}
+        </div>
         <div style="background:white;border:1px solid var(--border);border-radius:10px;overflow:hidden">
             <table style="width:100%;border-collapse:collapse;font-size:12px">
                 <thead style="background:#f9fafb">
@@ -3084,6 +3257,7 @@ function renderQuarterlyTrendsSection(s) {
                         <th style="text-align:right;padding:8px 10px">Omsättning</th>
                         <th style="text-align:right;padding:8px 10px">Nettoresultat</th>
                         <th style="text-align:right;padding:8px 10px">Marginal</th>
+                        <th style="text-align:right;padding:8px 10px">ROE</th>
                     </tr>
                 </thead>
                 <tbody>${tableRows}</tbody>
@@ -3295,6 +3469,152 @@ function renderFScoreSection(s) {
             ≥ 5 = ok finansiell hälsa. ≤ 3 = varningssignal.
         </div>
     </div>`;
+}
+
+function renderMacroOverlay(s) {
+    const m = s.macro_context;
+    if (!m) return '';
+    const us10y = m.us_10y;
+    const cape = m.cape;
+    const vix = m.vix;
+    const rel = m.sector_relevance || 'neutral';
+
+    let bg, color, icon;
+    if (rel === 'positive') {
+        bg = 'linear-gradient(135deg,#d1fae5,#a7f3d0)'; color = '#065f46'; icon = 'trending_up';
+    } else if (rel === 'negative') {
+        bg = 'linear-gradient(135deg,#fee2e2,#fecaca)'; color = '#7f1d1d'; icon = 'trending_down';
+    } else {
+        bg = 'linear-gradient(135deg,#f1f5f9,#e2e8f0)'; color = '#475569'; icon = 'public';
+    }
+
+    const stat = (label, val, suffix) => `
+        <div style="flex:1;text-align:center;background:rgba(255,255,255,0.6);padding:8px;border-radius:8px;min-width:80px">
+            <div style="font-size:9px;text-transform:uppercase;font-weight:700;color:${color};opacity:0.7">${label}</div>
+            <div style="font-size:16px;font-weight:800;color:${color}">${val != null ? val.toFixed(2) : '–'}<span style="font-size:11px;font-weight:600;opacity:0.7">${suffix || ''}</span></div>
+        </div>`;
+
+    return `<div class="drawer-section" style="background:${bg};border-radius:12px;padding:12px 14px;margin-bottom:12px">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+            <span class="material-symbols-outlined" style="font-size:16px;color:${color}">${icon}</span>
+            <strong style="font-size:11px;color:${color};text-transform:uppercase;letter-spacing:0.5px">Makro-kontext</strong>
+        </div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap">
+            ${stat('US 10y', us10y, '%')}
+            ${stat('Riksb.', m.se_rate, '%')}
+            ${stat('CAPE', cape)}
+            ${stat('VIX', vix)}
+        </div>
+        ${m.note ? `<div style="font-size:11px;color:${color};margin-top:8px;line-height:1.4;font-style:italic">⚠ ${m.note}</div>` : ''}
+        <div style="font-size:9px;color:${color};opacity:0.5;margin-top:6px">Påverkar inte score — bara kontext.</div>
+    </div>`;
+}
+
+function renderPeersPlaceholder(s) {
+    if (!s.orderbook_id) return '';
+    return `<div class="drawer-section" id="peerSection">
+        <div class="drawer-section-title">
+            <span class="material-symbols-outlined" style="font-size:14px;vertical-align:middle">compare_arrows</span>
+            Peer-jämförelse
+        </div>
+        <div id="peerContent">
+            <button onclick="loadPeers(${s.orderbook_id})" style="padding:10px 16px;background:white;border:1px solid var(--border);border-radius:10px;cursor:pointer;font-size:12px;font-weight:600;width:100%">
+                <span class="material-symbols-outlined" style="font-size:14px;vertical-align:middle">add_chart</span>
+                Visa jämförelse mot konkurrenter
+            </button>
+        </div>
+    </div>`;
+}
+
+async function loadPeers(orderbookId) {
+    const container = document.getElementById('peerContent');
+    if (!container) return;
+    container.innerHTML = `<div style="padding:20px;text-align:center;color:var(--text-muted)">
+        <span class="material-symbols-outlined" style="font-size:24px;animation:spin 1s linear infinite">progress_activity</span>
+        <div style="margin-top:6px;font-size:12px">Hämtar peers...</div>
+    </div>`;
+    try {
+        const r = await fetch(`/api/peers/${orderbookId}`);
+        const data = await r.json();
+        if (data.error) throw new Error(data.error);
+        renderPeerTable(data, container);
+    } catch (e) {
+        container.innerHTML = `<div style="color:#dc2626;padding:14px;font-size:12px">Fel: ${e.message}</div>`;
+    }
+}
+
+function renderPeerTable(data, container) {
+    const target = data.target;
+    const peers = data.peers || [];
+    const isInv = data.type === 'investment_company';
+    const all = [target, ...peers];
+    if (all.length < 2) {
+        container.innerHTML = `<div style="padding:14px;color:var(--text-muted);font-size:12px">Inga jämförbara peers hittade.</div>`;
+        return;
+    }
+
+    function fmt(v, suffix, decimals) {
+        if (v == null) return '–';
+        return v.toFixed(decimals != null ? decimals : 1) + (suffix || '');
+    }
+    function fmtMC(v) {
+        if (v == null) return '–';
+        if (v >= 1e12) return (v/1e12).toFixed(1) + 'T';
+        if (v >= 1e9) return (v/1e9).toFixed(1) + 'Md';
+        if (v >= 1e6) return (v/1e6).toFixed(0) + 'M';
+        return v.toFixed(0);
+    }
+    function pctClass(v) {
+        if (v == null) return '';
+        return v > 0 ? 'color:#059669;font-weight:600' : v < 0 ? 'color:#dc2626;font-weight:600' : '';
+    }
+
+    // Sortera så target alltid först, peers efter market_cap
+    const cols = isInv
+        ? ['Bolag', 'Pris', 'Mcap', 'Rabatt%', 'P/B', 'ROE', 'YTD', 'Smart']
+        : ['Bolag', 'Pris', 'Mcap', 'P/E', 'P/B', 'ROE', 'YTD', 'Smart'];
+
+    const rows = all.map((c, idx) => {
+        const isTgt = c._is_target;
+        const flag = (FLAGS && FLAGS[c.country]) || '';
+        const rowBg = isTgt ? 'background:linear-gradient(90deg,#dbeafe,transparent)' : '';
+        const cells = isInv
+            ? [
+                `<td style="padding:7px 10px;font-weight:${isTgt ? 700 : 500}">${flag} ${c.name}${isTgt ? ' <span style="font-size:9px;background:#3b82f6;color:white;padding:1px 5px;border-radius:6px;margin-left:4px">Du</span>' : ''}</td>`,
+                `<td style="padding:7px 10px;text-align:right">${c.last_price != null ? c.last_price.toFixed(2) : '–'} ${c.currency || ''}</td>`,
+                `<td style="padding:7px 10px;text-align:right">${fmtMC(c.market_cap)}</td>`,
+                `<td style="padding:7px 10px;text-align:right;${pctClass(c.nav_data ? -c.nav_data.discount_pct : null)}">${c.nav_data && c.nav_data.discount_pct != null ? (c.nav_data.discount_pct > 0 ? '+' : '') + c.nav_data.discount_pct + '%' : '–'}</td>`,
+                `<td style="padding:7px 10px;text-align:right">${fmt(c.price_book_ratio, '', 2)}</td>`,
+                `<td style="padding:7px 10px;text-align:right">${fmt(c.return_on_equity, '%')}</td>`,
+                `<td style="padding:7px 10px;text-align:right;${pctClass(c.ytd_change_pct)}">${fmt(c.ytd_change_pct, '%')}</td>`,
+                `<td style="padding:7px 10px;text-align:right;font-weight:600">${fmt(c.smart_score, '', 0)}</td>`,
+            ]
+            : [
+                `<td style="padding:7px 10px;font-weight:${isTgt ? 700 : 500}">${flag} ${c.name}${isTgt ? ' <span style="font-size:9px;background:#3b82f6;color:white;padding:1px 5px;border-radius:6px;margin-left:4px">Du</span>' : ''}</td>`,
+                `<td style="padding:7px 10px;text-align:right">${c.last_price != null ? c.last_price.toFixed(2) : '–'} ${c.currency || ''}</td>`,
+                `<td style="padding:7px 10px;text-align:right">${fmtMC(c.market_cap)}</td>`,
+                `<td style="padding:7px 10px;text-align:right">${fmt(c.pe_ratio, '', 1)}</td>`,
+                `<td style="padding:7px 10px;text-align:right">${fmt(c.price_book_ratio, '', 2)}</td>`,
+                `<td style="padding:7px 10px;text-align:right">${fmt(c.return_on_equity, '%')}</td>`,
+                `<td style="padding:7px 10px;text-align:right;${pctClass(c.ytd_change_pct)}">${fmt(c.ytd_change_pct, '%')}</td>`,
+                `<td style="padding:7px 10px;text-align:right;font-weight:600">${fmt(c.smart_score, '', 0)}</td>`,
+            ];
+        return `<tr style="${rowBg};border-bottom:1px solid var(--border-light);cursor:pointer" onclick="if(${!isTgt}) openStockDrawer(${c.orderbook_id})">${cells.join('')}</tr>`;
+    }).join('');
+
+    container.innerHTML = `
+        <div style="background:white;border:1px solid var(--border);border-radius:10px;overflow-x:auto;margin-bottom:8px">
+            <table style="width:100%;border-collapse:collapse;font-size:11.5px;min-width:600px">
+                <thead style="background:#f9fafb">
+                    <tr>${cols.map(c => `<th style="text-align:${c==='Bolag'?'left':'right'};padding:8px 10px;font-size:10px;text-transform:uppercase;color:var(--text-muted)">${c}</th>`).join('')}</tr>
+                </thead>
+                <tbody>${rows}</tbody>
+            </table>
+        </div>
+        <div style="font-size:10px;color:var(--text-muted);font-style:italic">
+            ⓘ ${isInv ? 'Investmentbolag i Norden — sorterat efter marknadsvärde.' : 'Bolag i samma sektor + land.'}
+            Klicka rad för att öppna drawer.
+        </div>`;
 }
 
 function renderInvestmentCompanySection(s) {
@@ -3810,6 +4130,9 @@ function openDrawer(s) {
         techItems.map(([l,v,fmt]) => `<div class="drawer-item"><div class="drawer-item-label">${l}</div><div class="drawer-item-value">${fmt(v)}</div></div>`).join('')
     }</div></div>`;
 
+    // ── MACRO-OVERLAY (10y-ränta + sektor-relevans) ──
+    html += renderMacroOverlay(s);
+
     // ── INVESTMENTBOLAG-PANEL (NAV/substansrabatt) — visas FÖRST om relevant ──
     html += renderInvestmentCompanySection(s);
 
@@ -3818,6 +4141,9 @@ function openDrawer(s) {
 
     // ── KÖPZON (simulerat riktpris) ──
     html += renderBuyZoneSection(s);
+
+    // ── PEER-JÄMFÖRELSE (lazy-loaded) ──
+    html += renderPeersPlaceholder(s);
 
     // ── VINST/TILLVÄXT PER KVARTAL (Avanza har ej FCF — vi visar nettoresultat) ──
     // Skippa för investmentbolag — kvartalsvinst speglar inte värdet (NAV är primärt)
@@ -3858,6 +4184,8 @@ function openDrawer(s) {
     document.getElementById('stockDrawer').classList.add('open');
     document.getElementById('drawerOverlay').classList.add('open');
     document.body.style.overflow = 'hidden';
+    // Hydrera lazy-renderade chart-element (pris-graf med köpzon)
+    setTimeout(_hydratePendingBuyZoneCharts, 50);
 }
 
 function closeDrawer() {
