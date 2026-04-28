@@ -3886,6 +3886,164 @@ def get_borsdata_history_as_annual(db, isin, max_years=10):
     return out
 
 
+# Cache för sektor-medianer (refreshas 1 gång per timme)
+_SECTOR_MEDIAN_CACHE = {"data": None, "ts": 0}
+_SECTOR_MEDIAN_TTL = 3600  # 1h
+
+def get_sector_medians(db):
+    """Beräkna sektor-medianer för P/E, P/B, ROE, ROA, ROCE, direct_yield.
+
+    Returnerar dict[sector] = {pe, pb, roe, roa, roce, dy} med median-värden.
+    Sektor härleds via _classify_stock så vi får samma keys som drawer använder.
+    """
+    now = time.time()
+    if _SECTOR_MEDIAN_CACHE["data"] and (now - _SECTOR_MEDIAN_CACHE["ts"]) < _SECTOR_MEDIAN_TTL:
+        return _SECTOR_MEDIAN_CACHE["data"]
+
+    ph = _ph()
+    # Hämta alla aktier med rimlig data — 100+ ägare = aktivt handlade
+    rows = _fetchall(db,
+        "SELECT name, short_name, country, last_price, market_cap, "
+        "pe_ratio, price_book_ratio, ev_ebit_ratio, direct_yield, "
+        "return_on_equity, return_on_assets, return_on_capital_employed, "
+        "debt_to_equity_ratio, total_assets, total_liabilities, sales, "
+        "operating_cash_flow "
+        "FROM stocks WHERE last_price > 0 AND number_of_owners >= 100")
+    stocks = [dict(r) for r in rows]
+
+    # Klassificera varje (utan Börsdata-attach för speed — namn-keyword räcker för median)
+    by_sector = {}
+    for s in stocks:
+        try:
+            cls = _classify_stock(s)
+            sector = cls.get("sector", "unknown")
+        except Exception:
+            sector = "unknown"
+        by_sector.setdefault(sector, []).append(s)
+
+    medians = {}
+    for sector, items in by_sector.items():
+        if len(items) < 5:  # för få bolag → ingen meningsfull median
+            continue
+        def _med_field(field, transform=None):
+            vals = []
+            for x in items:
+                v = x.get(field)
+                if v is None or v == 0:
+                    continue
+                if transform:
+                    try: v = transform(v)
+                    except Exception: continue
+                if isinstance(v, (int, float)) and v == v and abs(v) < 1e10:
+                    vals.append(v)
+            if not vals:
+                return None
+            vals.sort()
+            n = len(vals)
+            if n % 2 == 1:
+                return vals[n // 2]
+            return (vals[n // 2 - 1] + vals[n // 2]) / 2
+
+        medians[sector] = {
+            "n_stocks": len(items),
+            "pe": _med_field("pe_ratio"),
+            "pb": _med_field("price_book_ratio"),
+            "ev_ebit": _med_field("ev_ebit_ratio"),
+            "dy_pct": _med_field("direct_yield", lambda v: v * 100 if v < 1 else v),
+            "roe_pct": _med_field("return_on_equity", lambda v: v * 100 if abs(v) < 1.5 else v),
+            "roa_pct": _med_field("return_on_assets", lambda v: v * 100 if abs(v) < 1.5 else v),
+            "roce_pct": _med_field("return_on_capital_employed",
+                                    lambda v: v * 100 if abs(v) < 1.5 else v),
+            "de": _med_field("debt_to_equity_ratio"),
+        }
+
+    _SECTOR_MEDIAN_CACHE["data"] = medians
+    _SECTOR_MEDIAN_CACHE["ts"] = now
+    return medians
+
+
+def compute_share_dilution(db, isin, max_years=5):
+    """Beräkna utspädning över de senaste 5 åren.
+
+    Patch 4 (v2.3): bevakar utspädning >2%/år som varningssignal,
+    särskilt viktigt för förlustbolag som finansierar förluster via emissioner.
+
+    Returnerar dict eller None:
+        {
+            "shares_now": float,
+            "shares_5y_ago": float,
+            "total_dilution_pct": float,    # total %-ökning över hela perioden
+            "annualized_pct": float,        # CAGR av utspädning
+            "warning": "high" | "moderate" | "none",
+            "history": [{year, shares, yoy_pct}],
+        }
+    """
+    if not isin:
+        return None
+    ph = _ph()
+    try:
+        rows = _fetchall(db,
+            f"SELECT period_year, shares_outstanding "
+            f"FROM borsdata_reports "
+            f"WHERE isin = {ph} AND report_type = {ph} "
+            f"AND shares_outstanding IS NOT NULL AND shares_outstanding > 0 "
+            f"ORDER BY period_year DESC LIMIT {ph}",
+            (isin, "year", max_years))
+    except Exception:
+        return None
+    if not rows or len(rows) < 2:
+        return None
+
+    data = sorted([dict(r) for r in rows], key=lambda r: r["period_year"])
+    history = []
+    prev_shares = None
+    for r in data:
+        sh = r.get("shares_outstanding")
+        yoy_pct = None
+        if prev_shares and prev_shares > 0:
+            yoy_pct = round((sh - prev_shares) / prev_shares * 100, 2)
+        history.append({
+            "year": r.get("period_year"),
+            "shares": sh,
+            "yoy_pct": yoy_pct,
+        })
+        prev_shares = sh
+
+    shares_now = data[-1].get("shares_outstanding")
+    shares_first = data[0].get("shares_outstanding")
+    if not shares_now or not shares_first or shares_first <= 0:
+        return None
+
+    n_years = len(data) - 1
+    total_dilution = (shares_now - shares_first) / shares_first * 100
+    if n_years > 0:
+        # CAGR-formel: (shares_now / shares_first)^(1/n) - 1
+        try:
+            annualized = ((shares_now / shares_first) ** (1.0 / n_years) - 1) * 100
+        except Exception:
+            annualized = total_dilution / n_years
+    else:
+        annualized = 0
+
+    if annualized > 5:
+        warning = "high"
+    elif annualized > 2:
+        warning = "moderate"
+    else:
+        warning = "none"
+
+    return {
+        "shares_now": shares_now,
+        "shares_first": shares_first,
+        "first_year": data[0].get("period_year"),
+        "last_year": data[-1].get("period_year"),
+        "total_dilution_pct": round(total_dilution, 1),
+        "annualized_pct": round(annualized, 2),
+        "warning": warning,
+        "history": history,
+    }
+
+
 def compute_burn_rate_runway(db, isin, current_eps_neg=False):
     """Beräkna burn rate och cash runway för förlustbolag.
 

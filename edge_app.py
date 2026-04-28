@@ -676,6 +676,53 @@ def api_stock_detail(orderbook_id):
                         d["runway"] = runway
                 except Exception as e:
                     print(f"[stock detail] runway: {e}", file=sys.stderr)
+            # v2.4 — Insider-data (FI insynsregister) — enrich i realtid
+            try:
+                from edge_db import get_insider_summary, _normalize_name
+                ins_summary = get_insider_summary(db, days_back=180)
+                sname_norm = _normalize_name(d.get("name") or "")
+                ins = ins_summary.get(sname_norm)
+                if ins:
+                    d["insider_buys"] = ins.get("buys", 0)
+                    d["insider_sells"] = ins.get("sells", 0)
+                    d["insider_cluster_buy"] = ins.get("cluster_buy", False)
+                    d["insider_buy_value"] = ins.get("buy_value", 0)
+                    d["insider_sell_value"] = ins.get("sell_value", 0)
+                    d["insider_net_value"] = ins.get("net_value", 0)
+                    d["insider_buy_persons"] = (
+                        list(ins.get("buy_persons") or [])
+                        if not isinstance(ins.get("buy_persons"), list)
+                        else ins.get("buy_persons", []))
+                    d["insider_sell_persons"] = (
+                        list(ins.get("sell_persons") or [])
+                        if not isinstance(ins.get("sell_persons"), list)
+                        else ins.get("sell_persons", []))
+                    d["insider_latest_date"] = ins.get("latest_date", "")
+                    d["insider_period_days"] = 180
+            except Exception as e:
+                print(f"[stock detail] insider: {e}", file=sys.stderr)
+            # v2.4 — Utspädnings-bevakning (Patch 4)
+            if d.get("isin"):
+                try:
+                    from edge_db import compute_share_dilution
+                    dilution = compute_share_dilution(db, d["isin"], max_years=5)
+                    if dilution:
+                        d["share_dilution"] = dilution
+                except Exception as e:
+                    print(f"[stock detail] dilution: {e}", file=sys.stderr)
+            # v2.4 — Sektor-medianer för relativ kontext
+            try:
+                from edge_db import get_sector_medians
+                medians = get_sector_medians(db)
+                # Hämta sektor från classification
+                sector = (d.get("v2", {}).get("classification") or {}).get("sector")
+                if sector and sector in medians:
+                    d["sector_medians"] = {
+                        "sector": sector,
+                        **medians[sector],
+                    }
+            except Exception as e:
+                print(f"[stock detail] medians: {e}", file=sys.stderr)
             # v2.4 — Investmentbolag-detektion + NAV/substansrabatt
             try:
                 from edge_db import (_is_investment_company,

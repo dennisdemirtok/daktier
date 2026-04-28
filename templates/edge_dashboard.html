@@ -3478,6 +3478,173 @@ function renderFScoreSection(s) {
     </div>`;
 }
 
+function renderDilutionSection(s) {
+    const d = s.share_dilution;
+    if (!d) return '';
+
+    const annPct = d.annualized_pct;
+    const totalPct = d.total_dilution_pct;
+
+    // Färg baserat på warning-nivå
+    const warnMap = {
+        high:     { bg: 'linear-gradient(135deg,#fee2e2,#fca5a5)', color: '#7f1d1d',
+                    label: 'Hög utspädning', icon: 'warning', interp: 'Bolaget späder ut aktieägare aggressivt — ofta för att finansiera förluster.' },
+        moderate: { bg: 'linear-gradient(135deg,#fef3c7,#fde68a)', color: '#92400e',
+                    label: 'Moderat utspädning', icon: 'info', interp: 'Vissa nyemissioner skett. Bevaka att de skapar värde.' },
+        none:     { bg: 'linear-gradient(135deg,#d1fae5,#a7f3d0)', color: '#065f46',
+                    label: 'Ingen utspädning', icon: 'task_alt', interp: 'Disciplinerat — ingen meningsfull utspädning de senaste åren.' },
+    };
+    const sty = warnMap[d.warning] || warnMap.none;
+
+    // Bygg histogram-spark från history
+    const hist = d.history || [];
+    let sparkHtml = '';
+    if (hist.length >= 2) {
+        const yoyValues = hist.map(h => h.yoy_pct).filter(v => v != null);
+        if (yoyValues.length) {
+            const max = Math.max(...yoyValues, 0);
+            const min = Math.min(...yoyValues, 0);
+            const range = (max - min) || 1;
+            const w = 240, h = 36, padX = 4;
+            const barW = (w - 2*padX) / Math.max(yoyValues.length, 1) - 2;
+            const zeroY = h - (Math.abs(min) / range) * h;
+            const bars = yoyValues.map((v, i) => {
+                const x = padX + i * (barW + 2);
+                const barH = Math.abs(v) / range * h;
+                const y = v >= 0 ? zeroY - barH : zeroY;
+                const fill = v > 2 ? '#dc2626' : v > 0 ? '#f59e0b' : '#10b981';
+                return `<rect x="${x}" y="${y}" width="${barW}" height="${barH}" fill="${fill}" rx="1"/>`;
+            }).join('');
+            sparkHtml = `
+                <div style="margin-top:10px;background:rgba(255,255,255,0.5);padding:8px;border-radius:8px">
+                    <div style="font-size:10px;font-weight:700;color:${sty.color};opacity:0.7;margin-bottom:4px">Utspädning YoY (${hist[0].year}-${hist[hist.length-1].year})</div>
+                    <svg viewBox="0 0 ${w} ${h}" style="width:100%;height:${h}px">
+                        <line x1="0" y1="${zeroY}" x2="${w}" y2="${zeroY}" stroke="${sty.color}" stroke-width="0.5" opacity="0.4"/>
+                        ${bars}
+                    </svg>
+                </div>`;
+        }
+    }
+
+    return `<div class="drawer-section" style="background:${sty.bg};border-radius:12px;padding:14px 16px;margin-bottom:12px">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:8px">
+            <div>
+                <div class="drawer-section-title" style="margin:0;color:${sty.color}">
+                    <span class="material-symbols-outlined" style="font-size:14px;vertical-align:middle">${sty.icon}</span>
+                    Utspädning (${d.first_year}-${d.last_year})
+                </div>
+                <div style="font-size:11px;color:${sty.color};opacity:0.8;margin-top:2px">
+                    Patch 4 — bevakning av antal aktier
+                </div>
+            </div>
+            <span style="background:rgba(0,0,0,0.08);color:${sty.color};padding:3px 10px;border-radius:12px;font-size:11px;font-weight:700">${sty.label}</span>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-top:10px">
+            <div style="background:rgba(255,255,255,0.6);padding:10px;border-radius:8px">
+                <div style="font-size:10px;text-transform:uppercase;font-weight:700;color:${sty.color};opacity:0.7">Total</div>
+                <div style="font-size:18px;font-weight:800;color:${sty.color}">${totalPct > 0 ? '+' : ''}${totalPct}%</div>
+            </div>
+            <div style="background:rgba(255,255,255,0.6);padding:10px;border-radius:8px">
+                <div style="font-size:10px;text-transform:uppercase;font-weight:700;color:${sty.color};opacity:0.7">Per år (CAGR)</div>
+                <div style="font-size:18px;font-weight:800;color:${sty.color}">${annPct > 0 ? '+' : ''}${annPct}%</div>
+            </div>
+        </div>
+        ${sparkHtml}
+        <div style="font-size:11px;color:${sty.color};margin-top:10px;line-height:1.4">${sty.interp}</div>
+        <div style="font-size:9px;color:${sty.color};opacity:0.5;margin-top:6px">
+            Tröskel: >5%/år = hög, 2-5% = moderat, <2% = ingen.
+        </div>
+    </div>`;
+}
+
+function renderInsiderSection(s) {
+    const buys = s.insider_buys || 0;
+    const sells = s.insider_sells || 0;
+    const cluster = s.insider_cluster_buy;
+    const totalTx = buys + sells;
+    if (totalTx === 0) return '';  // Bara visa om data finns
+
+    const buyValue = s.insider_buy_value || 0;
+    const sellValue = s.insider_sell_value || 0;
+    const netValue = s.insider_net_value || 0;
+    const period = s.insider_period_days || 180;
+    const latest = s.insider_latest_date;
+
+    // Tolkning
+    let interp, sty;
+    if (cluster && buys >= 2) {
+        interp = '🟢 Cluster buy — flera insynspersoner köper samtidigt. Stark signal.';
+        sty = { bg: 'linear-gradient(135deg,#bbf7d0,#86efac)', color: '#065f46' };
+    } else if (buys > sells * 2 && buys >= 2) {
+        interp = '🟢 Övervikt köp — insynspersoner ackumulerar.';
+        sty = { bg: 'linear-gradient(135deg,#d1fae5,#a7f3d0)', color: '#065f46' };
+    } else if (sells > buys * 3 && sells >= 3) {
+        interp = '🔴 Tunga insynsförsäljningar — varningssignal.';
+        sty = { bg: 'linear-gradient(135deg,#fee2e2,#fca5a5)', color: '#7f1d1d' };
+    } else if (sells > buys && sells >= 2) {
+        interp = '🟠 Övervikt sälj — bevaka.';
+        sty = { bg: 'linear-gradient(135deg,#fed7aa,#fdba74)', color: '#9a3412' };
+    } else if (buys > sells) {
+        interp = '🟢 Modesta köp.';
+        sty = { bg: 'linear-gradient(135deg,#d1fae5,#a7f3d0)', color: '#065f46' };
+    } else {
+        interp = '⚪ Blandad aktivitet.';
+        sty = { bg: 'linear-gradient(135deg,#f3f4f6,#e5e7eb)', color: '#374151' };
+    }
+
+    const fmtMoney = v => {
+        if (v == null || v === 0) return '–';
+        const a = Math.abs(v);
+        if (a >= 1e6) return (v/1e6).toFixed(1) + ' M';
+        if (a >= 1e3) return (v/1e3).toFixed(0) + ' k';
+        return v.toFixed(0);
+    };
+
+    const buyPersons = s.insider_buy_persons || [];
+    const sellPersons = s.insider_sell_persons || [];
+    const buyPersonsCount = Array.isArray(buyPersons) ? buyPersons.length : 0;
+    const sellPersonsCount = Array.isArray(sellPersons) ? sellPersons.length : 0;
+
+    return `<div class="drawer-section" style="background:${sty.bg};border-radius:12px;padding:14px 16px;margin-bottom:12px">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:8px">
+            <div>
+                <div class="drawer-section-title" style="margin:0;color:${sty.color}">
+                    <span class="material-symbols-outlined" style="font-size:14px;vertical-align:middle">badge</span>
+                    Insynsregister (FI)
+                </div>
+                <div style="font-size:11px;color:${sty.color};opacity:0.8;margin-top:2px">
+                    Senaste ${period} dagar · ${totalTx} transaktioner${latest ? ' · senast ' + latest : ''}
+                </div>
+            </div>
+            ${cluster ? `<span style="background:#10b981;color:white;padding:3px 10px;border-radius:12px;font-size:11px;font-weight:700">⭐ Cluster buy</span>` : ''}
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-top:10px">
+            <div style="background:rgba(255,255,255,0.6);padding:10px;border-radius:8px">
+                <div style="font-size:10px;text-transform:uppercase;font-weight:700;color:${sty.color};opacity:0.7">Köp</div>
+                <div style="font-size:18px;font-weight:800;color:#059669">${buys} st</div>
+                <div style="font-size:11px;color:${sty.color};opacity:0.8">
+                    ${fmtMoney(buyValue)} SEK · ${buyPersonsCount} pers.
+                </div>
+            </div>
+            <div style="background:rgba(255,255,255,0.6);padding:10px;border-radius:8px">
+                <div style="font-size:10px;text-transform:uppercase;font-weight:700;color:${sty.color};opacity:0.7">Sälj</div>
+                <div style="font-size:18px;font-weight:800;color:#dc2626">${sells} st</div>
+                <div style="font-size:11px;color:${sty.color};opacity:0.8">
+                    ${fmtMoney(sellValue)} SEK · ${sellPersonsCount} pers.
+                </div>
+            </div>
+        </div>
+        <div style="margin-top:10px;padding:8px 12px;background:rgba(255,255,255,0.5);border-radius:8px;font-size:11.5px;color:${sty.color};line-height:1.5">
+            <strong>Net flow:</strong> ${netValue > 0 ? '+' : ''}${fmtMoney(netValue)} SEK<br>
+            ${interp}
+        </div>
+        <div style="font-size:10px;color:${sty.color};opacity:0.6;margin-top:6px;font-style:italic">
+            ⓘ Riktig "smart money" — verifierat via Finansinspektionens insynsregister.
+            Skiljer sig från Avanza-ägarflöde (= retail).
+        </div>
+    </div>`;
+}
+
 function renderRunwaySection(s) {
     const r = s.runway;
     if (!r) return '';
@@ -4198,24 +4365,50 @@ function openDrawer(s) {
         }
         return v.toFixed(1);
     };
+    // Sektor-median: för varje nyckeltal, jämför mot sektor-snitt
+    const sm = s.sector_medians;
+    function vsMedian(label, val, medianVal, isLowerBetter, displayVal) {
+        if (!sm || medianVal == null || val == null || val === 0) return '';
+        // Räkna differens
+        const pct = ((val - medianVal) / Math.abs(medianVal)) * 100;
+        let cls = 'color:var(--text-muted)';
+        let arrow = '';
+        if (Math.abs(pct) > 10) {
+            const isBetter = isLowerBetter ? pct < 0 : pct > 0;
+            cls = isBetter ? 'color:#059669;font-weight:600' : 'color:#dc2626;font-weight:600';
+            arrow = isBetter ? '▲' : '▼';
+        }
+        return `<div style="font-size:10px;${cls};margin-top:2px">${arrow} sektor-median: ${displayVal}</div>`;
+    }
     const fundItems = [
-        ['P/E', s.pe_ratio, v => fmtPosMult(v, 1)],
-        ['P/B', s.price_book_ratio, v => fmtPosMult(v, 2)],
-        ['EV/EBIT', s.ev_ebit_ratio, v => fmtPosMult(v, 1)],
-        ['Direktavk.', s.direct_yield, v => v!=null ? fmtV(v*100,1)+'%' : '-'],
-        ['ROE', s.return_on_equity, v => v!=null ? fmtV(v*100,1)+'%' : '-'],
-        ['ROA', s.return_on_assets, v => v!=null ? fmtV(v*100,1)+'%' : '-'],
-        ['ROCE', s.return_on_capital_employed, v => v!=null ? fmtV(v*100,1)+'%' : '-'],
-        ['D/E', s.debt_to_equity_ratio, v => fmtV(v,2)],
-        ['ND/EBITDA', s.net_debt_ebitda_ratio, () => fmtNdEbitda(s)],
-        ['EPS', s.eps, v => fmtV(v,2)],
-        ['OCF', s.operating_cash_flow, v => fmtM(v)],
-        ['Nettoresultat', s.net_profit, v => fmtM(v)],
-        ['Omsättning', s.sales, v => fmtM(v)],
-        ['Börsvärde', s.market_cap, v => v!=null ? (v/1e9).toFixed(2)+' Md' : '-'],
+        ['P/E', s.pe_ratio, v => fmtPosMult(v, 1),
+         () => vsMedian('P/E', s.pe_ratio, sm?.pe, true, sm?.pe ? sm.pe.toFixed(1) : '–')],
+        ['P/B', s.price_book_ratio, v => fmtPosMult(v, 2),
+         () => vsMedian('P/B', s.price_book_ratio, sm?.pb, true, sm?.pb ? sm.pb.toFixed(2) : '–')],
+        ['EV/EBIT', s.ev_ebit_ratio, v => fmtPosMult(v, 1),
+         () => vsMedian('EV/EBIT', s.ev_ebit_ratio, sm?.ev_ebit, true, sm?.ev_ebit ? sm.ev_ebit.toFixed(1) : '–')],
+        ['Direktavk.', s.direct_yield, v => v!=null ? fmtV(v*100,1)+'%' : '-',
+         () => vsMedian('DY', (s.direct_yield||0)*100, sm?.dy_pct, false, sm?.dy_pct ? sm.dy_pct.toFixed(1)+'%' : '–')],
+        ['ROE', s.return_on_equity, v => v!=null ? fmtV(v*100,1)+'%' : '-',
+         () => vsMedian('ROE', (s.return_on_equity||0)*100, sm?.roe_pct, false, sm?.roe_pct ? sm.roe_pct.toFixed(1)+'%' : '–')],
+        ['ROA', s.return_on_assets, v => v!=null ? fmtV(v*100,1)+'%' : '-',
+         () => vsMedian('ROA', (s.return_on_assets||0)*100, sm?.roa_pct, false, sm?.roa_pct ? sm.roa_pct.toFixed(1)+'%' : '–')],
+        ['ROCE', s.return_on_capital_employed, v => v!=null ? fmtV(v*100,1)+'%' : '-',
+         () => vsMedian('ROCE', (s.return_on_capital_employed||0)*100, sm?.roce_pct, false, sm?.roce_pct ? sm.roce_pct.toFixed(1)+'%' : '–')],
+        ['D/E', s.debt_to_equity_ratio, v => fmtV(v,2),
+         () => vsMedian('D/E', s.debt_to_equity_ratio, sm?.de, true, sm?.de ? sm.de.toFixed(2) : '–')],
+        ['ND/EBITDA', s.net_debt_ebitda_ratio, () => fmtNdEbitda(s), () => ''],
+        ['EPS', s.eps, v => fmtV(v,2), () => ''],
+        ['OCF', s.operating_cash_flow, v => fmtM(v), () => ''],
+        ['Nettoresultat', s.net_profit, v => fmtM(v), () => ''],
+        ['Omsättning', s.sales, v => fmtM(v), () => ''],
+        ['Börsvärde', s.market_cap, v => v!=null ? (v/1e9).toFixed(2)+' Md' : '-', () => ''],
     ];
-    html += `<div class="drawer-section"><div class="drawer-section-title">Fundamentala nyckeltal</div><div class="drawer-grid">${
-        fundItems.map(([l,v,fmt]) => `<div class="drawer-item"><div class="drawer-item-label">${l}</div><div class="drawer-item-value">${fmt(v)}</div></div>`).join('')
+    const sectorBadge = sm
+        ? `<span style="font-size:10px;background:#dbeafe;color:#1e40af;padding:2px 8px;border-radius:10px;margin-left:8px">vs ${sm.sector} (${sm.n_stocks} bolag)</span>`
+        : '';
+    html += `<div class="drawer-section"><div class="drawer-section-title">Fundamentala nyckeltal${sectorBadge}</div><div class="drawer-grid">${
+        fundItems.map(([l,v,fmt,medFn]) => `<div class="drawer-item"><div class="drawer-item-label">${l}</div><div class="drawer-item-value">${fmt(v)}</div>${medFn()}</div>`).join('')
     }</div></div>`;
 
     // ── TECHNICALS ──
@@ -4240,8 +4433,14 @@ function openDrawer(s) {
         techItems.map(([l,v,fmt]) => `<div class="drawer-item"><div class="drawer-item-label">${l}</div><div class="drawer-item-value">${fmt(v)}</div></div>`).join('')
     }</div></div>`;
 
+    // ── INSIDER (FI insynsregister) ──
+    html += renderInsiderSection(s);
+
     // ── RUNWAY (för förlustbolag — kritisk siffra) ──
     html += renderRunwaySection(s);
+
+    // ── UTSPÄDNING (shares-bevakning) ──
+    html += renderDilutionSection(s);
 
     // ── MACRO-OVERLAY (10y-ränta + sektor-relevans) ──
     html += renderMacroOverlay(s);
