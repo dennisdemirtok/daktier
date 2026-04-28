@@ -3296,7 +3296,10 @@ function renderHistoricalSection(s) {
     const years = sorted.map(r => r.financial_year);
     const eps = sorted.map(r => r.eps);
     const roe = sorted.map(r => r.return_on_equity != null ? (Math.abs(r.return_on_equity) > 1.5 ? r.return_on_equity : r.return_on_equity * 100) : null);
-    const sales = sorted.map(r => r.sales);
+    // För investmentbolag: omsättning är meningslös (bara förvaltningsavgifter).
+    // Visa istället nettoresultat (inkluderar portföljvärdering = riktig "intjäningsförmåga").
+    const isInvCo = !!s.is_investment_company;
+    const sales = sorted.map(r => isInvCo ? r.net_profit : r.sales);
     const divs = sorted.map(r => r.dividend_per_share);
 
     // Enkel sparkline-SVG
@@ -3380,8 +3383,12 @@ function renderHistoricalSection(s) {
         ${contextPills.length ? `<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px">${contextPills.join('')}</div>` : ''}
         ${miniRow('EPS per aktie', eps, '#3b82f6', fmtEps)}
         ${miniRow('Return on Equity', roe, '#10b981', fmtRoe)}
-        ${miniRow('Omsättning', sales, '#8b5cf6', fmtSales)}
+        ${miniRow(isInvCo ? 'Nettoresultat (inkl. portföljvärdering)' : 'Omsättning', sales, '#8b5cf6', fmtSales)}
         ${miniRow('Utdelning per aktie', divs, '#f59e0b', fmtDiv)}
+        ${isInvCo ? `<div style="font-size:10px;color:var(--text-muted);margin-top:6px;font-style:italic;line-height:1.4">
+            ⓘ För investmentbolag är "omsättning" = förvaltningsavgifter (~50M) och inte värdedrivande.
+            Vi visar nettoresultat istället, vilket inkluderar realiserade och orealiserade portföljvinster/-förluster.
+        </div>` : ''}
     </div>`;
 }
 
