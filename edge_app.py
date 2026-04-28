@@ -3833,6 +3833,17 @@ def api_backtest_v2_leakage_results():
     return jsonify(lr)
 
 
+@app.route("/api/backtest-v2/debug")
+def api_backtest_v2_debug():
+    """Returnera debug-info från senaste backtest-körning."""
+    debug_path = "/tmp/backtest_v2_results_debug.json"
+    if not os.path.exists(debug_path):
+        return jsonify({"error": "Inga debug-data ännu"}), 404
+    import json as _json
+    with open(debug_path) as f:
+        return jsonify(_json.load(f))
+
+
 @app.route("/api/backtest-v2/test-thread", methods=["POST"])
 def api_backtest_v2_test_thread():
     """Test-endpoint: startar bakgrundstråd som bara sätter state.

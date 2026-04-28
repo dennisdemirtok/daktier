@@ -142,9 +142,11 @@ def run_backtest(universe=None, start_year=2015, end_year=2024,
         if verbose:
             print(f"Mappade {len(ticker_to_isin)}/{len(universe)} tickers till ISIN")
 
+        skip_reasons = {"no_isin": 0, "no_pit_obs": 0, "llm_err": 0, "other": 0}
         for short, name in universe:
             isin = ticker_to_isin.get(short)
             if not isin:
+                skip_reasons["no_isin"] += 1
                 continue
             for date_iso in dates:
                 if max_obs and total_n >= max_obs:
@@ -156,6 +158,7 @@ def run_backtest(universe=None, start_year=2015, end_year=2024,
                     raw = build_observation(db, isin, short, date_iso)
                     if not raw:
                         skipped += 1
+                        skip_reasons["no_pit_obs"] += 1
                         if verbose and total_n % 50 == 0:
                             print(f"  [{total_n}] {short} {date_iso} — otillräcklig PIT-data")
                         continue
@@ -213,15 +216,34 @@ def run_backtest(universe=None, start_year=2015, end_year=2024,
     finally:
         db.close()
 
-    # Skriv CSV
-    if results:
-        fieldnames = list(results[0].keys())
-        with open(output_csv, "w", newline="") as f:
-            writer = csv.DictWriter(f, fieldnames=fieldnames)
-            writer.writeheader()
+    # Skriv CSV — alltid (även tom) så endpoint inte 404:ar
+    fieldnames = list(results[0].keys()) if results else [
+        "obs_id", "ticker", "name", "isin", "analysis_date", "setup",
+        "value", "quality", "momentum", "risk", "confidence",
+        "recommendation", "key_drivers", "key_risks",
+        "forward_return_12m", "forward_return_24m",
+        "data_completeness", "llm_hash",
+    ]
+    with open(output_csv, "w", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=fieldnames)
+        writer.writeheader()
+        if results:
             writer.writerows(results)
-        if verbose:
-            print(f"\n✅ {len(results)} obs sparade till {output_csv}")
-            print(f"   Skippade: {skipped}")
+    if verbose:
+        print(f"\n✅ {len(results)} obs sparade till {output_csv}")
+        print(f"   Skippade: {skipped}")
+        print(f"   Skip-orsaker: {skip_reasons}")
+    # Spara även debug-info till JSON så vi kan kolla vad som hände
+    debug_path = output_csv.replace(".csv", "_debug.json")
+    with open(debug_path, "w") as f:
+        import json as _json
+        _json.dump({
+            "n_results": len(results),
+            "n_total": total_n,
+            "n_skipped": skipped,
+            "skip_reasons": skip_reasons,
+            "ticker_to_isin": ticker_to_isin,
+            "dates": dates,
+        }, f, indent=2)
 
     return results
