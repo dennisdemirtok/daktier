@@ -5839,8 +5839,13 @@ def _startup():
             base = f"http://127.0.0.1:{port}"
             urls = [
                 "/api/dashboard",
+                # Signals med vanligaste sort-kombinationerna
                 "/api/signals?country=SE&sort=smart&order=desc&limit=50&offset=0&min_owners=10&signal=&action=",
+                "/api/signals?country=SE&sort=smart&order=desc&limit=20&offset=0&min_owners=10&signal=&action=",
+                "/api/signals?country=SE&sort=score&order=desc&limit=50&offset=0&min_owners=10&signal=&action=",
+                "/api/signals?country=US&sort=smart&order=desc&limit=50&offset=0&min_owners=10&signal=&action=",
                 "/api/stocks?q=&country=&sort=owners&order=desc&limit=50&offset=0&min_owners=0",
+                "/api/stocks?q=&country=SE&sort=owners&order=desc&limit=50&offset=0&min_owners=0",
                 "/api/hot-movers?mode=daily&direction=up&lookback=1&limit=50&offset=0&min_owners=100&country=",
                 "/api/trending?period=1m&direction=up&limit=50&min_owners=100",
                 "/api/insiders?q=&type=&limit=50&offset=0",
@@ -5850,6 +5855,9 @@ def _startup():
                 "/api/portfolio",
                 "/api/book-models",
                 "/api/simulation",
+                # Nya: trending V/Q
+                "/api/preset/value?country=SE&limit=50&min_owners=100",
+                "/api/preset/quality?country=SE&limit=50&min_owners=100",
             ]
             for u in urls:
                 try:

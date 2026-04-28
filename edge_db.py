@@ -3555,10 +3555,19 @@ def sync_borsdata_prices(db, isin_list=None, from_date=None, max_per_run=500,
     total_rows = 0
     errors = 0
 
+    # Throttle: vid bulk-bootstrap är vi snälla mot DB:n så server-requests
+    # inte saktas ner. ~50ms/bolag = ~4 minuter extra på 5000 bolag, men
+    # håller signals/dashboard responsiva under tiden.
+    import time as _time_mod
+    THROTTLE_MS = 50 if from_date else 0  # bulk = throttle, inkrementell = full speed
+
     for i, (isin, ins_id, is_global) in enumerate(targets):
         if progress_callback and i % 20 == 0:
             try: progress_callback(i, len(targets), isin)
             except Exception: pass
+
+        if THROTTLE_MS:
+            _time_mod.sleep(THROTTLE_MS / 1000.0)
 
         # Bestäm from_date: senaste vi har + 1 dag, eller 10 år tillbaka
         if from_date is None:
