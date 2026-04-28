@@ -3581,6 +3581,208 @@ def api_borsdata_sync_metadata():
         db.close()
 
 
+# ── Backtest v2 (anti-leakage) ──────────────────────────────
+
+_BACKTEST_V2_STATE = {
+    "running": False,
+    "phase": None,           # "leakage" | "backtest" | None
+    "started_at": None,
+    "finished_at": None,
+    "progress_n": 0,
+    "progress_total": 0,
+    "current": "",
+    "leakage_results": None,
+    "backtest_csv_path": None,
+    "backtest_report_md_path": None,
+    "error": None,
+    "logs": [],              # senaste 50 log-rader
+}
+
+
+def _bt2_log(msg):
+    """Lägg till log-rad i state (visas i status-endpoint)."""
+    _BACKTEST_V2_STATE["logs"].append(f"{datetime.now().strftime('%H:%M:%S')}  {msg}")
+    _BACKTEST_V2_STATE["logs"] = _BACKTEST_V2_STATE["logs"][-50:]
+    _BACKTEST_V2_STATE["current"] = msg
+    print(f"[backtest_v2] {msg}", flush=True)
+
+
+@app.route("/api/backtest-v2/leakage", methods=["POST"])
+def api_backtest_v2_leakage():
+    """Trigga 4 anti-leakage-blindtester i bakgrundstråd."""
+    if _BACKTEST_V2_STATE["running"]:
+        return jsonify({"error": "Redan igång", "phase": _BACKTEST_V2_STATE["phase"]}), 409
+    if not os.environ.get("ANTHROPIC_API_KEY"):
+        return jsonify({"error": "ANTHROPIC_API_KEY saknas på servern"}), 500
+
+    def _run():
+        _BACKTEST_V2_STATE.update({
+            "running": True, "phase": "leakage",
+            "started_at": datetime.now().isoformat(),
+            "finished_at": None, "progress_n": 0, "progress_total": 25,
+            "leakage_results": None, "error": None, "logs": [],
+        })
+        try:
+            _bt2_log("Startar 4 anti-leakage-blindtester")
+            from backtest_v2.anonymize import anonymize_observation
+            from backtest_v2.pit_data import build_observation
+            from backtest_v2.runner import find_isin_for_ticker, DEFAULT_UNIVERSE
+            from backtest_v2.leakage_tests import run_all_leakage_tests
+
+            db = get_db()
+            try:
+                # Sample obs för identitets/determinism/temporal
+                _bt2_log("Hämtar sample-obs (Volvo 2019-07)...")
+                isin_volvo = find_isin_for_ticker(db, "VOLV B")
+                if not isin_volvo:
+                    isin_volvo = find_isin_for_ticker(db, "SKF B")
+                if not isin_volvo:
+                    raise RuntimeError("Ingen sample-ISIN tillgänglig")
+                sample_raw = build_observation(db, isin_volvo, "TEST", "2019-07-15")
+                if not sample_raw:
+                    raise RuntimeError("PIT-data otillräcklig för 2019-07-15")
+                sample_anon = anonymize_observation(sample_raw)
+
+                # 10 obs från 2020-01-15 för krasch-blindtest
+                _bt2_log("Bygger 10 obs för 2020-Q1 krasch-test...")
+                q1_2020 = []
+                for short, name in DEFAULT_UNIVERSE[:18]:
+                    isin = find_isin_for_ticker(db, short)
+                    if not isin: continue
+                    raw = build_observation(db, isin, short, "2020-01-15")
+                    if raw:
+                        q1_2020.append(anonymize_observation(raw))
+                    if len(q1_2020) >= 10: break
+                _bt2_log(f"Q1 2020 obs hämtade: {len(q1_2020)}")
+
+                _bt2_log("Kör Test 1-4 (LLM-anrop)...")
+                report = run_all_leakage_tests(sample_anon, q1_2020)
+                _BACKTEST_V2_STATE["leakage_results"] = report
+                if report.get("all_pass"):
+                    _bt2_log("✅ Alla 4 tester passerade")
+                else:
+                    failed = [k for k, v in (report.get("results") or {}).items() if not v.get("pass")]
+                    _bt2_log(f"⚠ Failade: {', '.join(failed)}")
+            finally:
+                db.close()
+        except Exception as e:
+            import traceback
+            tb = traceback.format_exc()
+            _BACKTEST_V2_STATE["error"] = f"{type(e).__name__}: {e}"
+            _bt2_log(f"❌ FEL: {e}")
+            print(tb, file=sys.stderr, flush=True)
+        finally:
+            _BACKTEST_V2_STATE["running"] = False
+            _BACKTEST_V2_STATE["finished_at"] = datetime.now().isoformat()
+
+    threading.Thread(target=_run, daemon=True).start()
+    return jsonify({"status": "started", "phase": "leakage"})
+
+
+@app.route("/api/backtest-v2/run", methods=["POST"])
+def api_backtest_v2_run():
+    """Trigga full backtest (eller begränsad om ?max_obs=N)."""
+    if _BACKTEST_V2_STATE["running"]:
+        return jsonify({"error": "Redan igång", "phase": _BACKTEST_V2_STATE["phase"]}), 409
+    if not os.environ.get("ANTHROPIC_API_KEY"):
+        return jsonify({"error": "ANTHROPIC_API_KEY saknas på servern"}), 500
+
+    body = request.json if request.is_json else {}
+    max_obs = body.get("max_obs") or request.args.get("max_obs")
+    if max_obs:
+        try: max_obs = int(max_obs)
+        except (ValueError, TypeError): max_obs = None
+
+    def _run():
+        _BACKTEST_V2_STATE.update({
+            "running": True, "phase": "backtest",
+            "started_at": datetime.now().isoformat(),
+            "finished_at": None, "progress_n": 0,
+            "progress_total": max_obs or 600,
+            "backtest_csv_path": None,
+            "backtest_report_md_path": None,
+            "error": None, "logs": [],
+        })
+        try:
+            from backtest_v2.runner import run_backtest
+            from backtest_v2.analyze import generate_report
+
+            csv_path = "/tmp/backtest_v2_results.csv"
+            md_path = "/tmp/backtest_v2_report.md"
+            _bt2_log(f"Startar backtest (max_obs={max_obs or 'alla'})")
+            results = run_backtest(max_obs=max_obs, output_csv=csv_path, verbose=False)
+            _BACKTEST_V2_STATE["backtest_csv_path"] = csv_path
+            _BACKTEST_V2_STATE["progress_n"] = len(results)
+            _bt2_log(f"Backtest klar: {len(results)} obs sparade")
+
+            _bt2_log("Genererar markdown-rapport...")
+            generate_report(csv_path, output_md=md_path)
+            _BACKTEST_V2_STATE["backtest_report_md_path"] = md_path
+            _bt2_log("✅ Rapport klar")
+        except Exception as e:
+            import traceback
+            tb = traceback.format_exc()
+            _BACKTEST_V2_STATE["error"] = f"{type(e).__name__}: {e}"
+            _bt2_log(f"❌ FEL: {e}")
+            print(tb, file=sys.stderr, flush=True)
+        finally:
+            _BACKTEST_V2_STATE["running"] = False
+            _BACKTEST_V2_STATE["finished_at"] = datetime.now().isoformat()
+
+    threading.Thread(target=_run, daemon=True).start()
+    return jsonify({"status": "started", "phase": "backtest", "max_obs": max_obs})
+
+
+@app.route("/api/backtest-v2/status")
+def api_backtest_v2_status():
+    """Returnera status för pågående eller senaste körning."""
+    state = dict(_BACKTEST_V2_STATE)
+    # Kapsla in stora fält
+    if state.get("leakage_results"):
+        # Bara summary, inte hela rådatan
+        lr = state["leakage_results"]
+        results = lr.get("results", {})
+        state["leakage_summary"] = {
+            "all_pass": lr.get("all_pass"),
+            "tests": {k: {"pass": v.get("pass")} for k, v in results.items()},
+        }
+    return jsonify(state)
+
+
+@app.route("/api/backtest-v2/results.csv")
+def api_backtest_v2_csv():
+    """Ladda ner CSV med resultat."""
+    csv_path = _BACKTEST_V2_STATE.get("backtest_csv_path")
+    if not csv_path or not os.path.exists(csv_path):
+        return jsonify({"error": "Inga resultat ännu"}), 404
+    with open(csv_path) as f:
+        content = f.read()
+    return Response(content,
+                    mimetype="text/csv",
+                    headers={"Content-Disposition": "attachment; filename=backtest_v2.csv"})
+
+
+@app.route("/api/backtest-v2/report.md")
+def api_backtest_v2_report():
+    """Ladda ner markdown-rapport."""
+    md_path = _BACKTEST_V2_STATE.get("backtest_report_md_path")
+    if not md_path or not os.path.exists(md_path):
+        return jsonify({"error": "Ingen rapport ännu"}), 404
+    with open(md_path) as f:
+        content = f.read()
+    return Response(content,
+                    mimetype="text/markdown; charset=utf-8")
+
+
+@app.route("/api/backtest-v2/leakage-results")
+def api_backtest_v2_leakage_results():
+    """Returnera detaljerade leakage-resultat (om de finns)."""
+    lr = _BACKTEST_V2_STATE.get("leakage_results")
+    if not lr:
+        return jsonify({"error": "Inga leakage-resultat ännu"}), 404
+    return jsonify(lr)
+
+
 @app.route("/api/refresh-historical/status")
 def api_refresh_historical_status():
     """Returnerar både pågående sync OCH täcknings-stats över DB:n."""
