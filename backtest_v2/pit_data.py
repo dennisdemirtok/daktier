@@ -291,6 +291,20 @@ def build_observation(db, isin, ticker, analysis_date_iso):
     if (eps_yoy or 0) < -50 or (rev_yoy or 0) < -30:
         quality_regime = "turnaround"
 
+    # ── Bank-specifik logik ──
+    # Banker har strukturellt hög D/E (10-15) och låg ROA (1%) — inte
+    # värderingssignaler. Nolla dessa fält så LLM:en inte feltolkar dem.
+    is_bank = sector == "financials"
+    if is_bank:
+        # D/E och ND/EBITDA är meningslösa för banker
+        de = None
+        nd_ebitda = None
+        ev_ebit = None  # EBIT är inte rätt mått för banker (NIM är)
+        # F-Score tolkas annorlunda för banker — nolla
+        f_score = None
+        # ROA är strukturellt låg, inte en kvalitetsindikator
+        # men behåll den för completeness
+
     # Räkna data_completeness
     fund_fields = [pe, pb, fcf_yield_pct, roe_pct, gross_margin_pct, de, nd_ebitda, ev_ebit]
     growth_fields = [rev_yoy, eps_yoy, ocf_yoy]
@@ -344,8 +358,9 @@ _SECTOR_KEYWORDS_LOCAL = {
     "tech": ("software", "tech", "digital", "ai ", "saas", "platform",
              "internet", "semi", "photonic", "silicon", "ericsson", "evolution",
              "spotify", "axis", "tobii", "fingerprint"),
-    "financials": ("bank", "bancorp", "financial", "spar", "savings",
-                   "kreditmark", "asset management"),
+    # Banker explicit
+    "financials": ("seb", "swedbank", "handelsbanken", "shb ", "nordea", "nda ",
+                   "bank", "bancorp", "spar", "savings", "kreditmark"),
     "healthcare": ("health", "medic", "pharma", "bio", "diagnos", "läkemedel"),
     "energy": ("oil", "gas", "energy", "petroleum", "wind", "solar"),
     "materials": ("mining", "steel", "stål", "metals", "mineral", "chemical",
@@ -356,8 +371,11 @@ _SECTOR_KEYWORDS_LOCAL = {
     "real_estate": ("reit", "real estate", "fastighet", "property"),
     "utilities": ("utility", "vatten", "elektrici"),
     "telecom": ("telecom", "telekom", "telia", "wireless", "communication"),
-    "investment_company": ("invest", "holding", "kinnevik", "industrivärden",
-                           "lundbergs", "latour", "ratos", "bure"),
+    # Investmentbolag — explicit lista, inte banker
+    "investment_company": ("kinnevik", "industrivärden", "industrivarden",
+                           "lundbergs", "lundbergföretagen", "latour", "ratos",
+                           "bure ", "bure equity", "creades", "svolder",
+                           "öresund", "spiltan", "vnv ", "investor"),
 }
 
 

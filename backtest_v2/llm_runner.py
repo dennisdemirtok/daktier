@@ -52,7 +52,17 @@ VIKTIGA REGLER:
 - Förlustbolag (eps_yoy < 0 + flera negativa kvartal) → vanligtvis "early_stage_turnaround"
   eller "value_destruction". Aldrig "trifecta".
 - Hög ROE + låg D/E + positiv tillväxt = quality_compounder eller trifecta.
-- Returnera ENDAST JSON, ingen annan text."""
+- Returnera ENDAST JSON, ingen annan text.
+
+SEKTOR-SPECIFIK BEDÖMNING:
+- BANKER (sector="financials"): D/E och ND/EBITDA är NULL (strukturellt 10-15 för banker —
+  inte värderingssignal). Bedöm via P/E, P/B, ROE, dir.avkastning. Hög D/E hos bank
+  är NORMALT (deras affärsmodell är skuld/inlåning). Använd ALDRIG "value_destruction"
+  enbart pga frånvarande EV/EBIT eller hög D/E.
+- INVESTMENTBOLAG (sector="investment_company"): NAV/substansrabatt är primär värdering.
+  Hög EV/EBIT är normal eftersom EBIT är portföljbolagens, inte holding-bolagets.
+  Bedöm via P/B, ROE, dir.avkastning.
+- REAL ESTATE / UTILITIES: hög D/E är NORMALT (kapitalstruktur). Bedöm via FCF, P/B."""
 
 
 def _build_user_message(anonymized_obs):

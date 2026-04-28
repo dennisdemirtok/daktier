@@ -225,7 +225,11 @@ def crash_period_check(enriched):
 
 
 def generate_report(csv_path, output_md=None):
-    """Generera komplett rapport som markdown."""
+    """Generera komplett rapport som markdown.
+
+    Konservativ: rapporterar inte slutsatser för subgrupper med n<5.
+    Total-slutsats kräver minst n=50.
+    """
     results = load_results(csv_path)
     enriched = compute_alpha(results)
 
@@ -234,6 +238,7 @@ def generate_report(csv_path, output_md=None):
 
     overall_alpha = _safe_mean([r["alpha_12m"] for r in enriched])
     overall_hit_rate = sum(1 for r in enriched if r["alpha_12m"] > 0) / len(enriched) * 100
+    n_total = len(enriched)
     n_buy = sum(1 for r in enriched if r.get("recommendation") in ("BUY", "STRONG_BUY"))
     n_avoid = sum(1 for r in enriched if r.get("recommendation") in ("AVOID", "STRONG_AVOID"))
 
@@ -243,17 +248,33 @@ def generate_report(csv_path, output_md=None):
     regime = regime_analysis(enriched)
     crash = crash_period_check(enriched)
 
+    # Hjälp-fn: markera små samples
+    def n_marker(n):
+        if n < 5: return f"{n}*"
+        if n < 10: return f"{n}†"
+        return str(n)
+
     md = []
-    md.append("# Backtest-rapport — anti-leakage-validerad")
+    md.append("# Backtest-rapport (preliminär)")
     md.append("")
-    md.append(f"**Period:** 2015-2024, halvårsvis")
-    md.append(f"**Universum:** ~30 svenska aktier")
-    md.append(f"**Totalt obs (med forward return):** {len(enriched)}")
-    md.append(f"**Köp-rekommendationer:** {n_buy}, **Avoid:** {n_avoid}")
+
+    # ── Caveats-banner ──
+    if n_total < 50:
+        md.append("> ⚠ **Preliminär — för få observationer för slutsatser.**")
+        md.append(f"> N={n_total}. Subgrupper markerade `*` har n<5 (ej användbara), `†` har n<10 (svaga).")
+        md.append(f"> Ingen statistisk power. Resultaten är BARA en sanity-check att pipelinen kör.")
+        md.append("")
+
+    md.append(f"**Period:** se CSV (begränsad av Börsdata-historik)")
+    md.append(f"**Universum:** definierat i `runner.py DEFAULT_UNIVERSE`")
+    md.append(f"**Totalt obs (med forward return):** {n_total}")
+    md.append(f"**Köp-rek:** {n_buy} ({n_buy/n_total*100:.0f}%), **Avoid:** {n_avoid} ({n_avoid/n_total*100:.0f}%)")
     md.append("")
-    md.append("## 📊 Total alfa")
+    md.append("## 📊 Total alfa (preliminär)")
     md.append(f"- Medel-alfa 12m vs OMXS30: **{(overall_alpha or 0)*100:+.2f}%**")
     md.append(f"- Hit rate (alfa > 0): **{overall_hit_rate:.1f}%**")
+    if n_total < 50:
+        md.append(f"- ⚠ N={n_total} otillräckligt — alfa-bedömning kräver n≥50, ideal n≥200.")
     md.append("")
     md.append("## 🎯 Per setup-klass")
     md.append("| Setup | N | Medel-alfa 12m | Hit rate | Confidence |")
@@ -262,7 +283,7 @@ def generate_report(csv_path, output_md=None):
         a = s.get("mean_alpha_12m")
         c = s.get("mean_confidence")
         c_str = f"{c:.2f}" if c is not None else "–"
-        md.append(f"| {s['setup']} | {s['n']} | "
+        md.append(f"| {s['setup']} | {n_marker(s['n'])} | "
                   f"{(a or 0)*100:+.2f}% | "
                   f"{s['hit_rate_pct']:.1f}% | "
                   f"{c_str} |")
@@ -272,43 +293,86 @@ def generate_report(csv_path, output_md=None):
     md.append("|---|---|---|---|")
     for r in rec_perf:
         a = r.get("mean_alpha_12m")
-        md.append(f"| {r['recommendation']} | {r['n']} | "
+        md.append(f"| {r['recommendation']} | {n_marker(r['n'])} | "
                   f"{(a or 0)*100:+.2f}% | {r['hit_rate_pct']:.1f}% |")
     md.append("")
-    md.append("## 🎚️ Confidence-kalibrering")
-    md.append("| Confidence | N | Medel-alfa | Hit rate |")
-    md.append("|---|---|---|---|")
-    for c in conf_cal:
-        a = c.get("mean_alpha_12m")
-        md.append(f"| {c['confidence_bin']} | {c['n']} | "
-                  f"{(a or 0)*100:+.2f}% | {c['hit_rate_pct']:.1f}% |")
+
+    # Confidence-kalibrering — visa bara om alla bins har data
+    if all(c.get("n", 0) >= 5 for c in conf_cal):
+        md.append("## 🎚️ Confidence-kalibrering")
+        md.append("Hög confidence ska ge högre alfa. Om monoton stigning saknas → not predictive.")
+        md.append("")
+        md.append("| Confidence | N | Medel-alfa | Hit rate |")
+        md.append("|---|---|---|---|")
+        for c in conf_cal:
+            a = c.get("mean_alpha_12m")
+            md.append(f"| {c['confidence_bin']} | {n_marker(c['n'])} | "
+                      f"{(a or 0)*100:+.2f}% | {c['hit_rate_pct']:.1f}% |")
+        # Check monotonicity
+        alphas = [(c['confidence_bin'], c.get("mean_alpha_12m")) for c in conf_cal]
+        alphas = [(b, a) for b, a in alphas if a is not None]
+        if len(alphas) >= 3:
+            monotonic = all(alphas[i+1][1] > alphas[i][1] for i in range(len(alphas)-1))
+            if not monotonic:
+                md.append("")
+                md.append("⚠ **Confidence är INTE monotont prediktiv.** Self-report inte att lita på.")
+        md.append("")
+
+    md.append("## 🌍 Regim-analys")
+    md.append("Bull = OMXS30 +>5% nästa 12m, Bear = -5% eller sämre.")
     md.append("")
-    md.append("## 🌍 Regim-analys (bull/flat/bear)")
     md.append("| Regim | N | Medel-alfa | Hit rate |")
     md.append("|---|---|---|---|")
     for r in regime:
         if r.get("n", 0) == 0: continue
         a = r.get("mean_alpha_12m")
-        md.append(f"| {r['regime']} | {r['n']} | "
+        md.append(f"| {r['regime']} | {n_marker(r['n'])} | "
                   f"{(a or 0)*100:+.2f}% | {r.get('hit_rate_pct', 0):.1f}% |")
     md.append("")
-    md.append("## ⚠ Anti-leakage misstankar (kritiska vändpunkter)")
-    md.append("| Datum | N | Medel-alfa | % AVOID | Misstanke? |")
-    md.append("|---|---|---|---|---|")
-    for c in crash:
-        a = c.get("mean_alpha_12m")
-        suspect = "🚨 MISSTANKE" if c.get("leakage_suspect") else "✅ OK"
-        md.append(f"| {c['date']} | {c['n']} | "
-                  f"{(a or 0)*100:+.2f}% | {c['avoid_pct']:.1f}% | {suspect} |")
-    md.append("")
-    md.append("## 🔬 Konkret rekommendation")
-    md.append("")
-    if (overall_alpha or 0) > 0.05:
-        md.append("✅ **Agenten genererar meningsfull alfa.** Sätten klassificeringarna och fundamentala regler verkar fungera.")
-    elif (overall_alpha or 0) > 0:
-        md.append("🟡 **Agenten är marginellt positiv vs OMXS30.** Inom mätfel.")
+    # Varna om regim-skewness
+    n_bull = next((r['n'] for r in regime if r['regime'] == 'bull'), 0)
+    n_bear = next((r['n'] for r in regime if r['regime'] == 'bear'), 0)
+    n_flat = next((r['n'] for r in regime if r['regime'] == 'flat'), 0)
+    if n_bear < 5 or n_bull < 5:
+        md.append(f"⚠ **Regim-skew:** bull n={n_bull}, flat n={n_flat}, bear n={n_bear}.")
+        md.append(f"För kort period eller fel regim-trösklar — kan inte testa krasch-prestanda.")
+        md.append("")
+
+    # Anti-leakage tabell — visa bara om vi faktiskt har obs runt vändpunkter
+    if any(c.get("n", 0) > 0 for c in crash):
+        md.append("## 🚨 Anti-leakage misstankar (kritiska vändpunkter)")
+        md.append("| Datum | N | Medel-alfa | % AVOID | Misstanke? |")
+        md.append("|---|---|---|---|---|")
+        for c in crash:
+            if c.get("n", 0) == 0: continue
+            a = c.get("mean_alpha_12m")
+            suspect = "🚨 MISSTANKE" if c.get("leakage_suspect") else "✅ OK"
+            md.append(f"| {c['date']} | {n_marker(c['n'])} | "
+                      f"{(a or 0)*100:+.2f}% | {c['avoid_pct']:.1f}% | {suspect} |")
+        md.append("")
     else:
-        md.append("⚠ **Agenten ger ingen alfa över OMXS30.** Behöver översyn av scoring-logiken.")
+        md.append("## 🚨 Anti-leakage misstankar")
+        md.append("⚠ **Inga obs runt kända krasch-datum** (2020-Q1, 2022-Q1) — datasetet täcker inte dom perioderna.")
+        md.append("")
+
+    md.append("## 🔬 Sammanfattning")
+    md.append("")
+    if n_total < 50:
+        md.append("⚠ **Datasetet är för litet för slutsatser.** Pipelinen fungerar tekniskt och anti-leakage-tester")
+        md.append("har passerats, men:")
+        md.append("- N=" + str(n_total) + " obs är inte signifikant — kräver n≥50 för minimal power")
+        md.append("- Subgrupper med n<5 (markerade `*`) ska ignoreras")
+        md.append("- Confidence-kalibrering kräver utvärdering över längre period")
+        md.append("- Regim-analys saknar bear-period")
+        md.append("")
+        md.append("**Nästa steg:** synca längre Börsdata-historik (2015-2023) + utöka universum innan slutsatser.")
+    elif (overall_alpha or 0) > 0.05 and overall_hit_rate > 60:
+        md.append(f"🟢 **Indikation på alfa** ({(overall_alpha or 0)*100:+.2f}% medel, {overall_hit_rate:.0f}% hit rate, n={n_total}).")
+        md.append("Behöver bekräftas med faktor-justerad benchmark + walk-forward k-fold innan handelsbeslut.")
+    elif (overall_alpha or 0) > 0:
+        md.append(f"🟡 **Marginellt positivt** ({(overall_alpha or 0)*100:+.2f}%, n={n_total}). Inom mätfel.")
+    else:
+        md.append(f"🔴 **Ingen alfa** ({(overall_alpha or 0)*100:+.2f}%, n={n_total}). Behöver översyn av scoring-logik.")
 
     txt = "\n".join(md)
     if output_md:

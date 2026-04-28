@@ -3078,31 +3078,63 @@ _INVESTMENT_COMPANY_NAMES = {
 }
 
 
+# Banker har hög D/E (10-15) och låg ROA (1%) som NORMALTILLSTÅND.
+# De får ALDRIG klassas som investmentbolag — egen sektor "financials" + bank-routing.
+_KNOWN_BANK_NAMES = {
+    "seb", "swedbank", "handelsbanken", "nordea", "danske bank",
+    "länsförsäkringar", "lansforsakringar", "avanza", "nordnet",
+    "carnegie", "sparbanken", "skandinaviska enskilda",
+    # International banks
+    "jpmorgan", "wells fargo", "bank of america", "citigroup", "deutsche",
+    "barclays", "hsbc", "ubs", "credit suisse", "santander",
+}
+
+
+def _is_known_bank(s):
+    """Detektera bank — strukturella mått (D/E, ND/EBITDA) är meningslösa."""
+    name = (s.get("name") or "").strip().lower()
+    short_name = (s.get("short_name") or "").strip().lower()
+    for known in _KNOWN_BANK_NAMES:
+        if known in name or known in short_name:
+            return True
+    return False
+
+
 def _is_investment_company(s):
     """Detektera investmentbolag via namn + struktur.
 
     Investmentbolag har låg "operativ" omsättning och stort eget kapital
     (= portföljvärdet). Generisk Magic Formula/FCF-modell missar deras
     kärnvärdering (NAV/substansrabatt).
+
+    UTESLUTER banker explicit — de matchar strukturellt (revenue/equity < 5%)
+    men har egen affärsmodell som kräver olika behandling.
     """
+    # Banker ALDRIG investmentbolag
+    if _is_known_bank(s):
+        return False
+
     name = (s.get("name") or "").strip().lower()
     short_name = (s.get("short_name") or "").strip().lower()
 
-    # Direktmatch på kända namn
+    # Direktmatch på kända investmentbolag-namn (HÖGRE PRIORITET än strukturell signal)
     for known in _INVESTMENT_COMPANY_NAMES:
         if known in name or known in short_name:
             return True
 
-    # Strukturell signal: revenue/total_equity < 5% (typisk investmentbolagskvot)
+    # Strukturell signal: revenue/total_equity < 5% PLUS investmentbolagsord
     revenues = s.get("sales") or 0
     bd = s.get("_borsdata_latest") or {}
     if not revenues:
         revenues = bd.get("revenues") or 0
     total_equity = bd.get("total_equity") or s.get("total_assets", 0) - s.get("total_liabilities", 0)
     if total_equity and revenues and abs(revenues) / abs(total_equity) < 0.05:
-        # Plus: namnet innehåller typiskt investmentbolagsord
-        if any(k in name for k in ("invest", "equity", "holding", "förvaltning")):
-            return True
+        # KRÄV att namnet innehåller specifikt investmentbolagsord
+        # (annars riskerar vi banker, försäkring etc.)
+        if any(k in name for k in ("invest", "equity ", "holding", "förvaltning", "kapital")):
+            # Extra säkerhet: uteslut försäkring + bank-keywords
+            if not any(k in name for k in ("bank", "försäkring", "insurance", "spar")):
+                return True
 
     return False
 
