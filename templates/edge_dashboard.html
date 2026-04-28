@@ -3302,7 +3302,7 @@ function openDrawer(s) {
     _currentDrawerStock = s;
     const flag = FLAGS[s.country] || '';
 
-    // Header
+    // Header — visa direkt med slim data (snabb feedback)
     document.getElementById('drawerHeaderContent').innerHTML = `
         <div>
             <div style="font-size:20px;font-weight:700">${flag} ${s.name}</div>
@@ -3310,6 +3310,36 @@ function openDrawer(s) {
             <div style="font-size:24px;font-weight:700;margin-top:6px">${s.last_price != null ? s.last_price.toFixed(2) + ' ' + (s.currency || 'SEK') : '-'}</div>
         </div>
     `;
+
+    // ── Auto-fetch full data om slim ──
+    // Olika listor (signals, stocks, hot-movers, portfolio) levererar slim
+    // stock-objekt utan historical_annual / v2 / f_score. Dashboard fetchar
+    // alltid full data först. För konsistent drawer: kolla om datan är slim
+    // och fetcha i så fall full data → re-anropa openDrawer med rikare obj.
+    const isSlim = !s.historical_annual && !s.v2 && !s.f_score
+                   && !s._drawer_full_fetched;
+    if (isSlim && s.orderbook_id) {
+        // Visa loading-state direkt så användaren ser feedback
+        const drawerBody = document.getElementById('drawerBody');
+        if (drawerBody) {
+            drawerBody.innerHTML = `
+                <div style="padding:40px;text-align:center;color:var(--text-muted)">
+                    <span class="material-symbols-outlined" style="font-size:32px;animation:spin 1s linear infinite">progress_activity</span>
+                    <div style="margin-top:8px">Hämtar full information...</div>
+                </div>`;
+        }
+        fetch(`/api/stock/${s.orderbook_id}`)
+            .then(r => r.json())
+            .then(full => {
+                if (full && !full.error) {
+                    full._drawer_full_fetched = true;
+                    openDrawer(full);  // re-render med full data
+                }
+            })
+            .catch(e => console.warn('[drawer] fetch full data fel:', e));
+        // Returnera tidigt — re-render sker när fetch klart
+        return;
+    }
 
     let html = '';
 
