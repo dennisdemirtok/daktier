@@ -3674,9 +3674,11 @@ def api_backtest_v2_leakage():
             try:
                 # Sample obs för identitets/determinism/temporal
                 # Prova flera datum + tickers tills vi hittar PIT-data som räcker
+                # Börsdata-data räcker ~2023-Q4 → 2026. Vi måste använda
+                # senare datum eftersom PIT + 60d lag + 4 kvartals-krav.
                 _bt2_log("Söker sample-obs med tillräcklig PIT-data...")
                 sample_anon = None
-                test_dates = ["2024-07-15", "2024-01-15", "2023-07-15", "2023-01-15"]
+                test_dates = ["2025-10-15", "2025-07-15", "2025-04-15", "2025-01-15"]
                 for short_try in ["VOLV B", "ATCO A", "SAND", "ABB", "SKF B", "ERIC B", "AZN"]:
                     isin = find_isin_for_ticker(db, short_try)
                     if not isin: continue
@@ -3688,31 +3690,24 @@ def api_backtest_v2_leakage():
                             break
                     if sample_anon: break
                 if not sample_anon:
-                    raise RuntimeError("Ingen aktie hade tillräcklig PIT-data för testdatum 2023-2024")
+                    raise RuntimeError("Ingen aktie hade tillräcklig PIT-data för 2025")
 
-                # Krasch-blindtest: 2022-01-15 (Stockholm bear-market start, -20% under H1)
-                _bt2_log("Bygger 10 obs för 2022-Q1 bear-market-test...")
+                # Krasch-blindtest: använder 2025-Q1 (volatilitet runt
+                # AI-bubblan & räntor) — det är vad vi har data för.
+                # Med Börsdata-historik = bara 2 år är 2020-corona och 2022-bear
+                # utanför vårt fönster. Kompromiss: använd 2025-04-15 för
+                # bredare obs, även om det inte är en dramatisk krasch.
+                _bt2_log("Bygger 10 obs för 2025-Q1 (test-dataset)...")
                 bear_obs = []
                 for short, name in DEFAULT_UNIVERSE:
                     isin = find_isin_for_ticker(db, short)
                     if not isin: continue
-                    raw = build_observation(db, isin, short, "2022-01-15")
+                    raw = build_observation(db, isin, short, "2025-04-15")
                     if raw:
                         bear_obs.append(anonymize_observation(raw))
                     if len(bear_obs) >= 10: break
-                _bt2_log(f"  Bear-test obs hämtade: {len(bear_obs)}")
-                if len(bear_obs) < 5:
-                    # Fallback till 2024 om 2022 saknar data
-                    _bt2_log("Fallback: 2024-Q1 istället...")
-                    bear_obs = []
-                    for short, name in DEFAULT_UNIVERSE:
-                        isin = find_isin_for_ticker(db, short)
-                        if not isin: continue
-                        raw = build_observation(db, isin, short, "2024-01-15")
-                        if raw:
-                            bear_obs.append(anonymize_observation(raw))
-                        if len(bear_obs) >= 10: break
-                q1_2020 = bear_obs  # variabel-namn behåller från ursprungsschema
+                _bt2_log(f"  Test-obs hämtade: {len(bear_obs)}")
+                q1_2020 = bear_obs  # behåll variabelnamn från ursprungsschema
 
                 _bt2_log("Kör Test 1-4 (LLM-anrop)...")
                 report = run_all_leakage_tests(sample_anon, q1_2020)
