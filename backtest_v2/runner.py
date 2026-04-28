@@ -101,16 +101,16 @@ def get_dynamic_universe(db, country="SE", min_market_cap=1e9, max_n=100):
     Returnerar list av (short_name, name) tuples, sorterad market_cap desc.
     """
     ph = _ph()
+    # Avanza har ofta tom ISIN — hämta ISIN från borsdata_instrument_map
     rows = _fetchall(db, f"""
-        SELECT s.short_name, s.name, s.market_cap, s.isin,
+        SELECT s.short_name, s.name, s.market_cap, m.isin,
                (SELECT COUNT(*) FROM borsdata_reports br
-                WHERE br.isin = s.isin AND br.report_type = 'quarter') as n_q
+                WHERE br.isin = m.isin AND br.report_type = 'quarter') as n_q
         FROM stocks s
         JOIN borsdata_instrument_map m ON s.short_name = m.ticker
         WHERE s.country = {ph}
         AND s.last_price > 0
         AND s.market_cap >= {ph}
-        AND s.isin != ''
         ORDER BY s.market_cap DESC
         LIMIT {ph}
     """, (country, min_market_cap, max_n * 2))
