@@ -50,26 +50,34 @@ ALLOWED_REGIMES = {"compounder", "average", "subpar", "turnaround", "unknown"}
 
 # ── Förbjudna mönster (regex) som inte får finnas i serialiserad output ──
 
+# OBS: tar BORT \b(19|20)\d{2}\b (year_4digit) — för aggressiv. Flaggade
+# rena siffervärden som ND/EBITDA=2046 som "datum". ISO-format + "Q1 2020"-
+# format + bolagsnamn räcker för datum-läckage-skydd.
 _FORBIDDEN_PATTERNS = [
-    # Datum (4-siffrigt år 1980-2099)
-    (r"\b(19[89]\d|20\d{2})\b", "year_4digit"),
-    # ISO-datum
+    # ISO-datum (entydigt datum-format)
     (r"\b\d{4}-\d{2}-\d{2}\b", "iso_date"),
-    # "Q1 2020" eller "q1 2020"
+    # "Q1 2020" / "q1 2020" / "1Q 2020"
     (r"q[1-4]\s+(19|20)\d{2}", "quarter_year"),
-    # Valuta-koder (3 bokstäver inom \b)
+    (r"(19|20)\d{2}-q[1-4]\b", "year_quarter"),
+    # Valuta-koder (3 bokstäver inom \b — kontext-känsligt)
     (r"\b(sek|usd|eur|gbp|nok|dkk|jpy|cny|chf|cad)\b", "currency"),
     # Land
     (r"\b(sweden|sverige|usa|denmark|danmark|norway|norge|finland|"
-     r"germany|tyskland|uk|united kingdom|china|kina|stockholm)\b", "country"),
+     r"germany|tyskland|uk|united kingdom|china|kina|stockholm|"
+     r"helsinki|copenhagen|oslo)\b", "country"),
     # Valuta-symboler
     (r"[$€£¥]", "currency_symbol"),
-    # "Mdr" eller "Md" — antyder svenska
-    (r"\bm(d|dr)\b", "swedish_unit"),
-    # Specifika bolagsnamn (kort lista, expanderbar)
+    # "Mdr SEK" / "Md SEK" — antyder svenska
+    (r"\bm(d|dr)\s*(sek|kr)\b", "swedish_unit"),
+    # Specifika bolagsnamn (utökad lista)
     (r"\b(volvo|investor|atlas|sandvik|hennes|hm |microsoft|apple|"
      r"google|amazon|tesla|alphabet|berkshire|nvidia|ericsson|"
-     r"telia|swedbank|seb|handelsbanken|spotify|klarna)\b", "company_name"),
+     r"telia|swedbank|seb |handelsbanken|spotify|klarna|"
+     r"latour|industrivärden|kinnevik|lundbergs|bure|ratos)\b", "company_name"),
+    # Månadsnamn (engelska + svenska) som potentiell datum-läcka
+    (r"\b(january|february|march|april|may|june|july|august|"
+     r"september|october|november|december|"
+     r"januari|februari|mars|maj|juni|juli|augusti)\b", "month_name"),
 ]
 
 

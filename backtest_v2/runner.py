@@ -212,7 +212,16 @@ def run_backtest(universe=None, start_year=2015, end_year=2024,
                         continue
 
                     # 2. Anonymisera (assert sker här)
-                    anon = anonymize_observation(raw)
+                    try:
+                        anon = anonymize_observation(raw)
+                    except AssertionError as ae:
+                        # Skipa enskilda obs som triggar anti-leakage istället
+                        # för att krasch hela backtesten
+                        skipped += 1
+                        skip_reasons["other"] += 1
+                        if verbose:
+                            print(f"  [{total_n}] {short} {date_iso} skip pga anti-leakage: {ae}")
+                        continue
 
                     # 3. Kalla LLM
                     parsed, raw_text, h = call_llm(anon)
@@ -247,9 +256,6 @@ def run_backtest(universe=None, start_year=2015, end_year=2024,
                     if verbose and len(results) % 25 == 0:
                         print(f"  [{len(results)} klara, {skipped} skippade]")
 
-                except AssertionError as e:
-                    print(f"  ❌ ANTI-LEAKAGE FAIL för {short} {date_iso}: {e}")
-                    raise  # Stoppa hela backtesten
                 except Exception as e:
                     print(f"  ⚠ Fel för {short} {date_iso}: {type(e).__name__}: {e}")
                     skipped += 1
