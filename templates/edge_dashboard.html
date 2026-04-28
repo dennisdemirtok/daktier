@@ -3297,6 +3297,116 @@ function renderFScoreSection(s) {
     </div>`;
 }
 
+function renderInvestmentCompanySection(s) {
+    if (!s.is_investment_company || !s.nav_data) return '';
+    const nav = s.nav_data;
+    const disc = nav.discount_pct;
+    const interp = nav.interpretation;
+
+    // Färg baserat på rabatt vs historiken
+    let bg, color, icon, label;
+    if (interp === 'rabatt') {
+        bg = 'linear-gradient(135deg,#bbf7d0,#86efac)';
+        color = '#065f46';
+        icon = 'trending_down';
+        label = 'Substansrabatt';
+    } else if (interp === 'premium') {
+        bg = 'linear-gradient(135deg,#fee2e2,#fca5a5)';
+        color = '#7f1d1d';
+        icon = 'trending_up';
+        label = 'Premium';
+    } else {
+        bg = 'linear-gradient(135deg,#fef3c7,#fde68a)';
+        color = '#92400e';
+        icon = 'horizontal_rule';
+        label = 'Neutral';
+    }
+
+    // Värderingsbedömning relativt historiken
+    let assessmentBadge = '';
+    if (nav.assessment === 'attraktiv') {
+        assessmentBadge = `<span style="background:#10b981;color:white;padding:3px 10px;border-radius:12px;font-size:11px;font-weight:700">⭐ Attraktiv vs 5y snitt</span>`;
+    } else if (nav.assessment === 'dyr') {
+        assessmentBadge = `<span style="background:#dc2626;color:white;padding:3px 10px;border-radius:12px;font-size:11px;font-weight:700">⚠ Dyr vs 5y snitt</span>`;
+    } else if (nav.assessment === 'neutral') {
+        assessmentBadge = `<span style="background:#6b7280;color:white;padding:3px 10px;border-radius:12px;font-size:11px;font-weight:700">Normal nivå</span>`;
+    }
+
+    // Mini-historik-spark om vi har det
+    let historyHtml = '';
+    if (nav.history && nav.history.length >= 3) {
+        const hist = nav.history;
+        const min = Math.min(...hist.map(h => h.discount_pct));
+        const max = Math.max(...hist.map(h => h.discount_pct));
+        const range = max - min || 1;
+        const w = 320, h = 50, pad = 4;
+        const step = (w - 2*pad) / (hist.length - 1);
+        const pts = hist.map((p, i) => {
+            const x = pad + i * step;
+            const y = h - pad - ((p.discount_pct - min) / range) * (h - 2*pad);
+            return `${x},${y}`;
+        });
+        // Baseline för 0% (om syns i intervallet)
+        const baselineY = (min < 0 && max > 0) ? h - pad - ((0 - min) / range) * (h - 2*pad) : null;
+
+        historyHtml = `
+        <div style="margin-top:12px;padding:10px;background:rgba(255,255,255,0.5);border-radius:10px">
+            <div style="font-size:10px;font-weight:700;color:${color};text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px">
+                Historisk substansrabatt (${hist[0].year}-${hist[hist.length-1].year})
+            </div>
+            <svg viewBox="0 0 ${w} ${h}" style="width:100%;height:${h}px">
+                ${baselineY != null ? `<line x1="0" y1="${baselineY}" x2="${w}" y2="${baselineY}" stroke="${color}" stroke-dasharray="2,2" opacity="0.4"/>` : ''}
+                <polyline points="${pts.join(' ')}" fill="none" stroke="${color}" stroke-width="2"/>
+                ${hist.map((p, i) => {
+                    const x = pad + i * step;
+                    const y = h - pad - ((p.discount_pct - min) / range) * (h - 2*pad);
+                    return `<circle cx="${x}" cy="${y}" r="2" fill="${color}"/>`;
+                }).join('')}
+            </svg>
+            <div style="display:flex;justify-content:space-between;font-size:11px;margin-top:6px;color:${color}">
+                <span><strong>5y snitt:</strong> ${nav.avg_discount_5y > 0 ? '+' : ''}${nav.avg_discount_5y}%</span>
+                <span><strong>10y snitt:</strong> ${nav.avg_discount_10y > 0 ? '+' : ''}${nav.avg_discount_10y}%</span>
+                <span><strong>Min/Max:</strong> ${min.toFixed(0)}%/+${max.toFixed(0)}%</span>
+            </div>
+        </div>`;
+    }
+
+    return `<div class="drawer-section" style="background:${bg};border-radius:14px;padding:16px 18px;margin-bottom:14px">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:14px;margin-bottom:8px">
+            <div>
+                <div class="drawer-section-title" style="margin:0;color:${color}">
+                    <span class="material-symbols-outlined" style="font-size:14px;vertical-align:middle">${icon}</span>
+                    Investmentbolag — ${label}
+                </div>
+                <div style="font-size:11px;color:${color};opacity:0.8;margin-top:2px">
+                    Värderas mot Net Asset Value (NAV), inte intjäning
+                </div>
+            </div>
+            ${assessmentBadge}
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:10px">
+            <div style="background:rgba(255,255,255,0.6);padding:10px;border-radius:8px">
+                <div style="font-size:10px;text-transform:uppercase;font-weight:700;color:${color};opacity:0.7">NAV/aktie</div>
+                <div style="font-size:18px;font-weight:800;color:${color}">${nav.nav_per_share} ${nav.currency}</div>
+            </div>
+            <div style="background:rgba(255,255,255,0.6);padding:10px;border-radius:8px">
+                <div style="font-size:10px;text-transform:uppercase;font-weight:700;color:${color};opacity:0.7">Pris/aktie</div>
+                <div style="font-size:18px;font-weight:800;color:${color}">${nav.current_price} ${nav.currency}</div>
+            </div>
+            <div style="background:rgba(255,255,255,0.6);padding:10px;border-radius:8px">
+                <div style="font-size:10px;text-transform:uppercase;font-weight:700;color:${color};opacity:0.7">${disc < 0 ? 'Rabatt' : 'Premium'}</div>
+                <div style="font-size:18px;font-weight:800;color:${color}">${disc > 0 ? '+' : ''}${disc}%</div>
+            </div>
+        </div>
+        ${historyHtml}
+        <div style="font-size:10px;color:${color};opacity:0.7;margin-top:10px;font-style:italic;line-height:1.4">
+            ⓘ ${nav.note} För investmentbolag är substansrabatt det primära värderingsmåttet
+            — kvartalsvinst/FCF speglar inte värdet. Klassiska modeller (P/E, EV/EBIT, Magic Formula)
+            är ej tillämpliga och visas inte.
+        </div>
+    </div>`;
+}
+
 function openDrawer(s) {
     if (!s) return;
     _currentDrawerStock = s;
@@ -3700,6 +3810,9 @@ function openDrawer(s) {
         techItems.map(([l,v,fmt]) => `<div class="drawer-item"><div class="drawer-item-label">${l}</div><div class="drawer-item-value">${fmt(v)}</div></div>`).join('')
     }</div></div>`;
 
+    // ── INVESTMENTBOLAG-PANEL (NAV/substansrabatt) — visas FÖRST om relevant ──
+    html += renderInvestmentCompanySection(s);
+
     // ── BOKMODELLER (Graham, Buffett, Lynch, Greenblatt, Klarman, Taleb, Kelly m.fl.) ──
     html += renderBookModelSection(s);
 
@@ -3707,7 +3820,10 @@ function openDrawer(s) {
     html += renderBuyZoneSection(s);
 
     // ── VINST/TILLVÄXT PER KVARTAL (Avanza har ej FCF — vi visar nettoresultat) ──
-    html += renderQuarterlyTrendsSection(s);
+    // Skippa för investmentbolag — kvartalsvinst speglar inte värdet (NAV är primärt)
+    if (!s.is_investment_company) {
+        html += renderQuarterlyTrendsSection(s);
+    }
 
     // ── 10-års HISTORIK (Avanza /analysis) ──
     html += renderHistoricalSection(s);

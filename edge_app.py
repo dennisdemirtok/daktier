@@ -667,6 +667,38 @@ def api_stock_detail(orderbook_id):
                         d["f_score"] = fscore
                 except Exception as e:
                     print(f"[stock detail] f-score: {e}", file=sys.stderr)
+            # v2.4 — Investmentbolag-detektion + NAV/substansrabatt
+            try:
+                from edge_db import (_is_investment_company,
+                                     compute_investment_company_nav,
+                                     get_investment_company_nav_history)
+                if _is_investment_company(d):
+                    d["is_investment_company"] = True
+                    nav_now = compute_investment_company_nav(d)
+                    if nav_now:
+                        d["nav_data"] = nav_now
+                        # Historisk substansrabatt (5y + 10y avg)
+                        if d.get("isin"):
+                            hist = get_investment_company_nav_history(db, d["isin"], max_years=10)
+                            if hist:
+                                discounts = [h["discount_pct"] for h in hist if h.get("discount_pct") is not None]
+                                if discounts:
+                                    nav_now["history"] = hist
+                                    nav_now["avg_discount_5y"] = round(
+                                        sum(discounts[-5:]) / max(len(discounts[-5:]), 1), 1)
+                                    nav_now["avg_discount_10y"] = round(
+                                        sum(discounts) / len(discounts), 1)
+                                    # Värderingsbedömning relativt historiken
+                                    cur_disc = nav_now["discount_pct"]
+                                    avg_5y = nav_now["avg_discount_5y"]
+                                    if cur_disc < avg_5y - 5:
+                                        nav_now["assessment"] = "attraktiv"  # större rabatt än normalt
+                                    elif cur_disc > avg_5y + 5:
+                                        nav_now["assessment"] = "dyr"
+                                    else:
+                                        nav_now["assessment"] = "neutral"
+            except Exception as e:
+                print(f"[stock detail] investment-co: {e}", file=sys.stderr)
         except Exception as e:
             print(f"[stock detail] hist failed: {e}", file=sys.stderr)
         # Berika med book composite så drawer kan visa det

@@ -3057,6 +3057,146 @@ _SECTOR_KEYWORDS = {
 }
 
 
+# Kända svenska investmentbolag — utan dessa missar generisk klassificering
+# deras kärnvärdering (NAV, substansrabatt). Lista verifierad mot OMXS30 + small/mid cap.
+_INVESTMENT_COMPANY_NAMES = {
+    # Large cap
+    "investor", "industrivärden", "industrivarden", "kinnevik", "lundbergs",
+    "lundbergföretagen", "lundbergforetagen", "latour", "ratos",
+    # Mid cap
+    "bure equity", "bure", "creades", "svolder", "öresund", "oresund",
+    "traction", "spiltan", "vnv global", "vnv", "fastpartner",
+    # Small cap / mer specialiserade
+    "havsfrun", "håg & co", "naxs", "indutrade",  # gränsfall
+    "pierce group", "linc",
+}
+
+
+def _is_investment_company(s):
+    """Detektera investmentbolag via namn + struktur.
+
+    Investmentbolag har låg "operativ" omsättning och stort eget kapital
+    (= portföljvärdet). Generisk Magic Formula/FCF-modell missar deras
+    kärnvärdering (NAV/substansrabatt).
+    """
+    name = (s.get("name") or "").strip().lower()
+    short_name = (s.get("short_name") or "").strip().lower()
+
+    # Direktmatch på kända namn
+    for known in _INVESTMENT_COMPANY_NAMES:
+        if known in name or known in short_name:
+            return True
+
+    # Strukturell signal: revenue/total_equity < 5% (typisk investmentbolagskvot)
+    revenues = s.get("sales") or 0
+    bd = s.get("_borsdata_latest") or {}
+    if not revenues:
+        revenues = bd.get("revenues") or 0
+    total_equity = bd.get("total_equity") or s.get("total_assets", 0) - s.get("total_liabilities", 0)
+    if total_equity and revenues and abs(revenues) / abs(total_equity) < 0.05:
+        # Plus: namnet innehåller typiskt investmentbolagsord
+        if any(k in name for k in ("invest", "equity", "holding", "förvaltning")):
+            return True
+
+    return False
+
+
+def compute_investment_company_nav(s):
+    """Beräkna NAV-relaterad data för investmentbolag.
+
+    NAV per aktie = Eget kapital / antal aktier (proxy — riktig NAV inkluderar
+    portfölj-marknadsvärde justerat för latent skatt, men eget kapital är en
+    bra approximation för redovisat substansvärde).
+
+    Returnerar dict eller None om data saknas:
+        {
+            "nav_per_share": float (i nativ valuta),
+            "current_price": float,
+            "discount_pct": float (negativ = rabatt, positiv = premium),
+            "interpretation": "rabatt" | "premium" | "neutral",
+            "data_quality": str,
+        }
+    """
+    bd = s.get("_borsdata_latest") or {}
+    total_equity = bd.get("total_equity")
+    shares = bd.get("shares_outstanding")
+    price = s.get("last_price")
+    currency = s.get("currency") or bd.get("currency") or "SEK"
+
+    if not total_equity or not shares or shares <= 0 or not price:
+        return None
+
+    nav = total_equity / shares
+    if nav <= 0:
+        return None
+
+    discount = (price - nav) / nav  # positiv = premium, negativ = rabatt
+    if discount < -0.02:
+        interp = "rabatt"
+    elif discount > 0.02:
+        interp = "premium"
+    else:
+        interp = "neutral"
+
+    return {
+        "nav_per_share": round(nav, 2),
+        "current_price": round(price, 2),
+        "currency": currency,
+        "discount_pct": round(discount * 100, 1),
+        "interpretation": interp,
+        "data_quality": "borsdata_latest_quarter",
+        "note": ("NAV approximerat från eget kapital. Riktig NAV justerar "
+                 "för marknadsvärde av onoterade innehav + latent skatt."),
+    }
+
+
+def get_investment_company_nav_history(db, isin, max_years=10):
+    """Historisk NAV-rabatt/premium per år för investmentbolag.
+
+    Kombinerar Börsdatas årsrapport (eget kapital + aktier) med vår
+    prishistorik för att räkna rabatt år för år.
+
+    Returnerar list[{year, nav, price, discount_pct}] sorterad ASC eller [].
+    """
+    if not isin:
+        return []
+    ph = _ph()
+    try:
+        # Hämta år-rapporter (eget kapital + shares)
+        rows = _fetchall(db,
+            f"SELECT period_year, total_equity, shares_outstanding, "
+            f"stock_price_avg, stock_price_high, stock_price_low "
+            f"FROM borsdata_reports "
+            f"WHERE isin = {ph} AND report_type = {ph} "
+            f"ORDER BY period_year DESC LIMIT {ph}",
+            (isin, "year", max_years))
+    except Exception:
+        return []
+    if not rows:
+        return []
+
+    out = []
+    for r in rows:
+        rd = dict(r)
+        eq = rd.get("total_equity")
+        sh = rd.get("shares_outstanding")
+        avg_price = rd.get("stock_price_avg")
+        if not eq or not sh or sh <= 0 or not avg_price:
+            continue
+        nav = eq / sh
+        if nav <= 0:
+            continue
+        discount = (avg_price - nav) / nav
+        out.append({
+            "year": rd.get("period_year"),
+            "nav": round(nav, 2),
+            "price_avg": round(avg_price, 2),
+            "discount_pct": round(discount * 100, 1),
+        })
+    out.sort(key=lambda x: x.get("year") or 0)
+    return out
+
+
 def _classify_stock(s):
     """Modul A — klassificerar ett bolag i 4 dimensioner.
 
@@ -3104,6 +3244,14 @@ def _classify_stock(s):
     if bd_sector_name and bd_sector_name in _BORSDATA_SECTOR_MAP:
         sector = _BORSDATA_SECTOR_MAP[bd_sector_name]
         sector_source = "borsdata"
+
+    # ─── Investmentbolag-detektion (override standard sector) ───
+    # Investmentbolag inom Finance-sektorn har egen värderingslogik:
+    # NAV/substansrabatt istället för EV/EBIT, FCF Yield, Magic Formula.
+    # Detta måste detekteras FÖRE applicability-matrix kör.
+    if _is_investment_company(s):
+        sector = "investment_company"
+        sector_source = "investment_company_detection"
 
     # Fallback: keyword-matchning
     if not sector:
@@ -3204,12 +3352,13 @@ def _model_applicability(classification):
     is_reit = sector == "real_estate"      # v2.3 Patch 8: REIT-routning
     is_insurance = sector == "insurance"   # v2.3 Patch 8
     is_utility = sector == "utilities"     # v2.3 Patch 8
+    is_investment_co = sector == "investment_company"  # v2.4: NAV-driven
     is_cyclical = growth == "cyclical"
     is_turnaround = quality == "turnaround"
     is_asset_light = asset == "asset_light"
 
     # Sektorer där FCF inte är primärt mått (book value/NAV/dividend driven)
-    is_book_value_driven = is_bank or is_reit or is_insurance
+    is_book_value_driven = is_bank or is_reit or is_insurance or is_investment_co
 
     a = {
         # Bok-modeller (v1)
