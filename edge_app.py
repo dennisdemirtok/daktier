@@ -5871,16 +5871,51 @@ def _startup():
     except Exception as e:
         print(f"  ⚠ Kunde inte starta warmup: {e}", flush=True)
 
-# Fail-safe: om _startup kraschar (DB-migration-fel etc) ska Flask ändå
-# kunna boota så Railway healthcheck passerar. Sync-funktioner kan
-# triggas manuellt via /api/borsdata/sync-* om något gick snett.
+# _startup() körs i bakgrundstråd så gunicorn-workers kan svara på
+# healthchecks omedelbart. Tidigare kördes det synkront vid import,
+# vilket innebar att tunga ops (migration, schema-checks, advisory-locks)
+# kunde överskrida gunicorn timeout (120s) och worker dödades med SIGKILL
+# i en evig loop. Nu boots:ar Flask direkt och _startup() körs parallellt.
+def _run_startup_in_background():
+    try:
+        _startup()
+    except Exception as _startup_err:
+        import traceback
+        print(f"[STARTUP] Fel vid uppstart (Flask kör ändå): {_startup_err}",
+              file=sys.stderr, flush=True)
+        traceback.print_exc()
+
+# En av de 3 gunicorn-workers ska köra startup. Använd en fil-lås så
+# bara den första som startar gör jobbet (de andra skippar).
+_STARTUP_FLAG = "/tmp/.daktier_startup_lock"
 try:
-    _startup()
-except Exception as _startup_err:
-    import traceback
-    print(f"[STARTUP] Fel vid uppstart (Flask startar ändå): {_startup_err}",
-          file=sys.stderr, flush=True)
-    traceback.print_exc()
+    # Atomic create-or-fail
+    fd = os.open(_STARTUP_FLAG, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+    os.write(fd, str(datetime.now()).encode())
+    os.close(fd)
+    _is_startup_winner = True
+except FileExistsError:
+    # Fil-lock kan vara stale från tidigare deploy — kolla ålder
+    try:
+        age_sec = _time.time() - os.path.getmtime(_STARTUP_FLAG)
+        if age_sec > 600:  # 10 min gammal = stale, försök igen
+            os.remove(_STARTUP_FLAG)
+            fd = os.open(_STARTUP_FLAG, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+            os.write(fd, str(datetime.now()).encode())
+            os.close(fd)
+            _is_startup_winner = True
+        else:
+            _is_startup_winner = False
+    except Exception:
+        _is_startup_winner = False
+except Exception:
+    _is_startup_winner = True  # vid annat fel, kör ändå
+
+if _is_startup_winner:
+    threading.Thread(target=_run_startup_in_background, daemon=True).start()
+    print("[STARTUP] Bakgrundstråd för _startup() initierad", flush=True)
+else:
+    print("[STARTUP] Skippas (annan worker kör startup)", flush=True)
 
 # ── Main (direct execution only) ─────────────────────────
 

@@ -955,33 +955,45 @@ def _ensure_borsdata_columns(db):
     ]
 
     if is_pg:
-        # Advisory lock så bara EN worker kör migration åt gången.
-        # Annars deadlockar gunicorn-workers när de bootar parallellt
-        # och försöker ALTER TABLE samtidigt.
-        ADV_LOCK_KEY = 8723091  # godtyckligt unikt int för Börsdata-migrationen
+        # try_advisory_lock istället för blocking — om en annan worker har låset
+        # skippar vi bara migrationen (den körs av vinnaren ändå).
+        # pg_advisory_lock kan blockera för alltid om en tidigare session dog
+        # med låset hållit (i Railways pool kan låset hänga kvar).
+        ADV_LOCK_KEY = 8723091
         cur = db.cursor()
+        got_lock = False
         try:
-            cur.execute(f"SELECT pg_advisory_lock({ADV_LOCK_KEY})")
-            db.commit()  # commit för att frigöra ev. tidigare transaktion
+            cur.execute(f"SELECT pg_try_advisory_lock({ADV_LOCK_KEY})")
+            row = cur.fetchone()
+            db.commit()
+            try:
+                got_lock = bool(row[0] if isinstance(row, tuple) else row.get("pg_try_advisory_lock", False))
+            except (KeyError, IndexError, AttributeError):
+                got_lock = False
+            if not got_lock:
+                # Annan worker kör migration just nu — skip
+                try: cur.close()
+                except Exception: pass
+                return
             for table, cols in [("borsdata_instrument_map", map_cols),
                                 ("borsdata_reports", reports_cols)]:
                 for name, typ in cols:
                     try:
                         cur.execute(f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {name} {typ}")
-                        db.commit()  # commit per ALTER så fel inte cascade-aborterar
+                        db.commit()
                     except Exception as e:
                         try: db.rollback()
                         except Exception: pass
-                        # Kolumnen finns sannolikt redan — det är ok
                         msg = str(e).lower()
                         if "already exists" not in msg and "duplicate column" not in msg:
                             print(f"[borsdata migration PG] {table}.{name}: {e}")
         finally:
-            try:
-                cur.execute(f"SELECT pg_advisory_unlock({ADV_LOCK_KEY})")
-                db.commit()
-            except Exception:
-                pass
+            if got_lock:
+                try:
+                    cur.execute(f"SELECT pg_advisory_unlock({ADV_LOCK_KEY})")
+                    db.commit()
+                except Exception:
+                    pass
             try: cur.close()
             except Exception: pass
     else:
@@ -1020,12 +1032,22 @@ def _ensure_smart_score_columns(db):
     ]
 
     if is_pg:
-        # Advisory lock så workers serialiseras
+        # try-lock istället för blocking. Hängande lås i pool är dödskäl annars.
         ADV_LOCK_KEY = 8723092
         cur = db.cursor()
+        got_lock = False
         try:
-            cur.execute(f"SELECT pg_advisory_lock({ADV_LOCK_KEY})")
+            cur.execute(f"SELECT pg_try_advisory_lock({ADV_LOCK_KEY})")
+            row = cur.fetchone()
             db.commit()
+            try:
+                got_lock = bool(row[0] if isinstance(row, tuple) else row.get("pg_try_advisory_lock", False))
+            except (KeyError, IndexError, AttributeError):
+                got_lock = False
+            if not got_lock:
+                try: cur.close()
+                except Exception: pass
+                return
             for name, typ in cols:
                 try:
                     cur.execute(f"ALTER TABLE stocks ADD COLUMN IF NOT EXISTS {name} {typ}")
@@ -1049,11 +1071,12 @@ def _ensure_smart_score_columns(db):
                     except Exception: pass
                     print(f"[v2 idx] PG: {e}")
         finally:
-            try:
-                cur.execute(f"SELECT pg_advisory_unlock({ADV_LOCK_KEY})")
-                db.commit()
-            except Exception:
-                pass
+            if got_lock:
+                try:
+                    cur.execute(f"SELECT pg_advisory_unlock({ADV_LOCK_KEY})")
+                    db.commit()
+                except Exception:
+                    pass
             try: cur.close()
             except Exception: pass
     else:
