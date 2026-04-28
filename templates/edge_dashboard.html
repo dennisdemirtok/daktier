@@ -3478,6 +3478,87 @@ function renderFScoreSection(s) {
     </div>`;
 }
 
+function renderRunwaySection(s) {
+    const r = s.runway;
+    if (!r) return '';
+
+    // Färg baserat på status
+    const statusMap = {
+        comfortable: { bg: 'linear-gradient(135deg,#d1fae5,#a7f3d0)', color: '#065f46', label: 'Bekväm', icon: 'task_alt' },
+        moderate:    { bg: 'linear-gradient(135deg,#fef3c7,#fde68a)', color: '#92400e', label: 'Moderat', icon: 'schedule' },
+        tight:       { bg: 'linear-gradient(135deg,#fed7aa,#fb923c)', color: '#9a3412', label: 'Tight', icon: 'warning' },
+        critical:    { bg: 'linear-gradient(135deg,#fee2e2,#fca5a5)', color: '#7f1d1d', label: 'Kritisk', icon: 'error' },
+        unknown:     { bg: 'linear-gradient(135deg,#f3f4f6,#e5e7eb)', color: '#374151', label: 'Okänd', icon: 'help' },
+    };
+    const sty = statusMap[r.runway_status] || statusMap.unknown;
+
+    // Format cash i miljoner
+    const fmtM = v => {
+        if (v == null) return '–';
+        const a = Math.abs(v);
+        if (a >= 1e9) return (v/1e9).toFixed(2) + ' Md';
+        if (a >= 1e6) return (v/1e6).toFixed(0) + ' M';
+        return v.toFixed(0);
+    };
+
+    const months = r.runway_months;
+    let runwayDisplay = '–';
+    if (months != null) {
+        if (months >= 24) {
+            runwayDisplay = `${(months/12).toFixed(1)} år`;
+        } else {
+            runwayDisplay = `${months.toFixed(0)} mån`;
+        }
+    }
+
+    // Kontextuell tolkning
+    let interpretation = '';
+    if (r.runway_status === 'critical') {
+        interpretation = '⚠ Sannolikt kapitalbehov inom 6 månader → utspädningsrisk akut.';
+    } else if (r.runway_status === 'tight') {
+        interpretation = 'Cashbehov inom 12 mån. Bevaka emissionsignaler.';
+    } else if (r.runway_status === 'moderate') {
+        interpretation = '12-24 månader att exekvera mot break-even innan refinansieringsbehov.';
+    } else if (r.runway_status === 'comfortable') {
+        interpretation = 'God runway. Mindre tidspressad turnaround.';
+    }
+
+    return `<div class="drawer-section" style="background:${sty.bg};border-radius:12px;padding:14px 16px;margin-bottom:12px">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:8px">
+            <div>
+                <div class="drawer-section-title" style="margin:0;color:${sty.color}">
+                    <span class="material-symbols-outlined" style="font-size:14px;vertical-align:middle">${sty.icon}</span>
+                    Cash Runway
+                </div>
+                <div style="font-size:11px;color:${sty.color};opacity:0.8;margin-top:2px">
+                    Bolaget bränner cash — kritisk siffra
+                </div>
+            </div>
+            <span style="background:rgba(0,0,0,0.08);color:${sty.color};padding:3px 10px;border-radius:12px;font-size:11px;font-weight:700">
+                ${sty.label}
+            </span>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:10px">
+            <div style="background:rgba(255,255,255,0.6);padding:10px;border-radius:8px">
+                <div style="font-size:10px;text-transform:uppercase;font-weight:700;color:${sty.color};opacity:0.7">Cash</div>
+                <div style="font-size:18px;font-weight:800;color:${sty.color}">${fmtM(r.cash)} ${r.currency || ''}</div>
+            </div>
+            <div style="background:rgba(255,255,255,0.6);padding:10px;border-radius:8px">
+                <div style="font-size:10px;text-transform:uppercase;font-weight:700;color:${sty.color};opacity:0.7">Q-burn</div>
+                <div style="font-size:18px;font-weight:800;color:${sty.color}">${fmtM(r.quarterly_burn)}</div>
+            </div>
+            <div style="background:rgba(255,255,255,0.6);padding:10px;border-radius:8px">
+                <div style="font-size:10px;text-transform:uppercase;font-weight:700;color:${sty.color};opacity:0.7">Runway</div>
+                <div style="font-size:18px;font-weight:800;color:${sty.color}">${runwayDisplay}</div>
+            </div>
+        </div>
+        ${interpretation ? `<div style="font-size:11px;color:${sty.color};margin-top:10px;line-height:1.4">${interpretation}</div>` : ''}
+        <div style="font-size:9px;color:${sty.color};opacity:0.5;margin-top:6px">
+            Källa: ${r.data_source} (${r.year})
+        </div>
+    </div>`;
+}
+
 function renderMacroOverlay(s) {
     const m = s.macro_context;
     if (!m) return '';
@@ -3797,6 +3878,8 @@ function openDrawer(s) {
             quality_fair: 'linear-gradient(135deg,#e0e7ff,#a5b4fc)',
             balanced_value: 'linear-gradient(135deg,#d1fae5,#86efac)',
             balanced_quality: 'linear-gradient(135deg,#e0e7ff,#a5b4fc)',
+            quality_under_pressure: 'linear-gradient(135deg,#fed7aa,#fdba74)',
+            early_stage_turnaround: 'linear-gradient(135deg,#fce7f3,#f9a8d4)',
             mixed_signals: 'linear-gradient(135deg,#f3f4f6,#d1d5db)',
             momentum_trap: 'linear-gradient(135deg,#fee2e2,#fca5a5)',
             value_destruction: 'linear-gradient(135deg,#fee2e2,#f87171)',
@@ -4095,16 +4178,36 @@ function openDrawer(s) {
     // ── FUNDAMENTALS ──
     const fmtV = (v,d=1) => v != null ? v.toFixed(d) : '-';
     const fmtM = v => v != null ? (Math.abs(v)>1e9 ? (v/1e9).toFixed(1)+' Md' : (v/1e6).toFixed(0)+' M') : '-';
+    // Negativa multiplar är meningslösa — visa "N/A" med varför
+    const fmtPosMult = (v, d) => {
+        if (v == null) return '-';
+        if (v <= 0) return `<span style="color:var(--text-muted);font-style:italic">N/A — neg.</span>`;
+        return v.toFixed(d != null ? d : 1);
+    };
+    // ND/EBITDA: negativ = (a) cash > debt = skuldfritt, ELLER (b) negativ EBITDA = meningslöst
+    const fmtNdEbitda = (s) => {
+        const v = s.net_debt_ebitda_ratio;
+        if (v == null) return '-';
+        const netDebt = (s._borsdata_latest && s._borsdata_latest.net_debt != null)
+            ? s._borsdata_latest.net_debt : null;
+        if (v < 0) {
+            if (netDebt != null && netDebt < 0) {
+                return `<span title="Cash > Debt (skuldfritt)">Skuldfritt</span>`;
+            }
+            return `<span style="color:var(--text-muted);font-style:italic" title="Negativt EBITDA">N/A — neg. EBITDA</span>`;
+        }
+        return v.toFixed(1);
+    };
     const fundItems = [
-        ['P/E', s.pe_ratio, v => fmtV(v,1)],
-        ['P/B', s.price_book_ratio, v => fmtV(v,2)],
-        ['EV/EBIT', s.ev_ebit_ratio, v => fmtV(v,1)],
+        ['P/E', s.pe_ratio, v => fmtPosMult(v, 1)],
+        ['P/B', s.price_book_ratio, v => fmtPosMult(v, 2)],
+        ['EV/EBIT', s.ev_ebit_ratio, v => fmtPosMult(v, 1)],
         ['Direktavk.', s.direct_yield, v => v!=null ? fmtV(v*100,1)+'%' : '-'],
         ['ROE', s.return_on_equity, v => v!=null ? fmtV(v*100,1)+'%' : '-'],
         ['ROA', s.return_on_assets, v => v!=null ? fmtV(v*100,1)+'%' : '-'],
         ['ROCE', s.return_on_capital_employed, v => v!=null ? fmtV(v*100,1)+'%' : '-'],
         ['D/E', s.debt_to_equity_ratio, v => fmtV(v,2)],
-        ['ND/EBITDA', s.net_debt_ebitda_ratio, v => fmtV(v,1)],
+        ['ND/EBITDA', s.net_debt_ebitda_ratio, () => fmtNdEbitda(s)],
         ['EPS', s.eps, v => fmtV(v,2)],
         ['OCF', s.operating_cash_flow, v => fmtM(v)],
         ['Nettoresultat', s.net_profit, v => fmtM(v)],
@@ -4136,6 +4239,9 @@ function openDrawer(s) {
     html += `<div class="drawer-section"><div class="drawer-section-title">Tekniska indikatorer</div><div class="drawer-grid">${
         techItems.map(([l,v,fmt]) => `<div class="drawer-item"><div class="drawer-item-label">${l}</div><div class="drawer-item-value">${fmt(v)}</div></div>`).join('')
     }</div></div>`;
+
+    // ── RUNWAY (för förlustbolag — kritisk siffra) ──
+    html += renderRunwaySection(s);
 
     // ── MACRO-OVERLAY (10y-ränta + sektor-relevans) ──
     html += renderMacroOverlay(s);

@@ -3033,7 +3033,13 @@ _SECTOR_KEYWORDS = {
              "gaming", "esport", "microsoft", "apple", "alphabet",
              "google", "meta", "amazon", "nvidia", "tesla", "netflix",
              "salesforce", "oracle", "adobe", "intel", "amd", "arm ",
-             "spotify", "klarna", "ericsson", "evolution"],
+             "spotify", "klarna", "ericsson", "evolution",
+             # Halvledare / photonics / RF — separat undersektor
+             "semiconductor", "semiconductors", "halvledar", "photonic",
+             "fotonik", "silicon", "rf semi", "wafer", "foundry",
+             "sivers", "fingerprint", "axis", "tobii", "mycronic",
+             # Andra tech-undersektorer
+             "automation", "robot", "iot", "5g", "cellular", "connectivity"],
     "financials": ["bank", "banken", "bancorp", "financial", "finansiell",
                    "holding", "investor", "insurance", "försäkring", "insurance",
                    "asset management", "kreditmark", "spar", "savings"],
@@ -3878,6 +3884,112 @@ def get_borsdata_history_as_annual(db, isin, max_years=10):
     # Sortera ASC på år (samma som Avanza-funktionen)
     out.sort(key=lambda x: x.get("financial_year") or 0)
     return out
+
+
+def compute_burn_rate_runway(db, isin, current_eps_neg=False):
+    """Beräkna burn rate och cash runway för förlustbolag.
+
+    För Sivers, Pirate Studios m.fl. där bolaget bränner cash är detta
+    den viktigaste siffran — visar om de har 6 månader eller 2 år kvar
+    innan de behöver ta in nytt kapital (= utspädning).
+
+    Returnerar dict eller None om data saknas:
+        {
+            "cash": float,                    # senaste rapporterade cash
+            "currency": str,
+            "ttm_burn": float,                # rolling 4Q operating CF (om negativt)
+            "quarterly_burn": float,          # ttm_burn / 4
+            "runway_months": float,           # cash / quarterly_burn × 3
+            "runway_status": "comfortable"|"tight"|"critical",
+            "year": int,                      # senaste rapport-år
+            "data_source": str,
+        }
+    Returnerar None om:
+        - Bolaget INTE bränner cash (positiv OCF)
+        - Cash-data saknas
+    """
+    if not isin:
+        return None
+    ph = _ph()
+    try:
+        # Hämta senaste 4 kvartalsrapporter för att räkna TTM operativt kassaflöde
+        rows = _fetchall(db,
+            f"SELECT period_year, period_q, operating_cash_flow, "
+            f"cash_and_equivalents, currency "
+            f"FROM borsdata_reports "
+            f"WHERE isin = {ph} AND report_type = {ph} "
+            f"ORDER BY period_year DESC, period_q DESC LIMIT {ph}",
+            (isin, "quarter", 4))
+    except Exception:
+        return None
+    if not rows or len(rows) < 2:
+        # Fallback: prova årsrapport
+        try:
+            rows = _fetchall(db,
+                f"SELECT period_year, operating_cash_flow, cash_and_equivalents, currency "
+                f"FROM borsdata_reports WHERE isin = {ph} AND report_type = {ph} "
+                f"ORDER BY period_year DESC LIMIT 1",
+                (isin, "year"))
+        except Exception:
+            return None
+        if not rows:
+            return None
+        r = dict(rows[0])
+        ttm_burn = r.get("operating_cash_flow") or 0
+        cash = r.get("cash_and_equivalents")
+        if not cash or cash <= 0:
+            return None
+        if ttm_burn >= 0:
+            return None  # bolaget bränner inte cash
+        quarterly_burn = abs(ttm_burn) / 4
+        runway_months = (cash / quarterly_burn) * 3 if quarterly_burn > 0 else None
+        return _runway_dict(cash, ttm_burn, quarterly_burn, runway_months,
+                            r.get("currency", "SEK"), r.get("period_year"), "annual")
+
+    # Räkna TTM = sum av senaste 4 kvartal
+    quarterly_data = [dict(r) for r in rows]
+    ocfs = [r.get("operating_cash_flow") for r in quarterly_data
+            if r.get("operating_cash_flow") is not None]
+    if len(ocfs) < 2:
+        return None
+    ttm_burn = sum(ocfs)
+    if ttm_burn >= 0:
+        return None  # ej burner
+
+    # Senaste cash från senaste rapporten
+    latest = quarterly_data[0]
+    cash = latest.get("cash_and_equivalents")
+    if not cash or cash <= 0:
+        return None
+    quarterly_burn = abs(ttm_burn) / max(len(ocfs), 1)
+    runway_months = (cash / quarterly_burn) * 3 if quarterly_burn > 0 else None
+    return _runway_dict(cash, ttm_burn, quarterly_burn, runway_months,
+                        latest.get("currency", "SEK"), latest.get("period_year"),
+                        f"quarterly_ttm_{len(ocfs)}q")
+
+
+def _runway_dict(cash, ttm_burn, quarterly_burn, runway_months, currency, year, source):
+    """Hjälp-fn för burn-rate-output."""
+    if runway_months is None:
+        status = "unknown"
+    elif runway_months > 24:
+        status = "comfortable"
+    elif runway_months > 12:
+        status = "moderate"
+    elif runway_months > 6:
+        status = "tight"
+    else:
+        status = "critical"
+    return {
+        "cash": round(cash),
+        "currency": currency,
+        "ttm_burn": round(ttm_burn),
+        "quarterly_burn": round(quarterly_burn),
+        "runway_months": round(runway_months, 1) if runway_months is not None else None,
+        "runway_status": status,
+        "year": year,
+        "data_source": source,
+    }
 
 
 def compute_piotroski_fscore(db, isin):
@@ -5265,8 +5377,24 @@ def _score_book_models(s):
         and (s.get("return_on_capital_employed") or 0) > 0.10  # fortfarande lönsam
     )
 
+    # v2.4 — Early-stage turnaround / Pre-profitability speculative
+    # Bolag med flera förlustår + quality=turnaround = inte "balanserat kvalitetscase"
+    # utan spekulativt early-stage. Måste klassas korrekt så setup_label matchar slutsats.
+    is_turnaround_regime = classification.get("quality_regime") == "turnaround"
+    eps_loss_years = 0
+    try:
+        ctx = s.get("_hist") or {}
+        eps_loss_years = ctx.get("eps_loss_years", 0) or 0
+    except Exception:
+        pass
+    # Också: nuvarande EPS negativ + flera förlustår
+    current_eps_neg = (s.get("eps") or 0) < 0
+    multi_year_losses = eps_loss_years >= 3 or (current_eps_neg and is_turnaround_regime)
+
     if v_lvl == "?" or q_lvl == "?":
         setup, setup_label, setup_action = "incomplete_data", "🤷 Otillräcklig data", "Vänta på mer datatäckning"
+    elif multi_year_losses and is_turnaround_regime:
+        setup, setup_label, setup_action = "early_stage_turnaround", "🧪 Early-stage / Pre-profitability", "Spekulativ — max 0.05% position vid intresse"
     elif quality_under_pressure:
         setup, setup_label, setup_action = "quality_under_pressure", "🩺 Quality Under Pressure", "REDUCED_STARTER 15% + watchlist på katalysator"
     elif v_lvl == "high" and q_lvl == "high" and _hi(m_lvl):
@@ -5329,6 +5457,7 @@ def _score_book_models(s):
         "deep_value": 1.2,
         "quality_full_price": 1.0,
         "quality_under_pressure": 0.6,  # v2.3 Patch 5 — försiktig + watchlist
+        "early_stage_turnaround": 0.05, # v2.4 — spekulativ pre-profitability
         "quality_fair": 0.7,
         "balanced_value": 0.9,
         "balanced_quality": 0.8,

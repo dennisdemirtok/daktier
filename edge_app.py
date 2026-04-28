@@ -667,6 +667,15 @@ def api_stock_detail(orderbook_id):
                         d["f_score"] = fscore
                 except Exception as e:
                     print(f"[stock detail] f-score: {e}", file=sys.stderr)
+            # v2.4 — Burn rate / Runway för förlustbolag
+            if d.get("isin"):
+                try:
+                    from edge_db import compute_burn_rate_runway
+                    runway = compute_burn_rate_runway(db, d["isin"])
+                    if runway:
+                        d["runway"] = runway
+                except Exception as e:
+                    print(f"[stock detail] runway: {e}", file=sys.stderr)
             # v2.4 — Investmentbolag-detektion + NAV/substansrabatt
             try:
                 from edge_db import (_is_investment_company,
