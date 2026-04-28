@@ -4400,8 +4400,11 @@ function renderAgent() {
             </div>
         </div>` : '';
 
-    content.innerHTML = `
-    <style>
+    // CSS för agent-UI:t — sätts på kroppen via en statisk style-tag (idempotent)
+    if (!document.getElementById('agent-styles')) {
+        const styleEl = document.createElement('style');
+        styleEl.id = 'agent-styles';
+        styleEl.textContent = `
         .agent-wrap { display:flex; flex-direction:column; gap:14px; height:calc(100vh - 160px); max-width:920px; margin:0 auto; }
         .agent-hero { background:linear-gradient(135deg,#1e3a8a 0%,#3b82f6 50%,#8b5cf6 100%); color:white; border-radius:14px; padding:14px 18px; font-size:13px; box-shadow:0 4px 12px rgba(30,58,138,0.15); }
         .agent-hero strong { color:#fef3c7; }
@@ -4439,77 +4442,31 @@ function renderAgent() {
             box-shadow:0 0 0 0 rgba(251,191,36,0.5);
             animation:agent-pill-in 0.35s cubic-bezier(0.34,1.56,0.64,1), agent-pulse 1.8s ease-in-out infinite;
         }
-        .agent-tool-pill.done {
-            background:linear-gradient(135deg,#d1fae5,#a7f3d0); color:#065f46;
-            border-color:rgba(16,185,129,0.2);
-        }
-        .agent-tool-pill.error {
-            background:linear-gradient(135deg,#fee2e2,#fecaca); color:#991b1b;
-            border-color:rgba(220,38,38,0.2);
-        }
-        @keyframes agent-pill-in {
-            from { opacity:0; transform:translateY(4px) scale(0.9); }
-            to { opacity:1; transform:translateY(0) scale(1); }
-        }
-        @keyframes agent-pulse {
-            0%,100% { box-shadow:0 0 0 0 rgba(251,191,36,0); }
-            50% { box-shadow:0 0 0 4px rgba(251,191,36,0.2); }
-        }
-        @keyframes agent-spin {
-            to { transform:rotate(360deg); }
-        }
-        /* Chat history dropdown */
-        .agent-history-dropdown {
-            position:absolute; top:50px; right:0; width:340px; max-height:480px; overflow-y:auto;
-            background:white; border:1px solid var(--border); border-radius:12px;
-            box-shadow:0 8px 24px rgba(0,0,0,0.12); z-index:50;
-            animation:agent-pill-in 0.2s ease-out;
-        }
-        .agent-history-item {
-            padding:10px 14px; border-bottom:1px solid var(--border-light);
-            cursor:pointer; transition:background 0.12s;
-            display:flex; align-items:flex-start; gap:8px;
-        }
+        .agent-tool-pill.done { background:linear-gradient(135deg,#d1fae5,#a7f3d0); color:#065f46; border-color:rgba(16,185,129,0.2); }
+        .agent-tool-pill.error { background:linear-gradient(135deg,#fee2e2,#fecaca); color:#991b1b; border-color:rgba(220,38,38,0.2); }
+        @keyframes agent-pill-in { from { opacity:0; transform:translateY(4px) scale(0.9); } to { opacity:1; transform:translateY(0) scale(1); } }
+        @keyframes agent-pulse { 0%,100% { box-shadow:0 0 0 0 rgba(251,191,36,0); } 50% { box-shadow:0 0 0 4px rgba(251,191,36,0.2); } }
+        @keyframes agent-spin { to { transform:rotate(360deg); } }
+        .agent-history-dropdown { position:absolute; top:50px; right:0; width:340px; max-height:480px; overflow-y:auto; background:white; border:1px solid var(--border); border-radius:12px; box-shadow:0 8px 24px rgba(0,0,0,0.12); z-index:50; animation:agent-pill-in 0.2s ease-out; }
+        .agent-history-item { padding:10px 14px; border-bottom:1px solid var(--border-light); cursor:pointer; transition:background 0.12s; display:flex; align-items:flex-start; gap:8px; }
         .agent-history-item:hover { background:#f8fafc; }
         .agent-history-item.active { background:linear-gradient(135deg,#dbeafe,#eff6ff); }
         .agent-history-item-content { flex:1; min-width:0; }
         .agent-history-title { font-size:13px; font-weight:600; color:var(--text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
         .agent-history-meta { font-size:10.5px; color:var(--text-muted); margin-top:2px; }
-        .agent-history-del {
-            opacity:0; transition:opacity 0.15s; background:transparent; border:none; color:#dc2626;
-            cursor:pointer; padding:2px 6px; border-radius:6px; font-size:14px; line-height:1;
-        }
+        .agent-history-del { opacity:0; transition:opacity 0.15s; background:transparent; border:none; color:#dc2626; cursor:pointer; padding:2px 6px; border-radius:6px; font-size:14px; line-height:1; }
         .agent-history-item:hover .agent-history-del { opacity:0.6; }
         .agent-history-del:hover { opacity:1 !important; background:#fee2e2; }
         .agent-history-empty { padding:20px; text-align:center; color:var(--text-muted); font-size:12px; }
-        .agent-history-header {
-            padding:10px 14px; background:linear-gradient(135deg,#f8fafc,#f1f5f9);
-            border-bottom:1px solid var(--border); display:flex; justify-content:space-between; align-items:center;
-            position:sticky; top:0; z-index:1;
-        }
-        .agent-icon-btn {
-            background:white; border:1px solid var(--border); border-radius:10px;
-            padding:7px 12px; cursor:pointer; font-size:13px; font-weight:600;
-            display:inline-flex; align-items:center; gap:6px;
-            transition:all 0.15s;
-            color:var(--text);
-        }
+        .agent-history-header { padding:10px 14px; background:linear-gradient(135deg,#f8fafc,#f1f5f9); border-bottom:1px solid var(--border); display:flex; justify-content:space-between; align-items:center; position:sticky; top:0; z-index:1; }
+        .agent-icon-btn { background:white; border:1px solid var(--border); border-radius:10px; padding:7px 12px; cursor:pointer; font-size:13px; font-weight:600; display:inline-flex; align-items:center; gap:6px; transition:all 0.15s; color:var(--text); font-family:inherit; }
         .agent-icon-btn:hover { background:#f8fafc; border-color:#3b82f6; color:#1e40af; }
-        .agent-icon-btn .material-symbols-outlined {
-            font-variation-settings: 'FILL' 0, 'wght' 500, 'GRAD' 0, 'opsz' 20;
-        }
-        .agent-icon-btn.primary { background:linear-gradient(135deg,#3b82f6,#2563eb); color:white; border-color:transparent; }
-        .agent-icon-btn.primary:hover { box-shadow:0 4px 12px rgba(59,130,246,0.3); }
-        .agent-toolbar {
-            display:flex; gap:8px; align-items:center; justify-content:space-between;
-            padding-bottom:6px; position:relative;
-        }
+        .agent-icon-btn .material-symbols-outlined { font-variation-settings: 'FILL' 0, 'wght' 500, 'GRAD' 0, 'opsz' 20; }
+        .agent-toolbar { display:flex; gap:8px; align-items:center; justify-content:space-between; padding-bottom:6px; position:relative; }
         .agent-input-row { display:flex; gap:8px; align-items:flex-end; padding:10px; background:white; border:1px solid var(--border); border-radius:14px; box-shadow:0 1px 4px rgba(0,0,0,0.04); }
         .agent-textarea { flex:1; border:none; outline:none; resize:none; font-family:inherit; font-size:14px; padding:8px 6px; max-height:120px; }
         .agent-btn { background:linear-gradient(135deg,#1d4ed8,#3b82f6); color:white; border:none; padding:10px 22px; border-radius:10px; cursor:pointer; font-weight:600; font-family:inherit; }
         .agent-btn:disabled { opacity:0.4; cursor:not-allowed; }
-        .agent-icon-btn { background:#f3f4f6; border:none; padding:8px 10px; border-radius:8px; cursor:pointer; font-size:18px; }
-        .agent-icon-btn:hover { background:#e5e7eb; }
         .agent-examples { display:flex; flex-wrap:wrap; gap:6px; padding:6px 0 4px; }
         .agent-chip { background:white; border:1px solid var(--border); padding:7px 13px; border-radius:20px; font-size:12px; cursor:pointer; transition:all 0.15s; font-family:inherit; }
         .agent-chip:hover { background:linear-gradient(135deg,#1d4ed8,#3b82f6); color:white; border-color:#1d4ed8; transform:translateY(-1px); }
@@ -4517,7 +4474,6 @@ function renderAgent() {
         .agent-img-preview img { width:60px; height:60px; object-fit:cover; border-radius:8px; }
         .agent-img-meta { flex:1; }
         .agent-img-clear { background:none; border:none; color:var(--red); cursor:pointer; font-size:12px; padding:0; margin-top:4px; }
-        /* Markdown styling i agent-bubblor */
         .agent-md h1, .agent-md h2 { font-size:18px; font-weight:800; margin:14px 0 8px; color:#111827; border-bottom:1px solid #e5e7eb; padding-bottom:4px; }
         .agent-md h3 { font-size:15px; font-weight:700; margin:14px 0 6px; color:#1f2937; }
         .agent-md h4 { font-size:13px; font-weight:700; margin:10px 0 4px; color:#374151; text-transform:uppercase; letter-spacing:0.05em; }
@@ -4537,8 +4493,10 @@ function renderAgent() {
         .agent-md a { color:#2563eb; text-decoration:underline; }
         .agent-md em { font-style:italic; color:#6b7280; }
         .agent-foot { font-size:10.5px; color:var(--text-muted); margin-top:10px; padding-top:8px; border-top:1px dashed #e5e7eb; display:flex; gap:10px; flex-wrap:wrap; }
-        .agent-cancel-btn { background:#fee2e2; border:none; color:#991b1b; padding:8px 14px; border-radius:8px; cursor:pointer; font-size:12px; font-family:inherit; }
-    </style>
+        .agent-cancel-btn { background:#fee2e2; border:none; color:#991b1b; padding:8px 14px; border-radius:8px; cursor:pointer; font-size:12px; font-family:inherit; }`;
+        document.head.appendChild(styleEl);
+    }
+
     // Bygg history-dropdown
     const chats = _loadChats();
     const sortedChats = Object.values(chats).sort((a,b) => b.updated_at - a.updated_at);
