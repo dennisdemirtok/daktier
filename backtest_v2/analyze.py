@@ -261,10 +261,11 @@ def generate_report(csv_path, output_md=None):
     for s in setup_perf:
         a = s.get("mean_alpha_12m")
         c = s.get("mean_confidence")
+        c_str = f"{c:.2f}" if c is not None else "–"
         md.append(f"| {s['setup']} | {s['n']} | "
                   f"{(a or 0)*100:+.2f}% | "
                   f"{s['hit_rate_pct']:.1f}% | "
-                  f"{c:.2f if c is not None else 0} |")
+                  f"{c_str} |")
     md.append("")
     md.append("## 📈 Per rekommendation")
     md.append("| Rec | N | Medel-alfa | Hit rate |")

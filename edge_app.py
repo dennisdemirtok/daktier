@@ -3833,6 +3833,24 @@ def api_backtest_v2_leakage_results():
     return jsonify(lr)
 
 
+@app.route("/api/backtest-v2/regenerate-report", methods=["POST"])
+def api_backtest_v2_regenerate_report():
+    """Regenerera markdown-rapport från befintlig CSV (om analyze fixats)."""
+    state = _bt2_load()
+    csv_path = state.get("backtest_csv_path") or "/tmp/backtest_v2_results.csv"
+    if not os.path.exists(csv_path):
+        return jsonify({"error": "Ingen CSV att analysera"}), 404
+    try:
+        from backtest_v2.analyze import generate_report
+        md_path = csv_path.replace(".csv", "_report.md")
+        generate_report(csv_path, output_md=md_path)
+        _bt2_update(backtest_report_md_path=md_path, error=None)
+        return jsonify({"status": "regenerated", "md_path": md_path})
+    except Exception as e:
+        import traceback
+        return jsonify({"error": str(e), "traceback": traceback.format_exc()}), 500
+
+
 @app.route("/api/backtest-v2/debug")
 def api_backtest_v2_debug():
     """Returnera debug-info från senaste backtest-körning."""
