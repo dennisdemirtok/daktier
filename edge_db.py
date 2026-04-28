@@ -136,6 +136,29 @@ def _ph(count=1):
     return ",".join([p] * count)
 
 
+def _upsert_sql(table, columns, conflict_keys):
+    """Build INSERT OR REPLACE (SQLite) / INSERT ... ON CONFLICT (Postgres).
+
+    Args:
+        table: tabellnamn
+        columns: lista med kolumnnamn (ordnade enligt VALUES)
+        conflict_keys: lista med kolumner som utgör unique-key (för ON CONFLICT)
+
+    Returnerar SQL-sträng med korrekt placeholders för aktivt backend.
+    """
+    ph = _ph()
+    cols_csv = ", ".join(columns)
+    placeholders = ", ".join([ph] * len(columns))
+    if _use_postgres():
+        update_cols = [c for c in columns if c not in conflict_keys]
+        set_clause = ", ".join([f"{c} = EXCLUDED.{c}" for c in update_cols])
+        conflict_cols = ", ".join(conflict_keys)
+        return (f"INSERT INTO {table} ({cols_csv}) VALUES ({placeholders}) "
+                f"ON CONFLICT ({conflict_cols}) DO UPDATE SET {set_clause}")
+    else:
+        return f"INSERT OR REPLACE INTO {table} ({cols_csv}) VALUES ({placeholders})"
+
+
 def _create_tables(db):
     """Create all tables if they don't exist."""
     if _use_postgres():
@@ -3337,16 +3360,14 @@ def sync_borsdata_reports(db, limit=None, max_age_days=7):
     errors = 0
 
     # Spara mappnings-cache med utökad metadata
+    map_cols = ["isin", "ins_id", "ticker", "yahoo_ticker", "name", "market_id",
+                "sector_id", "branch_id", "country_id", "stock_price_currency",
+                "report_currency", "listing_date", "is_global", "fetched_at"]
+    map_sql = _upsert_sql("borsdata_instrument_map", map_cols, ["isin"])
     for isin, bd_inst, _, is_global in matched:
         ins_id = bd_inst.get("insId")
         try:
-            db.execute(
-                f"INSERT OR REPLACE INTO borsdata_instrument_map "
-                f"(isin, ins_id, ticker, yahoo_ticker, name, market_id, sector_id, "
-                f"branch_id, country_id, stock_price_currency, report_currency, "
-                f"listing_date, is_global, fetched_at) "
-                f"VALUES ({ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph}, "
-                f"{ph}, {ph}, {ph}, {ph}, {ph})",
+            db.execute(map_sql,
                 (isin, ins_id, bd_inst.get("ticker"), bd_inst.get("yahoo"),
                  bd_inst.get("name"), bd_inst.get("marketId"),
                  bd_inst.get("sectorId"), bd_inst.get("branchId"),
@@ -3354,7 +3375,12 @@ def sync_borsdata_reports(db, limit=None, max_age_days=7):
                  bd_inst.get("reportCurrency"), bd_inst.get("listingDate"),
                  1 if is_global else 0, now_iso))
         except Exception as e:
-            print(f"[Börsdata] map-insert fel: {e}")
+            # Logga max en gång (annars Railway rate-limitar log-flödet)
+            if not getattr(sync_borsdata_reports, "_logged_map_err", False):
+                print(f"[Börsdata] map-insert fel: {e}")
+                sync_borsdata_reports._logged_map_err = True
+            try: db.rollback()
+            except Exception: pass
     db.commit()
 
     for i, (isin, bd_inst, avz, is_global) in enumerate(matched):
@@ -3385,26 +3411,27 @@ def sync_borsdata_reports(db, limit=None, max_age_days=7):
                 for r in reports:
                     metrics = extract_v21_metrics(r)
                     period_year = r.get("year")
-                    period_q = r.get("period") if report_type == "quarter" else None
+                    # period_q = 0 för år-rader (Postgres PK kräver NOT NULL)
+                    period_q = r.get("period") if report_type == "quarter" else 0
                     # period 5 = full år, period 1-4 = kvartal
-                    if report_type == "quarter" and period_q in (None, 5):
+                    if report_type == "quarter" and period_q in (None, 0, 5):
                         continue
 
-                    db.execute(
-                        f"INSERT OR REPLACE INTO borsdata_reports "
-                        f"(isin, ins_id, report_type, period_year, period_q, "
-                        f"report_end_date, currency, "
-                        f"revenues, gross_income, operating_income, profit_before_tax, "
-                        f"net_profit, eps, "
-                        f"operating_cash_flow, investing_cash_flow, financing_cash_flow, "
-                        f"free_cash_flow, cash_flow_year, "
-                        f"total_assets, current_assets, non_current_assets, tangible_assets, "
-                        f"intangible_assets, financial_assets, total_equity, total_liabilities, "
-                        f"current_liabilities, non_current_liabilities, "
-                        f"cash_and_equivalents, net_debt, shares_outstanding, dividend, "
-                        f"stock_price_avg, stock_price_high, stock_price_low, "
-                        f"broken_fiscal_year, fetched_at) "
-                        f"VALUES ({', '.join([ph]*37)})",
+                    _report_cols = ["isin", "ins_id", "report_type", "period_year", "period_q",
+                                    "report_end_date", "currency",
+                                    "revenues", "gross_income", "operating_income", "profit_before_tax",
+                                    "net_profit", "eps",
+                                    "operating_cash_flow", "investing_cash_flow", "financing_cash_flow",
+                                    "free_cash_flow", "cash_flow_year",
+                                    "total_assets", "current_assets", "non_current_assets", "tangible_assets",
+                                    "intangible_assets", "financial_assets", "total_equity", "total_liabilities",
+                                    "current_liabilities", "non_current_liabilities",
+                                    "cash_and_equivalents", "net_debt", "shares_outstanding", "dividend",
+                                    "stock_price_avg", "stock_price_high", "stock_price_low",
+                                    "broken_fiscal_year", "fetched_at"]
+                    _report_sql = _upsert_sql("borsdata_reports", _report_cols,
+                                              ["isin", "report_type", "period_year", "period_q"])
+                    db.execute(_report_sql,
                         (isin, ins_id, report_type, period_year, period_q,
                          metrics.get("report_end_date"), metrics.get("currency"),
                          metrics.get("revenues"), metrics.get("gross_income"),
@@ -3444,20 +3471,20 @@ def sync_borsdata_metadata(db):
     ph = _ph()
     n_sec = 0
     n_br = 0
+    sec_sql = _upsert_sql("borsdata_sectors", ["sector_id", "name"], ["sector_id"])
     try:
         sectors = fetch_sectors()
         for s in sectors:
-            db.execute(f"INSERT OR REPLACE INTO borsdata_sectors (sector_id, name) VALUES ({ph}, {ph})",
-                       (s.get("id"), s.get("name")))
+            db.execute(sec_sql, (s.get("id"), s.get("name")))
             n_sec += 1
     except Exception as e:
         print(f"[Börsdata sectors] {e}")
 
+    br_sql = _upsert_sql("borsdata_branches", ["branch_id", "sector_id", "name"], ["branch_id"])
     try:
         branches = fetch_branches()
         for b in branches:
-            db.execute(f"INSERT OR REPLACE INTO borsdata_branches (branch_id, sector_id, name) VALUES ({ph}, {ph}, {ph})",
-                       (b.get("id"), b.get("sectorId"), b.get("name")))
+            db.execute(br_sql, (b.get("id"), b.get("sectorId"), b.get("name")))
             n_br += 1
     except Exception as e:
         print(f"[Börsdata branches] {e}")
@@ -3532,14 +3559,14 @@ def sync_borsdata_prices(db, isin_list=None, from_date=None, max_per_run=500,
             if not prices:
                 synced += 1
                 continue
+            _price_sql = _upsert_sql("borsdata_prices",
+                                      ["isin", "date", "open", "high", "low", "close", "volume"],
+                                      ["isin", "date"])
             for p in prices:
                 date_str = (p.get("d") or "")[:10]  # YYYY-MM-DD
                 if not date_str:
                     continue
-                db.execute(
-                    f"INSERT OR REPLACE INTO borsdata_prices "
-                    f"(isin, date, open, high, low, close, volume) "
-                    f"VALUES ({ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph})",
+                db.execute(_price_sql,
                     (isin, date_str, p.get("o"), p.get("h"), p.get("l"),
                      p.get("c"), p.get("v")))
                 total_rows += 1
@@ -3549,6 +3576,8 @@ def sync_borsdata_prices(db, isin_list=None, from_date=None, max_per_run=500,
         except Exception as e:
             print(f"[prices] {isin} fel: {e}")
             errors += 1
+            try: db.rollback()
+            except Exception: pass
     db.commit()
     return {"synced": synced, "total_rows": total_rows, "errors": errors,
             "total": len(targets)}
@@ -3589,15 +3618,18 @@ def sync_borsdata_kpis(db, kpi_ids=None, isin_list=None, max_per_run=500):
             try:
                 values = fetch_kpi_history_for_instrument(ins_id, kpi_id, "year",
                                                             is_global=bool(is_global))
+                _kpi_sql = _upsert_sql("borsdata_kpi_history",
+                                       ["isin", "kpi_id", "report_type",
+                                        "period_year", "period_q", "value"],
+                                       ["isin", "kpi_id", "report_type",
+                                        "period_year", "period_q"])
                 for v in values:
                     year = v.get("y")
                     val = v.get("v")
                     if year is None: continue
-                    db.execute(
-                        f"INSERT OR REPLACE INTO borsdata_kpi_history "
-                        f"(isin, kpi_id, report_type, period_year, period_q, value) "
-                        f"VALUES ({ph}, {ph}, 'year', {ph}, NULL, {ph})",
-                        (isin, kpi_id, year, val))
+                    # period_q = 0 för år-rader (samma konvention som borsdata_reports)
+                    db.execute(_kpi_sql,
+                        (isin, kpi_id, "year", year, 0, val))
                     total_rows += 1
             except Exception as e:
                 errors += 1
