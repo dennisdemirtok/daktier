@@ -4269,17 +4269,23 @@ if (typeof marked !== 'undefined') {
     marked.setOptions({ gfm: true, breaks: true });
 }
 
+// Material Symbols Outlined-ikoner som matchar sidebar-stilen
 const TOOL_LABELS = {
-    search_stocks:        { icon: '🔍', label: 'Söker bolag',        labelDone: 'Sökte bolag' },
-    get_full_stock:       { icon: '📊', label: 'Hämtar data',        labelDone: 'Hämtade data' },
-    get_quarterly_trends: { icon: '📈', label: 'Läser kvartalstrend', labelDone: 'Läste kvartalstrend' },
-    get_owner_history:    { icon: '👥', label: 'Läser ägartrend',    labelDone: 'Läste ägartrend' },
-    get_top_stocks:       { icon: '🏆', label: 'Bygger topplista',   labelDone: 'Byggde topplista' },
-    get_borsdata_history: { icon: '📐', label: 'Hämtar Börsdata-historik', labelDone: 'Börsdata-historik' },
-    get_sector_peers:     { icon: '🧭', label: 'Jämför sektor-peers', labelDone: 'Sektor-peers' },
-    get_backtest:         { icon: '⏪', label: 'Kör backtest',       labelDone: 'Backtestade' },
-    web_search:           { icon: '🌐', label: 'Söker på webben',    labelDone: 'Webb-sökning' },
+    search_stocks:        { icon: 'manage_search',     label: 'Söker bolag',           labelDone: 'Sökte bolag' },
+    get_full_stock:       { icon: 'bar_chart',         label: 'Hämtar data',           labelDone: 'Hämtade data' },
+    get_quarterly_trends: { icon: 'show_chart',        label: 'Läser kvartalstrend',   labelDone: 'Läste kvartalstrend' },
+    get_owner_history:    { icon: 'group',             label: 'Läser ägartrend',       labelDone: 'Läste ägartrend' },
+    get_top_stocks:       { icon: 'leaderboard',       label: 'Bygger topplista',      labelDone: 'Byggde topplista' },
+    get_borsdata_history: { icon: 'history',           label: 'Hämtar Börsdata-historik', labelDone: 'Börsdata-historik' },
+    get_sector_peers:     { icon: 'category',          label: 'Jämför sektor-peers',   labelDone: 'Sektor-peers' },
+    get_backtest:         { icon: 'replay',            label: 'Kör backtest',          labelDone: 'Backtestade' },
+    web_search:           { icon: 'language',          label: 'Söker på webben',       labelDone: 'Webb-sökning' },
 };
+
+function _msIcon(name, size = 14, opts = {}) {
+    const style = `font-size:${size}px;${opts.color ? `color:${opts.color};` : ''}${opts.spin ? 'animation:agent-spin 0.9s linear infinite;' : ''}`;
+    return `<span class="material-symbols-outlined" style="${style}">${name}</span>`;
+}
 
 // Hämta ett kort namn ur tool-input för visning ("MSFT", "Microsoft", "SE" etc.)
 function _toolInputLabel(name, input) {
@@ -4314,7 +4320,7 @@ function _groupTools(tools) {
 }
 
 function _renderToolGroup(g) {
-    const meta = TOOL_LABELS[g.name] || { icon: '⚙️', label: g.name, labelDone: g.name };
+    const meta = TOOL_LABELS[g.name] || { icon: 'settings', label: g.name, labelDone: g.name };
     const total = g.items.length;
     const isRunning = g.running > 0;
     const allDone = !isRunning && g.error === 0;
@@ -4337,16 +4343,19 @@ function _renderToolGroup(g) {
     let cls = 'running';
     let labelText = meta.label;
     let countHtml = '';
-    let icon = `<span class="pill-spin"></span>`;
+    let statusIcon = '';
 
     if (allDone) {
         cls = 'done';
         labelText = meta.labelDone || meta.label;
-        icon = '✓';
+        statusIcon = _msIcon('check_circle', 13);
     } else if (hasError) {
         cls = 'error';
         labelText = meta.labelDone || meta.label;
-        icon = '✕';
+        statusIcon = _msIcon('error', 13);
+    } else {
+        // Running — visa pulsande progress-ikon
+        statusIcon = _msIcon('progress_activity', 13, { spin: true });
     }
 
     if (total > 1) {
@@ -4357,8 +4366,9 @@ function _renderToolGroup(g) {
         }
     }
 
+    const toolIcon = _msIcon(meta.icon, 14);
     return `<span class="agent-tool-pill ${cls}">
-        ${meta.icon} ${labelText} ${countHtml} ${namesHtml} ${isRunning ? icon : ''}
+        ${toolIcon} ${labelText} ${countHtml} ${namesHtml} ${statusIcon}
     </span>`;
 }
 
@@ -4419,16 +4429,15 @@ function renderAgent() {
         }
         .agent-tool-pill .pill-count { font-size:10px; background:rgba(255,255,255,0.7); padding:1px 6px; border-radius:8px; font-weight:700; }
         .agent-tool-pill .pill-names { font-weight:500; opacity:0.85; font-size:10.5px; }
+        .agent-tool-pill .material-symbols-outlined {
+            vertical-align:middle; line-height:1;
+            font-variation-settings: 'FILL' 0, 'wght' 500, 'GRAD' 0, 'opsz' 20;
+        }
         .agent-tool-pill.running {
             background:linear-gradient(135deg,#fef3c7,#fde68a); color:#78350f;
             border-color:rgba(245,158,11,0.3);
             box-shadow:0 0 0 0 rgba(251,191,36,0.5);
             animation:agent-pill-in 0.35s cubic-bezier(0.34,1.56,0.64,1), agent-pulse 1.8s ease-in-out infinite;
-        }
-        .agent-tool-pill.running .pill-spin {
-            display:inline-block; width:8px; height:8px; border-radius:50%;
-            border:2px solid rgba(120,53,15,0.3); border-top-color:#78350f;
-            animation:agent-spin 0.8s linear infinite;
         }
         .agent-tool-pill.done {
             background:linear-gradient(135deg,#d1fae5,#a7f3d0); color:#065f46;
@@ -4480,11 +4489,15 @@ function renderAgent() {
         }
         .agent-icon-btn {
             background:white; border:1px solid var(--border); border-radius:10px;
-            padding:8px 12px; cursor:pointer; font-size:13px; font-weight:600;
+            padding:7px 12px; cursor:pointer; font-size:13px; font-weight:600;
             display:inline-flex; align-items:center; gap:6px;
             transition:all 0.15s;
+            color:var(--text);
         }
-        .agent-icon-btn:hover { background:#f8fafc; border-color:#3b82f6; }
+        .agent-icon-btn:hover { background:#f8fafc; border-color:#3b82f6; color:#1e40af; }
+        .agent-icon-btn .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 500, 'GRAD' 0, 'opsz' 20;
+        }
         .agent-icon-btn.primary { background:linear-gradient(135deg,#3b82f6,#2563eb); color:white; border-color:transparent; }
         .agent-icon-btn.primary:hover { box-shadow:0 4px 12px rgba(59,130,246,0.3); }
         .agent-toolbar {
@@ -4532,7 +4545,7 @@ function renderAgent() {
     let historyDropdown = '';
     if (_agentShowHistory) {
         const items = sortedChats.length === 0
-            ? `<div class="agent-history-empty">Inga sparade chattar än.<br><span style="font-size:10.5px">Varje konversation sparas automatiskt.</span></div>`
+            ? `<div class="agent-history-empty">${_msIcon('inbox', 24, { color: 'var(--text-muted)' })}<br>Inga sparade chattar än.<br><span style="font-size:10.5px">Varje konversation sparas automatiskt.</span></div>`
             : sortedChats.map(c => `
                 <div class="agent-history-item ${c.id === _agentChatId ? 'active' : ''}"
                      onclick="agentLoadChat('${c.id}')">
@@ -4540,14 +4553,14 @@ function renderAgent() {
                         <div class="agent-history-title">${escapeHtml(c.title)}</div>
                         <div class="agent-history-meta">${_formatRelativeTime(c.updated_at)} · ${(c.history?.length || 0)} meddelanden</div>
                     </div>
-                    <button class="agent-history-del" title="Radera" onclick="agentDeleteChat('${c.id}', event)">×</button>
+                    <button class="agent-history-del" title="Radera" onclick="agentDeleteChat('${c.id}', event)">${_msIcon('delete', 16)}</button>
                 </div>
             `).join('');
         historyDropdown = `
             <div class="agent-history-dropdown">
                 <div class="agent-history-header">
-                    <strong style="font-size:12px">📋 Senaste chattar</strong>
-                    <button class="agent-icon-btn" style="padding:4px 10px;font-size:11px" onclick="agentNewChat()">+ Ny chatt</button>
+                    <strong style="font-size:12px;display:inline-flex;align-items:center;gap:6px">${_msIcon('history', 16)} Senaste chattar</strong>
+                    <button class="agent-icon-btn" style="padding:4px 10px;font-size:11px" onclick="agentNewChat()">${_msIcon('add', 14)} Ny chatt</button>
                 </div>
                 ${items}
             </div>`;
@@ -4562,21 +4575,21 @@ function renderAgent() {
     content.innerHTML = `
     <div class="agent-wrap">
         <div class="agent-toolbar">
-            <div style="display:flex;align-items:center;gap:8px;min-width:0">
-                <span style="font-size:18px">🤖</span>
+            <div style="display:flex;align-items:center;gap:10px;min-width:0">
+                <span class="material-symbols-outlined" style="font-size:24px;color:#3b82f6">smart_toy</span>
                 <div style="min-width:0">
                     <div style="font-weight:700;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(activeTitle || 'Ny chatt')}</div>
                     <div style="font-size:10.5px;color:var(--text-muted)">${_agentHistory.length === 0 ? 'Edge Agent är redo' : `${_agentHistory.length} meddelanden`}</div>
                 </div>
             </div>
             <div style="display:flex;gap:6px;position:relative">
-                <button class="agent-icon-btn" onclick="agentNewChat()" title="Ny chatt">＋ Ny</button>
-                <button class="agent-icon-btn" onclick="agentToggleHistory()" title="Historik">📋 Historik</button>
+                <button class="agent-icon-btn" onclick="agentNewChat()" title="Ny chatt">${_msIcon('add', 16)} Ny</button>
+                <button class="agent-icon-btn" onclick="agentToggleHistory()" title="Historik">${_msIcon('history', 16)} Historik</button>
                 ${historyDropdown}
             </div>
         </div>
         ${_agentHistory.length === 0 ? `<div class="agent-hero">
-            <strong>🤖 Edge Agent</strong> — Claude Opus med direktåtkomst till databasen.
+            <span style="display:inline-flex;align-items:center;gap:8px;font-weight:700;font-size:15px">${_msIcon('smart_toy', 22, { color: '#fef3c7' })} Edge Agent</span> — Claude Opus med direktåtkomst till databasen.
             Söker bolag, läser kvartalstrender, ägarhistorik, kollar forum/Reddit/nyheter via web search.
             Ladda upp en skärmbild av din portfölj för analys.
         </div>` : ''}
@@ -4586,14 +4599,14 @@ function renderAgent() {
         ${turns.length === 0 ? exampleChips : ''}
         ${imagePreview}
         <div class="agent-input-row">
-            <button class="agent-icon-btn" title="Ladda upp bild" onclick="document.getElementById('agentImageInput').click()">📎</button>
+            <button class="agent-icon-btn" title="Ladda upp bild" onclick="document.getElementById('agentImageInput').click()">${_msIcon('attach_file', 18)}</button>
             <input type="file" id="agentImageInput" accept="image/*" style="display:none" onchange="agentHandleImage(event)"/>
             <textarea id="agentInput" class="agent-textarea" placeholder="${_agentLoading ? 'Agenten skriver...' : 'Fråga om en aktie, jämför bolag, eller analysera din portfölj...'}" rows="2"
                 ${_agentLoading ? 'disabled' : ''}
                 onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();agentSend()}"></textarea>
             ${_agentLoading
-                ? `<button class="agent-cancel-btn" onclick="agentCancel()">Avbryt</button>`
-                : `<button class="agent-btn" onclick="agentSend()">Skicka</button>`}
+                ? `<button class="agent-cancel-btn" onclick="agentCancel()" style="display:inline-flex;align-items:center;gap:4px">${_msIcon('close', 14)} Avbryt</button>`
+                : `<button class="agent-btn" onclick="agentSend()" style="display:inline-flex;align-items:center;gap:6px">${_msIcon('send', 16)} Skicka</button>`}
         </div>
     </div>`;
 
