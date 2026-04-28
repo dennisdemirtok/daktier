@@ -3845,6 +3845,59 @@ def api_backtest_v2_reset():
     return jsonify({"status": "reset"})
 
 
+@app.route("/api/backtest-v2/debug-pit/<ticker>")
+def api_backtest_v2_debug_pit(ticker):
+    """Debug: vad har vi för PIT-data för ett ticker?"""
+    date = request.args.get("date", "2024-07-15")
+    db = get_db()
+    try:
+        from backtest_v2.runner import find_isin_for_ticker
+        from backtest_v2.pit_data import (get_quarterly_reports_pit,
+                                            get_annual_reports_pit, get_price_pit,
+                                            build_observation)
+        isin = find_isin_for_ticker(db, ticker)
+        if not isin:
+            return jsonify({"error": "ticker not found", "ticker": ticker})
+
+        quarterly = get_quarterly_reports_pit(db, isin, date, max_quarters=8)
+        annual = get_annual_reports_pit(db, isin, date, max_years=2)
+        price = get_price_pit(db, isin, date)
+        raw = build_observation(db, isin, ticker, date)
+
+        # Hämta alla tillgängliga rapporter (utan PIT-filter) för diagnos
+        from edge_db import _fetchall, _ph as ph_fn
+        all_q = _fetchall(db,
+            f"SELECT period_year, period_q, report_end_date FROM borsdata_reports "
+            f"WHERE isin = {ph_fn()} AND report_type = {ph_fn()} "
+            f"ORDER BY period_year DESC, period_q DESC LIMIT 20",
+            (isin, "quarter"))
+        all_a = _fetchall(db,
+            f"SELECT period_year, report_end_date FROM borsdata_reports "
+            f"WHERE isin = {ph_fn()} AND report_type = {ph_fn()} "
+            f"ORDER BY period_year DESC LIMIT 5",
+            (isin, "year"))
+
+        return jsonify({
+            "ticker": ticker,
+            "isin": isin,
+            "analysis_date": date,
+            "pit_filtered": {
+                "quarterly_count": len(quarterly),
+                "annual_count": len(annual),
+                "price": price,
+                "obs_built": raw is not None,
+            },
+            "all_data_in_db": {
+                "quarterly_periods": [
+                    f"{r['period_year']}-Q{r['period_q']}" for r in all_q
+                ],
+                "annual_years": [r["period_year"] for r in all_a],
+            },
+        })
+    finally:
+        db.close()
+
+
 @app.route("/api/refresh-historical/status")
 def api_refresh_historical_status():
     """Returnerar både pågående sync OCH täcknings-stats över DB:n."""
