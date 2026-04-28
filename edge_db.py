@@ -7309,12 +7309,12 @@ def get_trending_value_quality(db, mode="value", country="SE",
         params.append(country)
     where_clause = "WHERE " + " AND ".join(where_parts)
 
+    # Avanza-kolumnerna (faktiska namn — verifierat mot PRAGMA table_info)
     cols = ("orderbook_id, name, short_name, isin, country, last_price, "
             "currency, market_cap, number_of_owners, "
-            "price_earnings_ratio, price_book_ratio, price_sales_ratio, "
-            "ev_ebitda, dividend_yield, "
-            "return_on_equity, return_on_invested_capital, "
-            "operating_margin, gross_margin, "
+            "pe_ratio, price_book_ratio, ev_ebit_ratio, direct_yield, "
+            "return_on_equity, return_on_assets, return_on_capital_employed, "
+            "debt_to_equity_ratio, six_months_change_pct, three_months_change_pct, "
             "smart_score, v2_value, v2_quality")
 
     rows = _fetchall(db,
@@ -7365,34 +7365,36 @@ def get_trending_value_quality(db, mode="value", country="SE",
         return ranks
 
     if mode == "value":
-        pe_vals = [_safe_pos(s.get("price_earnings_ratio")) for s in universe]
+        # Value Composite (anpassad O'Shaughnessy) — använd Avanza-kolumner:
+        # P/E, P/B, EV/EBIT, dir.avk. (P/S och EV/EBITDA saknas i datakällan)
+        pe_vals = [_safe_pos(s.get("pe_ratio")) for s in universe]
         pb_vals = [_safe_pos(s.get("price_book_ratio")) for s in universe]
-        ps_vals = [_safe_pos(s.get("price_sales_ratio")) for s in universe]
-        evebitda = [_safe_pos(s.get("ev_ebitda")) for s in universe]
-        # Dividend yield: hög = bra, så descending
-        dy_vals = [(s.get("dividend_yield") if (s.get("dividend_yield") or 0) > 0 else None)
+        evebit_vals = [_safe_pos(s.get("ev_ebit_ratio")) for s in universe]
+        dy_vals = [(s.get("direct_yield") if (s.get("direct_yield") or 0) > 0 else None)
                    for s in universe]
         r_pe = _rank_ascending(pe_vals)
         r_pb = _rank_ascending(pb_vals)
-        r_ps = _rank_ascending(ps_vals)
-        r_ev = _rank_ascending(evebitda)
+        r_ev = _rank_ascending(evebit_vals)
         r_dy = _rank_descending(dy_vals)
         composite_ranks = []
         for i in range(len(universe)):
-            composite_ranks.append(r_pe[i] + r_pb[i] + r_ps[i] + r_ev[i] + r_dy[i])
+            composite_ranks.append(r_pe[i] + r_pb[i] + r_ev[i] + r_dy[i])
         composite_key = "value_composite_rank"
     else:  # mode == "quality"
+        # Quality Composite — Avanza-kolumner: ROE, ROA, ROCE (≈ROIC), D/E (lågt=bra)
         roe_vals = [_safe_pos(s.get("return_on_equity")) for s in universe]
-        roic_vals = [_safe_pos(s.get("return_on_invested_capital")) for s in universe]
-        gm_vals = [_safe_pos(s.get("gross_margin")) for s in universe]
-        om_vals = [_safe_pos(s.get("operating_margin")) for s in universe]
+        roa_vals = [_safe_pos(s.get("return_on_assets")) for s in universe]
+        roce_vals = [_safe_pos(s.get("return_on_capital_employed")) for s in universe]
+        # D/E: filtrera bort 0 (oftast saknad data, inte "ingen skuld")
+        de_raw = [s.get("debt_to_equity_ratio") for s in universe]
+        de_vals = [(v if (v is not None and v > 0.001) else None) for v in de_raw]
         r_roe = _rank_descending(roe_vals)
-        r_roic = _rank_descending(roic_vals)
-        r_gm = _rank_descending(gm_vals)
-        r_om = _rank_descending(om_vals)
+        r_roa = _rank_descending(roa_vals)
+        r_roce = _rank_descending(roce_vals)
+        r_de = _rank_ascending(de_vals)
         composite_ranks = []
         for i in range(len(universe)):
-            composite_ranks.append(r_roe[i] + r_roic[i] + r_gm[i] + r_om[i])
+            composite_ranks.append(r_roe[i] + r_roa[i] + r_roce[i] + r_de[i])
         composite_key = "quality_composite_rank"
 
     # Tilldela composite-rank
@@ -7405,8 +7407,21 @@ def get_trending_value_quality(db, mode="value", country="SE",
     decile = universe[:decile_size]
 
     # ── Beräkna 6m momentum för decilen ──
+    # Försök först Börsdata-prices (mer noggrant), fallback Avanza six_months_change_pct
     for s in decile:
-        s["momentum_6m"] = _price_return_6m(db, s.get("isin"))
+        bd_mom = _price_return_6m(db, s.get("isin"))
+        if bd_mom is not None:
+            s["momentum_6m"] = bd_mom
+            s["momentum_6m_source"] = "borsdata"
+        else:
+            avz_mom = s.get("six_months_change_pct")
+            if avz_mom is not None:
+                # Avanza levererar i % (t.ex. 12.5 för +12.5%) — konvertera till decimal
+                s["momentum_6m"] = avz_mom / 100.0
+                s["momentum_6m_source"] = "avanza"
+            else:
+                s["momentum_6m"] = None
+                s["momentum_6m_source"] = None
 
     # ── Sortera decilen på momentum (None längst ned) ──
     def _mom_key(s):
