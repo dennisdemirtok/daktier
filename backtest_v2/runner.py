@@ -73,18 +73,20 @@ DEFAULT_UNIVERSE = [
 ]
 
 
-def get_analysis_dates(start_year=2017, end_year=2024):
-    """Generera halvårsvisa analysdatum: 1 januari + 1 juli per år.
+def get_analysis_dates(start_year=None, end_year=None):
+    """Generera analysdatum.
 
-    Default startar 2017 — Börsdata-rapporterna i Railway-DB:n täcker
-    typiskt 2017+ för annual reports. För quarterly är historiken kortare
-    (~2-3 år), så de tidigaste datumen kan ge skip pga otillräcklig PIT-data.
+    Börsdata-historiken är begränsad till 2024+ för quarterly. För att få
+    meningsfulla obs (4 kvartal PIT) måste analysdatum vara 2024-Q4 eller
+    senare. Vi använder kvartalsvis 2024-04 → 2025-10 = 7 datum.
+
+    Forward returns 12m är bara meningsfulla för obs upp till ~2025-04
+    (eftersom dagens datum är 2026-04). Senare obs får null forward returns.
     """
-    dates = []
-    for y in range(start_year, end_year + 1):
-        dates.append(f"{y}-01-15")  # mid-januari (årsrapport från i fjor + Q4 typisk klar)
-        dates.append(f"{y}-07-15")  # mid-juli (Q1 + Q2 typisk klar)
-    return dates
+    return [
+        "2024-04-15", "2024-07-15", "2024-10-15",
+        "2025-01-15", "2025-04-15", "2025-07-15", "2025-10-15",
+    ]
 
 
 def find_isin_for_ticker(db, short_name):

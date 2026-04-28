@@ -138,8 +138,10 @@ def build_observation(db, isin, ticker, analysis_date_iso):
     quarterly = get_quarterly_reports_pit(db, isin, analysis_date_iso, max_quarters=8)
     annual = get_annual_reports_pit(db, isin, analysis_date_iso, max_years=2)
 
-    if len(quarterly) < 4:
+    if len(quarterly) < 2:
         return None  # för lite kvartalsdata för meningsfull analys
+    # Notera: optimalt är 4+ kvartal för TTM, men 2-3 räcker för basic ratios.
+    # Vi loggar data_completeness så låg-data-obs syns i rapporten.
 
     # Pris vid analysdatum
     price = get_price_pit(db, isin, analysis_date_iso)
@@ -151,10 +153,17 @@ def build_observation(db, isin, ticker, analysis_date_iso):
         return None
 
     # Hämta TTM (trailing 12-month) från 4 senaste kvartal
+    # Om vi har < 4: skala upp till TTM via senaste annual som proxy
     ttm_quarters = quarterly[:4]
-    ttm_revenue = sum((q.get("revenues") or 0) for q in ttm_quarters)
-    ttm_ocf = sum((q.get("operating_cash_flow") or 0) for q in ttm_quarters)
-    ttm_eps = sum((q.get("eps") or 0) for q in ttm_quarters)
+    if len(ttm_quarters) >= 4:
+        ttm_revenue = sum((q.get("revenues") or 0) for q in ttm_quarters)
+        ttm_ocf = sum((q.get("operating_cash_flow") or 0) for q in ttm_quarters)
+        ttm_eps = sum((q.get("eps") or 0) for q in ttm_quarters)
+    else:
+        # Fallback: använd senaste annual för TTM-approximation
+        ttm_revenue = (latest_annual or {}).get("revenues") or 0
+        ttm_ocf = (latest_annual or {}).get("operating_cash_flow") or 0
+        ttm_eps = sum((q.get("eps") or 0) for q in ttm_quarters) * (4.0 / max(len(ttm_quarters), 1))
 
     # Föregående år TTM (4-7 kvartal bak) för YoY
     prev_ttm_quarters = quarterly[4:8] if len(quarterly) >= 8 else None
