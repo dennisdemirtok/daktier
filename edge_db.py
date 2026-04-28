@@ -5470,8 +5470,14 @@ def _detect_trigger_reason(stock, scores):
 
     # 8) Fallback: ren värderingssignal utan pris-trigger
     if comp is not None and comp >= 75:
+        # Filtrera bort non-numeric values (strängar t.ex. v2_setup-namn)
+        numeric_scores = [
+            (k, v) for k, v in scores.items()
+            if k not in ("composite", "models_available")
+            and v is not None and isinstance(v, (int, float))
+        ]
         strongest = max(
-            [(k, v) for k, v in scores.items() if k not in ("composite", "models_available") and v is not None],
+            numeric_scores,
             key=lambda kv: kv[1], default=(None, None)
         )
         if strongest[0]:

@@ -3529,8 +3529,11 @@ def api_ai_toplist_get():
     db = get_db()
     today = datetime.now().strftime("%Y-%m-%d")
     # Ensure table exists
-    db.execute("""CREATE TABLE IF NOT EXISTS ai_scores (
-        id INTEGER PRIMARY KEY AUTOINCREMENT, orderbook_id INTEGER,
+    # Postgres använder SERIAL, SQLite AUTOINCREMENT
+    from edge_db import _use_postgres as _use_pg_check
+    _id_col = "SERIAL PRIMARY KEY" if _use_pg_check() else "INTEGER PRIMARY KEY AUTOINCREMENT"
+    db.execute(f"""CREATE TABLE IF NOT EXISTS ai_scores (
+        id {_id_col}, orderbook_id INTEGER,
         stock_name TEXT NOT NULL, ai_score INTEGER, ai_signal TEXT, ai_summary TEXT,
         meta_score REAL, edge_score REAL, model_agreement INTEGER, analysis_date TEXT,
         UNIQUE(stock_name, analysis_date))""")
