@@ -3833,6 +3833,36 @@ def api_backtest_v2_leakage_results():
     return jsonify(lr)
 
 
+@app.route("/api/backtest-v2/test-thread", methods=["POST"])
+def api_backtest_v2_test_thread():
+    """Test-endpoint: startar bakgrundstråd som bara sätter state.
+    Om detta inte fungerar är tråd-mekanismen bruten."""
+    def _test_run():
+        try:
+            _bt2_update(running=True, phase="test_thread",
+                        started_at=datetime.now().isoformat(),
+                        progress_total=3, progress_n=0, error=None, logs=[])
+            _bt2_log("test-tråden startade")
+            import time
+            time.sleep(2)
+            _bt2_log("efter 2s sleep")
+            time.sleep(2)
+            _bt2_log("efter 4s sleep")
+            _bt2_update(running=False, finished_at=datetime.now().isoformat())
+        except Exception as e:
+            import traceback
+            tb = traceback.format_exc()
+            try:
+                _bt2_update(running=False, error=f"{type(e).__name__}: {e}",
+                            finished_at=datetime.now().isoformat())
+            except Exception:
+                pass
+            print(f"[test-thread] FEL: {tb}", file=sys.stderr, flush=True)
+
+    threading.Thread(target=_test_run, daemon=True).start()
+    return jsonify({"status": "thread_started"})
+
+
 @app.route("/api/backtest-v2/reset", methods=["POST"])
 def api_backtest_v2_reset():
     """Tvinga reset av state (om körningen hänger)."""
