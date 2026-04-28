@@ -95,6 +95,15 @@ def get_db():
     if _use_postgres():
         raw = psycopg2.connect(DATABASE_URL, connect_timeout=5)
         raw.autocommit = False
+        # statement_timeout skyddar mot hängande queries som låser
+        # connection-pool. Default 25s — räcker för alla våra queries
+        # (dashboard etc bör vara <5s).
+        try:
+            with raw.cursor() as _c:
+                _c.execute("SET statement_timeout = '25s'")
+            raw.commit()
+        except Exception:
+            pass
         db = PgConnectionWrapper(raw)
     else:
         db = sqlite3.connect(DB_PATH)
