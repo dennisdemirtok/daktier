@@ -3734,7 +3734,13 @@ def api_backtest_v2_leakage():
 
 @app.route("/api/backtest-v2/run", methods=["POST"])
 def api_backtest_v2_run():
-    """Trigga full backtest (eller begränsad om ?max_obs=N)."""
+    """Trigga full backtest (eller begränsad om ?max_obs=N).
+
+    Body/query params:
+        max_obs: max obs (default = alla)
+        max_universe: max aktier i universum (default 80)
+        min_market_cap: min mcap i SEK (default 1e9 = 1Md)
+    """
     state = _bt2_load()
     if state.get("running"):
         return jsonify({"error": "Redan igång", "phase": state.get("phase")}), 409
@@ -3742,10 +3748,14 @@ def api_backtest_v2_run():
         return jsonify({"error": "ANTHROPIC_API_KEY saknas på servern"}), 500
 
     body = request.json if request.is_json else {}
-    max_obs = body.get("max_obs") or request.args.get("max_obs")
-    if max_obs:
-        try: max_obs = int(max_obs)
-        except (ValueError, TypeError): max_obs = None
+    def _arg(name, default=None, cast=int):
+        v = body.get(name) or request.args.get(name)
+        if v is None: return default
+        try: return cast(v)
+        except (ValueError, TypeError): return default
+    max_obs = _arg("max_obs")
+    max_universe = _arg("max_universe", 80)
+    min_market_cap = _arg("min_market_cap", int(1e9))
 
     def _run():
         _bt2_update(
@@ -3763,8 +3773,13 @@ def api_backtest_v2_run():
 
             csv_path = "/tmp/backtest_v2_results.csv"
             md_path = "/tmp/backtest_v2_report.md"
-            _bt2_log(f"Startar backtest (max_obs={max_obs or 'alla'})")
-            results = run_backtest(max_obs=max_obs, output_csv=csv_path, verbose=False)
+            _bt2_log(f"Startar backtest (max_obs={max_obs or 'alla'}, "
+                     f"universum max={max_universe}, min mcap={min_market_cap/1e9:.1f}Md)")
+            results = run_backtest(
+                max_obs=max_obs, output_csv=csv_path, verbose=False,
+                use_dynamic_universe=True,
+                max_universe=max_universe,
+                min_market_cap=min_market_cap)
             _bt2_update(backtest_csv_path=csv_path, progress_n=len(results))
             _bt2_log(f"Backtest klar: {len(results)} obs sparade")
 

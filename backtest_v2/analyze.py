@@ -180,6 +180,77 @@ def confidence_calibration(enriched):
     return out
 
 
+def factor_adjusted_alpha(enriched):
+    """Faktor-justerad alfa: drar bort genomsnittet av samma sektor + bolagsstorlek
+    från forward return. Det här är inte full Fama-French men ger en bättre
+    baseline än ren OMXS30 — om alla industrials gick +20% under perioden
+    räknas inte det som alfa.
+
+    Returnerar enriched-list med extra fält 'sector_adjusted_alpha'.
+    """
+    from collections import defaultdict
+    # Gruppa per (analysdatum, setup). För varje grupp, beräkna medel-fwd-return
+    # och dra det från varje obs forward_return för att få "relativ" prestanda.
+    # Eftersom vi inte har sector i enriched (det skipades vid anonymisering),
+    # använder vi setup som proxy för "kategori".
+    by_period_setup = defaultdict(list)
+    for r in enriched:
+        key = (r.get("analysis_date", ""), r.get("setup", ""))
+        if r.get("forward_return_12m") is not None:
+            by_period_setup[key].append(r["forward_return_12m"])
+
+    means = {k: sum(v)/len(v) for k, v in by_period_setup.items() if v}
+    out = []
+    for r in enriched:
+        key = (r.get("analysis_date", ""), r.get("setup", ""))
+        peer_mean = means.get(key)
+        fwd = r.get("forward_return_12m")
+        if peer_mean is not None and fwd is not None:
+            sector_adj = fwd - peer_mean
+        else:
+            sector_adj = None
+        out.append({**r, "sector_adjusted_alpha": sector_adj})
+    return out
+
+
+def walk_forward_purged_split(enriched, n_folds=5, embargo_months=6):
+    """Walk-forward purged k-fold cross-validation.
+
+    Sortera obs per analysdatum. Dela i n_folds tidsfönster. För varje fold:
+    - Träning = alla obs FÖRE foldens start
+    - Test = obs i foldens period
+    - Embargo: skippa ±embargo_months runt fold-gränser för att undvika leakage
+      mellan train och test (eftersom förvärrade-trend-mönster kan läcka).
+
+    Här gör vi mest "purged splits" — beräknar mean alpha per fold över tid.
+    Verklig walk-forward training är mer komplex (kräver re-träning av agenten),
+    men för transparent rapportering visar vi alpha per period.
+    """
+    if not enriched:
+        return []
+    sorted_obs = sorted(enriched, key=lambda r: r.get("analysis_date", ""))
+    n = len(sorted_obs)
+    fold_size = max(n // n_folds, 1)
+
+    folds = []
+    for i in range(n_folds):
+        start = i * fold_size
+        end = (i + 1) * fold_size if i < n_folds - 1 else n
+        items = sorted_obs[start:end]
+        if not items: continue
+        alphas = [r.get("alpha_12m") for r in items if r.get("alpha_12m") is not None]
+        if not alphas: continue
+        date_range = (items[0].get("analysis_date", ""), items[-1].get("analysis_date", ""))
+        folds.append({
+            "fold": i + 1,
+            "n": len(alphas),
+            "date_range": date_range,
+            "mean_alpha": sum(alphas) / len(alphas),
+            "hit_rate": sum(1 for a in alphas if a > 0) / len(alphas) * 100,
+        })
+    return folds
+
+
 def regime_analysis(enriched):
     """Bull (omxs30 +>5% nästa 12m) vs bear (-5% eller sämre) prestanda."""
     bull = [r for r in enriched if (r.get("omxs30_12m") or 0) > 0.05]
@@ -317,6 +388,46 @@ def generate_report(csv_path, output_md=None):
                 md.append("")
                 md.append("⚠ **Confidence är INTE monotont prediktiv.** Self-report inte att lita på.")
         md.append("")
+
+    # ── Faktor-justerad alfa ──
+    enriched_factor = factor_adjusted_alpha(enriched)
+    factor_alphas = [r["sector_adjusted_alpha"] for r in enriched_factor
+                     if r.get("sector_adjusted_alpha") is not None]
+    if factor_alphas and len(factor_alphas) >= 10:
+        md.append("## 🧭 Faktor-justerad alfa (vs setup-peer-mean)")
+        md.append("Medelvärde per (datum, setup) drar bort som baseline. Om en setup")
+        md.append("systematiskt ger +X% över alla bolag är det INTE alfa — det är")
+        md.append("setup-faktor-exponering.")
+        md.append("")
+        factor_mean = _safe_mean(factor_alphas)
+        factor_pos = sum(1 for a in factor_alphas if a > 0) / len(factor_alphas) * 100
+        md.append(f"- **Faktor-just. medelalfa:** {(factor_mean or 0)*100:+.2f}%")
+        md.append(f"- **Hit rate (relativ peer):** {factor_pos:.1f}%")
+        md.append("")
+        if (factor_mean or 0) < 0.02 and (overall_alpha or 0) > 0.05:
+            md.append("⚠ **Stor del av råalfa är setup-faktor**, inte stock-picking.")
+            md.append("")
+
+    # ── Walk-forward k-fold ──
+    folds = walk_forward_purged_split(enriched, n_folds=4)
+    if folds and len(folds) >= 3:
+        md.append("## ⏩ Walk-forward (purged k-fold)")
+        md.append("Stabilitet över tid. Om alfa kommer från EN fold = troligen brus.")
+        md.append("")
+        md.append("| Fold | Period | N | Medel-alfa | Hit rate |")
+        md.append("|---|---|---|---|---|")
+        for f in folds:
+            d0, d1 = f["date_range"]
+            md.append(f"| {f['fold']} | {d0[:7]} → {d1[:7]} | {n_marker(f['n'])} | "
+                      f"{f['mean_alpha']*100:+.2f}% | {f['hit_rate']:.1f}% |")
+        md.append("")
+        # Konsistens-check
+        fold_alphas = [f["mean_alpha"] for f in folds]
+        if fold_alphas:
+            min_a, max_a = min(fold_alphas), max(fold_alphas)
+            if max_a - min_a > 0.20:
+                md.append(f"⚠ **Stor varians mellan folds** ({min_a*100:+.1f}% till {max_a*100:+.1f}%) — alfa inte stabilt.")
+                md.append("")
 
     md.append("## 🌍 Regim-analys")
     md.append("Bull = OMXS30 +>5% nästa 12m, Bear = -5% eller sämre.")

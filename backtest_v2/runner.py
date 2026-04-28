@@ -77,7 +77,7 @@ def get_analysis_dates(start_year=None, end_year=None):
     """Generera analysdatum.
 
     Börsdata-historiken är begränsad till 2024+ för quarterly. För att få
-    meningsfulla obs (4 kvartal PIT) måste analysdatum vara 2024-Q4 eller
+    meningsfulla obs (2+ kvartal PIT) måste analysdatum vara 2024-Q4 eller
     senare. Vi använder kvartalsvis 2024-04 → 2025-10 = 7 datum.
 
     Forward returns 12m är bara meningsfulla för obs upp till ~2025-04
@@ -87,6 +87,38 @@ def get_analysis_dates(start_year=None, end_year=None):
         "2024-04-15", "2024-07-15", "2024-10-15",
         "2025-01-15", "2025-04-15", "2025-07-15", "2025-10-15",
     ]
+
+
+def get_dynamic_universe(db, country="SE", min_market_cap=1e9, max_n=100):
+    """Hämta dynamiskt universum från borsdata_instrument_map + stocks.
+
+    Använder Avanza-stocks med ISIN-mappning till Börsdata. Filtrerar:
+    - country (default SE)
+    - min market cap (default 1 Mdr SEK)
+    - har ISIN i borsdata_instrument_map
+    - har minst 5 quarterly reports
+
+    Returnerar list av (short_name, name) tuples, sorterad market_cap desc.
+    """
+    ph = _ph()
+    rows = _fetchall(db, f"""
+        SELECT s.short_name, s.name, s.market_cap, s.isin,
+               (SELECT COUNT(*) FROM borsdata_reports br
+                WHERE br.isin = s.isin AND br.report_type = 'quarter') as n_q
+        FROM stocks s
+        JOIN borsdata_instrument_map m ON s.short_name = m.ticker
+        WHERE s.country = {ph}
+        AND s.last_price > 0
+        AND s.market_cap >= {ph}
+        AND s.isin != ''
+        ORDER BY s.market_cap DESC
+        LIMIT {ph}
+    """, (country, min_market_cap, max_n * 2))
+
+    # Filtrera till bolag med faktisk quarterly-data
+    return [(r["short_name"], r["name"])
+            for r in rows
+            if (r["n_q"] or 0) >= 5][:max_n]
 
 
 def find_isin_for_ticker(db, short_name):
@@ -110,21 +142,37 @@ def find_isin_for_ticker(db, short_name):
 
 def run_backtest(universe=None, start_year=2015, end_year=2024,
                  output_csv="/tmp/backtest_v2_results.csv",
-                 max_obs=None, verbose=True):
+                 max_obs=None, verbose=True, use_dynamic_universe=True,
+                 max_universe=80, min_market_cap=1e9):
     """Kör backtest-pipelinen.
 
     Args:
-        universe: lista av (short_name, full_name) tuples; default DEFAULT_UNIVERSE
+        universe: lista av (short_name, full_name) tuples; None = dynamisk
+        use_dynamic_universe: hämta från DB istället för DEFAULT_UNIVERSE
+        max_universe: max antal aktier i dynamiskt universum
+        min_market_cap: min mcap för dynamiskt universum (default 1 Mdr)
         max_obs: max antal observationer (för debug); None = alla
     Returnerar: lista av result-dicts.
     """
-    universe = universe or DEFAULT_UNIVERSE
+    db = get_db()
+
+    if universe is None and use_dynamic_universe:
+        try:
+            universe = get_dynamic_universe(db, country="SE",
+                                            min_market_cap=min_market_cap,
+                                            max_n=max_universe)
+            if verbose:
+                print(f"Dynamiskt universum: {len(universe)} bolag (mcap >= {min_market_cap/1e9:.1f}Md)")
+        except Exception as e:
+            print(f"  ⚠ Dynamiskt universum failade: {e} — faller tillbaka på DEFAULT")
+            universe = DEFAULT_UNIVERSE
+    else:
+        universe = universe or DEFAULT_UNIVERSE
+
     dates = get_analysis_dates(start_year, end_year)
     if verbose:
         print(f"Universum: {len(universe)} aktier, {len(dates)} datum")
         print(f"Total potentiella obs: {len(universe) * len(dates)}")
-
-    db = get_db()
     results = []
     skipped = 0
     total_n = 0
