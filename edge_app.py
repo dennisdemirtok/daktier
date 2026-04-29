@@ -618,7 +618,14 @@ def api_dashboard():
 
 @app.route("/api/stock/<orderbook_id>")
 def api_stock_detail(orderbook_id):
-    """Hämta en enskild aktie med alla fält — används av drawer vid klick från topplistor/picks."""
+    """Hämta en enskild aktie med alla fält — används av drawer vid klick från topplistor/picks.
+
+    Query-params:
+        lite=1    Hoppa över tunga sekundära beräkningar (quant_rank, NAV-historik,
+                  share_dilution, runway, quality_persistence). Lazy-loadas via
+                  /api/stock/<id>/extras. Snabbar upp drawer-render markant.
+    """
+    is_lite = request.args.get("lite") == "1"
     db = get_db()
     try:
         # orderbook_id lagras som TEXT i vissa databaser, INTEGER i andra — matcha båda
@@ -667,8 +674,8 @@ def api_stock_detail(orderbook_id):
                         d["f_score"] = fscore
                 except Exception as e:
                     print(f"[stock detail] f-score: {e}", file=sys.stderr)
-            # v2.4 — Burn rate / Runway för förlustbolag
-            if d.get("isin"):
+            # Burn rate / Runway för förlustbolag (lazy-loaded i lite-mode)
+            if not is_lite and d.get("isin"):
                 try:
                     from edge_db import compute_burn_rate_runway
                     runway = compute_burn_rate_runway(db, d["isin"])
@@ -676,8 +683,8 @@ def api_stock_detail(orderbook_id):
                         d["runway"] = runway
                 except Exception as e:
                     print(f"[stock detail] runway: {e}", file=sys.stderr)
-            # v2.5 — Quality persistence (5 års ROIC/ROE-stabilitet)
-            if d.get("isin"):
+            # Quality persistence (5 års ROIC/ROE-stabilitet) — lazy
+            if not is_lite and d.get("isin"):
                 try:
                     from edge_db import compute_quality_persistence
                     qp = compute_quality_persistence(db, d["isin"], years=5)
@@ -685,39 +692,40 @@ def api_stock_detail(orderbook_id):
                         d["quality_persistence"] = qp
                 except Exception as e:
                     print(f"[stock detail] quality_persistence: {e}", file=sys.stderr)
-            # v2.5 — Quant rank (Quality/Value/Momentum från 20y KPI)
-            try:
-                cache_key = f"{d.get('country', 'SE')}|500000000"
-                now = _time.time()
-                if (_QUANT_CACHE.get("country") == cache_key
-                        and (now - _QUANT_CACHE.get("ts", 0)) < _QUANT_CACHE_TTL
-                        and _QUANT_CACHE.get("data")):
-                    all_data = _QUANT_CACHE["data"]
-                else:
-                    from edge_db import compute_quant_scores
-                    all_data = compute_quant_scores(db,
-                        country=d.get("country", "SE"),
-                        min_market_cap=500_000_000, max_universe=300)
-                    _QUANT_CACHE.update({"data": all_data, "ts": now,
-                                         "country": cache_key})
-                target = None
-                for s in all_data:
-                    if str(s.get("orderbook_id")) == str(d.get("orderbook_id")):
-                        target = s
-                        break
-                if target:
-                    n_universe = len(all_data)
-                    d["quant_rank"] = {
-                        "n_universe": n_universe,
-                        "quality_score": target.get("quality_score"),
-                        "value_score": target.get("value_score"),
-                        "momentum_score": target.get("momentum_score"),
-                        "composite_score": target.get("composite_score"),
-                        "is_quant_trifecta": target.get("is_quant_trifecta"),
-                    }
-            except Exception as e:
-                print(f"[stock detail] quant_rank: {e}", file=sys.stderr)
-            # v2.4 — Insider-data (FI insynsregister) — enrich i realtid
+            # Quant rank (Quality/Value/Momentum från 20y KPI) — lazy
+            if not is_lite:
+                try:
+                    cache_key = f"{d.get('country', 'SE')}|500000000"
+                    now = _time.time()
+                    if (_QUANT_CACHE.get("country") == cache_key
+                            and (now - _QUANT_CACHE.get("ts", 0)) < _QUANT_CACHE_TTL
+                            and _QUANT_CACHE.get("data")):
+                        all_data = _QUANT_CACHE["data"]
+                    else:
+                        from edge_db import compute_quant_scores
+                        all_data = compute_quant_scores(db,
+                            country=d.get("country", "SE"),
+                            min_market_cap=500_000_000, max_universe=300)
+                        _QUANT_CACHE.update({"data": all_data, "ts": now,
+                                             "country": cache_key})
+                    target = None
+                    for s in all_data:
+                        if str(s.get("orderbook_id")) == str(d.get("orderbook_id")):
+                            target = s
+                            break
+                    if target:
+                        n_universe = len(all_data)
+                        d["quant_rank"] = {
+                            "n_universe": n_universe,
+                            "quality_score": target.get("quality_score"),
+                            "value_score": target.get("value_score"),
+                            "momentum_score": target.get("momentum_score"),
+                            "composite_score": target.get("composite_score"),
+                            "is_quant_trifecta": target.get("is_quant_trifecta"),
+                        }
+                except Exception as e:
+                    print(f"[stock detail] quant_rank: {e}", file=sys.stderr)
+            # Insider-data (FI insynsregister) — enrich i realtid (cachad i Python-modul)
             try:
                 from edge_db import get_insider_summary, _normalize_name
                 ins_summary = get_insider_summary(db, days_back=180)
@@ -742,8 +750,8 @@ def api_stock_detail(orderbook_id):
                     d["insider_period_days"] = 180
             except Exception as e:
                 print(f"[stock detail] insider: {e}", file=sys.stderr)
-            # v2.4 — Utspädnings-bevakning (Patch 4)
-            if d.get("isin"):
+            # Utspädnings-bevakning (5y KPI) — lazy
+            if not is_lite and d.get("isin"):
                 try:
                     from edge_db import compute_share_dilution
                     dilution = compute_share_dilution(db, d["isin"], max_years=5)
@@ -764,7 +772,8 @@ def api_stock_detail(orderbook_id):
                     }
             except Exception as e:
                 print(f"[stock detail] medians: {e}", file=sys.stderr)
-            # v2.4 — Investmentbolag-detektion + NAV/substansrabatt
+            # Investmentbolag-detektion + NAV/substansrabatt
+            # Detektion + nuvarande NAV alltid (lätt). 10y historik = lazy.
             try:
                 from edge_db import (_is_investment_company,
                                      compute_investment_company_nav,
@@ -774,8 +783,8 @@ def api_stock_detail(orderbook_id):
                     nav_now = compute_investment_company_nav(d)
                     if nav_now:
                         d["nav_data"] = nav_now
-                        # Historisk substansrabatt (5y + 10y avg)
-                        if d.get("isin"):
+                        # Historisk substansrabatt (10y query) — lazy-load
+                        if not is_lite and d.get("isin"):
                             hist = get_investment_company_nav_history(db, d["isin"], max_years=10)
                             if hist:
                                 discounts = [h["discount_pct"] for h in hist if h.get("discount_pct") is not None]
@@ -900,6 +909,15 @@ def api_stock_detail(orderbook_id):
         except Exception as e:
             print(f"[stock detail] composite failed: {e}", file=sys.stderr)
 
+        # Smart Score deltas (7d/30d) — för att visa trend i drawer
+        try:
+            from edge_db import get_smart_score_deltas
+            deltas = get_smart_score_deltas(db, d.get("orderbook_id"), d.get("smart_score"))
+            if deltas:
+                d["smart_score_deltas"] = deltas
+        except Exception as e:
+            print(f"[stock detail] smart_score_deltas: {e}", file=sys.stderr)
+
         # v2.4 — Macro-overlay (kontext, påverkar inte score)
         try:
             macro = _fetch_macro_indicators()
@@ -941,6 +959,107 @@ def api_stock_detail(orderbook_id):
             print(f"[stock detail] macro: {e}", file=sys.stderr)
 
         return jsonify(d)
+    finally:
+        db.close()
+
+
+@app.route("/api/stock/<orderbook_id>/extras")
+def api_stock_extras(orderbook_id):
+    """Lazy-loaded sekundär data för drawer (efter att initial-rendering är klar).
+
+    Returnerar bara de tunga beräkningarna (quant_rank, share_dilution, runway,
+    quality_persistence, NAV-historik) som hoppas över när drawer fetchar med
+    ?lite=1. Hålls separat så drawer kan visa primär data direkt och fylla i
+    extras async.
+    """
+    db = get_db()
+    try:
+        row = db.execute(
+            f"SELECT orderbook_id, isin, country, name FROM stocks "
+            f"WHERE CAST(orderbook_id AS TEXT) = CAST({_ph()} AS TEXT) LIMIT 1",
+            (str(orderbook_id),)
+        ).fetchone()
+        if not row:
+            return jsonify({"error": "not found"}), 404
+        d = dict(row)
+        out = {}
+        isin = d.get("isin")
+
+        # Burn rate / runway
+        if isin:
+            try:
+                from edge_db import compute_burn_rate_runway
+                runway = compute_burn_rate_runway(db, isin)
+                if runway:
+                    out["runway"] = runway
+            except Exception as e:
+                print(f"[extras] runway: {e}", file=sys.stderr)
+
+        # Quality persistence
+        if isin:
+            try:
+                from edge_db import compute_quality_persistence
+                qp = compute_quality_persistence(db, isin, years=5)
+                if qp:
+                    out["quality_persistence"] = qp
+            except Exception as e:
+                print(f"[extras] quality_persistence: {e}", file=sys.stderr)
+
+        # Share dilution
+        if isin:
+            try:
+                from edge_db import compute_share_dilution
+                dilution = compute_share_dilution(db, isin, max_years=5)
+                if dilution:
+                    out["share_dilution"] = dilution
+            except Exception as e:
+                print(f"[extras] dilution: {e}", file=sys.stderr)
+
+        # Quant rank
+        try:
+            cache_key = f"{d.get('country', 'SE')}|500000000"
+            now = _time.time()
+            if (_QUANT_CACHE.get("country") == cache_key
+                    and (now - _QUANT_CACHE.get("ts", 0)) < _QUANT_CACHE_TTL
+                    and _QUANT_CACHE.get("data")):
+                all_data = _QUANT_CACHE["data"]
+            else:
+                from edge_db import compute_quant_scores
+                all_data = compute_quant_scores(db,
+                    country=d.get("country", "SE"),
+                    min_market_cap=500_000_000, max_universe=300)
+                _QUANT_CACHE.update({"data": all_data, "ts": now,
+                                     "country": cache_key})
+            target = next((s for s in all_data if str(s.get("orderbook_id")) == str(orderbook_id)), None)
+            if target:
+                out["quant_rank"] = {
+                    "n_universe": len(all_data),
+                    "quality_score": target.get("quality_score"),
+                    "value_score": target.get("value_score"),
+                    "momentum_score": target.get("momentum_score"),
+                    "composite_score": target.get("composite_score"),
+                    "is_quant_trifecta": target.get("is_quant_trifecta"),
+                }
+        except Exception as e:
+            print(f"[extras] quant_rank: {e}", file=sys.stderr)
+
+        # NAV-historik (om investmentbolag)
+        if isin:
+            try:
+                from edge_db import get_investment_company_nav_history
+                hist = get_investment_company_nav_history(db, isin, max_years=10)
+                if hist:
+                    discounts = [h["discount_pct"] for h in hist if h.get("discount_pct") is not None]
+                    if discounts:
+                        out["nav_history"] = {
+                            "history": hist,
+                            "avg_discount_5y": round(sum(discounts[-5:]) / max(len(discounts[-5:]), 1), 1),
+                            "avg_discount_10y": round(sum(discounts) / len(discounts), 1),
+                        }
+            except Exception as e:
+                print(f"[extras] nav_history: {e}", file=sys.stderr)
+
+        return jsonify(out)
     finally:
         db.close()
 
@@ -1226,18 +1345,34 @@ def api_stock_price_history(orderbook_id):
     """Returnerar daglig prishistorik från borsdata_prices för en stock.
 
     Query params: days (default 180 = ~6 mån)
+
+    ISIN-lookup-strategi:
+    1. stocks.isin (om satt)
+    2. fallback: JOIN på borsdata_instrument_map.ticker == stocks.short_name
+       (många SE-stocks saknar isin direkt i stocks-tabellen men har ticker-match)
     """
     days = int(request.args.get("days", 180))
     db = get_db()
     try:
         from edge_db import _ph as ph_fn, _fetchone, _fetchall
-        # Hämta isin
+        # Hämta isin + short_name
         row = _fetchone(db,
-            f"SELECT isin FROM stocks WHERE CAST(orderbook_id AS TEXT) = CAST({_ph()} AS TEXT) LIMIT 1",
+            f"SELECT isin, short_name FROM stocks WHERE CAST(orderbook_id AS TEXT) = CAST({_ph()} AS TEXT) LIMIT 1",
             (str(orderbook_id),))
         if not row:
             return jsonify({"error": "stock not found"}), 404
-        isin = row["isin"] if "isin" in row.keys() else None
+        rd = dict(row)
+        isin = rd.get("isin")
+        # Fallback: lookup via borsdata_instrument_map om stocks.isin är tom
+        if not isin and rd.get("short_name"):
+            try:
+                map_row = _fetchone(db,
+                    f"SELECT isin FROM borsdata_instrument_map WHERE ticker = {_ph()} LIMIT 1",
+                    (rd["short_name"],))
+                if map_row:
+                    isin = dict(map_row).get("isin")
+            except Exception as e:
+                print(f"[price-history] map fallback: {e}", file=sys.stderr)
         if not isin:
             return jsonify({"prices": [], "note": "no_isin"})
 
@@ -5348,8 +5483,15 @@ DEL 7 — SVARSPRINCIPER
 **Använd alltid search_stocks-tool** när användaren nämner ett specifikt bolag.
 Citera EXAKTA siffror från DB:n — gissa aldrig på nyckeltal.
 
-**Föredra book-composite framför Edge Score** för "är detta en bra investering".
-Edge Score handlar om momentum just nu, composite om fundamental kvalitet enligt 10 böcker.
+**SCORE-HIERARKI (viktigt — bara EN score till användaren):**
+- **DAKTIER Score (smart_score)** är vår primära siffra 0-100. Skala: ≥80 STARK KÖP,
+  ≥70 KÖP, ≥55 OK, ≥40 VÄNTA, <40 UNDVIK. Citera ALLTID denna när användaren frågar
+  "är X köpvärt?". Övriga scores (Meta, Edge, Bok-composite, Quant) är delkomponenter.
+- DAKTIER = 50% Bok-composite (10 modeller) + 50% Meta-score (4 modeller).
+- Visa breakdown bara om användaren explicit frågar "varför är scoren XX?" eller
+  "vad ingår?". Annars: en siffra + label.
+- Edge Score (momentum) och Meta Score (4 sub-modeller) är komponent-scores —
+  diskutera dem bara som motivering för DAKTIER Scoren, inte som ersättningar.
 
 **Format**: svenska, punktlistor, fetstilta nyckeltal, kort. Använd 1-3 emojis sparsamt.
 
@@ -6203,7 +6345,7 @@ def _agent_tools_definition():
         },
         {
             "name": "get_full_stock",
-            "description": "Djupdyk i ETT specifikt bolag. Returnerar ALLA nyckeltal: P/E, P/B, ROE, ROCE, FCF (operating cash flow), book composite (10 modellers viktning), Smart Score, Edge Score, momentum, ägarutveckling, värdefälla-flagga, rsi, etc. Använd när användaren frågar 'hur ser X ut?' eller 'är X köpvärt?'.",
+            "description": "Djupdyk i ETT specifikt bolag. Returnerar ALLA nyckeltal: P/E, P/B, ROE, ROCE, FCF (operating cash flow), book composite (10 modellers viktning), DAKTIER Score (vår primära score), Edge Score, momentum, ägarutveckling, värdefälla-flagga, rsi, etc. Använd när användaren frågar 'hur ser X ut?' eller 'är X köpvärt?'.",
             "input_schema": {
                 "type": "object",
                 "properties": {
@@ -6649,6 +6791,52 @@ DEL 9 — DAGENS DB-SNAPSHOT (uppdateras var 5 min)
 def _startup():
     db = get_db()
     stats = get_stats(db)
+
+    # ISIN-backfill: stocks.isin saknas för många SE-bolag, men finns i
+    # borsdata_instrument_map.ticker. Backfill från ticker-match en gång —
+    # därefter fungerar price-history, KPI-lookup och NAV-historik direkt.
+    try:
+        from edge_db import _fetchone, _ph as ph_fn
+        ph = ph_fn()
+        before = _fetchone(db,
+            "SELECT COUNT(*) as n FROM stocks "
+            "WHERE (isin IS NULL OR isin = '') AND short_name IS NOT NULL")
+        n_missing = (dict(before)["n"] if before else 0) or 0
+        if n_missing > 0:
+            print(f"[STARTUP] ISIN-backfill: {n_missing} stocks saknar ISIN, kör backfill...")
+            # Postgres + SQLite-kompatibel UPDATE FROM
+            try:
+                db.execute("""
+                    UPDATE stocks
+                    SET isin = m.isin
+                    FROM borsdata_instrument_map m
+                    WHERE stocks.short_name = m.ticker
+                    AND (stocks.isin IS NULL OR stocks.isin = '')
+                    AND m.isin IS NOT NULL AND m.isin != ''
+                """)
+                db.commit()
+            except Exception:
+                # SQLite saknar UPDATE FROM — fall back till per-row update
+                db.rollback() if hasattr(db, "rollback") else None
+                rows = db.execute(
+                    "SELECT s.short_name, m.isin "
+                    "FROM stocks s JOIN borsdata_instrument_map m ON s.short_name = m.ticker "
+                    "WHERE (s.isin IS NULL OR s.isin = '') AND m.isin IS NOT NULL AND m.isin != ''"
+                ).fetchall()
+                for r in rows:
+                    rd = dict(r)
+                    db.execute(
+                        f"UPDATE stocks SET isin = {ph} WHERE short_name = {ph}",
+                        (rd["isin"], rd["short_name"]))
+                db.commit()
+            after = _fetchone(db,
+                "SELECT COUNT(*) as n FROM stocks "
+                "WHERE (isin IS NULL OR isin = '') AND short_name IS NOT NULL")
+            n_after = (dict(after)["n"] if after else 0) or 0
+            print(f"[STARTUP] ISIN-backfill klar: {n_missing - n_after} bolag fick ISIN, {n_after} kvar utan ticker-match")
+    except Exception as e:
+        print(f"[STARTUP] ISIN-backfill fel: {e}", file=sys.stderr)
+
     db.close()
 
     print("=" * 60)

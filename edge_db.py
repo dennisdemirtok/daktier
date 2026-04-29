@@ -1022,9 +1022,42 @@ def _ensure_borsdata_columns(db):
 
 
 def _ensure_smart_score_columns(db):
-    """Idempotent migration: lägg till smart_score- + v2-kolumner om de saknas."""
+    """Idempotent migration: lägg till smart_score- + v2-kolumner om de saknas.
+
+    Skapar även smart_score_history-tabell för 7d/30d-deltas.
+    """
     is_pg = _use_postgres()
     real = "DOUBLE PRECISION" if is_pg else "REAL"
+    # Skapa smart_score_history om den saknas (snapshot per dag)
+    try:
+        if is_pg:
+            db.execute("""
+                CREATE TABLE IF NOT EXISTS smart_score_history (
+                    orderbook_id TEXT NOT NULL,
+                    date TEXT NOT NULL,
+                    smart_score DOUBLE PRECISION,
+                    PRIMARY KEY (orderbook_id, date)
+                )
+            """)
+            db.execute("CREATE INDEX IF NOT EXISTS idx_smart_score_hist_date ON smart_score_history(date DESC)")
+            db.execute("CREATE INDEX IF NOT EXISTS idx_smart_score_hist_obid ON smart_score_history(orderbook_id, date DESC)")
+            db.commit()
+        else:
+            db.execute("""
+                CREATE TABLE IF NOT EXISTS smart_score_history (
+                    orderbook_id TEXT NOT NULL,
+                    date TEXT NOT NULL,
+                    smart_score REAL,
+                    PRIMARY KEY (orderbook_id, date)
+                )
+            """)
+            db.execute("CREATE INDEX IF NOT EXISTS idx_smart_score_hist_date ON smart_score_history(date DESC)")
+            db.execute("CREATE INDEX IF NOT EXISTS idx_smart_score_hist_obid ON smart_score_history(orderbook_id, date DESC)")
+            db.commit()
+    except Exception as e:
+        try: db.rollback()
+        except Exception: pass
+        print(f"[smart_score_history migration] {e}")
     cols = [
         ("smart_score", real),
         ("smart_score_yesterday", real),
@@ -4250,12 +4283,41 @@ def compute_quant_scores(db, country="SE", min_market_cap=500e6,
     universe = [dict(r) for r in rows]
     if not universe: return []
 
-    # Hämta KPI-värden för alla
+    # Hämta KPI-värden för alla — BULK i en query istället för N roundtrips
     # KPI-id: 2=P/E, 4=P/B, 10=EV/EBIT, 33=ROE, 37=ROIC, 30=Vinstmarginal,
     #          1=Direktavkastning, 94=Omsättningstillväxt, 97=Vinsttillväxt
-    target_kpis = {2, 4, 10, 33, 37, 30, 1, 94, 97}
+    target_kpis = [2, 4, 10, 33, 37, 30, 1, 94, 97]
+    isin_list = [s["isin"] for s in universe if s.get("isin")]
+    kpi_by_isin = {}  # {isin: {kpi_id: latest_value}}
+    if isin_list:
+        # Postgres + SQLite stöder båda IN (...) — bygg parameter-lista
+        isin_ph = ",".join([ph] * len(isin_list))
+        kpi_ph = ",".join(str(k) for k in target_kpis)
+        try:
+            rows = _fetchall(db, f"""
+                SELECT isin, kpi_id, period_year, value
+                FROM borsdata_kpi_history
+                WHERE isin IN ({isin_ph})
+                AND report_type = {ph}
+                AND kpi_id IN ({kpi_ph})
+                AND value IS NOT NULL
+                ORDER BY period_year DESC
+            """, (*isin_list, "year"))
+            # Behåll bara senaste året per (isin, kpi_id)
+            for r in rows:
+                rd = dict(r)
+                isin = rd.get("isin")
+                kid = rd.get("kpi_id")
+                if isin not in kpi_by_isin:
+                    kpi_by_isin[isin] = {}
+                if kid not in kpi_by_isin[isin]:
+                    kpi_by_isin[isin][kid] = rd.get("value")
+        except Exception as e:
+            import sys
+            print(f"[compute_quant_scores] bulk KPI query failed: {e}", file=sys.stderr)
+
     for s in universe:
-        kpis = get_latest_kpi_values(db, s["isin"], list(target_kpis))
+        kpis = kpi_by_isin.get(s["isin"], {})
         s["pe"] = kpis.get(2)
         s["pb"] = kpis.get(4)
         s["ev_ebit"] = kpis.get(10)
@@ -7124,12 +7186,103 @@ def update_smart_scores_for_all(db, min_owners=100):
             print(f"[smart_score] update fel för {oid}: {e}")
             errors += 1
 
+    # Snapshot till smart_score_history (en rad per (orderbook_id, dagens datum))
+    # Använder UPSERT så samma dag blir idempotent.
+    try:
+        for stock in stocks_list:
+            oid = stock.get("orderbook_id")
+            new_score = stock.get("smart_score")  # uppdaterad ovan
+            if oid is None or new_score is None:
+                continue
+            try:
+                if _use_postgres():
+                    cursor.execute(
+                        f"INSERT INTO smart_score_history (orderbook_id, date, smart_score) "
+                        f"VALUES ({ph}, {ph}, {ph}) "
+                        f"ON CONFLICT (orderbook_id, date) DO UPDATE SET smart_score = EXCLUDED.smart_score",
+                        (str(oid), today, new_score))
+                else:
+                    db.execute(
+                        "INSERT INTO smart_score_history (orderbook_id, date, smart_score) "
+                        "VALUES (?, ?, ?) "
+                        "ON CONFLICT(orderbook_id, date) DO UPDATE SET smart_score = excluded.smart_score",
+                        (str(oid), today, new_score))
+            except Exception as ie:
+                # Tyst skip — historik är best-effort
+                pass
+    except Exception as e:
+        print(f"[smart_score_history] snapshot fel: {e}")
+
     if _use_postgres():
         cursor.close()
     db.commit()
 
     return {"updated": updated, "unchanged": unchanged, "errors": errors,
             "total": len(stocks_list)}
+
+
+def get_smart_score_history(db, orderbook_id, days=30):
+    """Hämtar smart_score-historik för en aktie de senaste N dagarna.
+
+    Returnerar list[dict] med {date, smart_score} sorterad ASC.
+    """
+    if not orderbook_id:
+        return []
+    ph = _ph()
+    try:
+        rows = _fetchall(db,
+            f"SELECT date, smart_score FROM smart_score_history "
+            f"WHERE orderbook_id = {ph} ORDER BY date DESC LIMIT {ph}",
+            (str(orderbook_id), days))
+        out = [{"date": dict(r)["date"], "smart_score": dict(r)["smart_score"]} for r in rows]
+        out.reverse()  # ASC
+        return out
+    except Exception as e:
+        print(f"[get_smart_score_history] {e}")
+        return []
+
+
+def get_smart_score_deltas(db, orderbook_id, current_score=None):
+    """Hämtar 7d/30d-deltas för smart_score.
+
+    Returnerar dict {delta_7d, delta_30d, score_7d_ago, score_30d_ago} eller None.
+    """
+    if not orderbook_id:
+        return None
+    history = get_smart_score_history(db, orderbook_id, days=35)
+    if not history:
+        return None
+    # current = senaste i history (eller current_score om given)
+    current = current_score if current_score is not None else history[-1]["smart_score"]
+    if current is None:
+        return None
+    from datetime import datetime as _dt, timedelta as _td
+    today = _dt.now().date()
+    # Hitta närmaste värde som är >=7 dagar gammalt
+    def _find_at_age(min_age_days):
+        threshold = today - _td(days=min_age_days)
+        # Gå bakåt i historiken
+        for h in reversed(history):
+            try:
+                d = _dt.strptime(h["date"], "%Y-%m-%d").date()
+            except Exception:
+                continue
+            if d <= threshold:
+                return h["smart_score"], h["date"]
+        return None, None
+
+    s_7d, d_7d = _find_at_age(7)
+    s_30d, d_30d = _find_at_age(30)
+    return {
+        "current": current,
+        "score_7d_ago": s_7d,
+        "score_30d_ago": s_30d,
+        "date_7d_ago": d_7d,
+        "date_30d_ago": d_30d,
+        "delta_7d": (current - s_7d) if (s_7d is not None) else None,
+        "delta_30d": (current - s_30d) if (s_30d is not None) else None,
+        "n_days": len(history),
+    }
 
 
 def get_hot_movers(db, direction="up", lookback=1, min_owners=100, limit=50, offset=0, country="", mode="daily"):

@@ -1500,11 +1500,17 @@ function renderSignalsTable() {
     const infoBanner = `<div class="info-banner">
         <div class="info-banner-icon">⭐</div>
         <div class="info-banner-text">
-            <strong>⭐ Smart Score (NY):</strong> Den enkla siffran — 50% Meta Score + 50% Bok-composite. ≥80 = STARK KÖP, ≥70 = KÖP, ≥55 = OK, ≥40 = VÄNTA, &lt;40 = UNDVIK. <strong>▲/▼-pilen visar förändring från igår</strong> — så du ser direkt när NVidia eller Investor B blir mer köpvärt på en kursnedgång.<br>
-            <strong>Meta Score:</strong> Viktat snitt av 4 modeller — Trav 30% + DSM 25% + ACE 25% + Magic Formula 20%.<br>
-            <strong>🏇 Trav:</strong> Ägardriven momentum · <strong>🎯 DSM:</strong> Kontrarian + värde · <strong>⚡ ACE:</strong> Percentil multi-faktor · <strong>📊 Magic:</strong> EV/EBIT + ROCE.<br>
-            <strong>📚 Bok-composite:</strong> Viktat snitt över 10 bokmodeller (Graham, Buffett, Lynch, Greenblatt, Klarman, Bogle, Stinsen, Taleb, Kelly, Spiltan).<br>
-            <strong>DD-skydd:</strong> Blockerar entry vid hög DD-risk (≥60) eller extrem pris-spike (6M >150%, YTD >200%).
+            <strong>⭐ DAKTIER Score 0–100</strong> — vår primära score. Backtest-validerad sammanvägning av momentum + fundamenta.<br>
+            <span style="opacity:0.85">≥80 STARK KÖP · ≥70 KÖP · ≥55 OK · ≥40 VÄNTA · &lt;40 UNDVIK · ▲/▼ = förändring sedan igår</span><br>
+            <details style="margin-top:6px">
+                <summary style="cursor:pointer;font-weight:600">Vad ingår i DAKTIER Score?</summary>
+                <div style="margin-top:6px;font-size:12px;line-height:1.5">
+                    <strong>50% Bok-composite</strong> — viktat snitt av 10 bokmodeller (Graham, Buffett, Lynch, Greenblatt, Klarman, Bogle, Stinsen, Taleb, Kelly, Spiltan).<br>
+                    <strong>50% Meta-score</strong> — Trav (30%, ägar-momentum) + DSM (25%, kontrarian) + ACE (25%, multi-faktor) + Magic Formula (20%, EV/EBIT + ROCE).<br>
+                    Övriga score-kolumner i tabellen (Meta, Edge, Bok) är delkomponenter — DAKTIER Score är den siffran att sortera på.<br>
+                    <strong>DD-skydd:</strong> Blockerar entry vid hög DD-risk (≥60) eller extrem pris-spike (6M &gt;150%, YTD &gt;200%).
+                </div>
+            </details>
         </div>
     </div>`;
 
@@ -1612,7 +1618,7 @@ function renderSignalsTable() {
         <div class="table-container">
             <table class="signals-table"><thead><tr>
                 <th style="width:40px">#</th>
-                <th onclick="doSort('smart')" class="${thClass('smart')}" style="min-width:120px" title="Smart Score = 50% Meta (momentum) + 50% Bok-composite (fundamenta). En enkel score för att se köpvärde. ▲/▼ visar förändring från igår.">⭐ Smart Score${sortArrow('smart')}</th>
+                <th onclick="doSort('smart')" class="${thClass('smart')}" style="min-width:120px" title="DAKTIER Score = vår primära score 0-100. Sammanvägning av Meta (50% — momentum) och Bok-composite (50% — fundamenta). ▲/▼ visar förändring senaste dygnet. Övriga score-kolumner är delkomponenter.">⭐ DAKTIER Score${sortArrow('smart')}</th>
                 <th onclick="doSort('v2_quality')" class="${thClass('v2_quality')}" style="min-width:90px" title="v2 Setup-typ + Value/Quality/Momentum-axlar (klassificerings-baserad analys, asset_light/compounder/etc).">🎯 v2 Setup${sortArrow('v2_quality')}</th>
                 <th onclick="doSort('meta')" class="${thClass('meta')}" style="min-width:140px">Meta Score${sortArrow('meta')}</th>
                 <th onclick="doSort('score')" class="${thClass('score')}" style="min-width:80px">Edge${sortArrow('score')}</th>
@@ -2825,52 +2831,77 @@ function renderBuyZoneSection(s) {
     const zone = bz.buy_zone_price;
     const dist = bz.distance_pct;
     const inZone = bz.in_buy_zone;
-    const currComp = bz.current_composite;
-    const zoneComp = bz.buy_zone_composite;
     const currency = s.currency || '';
 
-    let headerBg, headerTitle, headerIcon, bodyText;
+    // Färg + status
+    let statusBg, statusBorder, statusBadgeBg, statusBadgeColor, statusLabel, headline, sub;
     if (inZone) {
-        headerBg = 'linear-gradient(135deg,#d1fae5,#a7f3d0)';
-        headerIcon = '🎯';
-        headerTitle = 'I köpzon nu';
-        bodyText = `Aktien ligger redan på eller under beräknat köpzonspris (<b>${zone?.toFixed(2)} ${currency}</b>). Composite ${currComp?.toFixed(0)} bekräftar köpsignal.`;
+        statusBg = 'linear-gradient(135deg,#ecfdf5,#d1fae5)';
+        statusBorder = '#10b981';
+        statusBadgeBg = '#10b981';
+        statusBadgeColor = 'white';
+        statusLabel = 'KÖPLÄGE';
+        headline = `Priset är i köpzonen.`;
+        sub = `Just nu uppfyller flera av våra värderingsmodeller köpkriterierna samtidigt.`;
     } else if (zone == null) {
-        headerBg = 'linear-gradient(135deg,#f3f4f6,#e5e7eb)';
-        headerIcon = '⏸';
-        headerTitle = 'Långt från köpzon';
-        bodyText = `Priset behöver falla mer än 25% för att composite ska nå köpsignal (75). Composite just nu: ${currComp?.toFixed(0)}.`;
+        statusBg = 'linear-gradient(135deg,#fafafa,#f4f4f5)';
+        statusBorder = '#a1a1aa';
+        statusBadgeBg = '#71717a';
+        statusBadgeColor = 'white';
+        statusLabel = 'EJ KÖPLÄGE';
+        headline = `Aktien är inte nära köpzonen.`;
+        sub = `Priset skulle behöva falla mer än 25% innan modellerna är överens om köp.`;
     } else {
-        headerBg = 'linear-gradient(135deg,#fef3c7,#fde68a)';
-        headerIcon = '⏳';
-        headerTitle = 'Nära köpzon';
-        bodyText = `Priset behöver falla <b>${dist?.toFixed(1)}%</b> (från ${curr?.toFixed(2)} → <b>${zone?.toFixed(2)} ${currency}</b>) för att composite ska gå från ${currComp?.toFixed(0)} till ${zoneComp?.toFixed(0)} (köpsignal).`;
+        statusBg = 'linear-gradient(135deg,#fffbeb,#fef3c7)';
+        statusBorder = '#f59e0b';
+        statusBadgeBg = '#f59e0b';
+        statusBadgeColor = 'white';
+        statusLabel = 'BEVAKA';
+        headline = `Bevaka — köpläge vid <b>${zone.toFixed(2)} ${currency}</b>.`;
+        sub = `Aktien handlas ${dist.toFixed(1)}% över köpzonen.`;
     }
 
     // ID för price chart container — laddas async
     const chartId = `priceChart_${s.orderbook_id || 'x'}`;
 
-    return `<div class="drawer-section" style="background:${headerBg};border-radius:12px;padding:14px 16px;margin-top:12px">
-        <div class="drawer-section-title" style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
-            <span style="font-size:20px">${headerIcon}</span>
-            <span>${headerTitle} — simulerat riktpris</span>
+    // Stora siffror — grid med 3 KPI:er
+    const kpiCard = (label, value, accent) => `
+        <div style="background:white;border-radius:10px;padding:10px 12px;border:1px solid rgba(0,0,0,0.05);text-align:center">
+            <div style="font-size:10px;color:#6b7280;font-weight:700;text-transform:uppercase;letter-spacing:0.5px">${label}</div>
+            <div style="font-size:18px;font-weight:800;color:${accent || '#0f172a'};margin-top:2px;line-height:1.2">${value}</div>
+        </div>`;
+
+    const kpis = (zone != null && !inZone) ? `
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:12px">
+            ${kpiCard('Nu', curr.toFixed(2) + ' ' + currency, '#1e293b')}
+            ${kpiCard('Köpzon', zone.toFixed(2) + ' ' + currency, '#10b981')}
+            ${kpiCard('Avstånd', '−' + dist.toFixed(1) + '%', '#f59e0b')}
+        </div>` : (inZone && curr != null) ? `
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px">
+            ${kpiCard('Nuvarande pris', curr.toFixed(2) + ' ' + currency, '#10b981')}
+            ${kpiCard('Köpzon nådd', '✓', '#10b981')}
+        </div>` : '';
+
+    return `<div class="drawer-section" style="background:${statusBg};border-left:4px solid ${statusBorder};border-radius:10px;padding:14px 16px;margin-top:12px">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:8px">
+            <div style="font-size:13px;font-weight:700;color:#0f172a">När är aktien köpvärd?</div>
+            <span style="background:${statusBadgeBg};color:${statusBadgeColor};font-size:10.5px;font-weight:800;padding:3px 10px;border-radius:12px;letter-spacing:0.5px">${statusLabel}</span>
         </div>
-        <div style="font-size:13px;line-height:1.5;color:#1f2937">${bodyText}</div>
-        ${zone != null && !inZone ? `
-            <div style="display:flex;gap:14px;margin-top:10px;font-size:12px">
-                <div><span style="opacity:0.7">Nuvarande:</span> <b>${curr?.toFixed(2)} ${currency}</b></div>
-                <div><span style="opacity:0.7">Köpzon:</span> <b>${zone?.toFixed(2)} ${currency}</b></div>
-                <div><span style="opacity:0.7">Avstånd:</span> <b>${dist?.toFixed(1)}%</b></div>
-            </div>` : ''}
+        <div style="font-size:14px;color:#0f172a;line-height:1.5">${headline}</div>
+        <div style="font-size:12.5px;color:#475569;line-height:1.5;margin-top:4px">${sub}</div>
+        ${kpis}
         <div id="${chartId}" data-orderbook-id="${s.orderbook_id || ''}" data-zone="${zone || ''}" data-curr="${curr || ''}" data-currency="${currency}" data-in-zone="${inZone ? '1' : '0'}" class="buy-zone-chart-pending" style="margin-top:12px;min-height:120px">
             <div style="text-align:center;color:var(--text-muted);font-size:11px;padding:14px">
                 <span class="material-symbols-outlined" style="font-size:14px;animation:spin 1s linear infinite">progress_activity</span>
                 Laddar prishistorik...
             </div>
         </div>
-        <div style="font-size:11px;color:var(--text-muted);margin-top:8px;font-style:italic">
-            Köpzonen är det pris där composite (viktat av 10 bokmodeller) skulle passera 75. Beräknas genom att simulera pris-sänkningar och rescora — fångar in läget där Graham, Buffett, Klarman, Greenblatt m.fl. tillsammans flaggar köp.
-        </div>
+        <details style="margin-top:10px">
+            <summary style="font-size:11px;color:#6b7280;cursor:pointer">Hur räknas köpzonen?</summary>
+            <div style="font-size:11.5px;color:#475569;line-height:1.5;margin-top:6px;padding:8px 10px;background:rgba(255,255,255,0.6);border-radius:6px">
+                Vi simulerar små prisfall (2%, 5%, 10%…) och räknar om bolagets samlade värderings-poäng (Graham, Buffett, Klarman, Greenblatt m.fl.) vid varje pris. Köpzonen är det pris där den samlade poängen passerar 75 — då är majoriteten av modellerna överens om att aktien är köpvärd.
+            </div>
+        </details>
     </div>`;
 }
 
@@ -4182,15 +4213,31 @@ function openDrawer(s) {
             drawerBody.innerHTML = `
                 <div style="padding:40px;text-align:center;color:var(--text-muted)">
                     <span class="material-symbols-outlined" style="font-size:32px;animation:spin 1s linear infinite">progress_activity</span>
-                    <div style="margin-top:8px">Hämtar full information...</div>
+                    <div style="margin-top:8px">Hämtar information...</div>
                 </div>`;
         }
-        fetch(`/api/stock/${s.orderbook_id}`)
+        // Steg 1: snabb primär data (?lite=1 hoppar över quant_rank, NAV-historik m.m.)
+        fetch(`/api/stock/${s.orderbook_id}?lite=1`)
             .then(r => r.json())
             .then(full => {
                 if (full && !full.error) {
                     full._drawer_full_fetched = true;
-                    openDrawer(full);  // re-render med full data
+                    openDrawer(full);  // render direkt med primär data
+                    // Steg 2: lazy-load extras parallellt — re-render när klart
+                    fetch(`/api/stock/${s.orderbook_id}/extras`)
+                        .then(r => r.json())
+                        .then(extras => {
+                            if (extras && !extras.error && _currentDrawerStock
+                                && String(_currentDrawerStock.orderbook_id) === String(full.orderbook_id)) {
+                                Object.assign(full, extras);
+                                // Merge nav_history in i nav_data
+                                if (extras.nav_history && full.nav_data) {
+                                    Object.assign(full.nav_data, extras.nav_history);
+                                }
+                                openDrawer(full);  // re-render med extras
+                            }
+                        })
+                        .catch(e => console.warn('[drawer] extras fetch fel:', e));
                 }
             })
             .catch(e => console.warn('[drawer] fetch full data fel:', e));
@@ -4371,60 +4418,134 @@ function openDrawer(s) {
         </div>`;
     }
 
-    // ── ⭐ SMART SCORE (sammanvägd, nya hjältescoren) ──
+    // ── ⭐ DAKTIER SCORE (en samlad, primär score) ──
     if (s.smart_score != null) {
         const ss = s.smart_score;
-        const ssLabel = s.smart_score_label || (ss >= 80 ? 'STARK KÖP' : ss >= 70 ? 'KÖP' : ss >= 55 ? 'OK' : ss >= 40 ? 'VÄNTA' : 'UNDVIK');
-        const ssColor = s.smart_score_color || (ss >= 80 ? '#006c46' : ss >= 70 ? '#00a870' : ss >= 55 ? '#888' : ss >= 40 ? '#e67700' : '#c0392b');
-        const sd = s.smart_score_change;
-        const sdHtml = sd == null ? '<span style="color:#888;font-size:14px;font-weight:500">— ingen historik ännu —</span>'
-            : sd > 0.5 ? `<span style="color:#00a870;font-weight:700;font-size:18px">▲ ${sd.toFixed(1)}p sedan igår</span>`
-            : sd < -0.5 ? `<span style="color:#c0392b;font-weight:700;font-size:18px">▼ ${Math.abs(sd).toFixed(1)}p sedan igår</span>`
-            : `<span style="color:#888;font-size:14px">● Oförändrad sedan igår</span>`;
-        const ssBg = ss >= 70 ? 'linear-gradient(135deg, #ecfdf5, #d1fae5)' : ss >= 55 ? 'linear-gradient(135deg, #f9fafb, #f3f4f6)' : ss >= 40 ? 'linear-gradient(135deg, #fef3c7, #fde68a)' : 'linear-gradient(135deg, #fee2e2, #fecaca)';
-        html += `<div class="drawer-section" style="background:${ssBg};border-radius:12px;padding:18px;margin-bottom:14px">
-            <div style="display:flex;align-items:baseline;justify-content:space-between;gap:14px">
+        const ssLabel = ss >= 80 ? 'STARK KÖP' : ss >= 70 ? 'KÖP' : ss >= 55 ? 'OK' : ss >= 40 ? 'VÄNTA' : 'UNDVIK';
+        const ssColor = ss >= 80 ? '#006c46' : ss >= 70 ? '#00a870' : ss >= 55 ? '#64748b' : ss >= 40 ? '#e67700' : '#c0392b';
+        const sd = s.smart_score_change;  // 1d delta
+        const deltas = s.smart_score_deltas || {};
+        const d7 = deltas.delta_7d;
+        const d30 = deltas.delta_30d;
+
+        // Helper för delta-badge
+        const deltaBadge = (val, label) => {
+            if (val == null) return `<div style="text-align:center;padding:6px 8px;background:rgba(255,255,255,0.5);border-radius:8px"><div style="font-size:9.5px;color:#94a3b8;font-weight:700;text-transform:uppercase">${label}</div><div style="font-size:13px;color:#94a3b8;margin-top:2px">—</div></div>`;
+            const c = val > 0.5 ? '#10b981' : val < -0.5 ? '#dc2626' : '#64748b';
+            const arrow = val > 0.5 ? '▲' : val < -0.5 ? '▼' : '●';
+            const sign = val > 0 ? '+' : '';
+            return `<div style="text-align:center;padding:6px 8px;background:rgba(255,255,255,0.7);border-radius:8px">
+                <div style="font-size:9.5px;color:#64748b;font-weight:700;text-transform:uppercase">${label}</div>
+                <div style="font-size:13px;color:${c};font-weight:700;margin-top:2px">${arrow} ${sign}${val.toFixed(1)}p</div>
+            </div>`;
+        };
+
+        // Breakdown chips för de underliggande modellerna (kompakt)
+        const breakdownChip = (label, val, weight) => {
+            if (val == null) return '';
+            const c = val >= 70 ? '#10b981' : val >= 55 ? '#3b82f6' : val >= 40 ? '#f59e0b' : '#dc2626';
+            return `<div style="background:rgba(255,255,255,0.6);border-radius:6px;padding:5px 9px;display:flex;align-items:center;gap:6px">
+                <span style="font-size:11px;color:#475569;font-weight:600">${label}</span>
+                <span style="font-size:13px;font-weight:800;color:${c}">${val.toFixed(0)}</span>
+                ${weight ? `<span style="font-size:9.5px;color:#94a3b8">${weight}</span>` : ''}
+            </div>`;
+        };
+
+        const ssBg = ss >= 70 ? 'linear-gradient(135deg, #ecfdf5, #d1fae5)' : ss >= 55 ? 'linear-gradient(135deg, #f8fafc, #f1f5f9)' : ss >= 40 ? 'linear-gradient(135deg, #fffbeb, #fef3c7)' : 'linear-gradient(135deg, #fef2f2, #fee2e2)';
+
+        html += `<div class="drawer-section" style="background:${ssBg};border-radius:14px;padding:18px;margin-bottom:14px;border:1px solid rgba(0,0,0,0.05)">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:14px;margin-bottom:14px">
                 <div>
-                    <div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.08em;font-weight:700">⭐ Smart Score</div>
-                    <div style="font-size:42px;font-weight:800;color:${ssColor};line-height:1">${ss.toFixed(0)}</div>
-                    <div style="font-size:14px;color:${ssColor};font-weight:700;margin-top:2px">${ssLabel}</div>
-                </div>
-                <div style="text-align:right">
-                    <div style="font-size:11px;color:var(--text-muted)">Förändring</div>
-                    ${sdHtml}
-                    <div style="font-size:10px;color:var(--text-muted);margin-top:4px">50% Meta + 50% Bok-composite</div>
+                    <div style="font-size:10.5px;color:#475569;text-transform:uppercase;letter-spacing:0.1em;font-weight:800">⭐ DAKTIER Score</div>
+                    <div style="display:flex;align-items:baseline;gap:10px;margin-top:4px">
+                        <div style="font-size:46px;font-weight:900;color:${ssColor};line-height:1">${ss.toFixed(0)}</div>
+                        <div style="font-size:13px;color:${ssColor};font-weight:800;letter-spacing:0.5px">${ssLabel}</div>
+                    </div>
                 </div>
             </div>
+            <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px">
+                ${deltaBadge(sd, '1 dag')}
+                ${deltaBadge(d7, '7 dagar')}
+                ${deltaBadge(d30, '30 dagar')}
+            </div>
+            <details style="margin-top:12px">
+                <summary style="font-size:11px;color:#64748b;cursor:pointer;font-weight:600">Hur räknas DAKTIER Score?</summary>
+                <div style="margin-top:8px;font-size:11.5px;color:#475569;line-height:1.5">
+                    <div style="margin-bottom:6px">Sammanvägning av två backtestade ramverk:</div>
+                    <div style="display:flex;flex-wrap:wrap;gap:6px">
+                        ${breakdownChip('Bok-composite', s.book_composite, '50%')}
+                        ${breakdownChip('Meta', s.meta_score, '50%')}
+                    </div>
+                    <div style="margin-top:8px;font-size:11px;color:#64748b">
+                        <strong>Bok-composite</strong> = Graham, Buffett, Klarman, Greenblatt m.fl. (10 modeller)<br>
+                        <strong>Meta</strong> = Trav (ägar-momentum) + DSM + ACE + Magic Formula
+                    </div>
+                </div>
+            </details>
         </div>`;
     }
 
-    // ── EDGE MODEL (if available) ──
-    if (s.edge_score != null) {
-        const sc = scoreColor(s.edge_score);
-        html += `<div class="drawer-section">
-            <div class="drawer-section-title">Edge Model</div>
-            <div class="drawer-grid">
-                <div class="drawer-item"><div class="drawer-item-label">Edge Score</div><div class="drawer-item-value" style="color:${sc}">${s.edge_score.toFixed(1)}</div></div>
-                <div class="drawer-item"><div class="drawer-item-label">Signal</div><div class="drawer-item-value">${signalBadge(s.signal)}</div></div>
-                <div class="drawer-item"><div class="drawer-item-label">Action</div><div class="drawer-item-value">${actionBadge(s.action)}</div></div>
-                <div class="drawer-item"><div class="drawer-item-label">Fas</div><div class="drawer-item-value">${phaseBadge(s.phase)}</div></div>
-                <div class="drawer-item"><div class="drawer-item-label">DD Risk</div><div class="drawer-item-value">${ddRiskBadge(s.dd_risk, s.dd_risk_label)}</div></div>
-                <div class="drawer-item"><div class="drawer-item-label">7d Trend</div><div class="drawer-item-value">${trend7dBadge(s.trend_7d, s.trend_7d_sv)}</div></div>
-            </div>
-        </div>`;
-        if (s.components) {
-            const comps = [
-                ['Momentum', s.components.owner_momentum, 'var(--green)'],
-                ['Accel+SS', s.components.accel_sweetspot, 'var(--blue)'],
-                ['Kontrarian', s.components.kontrarian, 'var(--purple)'],
-                ['Fundamental', s.components.fundamental, '#2563eb'],
-                ['Short Squeeze', s.components.short_squeeze, 'var(--orange)'],
-                ['Ägarmognad', s.components.owner_maturity, '#16a34a'],
-            ];
-            html += `<div class="drawer-section"><div class="drawer-section-title">Modellkomponenter</div><div class="drawer-grid">${
-                comps.map(([l,v,c]) => `<div class="drawer-item"><div class="drawer-item-label">${l}</div><div class="drawer-item-value" style="color:${c}">${v!=null?v.toFixed(0):'-'}</div></div>`).join('')
-            }</div></div>`;
+    // ── DETALJSCORES (Edge + Meta) — komprimerat under DAKTIER Score ──
+    // Visas bara om DAKTIER Score saknas, ELLER inuti collapsible "Detaljer"-panel
+    const hasEdge = s.edge_score != null;
+    const hasMeta = s.meta_score != null;
+    if ((hasEdge || hasMeta) && s.smart_score != null) {
+        // Komprimerad detalj-panel — användaren kan veckla ut för att se underliggande modeller
+        let detailsBody = '';
+        if (hasEdge) {
+            detailsBody += `<div style="margin-top:8px">
+                <div style="font-size:11px;font-weight:700;color:#475569;margin-bottom:4px;text-transform:uppercase;letter-spacing:0.4px">Edge-modell (ägar-momentum)</div>
+                <div style="display:flex;flex-wrap:wrap;gap:6px">
+                    <span style="background:white;border:1px solid #e5e7eb;border-radius:6px;padding:4px 9px;font-size:11.5px"><b>Score:</b> ${s.edge_score.toFixed(0)}</span>
+                    <span style="background:white;border:1px solid #e5e7eb;border-radius:6px;padding:4px 9px;font-size:11.5px"><b>Signal:</b> ${(s.signal||'-').replace(/_/g,' ')}</span>
+                    <span style="background:white;border:1px solid #e5e7eb;border-radius:6px;padding:4px 9px;font-size:11.5px"><b>Fas:</b> ${(s.phase||'-')}</span>
+                    ${s.dd_risk_label ? `<span style="background:white;border:1px solid #e5e7eb;border-radius:6px;padding:4px 9px;font-size:11.5px"><b>DD-risk:</b> ${s.dd_risk_label}</span>` : ''}
+                </div>
+            </div>`;
         }
+        if (hasMeta) {
+            const dsc = s.dsm_score || 0;
+            const asc = s.ace_score || 0;
+            const msc = s.magic_score;
+            detailsBody += `<div style="margin-top:10px">
+                <div style="font-size:11px;font-weight:700;color:#475569;margin-bottom:4px;text-transform:uppercase;letter-spacing:0.4px">Meta-modell (4 sub-modeller)</div>
+                <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px">
+                    <div style="background:white;border:1px solid #e5e7eb;border-radius:8px;padding:6px;text-align:center">
+                        <div style="font-size:9.5px;color:#64748b">Trav</div>
+                        <div style="font-size:14px;font-weight:700;color:${scoreColor(s.edge_score||0)}">${(s.edge_score||0).toFixed(0)}</div>
+                    </div>
+                    <div style="background:white;border:1px solid #e5e7eb;border-radius:8px;padding:6px;text-align:center">
+                        <div style="font-size:9.5px;color:#64748b">DSM</div>
+                        <div style="font-size:14px;font-weight:700;color:${scoreColor(dsc)}">${dsc.toFixed(0)}</div>
+                    </div>
+                    <div style="background:white;border:1px solid #e5e7eb;border-radius:8px;padding:6px;text-align:center">
+                        <div style="font-size:9.5px;color:#64748b">ACE</div>
+                        <div style="font-size:14px;font-weight:700;color:${scoreColor(asc)}">${asc.toFixed(0)}</div>
+                    </div>
+                    <div style="background:white;border:1px solid #e5e7eb;border-radius:8px;padding:6px;text-align:center">
+                        <div style="font-size:9.5px;color:#64748b">Magic</div>
+                        <div style="font-size:14px;font-weight:700;color:${msc != null ? scoreColor(msc) : '#9ca3af'}">${msc != null ? msc.toFixed(0) : '—'}</div>
+                    </div>
+                </div>
+            </div>`;
+        }
+        if (detailsBody) {
+            html += `<details class="drawer-section" style="background:#f8fafc;border-radius:10px;padding:10px 14px">
+                <summary style="font-size:12px;font-weight:700;color:#334155;cursor:pointer;list-style:none">
+                    📊 Score-detaljer (Edge + Meta)
+                </summary>
+                ${detailsBody}
+            </details>`;
+        }
+    } else if (hasEdge && !hasMeta) {
+        // Edge utan smart_score: visa kompakt utan att duplicera
+        html += `<details class="drawer-section" style="background:#f8fafc;border-radius:10px;padding:10px 14px">
+            <summary style="font-size:12px;font-weight:700;color:#334155;cursor:pointer">📊 Edge-detaljer</summary>
+            <div style="margin-top:8px;display:flex;flex-wrap:wrap;gap:6px">
+                <span style="background:white;border:1px solid #e5e7eb;border-radius:6px;padding:4px 9px;font-size:11.5px"><b>Score:</b> ${s.edge_score.toFixed(0)}</span>
+                <span style="background:white;border:1px solid #e5e7eb;border-radius:6px;padding:4px 9px;font-size:11.5px"><b>Signal:</b> ${(s.signal||'-').replace(/_/g,' ')}</span>
+            </div>
+        </details>`;
     }
 
     // ── DISCOVERY SIGNAL (backtestad: 66-87% win rate, +45% 1Y) ──
@@ -4485,40 +4606,7 @@ function openDrawer(s) {
         </div>`;
     }
 
-    // ── META SCORE (alla 4 modeller) ──
-    if (s.meta_score != null) {
-        const mc = scoreColor(s.meta_score);
-        const dsc = s.dsm_score || 0;
-        const asc = s.ace_score || 0;
-        const msc = s.magic_score;
-        html += `<div class="drawer-section">
-            <div class="drawer-section-title">🎯 Meta Score (4 modeller)</div>
-            <div class="drawer-grid">
-                <div class="drawer-item"><div class="drawer-item-label">Meta Score</div><div class="drawer-item-value" style="font-size:20px;color:${mc}">${s.meta_score.toFixed(1)}</div></div>
-                <div class="drawer-item"><div class="drawer-item-label">Meta Signal</div><div class="drawer-item-value">${metaSignalBadge(s.meta_signal)}</div></div>
-                <div class="drawer-item"><div class="drawer-item-label">Enighet</div><div class="drawer-item-value">${modelAgreementBadge(s.model_agreement, s.model_agreement_total)}</div></div>
-                <div class="drawer-item"><div class="drawer-item-label">DD Blockerad</div><div class="drawer-item-value">${s.dd_blocked ? '<span style="color:var(--red)">Ja ⚠</span>' : '<span style="color:var(--green)">Nej ✓</span>'}</div></div>
-            </div>
-            <div style="margin-top:12px;display:grid;grid-template-columns:repeat(4,1fr);gap:8px">
-                <div style="text-align:center;padding:8px;background:var(--bg-secondary);border-radius:8px">
-                    <div style="font-size:10px;color:var(--text-muted)">🏇 Trav</div>
-                    <div style="font-size:16px;font-weight:700;color:${scoreColor(s.edge_score||0)}">${(s.edge_score||0).toFixed(0)}</div>
-                </div>
-                <div style="text-align:center;padding:8px;background:var(--bg-secondary);border-radius:8px">
-                    <div style="font-size:10px;color:var(--text-muted)">🎯 DSM</div>
-                    <div style="font-size:16px;font-weight:700;color:${scoreColor(dsc)}">${dsc.toFixed(0)}</div>
-                </div>
-                <div style="text-align:center;padding:8px;background:var(--bg-secondary);border-radius:8px">
-                    <div style="font-size:10px;color:var(--text-muted)">⚡ ACE</div>
-                    <div style="font-size:16px;font-weight:700;color:${scoreColor(asc)}">${asc.toFixed(0)}</div>
-                </div>
-                <div style="text-align:center;padding:8px;background:var(--bg-secondary);border-radius:8px">
-                    <div style="font-size:10px;color:var(--text-muted)">📊 Magic</div>
-                    <div style="font-size:16px;font-weight:700;color:${msc != null ? scoreColor(msc) : 'var(--text-muted)'}">${msc != null ? msc.toFixed(0) : '—'}</div>
-                </div>
-            </div>
-        </div>`;
-    }
+    // Meta Score visas nu inuti DAKTIER Score-detaljer (collapsible) — ingen separat sektion
 
     // ── PRICE CHANGES ──
     const priceFields = [
