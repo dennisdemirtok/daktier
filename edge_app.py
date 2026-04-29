@@ -3877,6 +3877,144 @@ def api_backtest_v2_debug():
         return jsonify(_json.load(f))
 
 
+@app.route("/api/borsdata/test-kpi/<ticker>")
+def api_borsdata_test_kpi(ticker):
+    """Hämta KPI-data DIREKT från Börsdata för ett bolag och visa råa svaret.
+
+    Används för att verifiera att Börsdata har 10+ års historik innan vi
+    syncar till DB:n.
+
+    Query: ?kpi=ROE (default = ROE) ; ?type=year (default)
+    """
+    kpi_name = (request.args.get("kpi") or "ROE").upper()
+    report_type = request.args.get("type", "year")
+    db = get_db()
+    try:
+        from edge_db import _ph as ph_fn, _fetchone
+        from borsdata_fetcher import (fetch_kpi_history_for_instrument,
+                                       TOP_KPIS)
+        # Hitta KPI-id från namn
+        kpi_id = None
+        for kid, kname in TOP_KPIS.items():
+            if kpi_name == kname.upper() or kpi_name in kname.upper():
+                kpi_id = kid
+                break
+        if not kpi_id:
+            return jsonify({
+                "error": f"Okänd KPI '{kpi_name}'",
+                "available": TOP_KPIS,
+            }), 400
+
+        # Hitta ins_id för ticker
+        row = _fetchone(db,
+            f"SELECT ins_id, isin, is_global, name FROM borsdata_instrument_map "
+            f"WHERE ticker = {_ph()} LIMIT 1", (ticker,))
+        if not row:
+            return jsonify({"error": f"Ticker '{ticker}' ej i borsdata_instrument_map"}), 404
+        ins_id = row["ins_id"]
+        is_global = bool(row["is_global"])
+
+        # Hämta KPI-historik DIREKT från Börsdata API
+        values = fetch_kpi_history_for_instrument(
+            ins_id, kpi_id, report_type, is_global=is_global)
+
+        # Sortera & format:era
+        sorted_values = sorted(values, key=lambda v: v.get("y", 0))
+        years = [v.get("y") for v in sorted_values]
+        oldest = min(years) if years else None
+        newest = max(years) if years else None
+
+        return jsonify({
+            "ticker": ticker,
+            "ins_id": ins_id,
+            "isin": row["isin"],
+            "kpi_id": kpi_id,
+            "kpi_name": TOP_KPIS.get(kpi_id),
+            "report_type": report_type,
+            "n_values": len(values),
+            "year_range": f"{oldest} → {newest}" if oldest else None,
+            "values": sorted_values,
+        })
+    except Exception as e:
+        import traceback
+        return jsonify({"error": str(e), "tb": traceback.format_exc()[:500]}), 500
+    finally:
+        db.close()
+
+
+@app.route("/api/borsdata/sync-kpis-batch", methods=["POST"])
+def api_borsdata_sync_kpis_batch():
+    """Sync KPI-history för LITEN explicit lista av bolag (test-läge).
+
+    Body: {"tickers": ["VOLV B", "INVE B"]}
+    Skriver till DB. Returnerar antal rows skrivna per ticker.
+    """
+    body = request.json if request.is_json else {}
+    tickers = body.get("tickers", [])
+    if not tickers:
+        return jsonify({"error": "tickers krävs"}), 400
+
+    db = get_db()
+    try:
+        from edge_db import _ph as ph_fn, _fetchall, _fetchone, _upsert_sql
+        from borsdata_fetcher import (fetch_kpi_history_for_instrument,
+                                       TOP_KPIS, BORSDATA_KEY)
+        if not BORSDATA_KEY:
+            return jsonify({"error": "BORSDATA_API_KEY saknas"}), 500
+
+        # Mappa tickers till ins_ids
+        ph = _ph()
+        placeholders = ",".join([ph] * len(tickers))
+        rows = _fetchall(db,
+            f"SELECT ticker, ins_id, isin, is_global FROM borsdata_instrument_map "
+            f"WHERE ticker IN ({placeholders})", tickers)
+        targets = [(r["ticker"], r["ins_id"], r["isin"], r["is_global"]) for r in rows]
+
+        if not targets:
+            return jsonify({"error": "Inga matchade tickers", "input": tickers}), 404
+
+        kpi_sql = _upsert_sql("borsdata_kpi_history",
+                              ["isin", "kpi_id", "report_type",
+                               "period_year", "period_q", "value"],
+                              ["isin", "kpi_id", "report_type",
+                               "period_year", "period_q"])
+
+        results = {}
+        for ticker, ins_id, isin, is_global in targets:
+            results[ticker] = {"isin": isin, "kpi_results": {}, "total_rows": 0}
+            for kpi_id, kpi_name in TOP_KPIS.items():
+                try:
+                    values = fetch_kpi_history_for_instrument(
+                        ins_id, kpi_id, "year", is_global=bool(is_global))
+                    n_written = 0
+                    for v in values:
+                        year = v.get("y")
+                        val = v.get("v")
+                        if year is None: continue
+                        try:
+                            db.execute(kpi_sql, (isin, kpi_id, "year", year, 0, val))
+                            n_written += 1
+                        except Exception as e:
+                            db.rollback()
+                    db.commit()
+                    years = sorted([v.get("y") for v in values if v.get("y")])
+                    results[ticker]["kpi_results"][kpi_name] = {
+                        "n_values": len(values),
+                        "year_range": f"{years[0]}→{years[-1]}" if years else None,
+                        "n_written": n_written,
+                    }
+                    results[ticker]["total_rows"] += n_written
+                except Exception as e:
+                    results[ticker]["kpi_results"][kpi_name] = {"error": str(e)}
+
+        return jsonify({"tickers_synced": len(targets), "results": results})
+    except Exception as e:
+        import traceback
+        return jsonify({"error": str(e), "tb": traceback.format_exc()[:1000]}), 500
+    finally:
+        db.close()
+
+
 @app.route("/api/backtest-v2/test-thread", methods=["POST"])
 def api_backtest_v2_test_thread():
     """Test-endpoint: startar bakgrundstråd som bara sätter state.
