@@ -170,15 +170,23 @@ def fetch_reports_bulk(insIds, report_type="quarter", max_count=20):
 # KPI-historik — enskilda nyckeltal över tid
 # ──────────────────────────────────────────────────────────────
 
-def fetch_kpi_history(insId, kpiId, report_type="year"):
+def fetch_kpi_history(insId, kpiId, report_type="year",
+                      price_type="mean", max_count=20):
     """Hämta historik för en specifik KPI för ett instrument.
 
-    KPI 63 = Free Cash Flow
-    KPI 64 = CapEx
-    KPI 37 = ROIC
+    Verifierat URL-format (Börsdatas swagger):
+      /v1/instruments/{insId}/kpis/{kpiId}/{reportType}/{priceType}/history
+
+    Args:
+        report_type: "year" | "r12" | "quarter"
+        price_type: "mean" | "high" | "low" | "last"
+        max_count: 20 för year, 40 för r12/quarter
+
+    KPI 63 = Free Cash Flow, 37 = ROIC, 33 = ROE, 4 = P/B
     """
-    url = f"{BORSDATA_BASE}/instruments/{insId}/kpis/{kpiId}/{report_type}/history"
-    data = _rate_limited_get(url)
+    url = (f"{BORSDATA_BASE}/instruments/{insId}/kpis/{kpiId}"
+           f"/{report_type}/{price_type}/history")
+    data = _rate_limited_get(url, params={"maxCount": max_count})
     return data.get("values", [])
 
 
@@ -292,13 +300,21 @@ TOP_KPIS = {
 }
 
 
-def fetch_kpi_history_for_instrument(insId, kpiId, report_type="year", is_global=False):
-    """Hämta historik för en KPI för ett instrument (alla år tillgängliga)."""
+def fetch_kpi_history_for_instrument(insId, kpiId, report_type="year",
+                                       is_global=False, price_type="mean",
+                                       max_count=20):
+    """Hämta historik för en KPI för ett instrument.
+
+    Verifierat URL-format:
+      /v1/instruments/{insId}/kpis/{kpiId}/{reportType}/{priceType}/history
+
+    Returnerar list av {"y": år, "p": period (0 för year), "v": värde}.
+    """
     base = f"{BORSDATA_BASE}/instruments"
     if is_global:
         base += "/global"
-    url = f"{base}/{insId}/kpis/{kpiId}/{report_type}/history"
-    data = _rate_limited_get(url)
+    url = f"{base}/{insId}/kpis/{kpiId}/{report_type}/{price_type}/history"
+    data = _rate_limited_get(url, params={"maxCount": max_count})
     return data.get("values", [])
 
 
