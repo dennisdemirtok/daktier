@@ -3877,6 +3877,72 @@ def api_backtest_v2_debug():
         return jsonify(_json.load(f))
 
 
+@app.route("/api/borsdata/kpi-metadata")
+def api_borsdata_kpi_metadata():
+    """Hämta lista över ALLA tillgängliga KPI:er från Börsdata.
+
+    Visar deras id + namn. Behövs för att verifiera att TOP_KPIS
+    har korrekta KPI-id."""
+    try:
+        from borsdata_fetcher import fetch_kpi_metadata, TOP_KPIS
+        metadata = fetch_kpi_metadata()
+        # Filtrera till bara nyckel-info
+        simplified = []
+        for k in metadata[:200]:
+            simplified.append({
+                "id": k.get("kpiId") or k.get("id"),
+                "name": k.get("nameSv") or k.get("nameEn") or k.get("name"),
+                "format": k.get("format"),
+                "calcGroup": k.get("calcGroup"),
+                "calc": k.get("calc"),
+            })
+        return jsonify({
+            "n_total": len(metadata),
+            "our_top_kpis": TOP_KPIS,
+            "first_50_in_borsdata": simplified[:50],
+        })
+    except Exception as e:
+        import traceback
+        return jsonify({"error": str(e), "tb": traceback.format_exc()[:500]}), 500
+
+
+@app.route("/api/borsdata/test-kpi-formats/<int:ins_id>/<int:kpi_id>")
+def api_borsdata_test_kpi_formats(ins_id, kpi_id):
+    """Prova olika URL-format för att hitta rätt KPI-history-anrop."""
+    import urllib.request
+    import os as _os
+    api_key = _os.environ.get("BORSDATA_API_KEY")
+    if not api_key:
+        return jsonify({"error": "BORSDATA_API_KEY saknas"}), 500
+
+    base = "https://apiservice.borsdata.se/v1"
+    formats = [
+        # Standardformat
+        f"{base}/instruments/{ins_id}/kpis/{kpi_id}/year/history",
+        # Alternativa
+        f"{base}/instruments/{ins_id}/kpis/{kpi_id}/year/last",
+        f"{base}/instruments/{ins_id}/kpis/{kpi_id}/last/year/latest",
+        f"{base}/instruments/{ins_id}/kpis/{kpi_id}/1year/history",
+        f"{base}/instruments/{ins_id}/kpis/{kpi_id}/1/year/history",
+        # Pris-historik som referens (vi vet att den fungerar)
+        f"{base}/instruments/{ins_id}/stockprices",
+    ]
+    results = {}
+    for url in formats:
+        sep = "&" if "?" in url else "?"
+        full_url = f"{url}{sep}authKey={api_key}&maxCount=10"
+        try:
+            req = urllib.request.Request(full_url)
+            with urllib.request.urlopen(req, timeout=15) as resp:
+                data = resp.read().decode()
+                results[url] = {"status": "200", "preview": data[:300]}
+        except urllib.error.HTTPError as e:
+            results[url] = {"status": str(e.code), "msg": str(e)[:100]}
+        except Exception as e:
+            results[url] = {"error": str(e)[:100]}
+    return jsonify(results)
+
+
 @app.route("/api/borsdata/test-kpi/<ticker>")
 def api_borsdata_test_kpi(ticker):
     """Hämta KPI-data DIREKT från Börsdata för ett bolag och visa råa svaret.
