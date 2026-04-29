@@ -127,6 +127,199 @@ def get_forward_return(db, isin, from_date_iso, months_forward):
     return (p_to - p_from) / p_from
 
 
+# ── KPI-history-baserad PIT-data (10y backtest) ──
+
+# Mapping från KPI-id (Börsdata) till vårt fundamentals-namn
+KPI_ID_TO_FIELD = {
+    1: "direct_yield_pct",      # Direktavkastning %
+    2: "pe",                    # P/E
+    3: "ps",                    # P/S
+    4: "pb",                    # P/B
+    10: "ev_ebit",              # EV/EBIT
+    11: "ev_ebitda",            # EV/EBITDA
+    13: "ev_fcf",               # EV/FCF
+    25: "capex_pct",            # Capex %
+    28: "gross_margin_pct",     # Bruttomarginal
+    29: "operating_margin_pct", # Rörelsemarginal
+    30: "profit_margin_pct",    # Vinstmarginal
+    31: "fcf_margin_pct",       # FCF-marginal
+    33: "roe_pct",              # ROE
+    34: "roa_pct",              # ROA
+    37: "roic_pct",             # ROIC
+    39: "soliditet_pct",        # Soliditet
+    40: "debt_to_equity",       # Skuldsättningsgrad
+    42: "nd_ebitda",            # Nettoskuld/EBITDA
+    63: "fcf_value",            # Fritt Kassaflöde (absolut)
+    94: "revenue_yoy_pct",      # Omsättningstillväxt
+    97: "eps_yoy_pct",          # Vinsttillväxt
+}
+
+
+def _latest_available_year(analysis_date_iso):
+    """Vilket år är det senaste vars rapport är tillgängligt vid analysdatum?
+
+    Konservativt: Q4-rapport för år Y publiceras i Q1-Q2 av Y+1.
+    Vid analysis_date.month >= 4: latest = year - 1
+    Vid month < 4: latest = year - 2 (förra året ej publicerat än)
+    """
+    from datetime import datetime
+    d = datetime.strptime(analysis_date_iso, "%Y-%m-%d")
+    if d.month >= 4:
+        return d.year - 1
+    return d.year - 2
+
+
+def get_kpi_history_pit(db, isin, analysis_date_iso, max_years=5):
+    """Hämta KPI-historik PIT.
+
+    Returnerar dict {year: {field_name: value}} för senaste max_years
+    fullständiga år.
+    """
+    if not isin:
+        return {}
+    latest_year = _latest_available_year(analysis_date_iso)
+    earliest_year = latest_year - max_years + 1
+    ph = _ph()
+    rows = _fetchall(db,
+        f"SELECT period_year, kpi_id, value FROM borsdata_kpi_history "
+        f"WHERE isin = {ph} AND report_type = {ph} "
+        f"AND period_year >= {ph} AND period_year <= {ph}",
+        (isin, "year", earliest_year, latest_year))
+
+    by_year = {}
+    for r in rows:
+        rd = dict(r)
+        year = rd.get("period_year")
+        kpi_id = rd.get("kpi_id")
+        val = rd.get("value")
+        field = KPI_ID_TO_FIELD.get(kpi_id)
+        if not field or year is None or val is None:
+            continue
+        by_year.setdefault(year, {})[field] = float(val)
+
+    return by_year
+
+
+def build_observation_from_kpi(db, isin, ticker, analysis_date_iso, max_years=5):
+    """Bygg PIT-observation från KPI-history (10y backtest).
+
+    Använder borsdata_kpi_history istället för borsdata_reports. Detta
+    fungerar för 2015-2024 (KPI-history täcker 20 år) medan reports bara
+    har 2 års kvartalsdata.
+
+    Returnerar None om otillräcklig data (< 3 år historik).
+    """
+    history = get_kpi_history_pit(db, isin, analysis_date_iso, max_years=max_years)
+    if not history or len(history) < 3:
+        return None
+
+    latest_year = max(history.keys())
+    latest = history[latest_year]
+
+    # Senaste tillgängliga: använd som "current"
+    fundamentals = {
+        "pe": latest.get("pe"),
+        "pb": latest.get("pb"),
+        "ev_ebit": latest.get("ev_ebit"),
+        "fcf_yield_pct": None,  # Inte direkt KPI — räkna ev. från fcf/ev
+        "roe_pct": latest.get("roe_pct"),
+        "roa_pct": latest.get("roa_pct"),
+        "roce_pct": latest.get("roic_pct"),  # ROIC ≈ ROCE
+        "operating_margin_pct": latest.get("operating_margin_pct"),
+        "gross_margin_pct": latest.get("gross_margin_pct"),
+        "debt_to_equity": latest.get("debt_to_equity"),
+        "nd_ebitda": latest.get("nd_ebitda"),
+        "direct_yield_pct": latest.get("direct_yield_pct"),
+    }
+
+    # Tillväxt: använd YoY-rates som finns i KPI-history
+    growth = {
+        "revenue_yoy_pct": latest.get("revenue_yoy_pct"),
+        "eps_yoy_pct": latest.get("eps_yoy_pct"),
+        "ocf_yoy_pct": None,  # ej standard KPI
+    }
+
+    # Bygg kvartalsvis-liknande historik från senaste 5 årens vinsttillväxt
+    quarterly_eps_growth_yoy = []
+    sorted_years = sorted(history.keys())
+    n = len(sorted_years)
+    for i, y in enumerate(sorted_years):
+        eps_growth = history[y].get("eps_yoy_pct")
+        if eps_growth is None: continue
+        # Relativ q-label: senaste = Q0, näst senaste = Q-1, ...
+        rel_idx = -(n - 1 - i)
+        rel_q = "Q0" if rel_idx == 0 else f"Q{rel_idx}"
+        quarterly_eps_growth_yoy.append({"q": rel_q, "yoy_pct": eps_growth})
+
+    # Pris vid analysdatum (för market_cap)
+    price = get_price_pit(db, isin, analysis_date_iso)
+
+    # Klassning från stocks-tabell
+    ph = _ph()
+    stock_row = _fetchone(db,
+        f"SELECT sector, name FROM stocks WHERE isin = {ph} LIMIT 1", (isin,))
+    sector_raw = (stock_row.get("sector") if stock_row else "") or ""
+    sector = _map_to_generic_sector(sector_raw, stock_row.get("name") if stock_row else "")
+
+    # Asset intensity heuristik
+    asset_intensity = "mixed"
+    if sector in ("real_estate", "utilities", "materials", "industrials"):
+        asset_intensity = "asset_heavy"
+    elif sector in ("tech", "consumer", "healthcare"):
+        asset_intensity = "asset_light"
+
+    # Quality regime från ROE-historik
+    quality_regime = "average"
+    roe_values = [history[y].get("roe_pct") for y in sorted_years]
+    roe_values = [v for v in roe_values if v is not None]
+    if roe_values:
+        median_roe = sorted(roe_values)[len(roe_values)//2]
+        if median_roe > 18: quality_regime = "compounder"
+        elif median_roe < 5: quality_regime = "subpar"
+    if (latest.get("eps_yoy_pct") or 0) < -50:
+        quality_regime = "turnaround"
+
+    # Bank-fix: noll meningslösa fält
+    if sector == "financials":
+        fundamentals["debt_to_equity"] = None
+        fundamentals["nd_ebitda"] = None
+        fundamentals["ev_ebit"] = None
+
+    # Data completeness
+    fund_n = sum(1 for v in fundamentals.values() if v is not None)
+    growth_n = sum(1 for v in growth.values() if v is not None)
+    completeness = (fund_n + growth_n) / (len(fundamentals) + len(growth))
+
+    return {
+        "_meta": {
+            "ticker": ticker,
+            "isin": isin,
+            "analysis_date": analysis_date_iso,
+            "price_at_analysis": price,
+            "data_source": "kpi_history",
+            "latest_year": latest_year,
+            "n_years": len(history),
+        },
+        "fundamentals": fundamentals,
+        "growth": growth,
+        "quarterly_eps_growth_yoy": quarterly_eps_growth_yoy,
+        "ownership_changes": {
+            "retail_change_3m_pct": 0,
+            "retail_change_1y_pct": 0,
+            "insider_net_buys": 0,
+            "insider_net_sells": 0,
+            "cluster_buy": False,
+        },
+        "classification": {
+            "sector": sector,
+            "asset_intensity": asset_intensity,
+            "quality_regime": quality_regime,
+        },
+        "f_score": None,  # Kräver kvartalsdata, ej tillgängligt 10y
+        "data_completeness": completeness,
+    }
+
+
 def build_observation(db, isin, ticker, analysis_date_iso):
     """Bygg en RAW observation från PIT-data.
 

@@ -73,20 +73,25 @@ DEFAULT_UNIVERSE = [
 ]
 
 
-def get_analysis_dates(start_year=None, end_year=None):
+def get_analysis_dates(start_year=None, end_year=None, mode="yearly_10y"):
     """Generera analysdatum.
 
-    Börsdata-historiken är begränsad till 2024+ för quarterly. För att få
-    meningsfulla obs (2+ kvartal PIT) måste analysdatum vara 2024-Q4 eller
-    senare. Vi använder kvartalsvis 2024-04 → 2025-10 = 7 datum.
+    mode='yearly_10y': årligen 2015-07-15 → 2024-07-15 (10 år)
+        Använder KPI-history (20 års data tillgängligt)
+        Forward 12m fungerar för 2015-2024 (har prishistorik)
 
-    Forward returns 12m är bara meningsfulla för obs upp till ~2025-04
-    (eftersom dagens datum är 2026-04). Senare obs får null forward returns.
+    mode='quarterly_short': kvartalsvis 2024-04 → 2025-10 (1.5 år)
+        Använder reports-baserad PIT (begränsad)
     """
-    return [
-        "2024-04-15", "2024-07-15", "2024-10-15",
-        "2025-01-15", "2025-04-15", "2025-07-15", "2025-10-15",
-    ]
+    if mode == "quarterly_short":
+        return [
+            "2024-04-15", "2024-07-15", "2024-10-15",
+            "2025-01-15", "2025-04-15", "2025-07-15", "2025-10-15",
+        ]
+    # 10-år: midsommar varje år (då senaste annual rapport från Q4 fjol är säker)
+    s = start_year or 2015
+    e = end_year or 2024
+    return [f"{y}-07-15" for y in range(s, e + 1)]
 
 
 def get_dynamic_universe(db, country="SE", min_market_cap=1e9, max_n=100):
@@ -143,7 +148,8 @@ def find_isin_for_ticker(db, short_name):
 def run_backtest(universe=None, start_year=2015, end_year=2024,
                  output_csv="/tmp/backtest_v2_results.csv",
                  max_obs=None, verbose=True, use_dynamic_universe=True,
-                 max_universe=80, min_market_cap=1e9):
+                 max_universe=80, min_market_cap=1e9,
+                 date_mode="yearly_10y"):
     """Kör backtest-pipelinen.
 
     Args:
@@ -169,9 +175,9 @@ def run_backtest(universe=None, start_year=2015, end_year=2024,
     else:
         universe = universe or DEFAULT_UNIVERSE
 
-    dates = get_analysis_dates(start_year, end_year)
+    dates = get_analysis_dates(start_year, end_year, mode=date_mode)
     if verbose:
-        print(f"Universum: {len(universe)} aktier, {len(dates)} datum")
+        print(f"Universum: {len(universe)} aktier, {len(dates)} datum, mode={date_mode}")
         print(f"Total potentiella obs: {len(universe) * len(dates)}")
     results = []
     skipped = 0
@@ -203,7 +209,11 @@ def run_backtest(universe=None, start_year=2015, end_year=2024,
 
                 try:
                     # 1. Bygg PIT-observation
-                    raw = build_observation(db, isin, short, date_iso)
+                    if date_mode == "yearly_10y":
+                        from backtest_v2.pit_data import build_observation_from_kpi
+                        raw = build_observation_from_kpi(db, isin, short, date_iso)
+                    else:
+                        raw = build_observation(db, isin, short, date_iso)
                     if not raw:
                         skipped += 1
                         skip_reasons["no_pit_obs"] += 1

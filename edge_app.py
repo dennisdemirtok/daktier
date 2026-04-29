@@ -3949,6 +3949,46 @@ def api_borsdata_test_kpi_formats(ins_id, kpi_id):
     return jsonify(results)
 
 
+@app.route("/api/backtest-v2/test-kpi-obs/<ticker>")
+def api_backtest_v2_test_kpi_obs(ticker):
+    """Bygg KPI-baserad PIT-observation för en ticker + datum.
+
+    Query: ?date=2020-07-15
+    """
+    date = request.args.get("date", "2020-07-15")
+    db = get_db()
+    try:
+        from backtest_v2.runner import find_isin_for_ticker
+        from backtest_v2.pit_data import (build_observation_from_kpi,
+                                            get_kpi_history_pit)
+        from backtest_v2.anonymize import anonymize_observation
+
+        isin = find_isin_for_ticker(db, ticker)
+        if not isin:
+            return jsonify({"error": "ticker not found"}), 404
+
+        history = get_kpi_history_pit(db, isin, date, max_years=5)
+        raw = build_observation_from_kpi(db, isin, ticker, date)
+        anon = None
+        try:
+            if raw:
+                anon = anonymize_observation(raw)
+        except AssertionError as e:
+            anon = {"_anonymize_error": str(e)}
+
+        return jsonify({
+            "ticker": ticker,
+            "isin": isin,
+            "date": date,
+            "kpi_history_years": list(sorted(history.keys())),
+            "n_kpi_years": len(history),
+            "raw_obs": raw,
+            "anonymized_obs": anon,
+        })
+    finally:
+        db.close()
+
+
 @app.route("/api/borsdata/test-kpi/<ticker>")
 def api_borsdata_test_kpi(ticker):
     """Hämta KPI-data DIREKT från Börsdata för ett bolag och visa råa svaret.
