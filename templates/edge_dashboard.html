@@ -1227,7 +1227,7 @@ const TAB_META = {
     myportfolio: { title: 'Min Portfölj',    sub: 'Ditt bevakade innehav' },
     aitoplist:   { title: 'AI Topplista',    sub: 'AI-rankning av alla bolag' },
     agent:       { title: 'AI Agent',         sub: 'Chatta med Claude Opus över hela databasen' },
-    backtest:    { title: 'Backtest',         sub: 'Hur har v2.3-strategierna presterat historiskt?' },
+    backtest:    { title: 'Backtest',         sub: 'Hur har setup-strategierna presterat historiskt?' },
 };
 
 // NOTE: Live-läge borttaget — vi uppdaterar inte owner-snapshots löpande, så auto-refresh-timer avvecklad.
@@ -3534,7 +3534,7 @@ function renderDilutionSection(s) {
                     Utspädning (${d.first_year}-${d.last_year})
                 </div>
                 <div style="font-size:11px;color:${sty.color};opacity:0.8;margin-top:2px">
-                    Patch 4 — bevakning av antal aktier
+                    Bevakning av antal aktier
                 </div>
             </div>
             <span style="background:rgba(0,0,0,0.08);color:${sty.color};padding:3px 10px;border-radius:12px;font-size:11px;font-weight:700">${sty.label}</span>
@@ -4315,7 +4315,7 @@ function openDrawer(s) {
                 </details>` : ''}
             ${(v.conflicts || []).length > 0 ? `
                 <div style="background:#fee2e2;color:#991b1b;border-radius:10px;padding:10px 12px;margin-top:10px;font-size:12px">
-                    <strong>⚠️ v2.2 Modellkonflikter (${v.conflicts.length}):</strong>
+                    <strong>⚠️ Modellkonflikter (${v.conflicts.length}):</strong>
                     <ul style="margin:4px 0 0 16px;padding:0">
                         ${v.conflicts.map(c => `<li>${c.replace(/_/g,' ')}</li>`).join('')}
                     </ul>
@@ -4323,11 +4323,11 @@ function openDrawer(s) {
                 </div>` : ''}
             ${v.consistency && v.consistency.check === 'FAIL' ? `
                 <div style="background:#fef3c7;color:#78350f;border-radius:10px;padding:8px 12px;margin-top:8px;font-size:11px">
-                    <strong>🔬 v2.2 Konsistenscheck FAIL:</strong> ROIC-Implied ${v.consistency.roic_implied_raw} vs Reverse DCF ${v.consistency.reverse_dcf_raw} (divergence ${v.consistency.divergence}). Båda capade till 50 i Value-axeln.
+                    <strong>🔬 Konsistenscheck FAIL:</strong> ROIC-Implied ${v.consistency.roic_implied_raw} vs Reverse DCF ${v.consistency.reverse_dcf_raw} (divergence ${v.consistency.divergence}). Båda capade till 50 i Value-axeln.
                 </div>` : ''}
             ${v.fcf_debug ? `
                 <details style="background:rgba(255,255,255,0.6);border-radius:10px;padding:8px 12px;margin-top:8px;font-size:11px">
-                    <summary style="cursor:pointer;font-weight:600">🔍 v2.2 FCF Pipeline (debug-block)</summary>
+                    <summary style="cursor:pointer;font-weight:600">🔍 FCF Pipeline (debug-block)</summary>
                     <div style="margin-top:6px;display:grid;grid-template-columns:1fr 1fr;gap:4px;font-family:monospace;font-size:10.5px">
                         <span style="color:#6b7280">Currency:</span><span>${v.fcf_debug.currency}</span>
                         <span style="color:#6b7280">MarketCap (native):</span><span>${(v.fcf_debug.market_cap_native/1e9).toFixed(1)}B</span>
@@ -4346,7 +4346,7 @@ function openDrawer(s) {
                 </details>` : ''}
             ${v.earnings_revision_debug ? `
                 <details style="background:rgba(255,255,255,0.6);border-radius:10px;padding:8px 12px;margin-top:8px;font-size:11px">
-                    <summary style="cursor:pointer;font-weight:600">📈 v2.2 Earnings Revision (proxy: ${v.earnings_revision_debug.source})</summary>
+                    <summary style="cursor:pointer;font-weight:600">📈 Earnings Revision (proxy: ${v.earnings_revision_debug.source})</summary>
                     <div style="margin-top:6px;font-family:monospace;font-size:10.5px">
                         Senaste 4 kv EPS: ${v.earnings_revision_debug.recent_4q_eps_sum} ·
                         Föregående 4 kv: ${v.earnings_revision_debug.older_4q_eps_sum} ·
@@ -4356,7 +4356,7 @@ function openDrawer(s) {
                 </details>` : ''}
             ${v.ownership_signals ? `
                 <details style="background:rgba(255,255,255,0.6);border-radius:10px;padding:8px 12px;margin-top:8px;font-size:11px">
-                    <summary style="cursor:pointer;font-weight:600">👥 v2.2 Ownership-signals (separerade)</summary>
+                    <summary style="cursor:pointer;font-weight:600">👥 Ownership-signals (separerade)</summary>
                     <div style="margin-top:6px;display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:10.5px">
                         <div><strong>Insider:</strong> ${v.ownership_signals.insider_activity.data_available
                             ? `${v.ownership_signals.insider_activity.buy_transactions} köp / ${v.ownership_signals.insider_activity.sell_transactions} sälj — <em>${v.ownership_signals.insider_activity.interpretation.replace(/_/g,' ')}</em>`
@@ -5419,6 +5419,38 @@ function renderAgent() {
         .agent-msg-bubble { max-width:78%; padding:13px 17px; border-radius:14px; font-size:14px; line-height:1.55; box-shadow:0 1px 3px rgba(0,0,0,0.05); }
         .agent-msg.user .agent-msg-bubble { background:linear-gradient(135deg,#1d4ed8,#3b82f6); color:white; border-bottom-right-radius:4px; }
         .agent-msg.ai .agent-msg-bubble { background:white; border:1px solid var(--border); border-bottom-left-radius:4px; }
+        .agent-msg.ai .agent-msg-bubble h1,
+        .agent-msg.ai .agent-msg-bubble h2 { font-size:16px; font-weight:700; color:#0f172a; margin:14px 0 6px; padding-bottom:6px; border-bottom:1px solid #e5e7eb; line-height:1.3; }
+        .agent-msg.ai .agent-msg-bubble h2:first-child,
+        .agent-msg.ai .agent-msg-bubble h1:first-child { margin-top:0; }
+        .agent-msg.ai .agent-msg-bubble h3 { font-size:14px; font-weight:700; color:#1e3a8a; margin:14px 0 6px; line-height:1.3; }
+        .agent-msg.ai .agent-msg-bubble h4 { font-size:13px; font-weight:700; color:#334155; margin:10px 0 4px; }
+        .agent-msg.ai .agent-msg-bubble p { margin:6px 0; }
+        .agent-msg.ai .agent-msg-bubble ul,
+        .agent-msg.ai .agent-msg-bubble ol { margin:4px 0 8px; padding-left:20px; }
+        .agent-msg.ai .agent-msg-bubble li { margin:2px 0; }
+        .agent-msg.ai .agent-msg-bubble strong { color:#0f172a; font-weight:700; }
+        .agent-msg.ai .agent-msg-bubble code { background:#f1f5f9; color:#1e293b; padding:1px 5px; border-radius:4px; font-size:12px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+        .agent-msg.ai .agent-msg-bubble blockquote { border-left:3px solid #3b82f6; padding:6px 12px; margin:8px 0; background:#eff6ff; color:#1e40af; border-radius:0 6px 6px 0; font-size:13px; }
+        .agent-msg.ai .agent-msg-bubble blockquote p { margin:2px 0; }
+        .agent-msg.ai .agent-msg-bubble table {
+            width:100%; border-collapse:collapse; margin:10px 0;
+            font-size:12.5px; background:white;
+            border:1px solid #e5e7eb; border-radius:8px; overflow:hidden;
+        }
+        .agent-msg.ai .agent-msg-bubble th {
+            background:linear-gradient(135deg,#f8fafc,#f1f5f9);
+            color:#0f172a; font-weight:700; text-align:left;
+            padding:8px 10px; font-size:11.5px; text-transform:uppercase;
+            letter-spacing:0.3px; border-bottom:1px solid #e5e7eb;
+        }
+        .agent-msg.ai .agent-msg-bubble td {
+            padding:7px 10px; border-bottom:1px solid #f1f5f9;
+            color:#1e293b; line-height:1.45; vertical-align:top;
+        }
+        .agent-msg.ai .agent-msg-bubble tr:last-child td { border-bottom:none; }
+        .agent-msg.ai .agent-msg-bubble tr:nth-child(even) td { background:#fafbfc; }
+        .agent-msg.ai .agent-msg-bubble hr { border:none; border-top:1px solid #e5e7eb; margin:14px 0; }
         .agent-msg-bubble.streaming { background:linear-gradient(120deg,white 0%,#f8fafc 50%,white 100%); background-size:200% 100%; animation:agent-shimmer 2s linear infinite; }
         @keyframes agent-shimmer { 0%{background-position:-200% 0;} 100%{background-position:200% 0;} }
         .agent-msg-img { max-width:280px; max-height:200px; display:block; border-radius:8px; margin-bottom:8px; }
@@ -5619,7 +5651,7 @@ function renderAgentTurn(h, idx) {
         if (h.v22_violations && h.v22_violations.length) {
             const list = h.v22_violations.map(v => `<li><strong>${v.rule}:</strong> "${escapeHtml(v.sample)}"</li>`).join('');
             footer += `<div style="background:#fee2e2;color:#991b1b;border-radius:8px;padding:8px 12px;margin-top:8px;font-size:11px">
-                <strong>🚫 v2.2 Sentiment-regelbrott upptäckt (${h.v22_violations.length}):</strong>
+                <strong>🚫 Sentiment-regelbrott upptäckt (${h.v22_violations.length}):</strong>
                 <ul style="margin:4px 0 0 16px;padding:0">${list}</ul>
                 <div style="margin-top:4px;font-size:10px;font-style:italic">Disclaimer-prefix räddar inte regeln. Slutsatsen ska INTE förlita sig på dessa källor.</div>
             </div>`;
@@ -6175,7 +6207,7 @@ async function renderBacktest() {
     </style>
     <div class="bt-wrap">
         <div class="bt-header">
-            <strong>📊 v2.3 Backtest</strong> — kvartalsvis rebalans, likavikt, 1M SEK startkapital, 2018-nu.
+            <strong>📊 Setup-backtest</strong> — kvartalsvis rebalans, likavikt, 1M SEK startkapital, 2018-nu.
             <div style="font-size:12px;margin-top:4px;opacity:0.85">
                 Lookahead-skydd: report_end + 30 dagar release-lag. Kräver att Börsdata-pris-data är synkad.
             </div>
