@@ -247,24 +247,48 @@ def fetch_branches():
     return data.get("branches", [])
 
 
-# Top 15 KPIs vi vill ha historik på (verifierat mot Börsdata KPI-katalog)
-# Dessa kompletterar reports-data med fördefinierade ratios.
+# Top KPIs — KORRIGERAT 2026-04-29 efter verifiering mot Börsdata
+# /v1/instruments/kpis/metadata. Tidigare mappning var FEL — vi använde
+# id=4 som "ROE" men det är P/B. Detta gjorde KPI-sync värdelöst.
+#
+# Verifierade id:n (från Börsdatas faktiska metadata):
 TOP_KPIS = {
-    1:  "P/E",
-    2:  "P/S",
-    3:  "P/B",
-    4:  "ROE",
-    7:  "Direct Yield",
+    # Värderings-multiplar
+    1:  "Direktavkastning",      # %
+    2:  "P/E",
+    3:  "P/S",
+    4:  "P/B",
+    10: "EV/EBIT",
+    11: "EV/EBITDA",
     13: "EV/FCF",
-    25: "CapEx % of Sales",
-    37: "ROIC",
-    63: "Free Cash Flow",
-    64: "CapEx",
     76: "P/FCF",
-    33: "Net Debt / EBITDA",
-    50: "Operating Margin",
-    51: "Net Margin",
-    61: "EBIT",
+    # Lönsamhet
+    33: "ROE (Avkastning På EK)",
+    34: "ROA (Avkastning På T)",
+    37: "ROIC",
+    # Marginaler
+    28: "Bruttomarginal",        # %
+    29: "Rörelsemarginal",       # %
+    30: "Vinstmarginal",         # %
+    31: "FCF-marginal",          # %
+    32: "EBITDA-marginal",       # %
+    # Skuldsättning + likviditet
+    39: "Soliditet",
+    40: "Skuldsättningsgrad",
+    42: "Nettoskuld/EBITDA",
+    # Kassaflöde + CapEx
+    62: "Operativ Kassaflöde",
+    63: "Fritt Kassaflöde",      # FCF
+    64: "Capex",
+    25: "Capex %",
+    # Tillväxt
+    94: "Omsättningstillväxt",
+    97: "Vinsttillväxt",
+    98: "Utdelningstillväxt",
+    99: "Tillväxt Eget Kapital",
+    # Företagsmetrik
+    61: "Antal Aktier",          # för utspädning
+    50: "Börsvärde",
 }
 
 
