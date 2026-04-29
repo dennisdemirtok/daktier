@@ -254,12 +254,16 @@ def build_observation_from_kpi(db, isin, ticker, analysis_date_iso, max_years=5)
     # Pris vid analysdatum (för market_cap)
     price = get_price_pit(db, isin, analysis_date_iso)
 
-    # Klassning från stocks-tabell
+    # Klassning från stocks + Avanza short_name (för bank-detektion)
     ph = _ph()
     stock_row = _fetchone(db,
-        f"SELECT sector, name FROM stocks WHERE isin = {ph} LIMIT 1", (isin,))
+        f"SELECT sector, name, short_name FROM stocks WHERE isin = {ph} LIMIT 1", (isin,))
     sector_raw = (stock_row.get("sector") if stock_row else "") or ""
-    sector = _map_to_generic_sector(sector_raw, stock_row.get("name") if stock_row else "")
+    name = stock_row.get("name") if stock_row else ""
+    short_name = stock_row.get("short_name") if stock_row else ""
+    # Kombinera båda namn för matchning (Avanza stocks.sector är ofta tom)
+    combined = f"{sector_raw} {name} {short_name}".strip()
+    sector = _map_to_generic_sector(sector_raw, combined)
 
     # Asset intensity heuristik
     asset_intensity = "mixed"
