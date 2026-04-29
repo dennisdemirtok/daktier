@@ -685,6 +685,38 @@ def api_stock_detail(orderbook_id):
                         d["quality_persistence"] = qp
                 except Exception as e:
                     print(f"[stock detail] quality_persistence: {e}", file=sys.stderr)
+            # v2.5 — Quant rank (Quality/Value/Momentum från 20y KPI)
+            try:
+                cache_key = f"{d.get('country', 'SE')}|500000000"
+                now = _time.time()
+                if (_QUANT_CACHE.get("country") == cache_key
+                        and (now - _QUANT_CACHE.get("ts", 0)) < _QUANT_CACHE_TTL
+                        and _QUANT_CACHE.get("data")):
+                    all_data = _QUANT_CACHE["data"]
+                else:
+                    from edge_db import compute_quant_scores
+                    all_data = compute_quant_scores(db,
+                        country=d.get("country", "SE"),
+                        min_market_cap=500_000_000, max_universe=300)
+                    _QUANT_CACHE.update({"data": all_data, "ts": now,
+                                         "country": cache_key})
+                target = None
+                for s in all_data:
+                    if str(s.get("orderbook_id")) == str(d.get("orderbook_id")):
+                        target = s
+                        break
+                if target:
+                    n_universe = len(all_data)
+                    d["quant_rank"] = {
+                        "n_universe": n_universe,
+                        "quality_score": target.get("quality_score"),
+                        "value_score": target.get("value_score"),
+                        "momentum_score": target.get("momentum_score"),
+                        "composite_score": target.get("composite_score"),
+                        "is_quant_trifecta": target.get("is_quant_trifecta"),
+                    }
+            except Exception as e:
+                print(f"[stock detail] quant_rank: {e}", file=sys.stderr)
             # v2.4 — Insider-data (FI insynsregister) — enrich i realtid
             try:
                 from edge_db import get_insider_summary, _normalize_name
@@ -1219,6 +1251,136 @@ def api_stock_price_history(orderbook_id):
         return jsonify({"isin": isin, "prices": prices, "count": len(prices)})
     finally:
         db.close()
+
+
+_QUANT_CACHE = {"data": None, "ts": 0, "country": None}
+_QUANT_CACHE_TTL = 600  # 10 min
+
+
+@app.route("/api/quant-screen")
+def api_quant_screen():
+    """Quantitativa screens (Quality/Value/Momentum från 20 års KPI-data).
+
+    Query params:
+        country=SE (default)
+        mode=trifecta|composite|quality|value|momentum (default: composite)
+        limit=50
+        min_market_cap=500000000
+
+    Returnerar top-N enligt vald sortering.
+    """
+    country = request.args.get("country", "SE")
+    mode = request.args.get("mode", "composite")
+    limit = int(request.args.get("limit", 50))
+    min_mcap = int(request.args.get("min_market_cap", 500_000_000))
+
+    # Cache (10 min) per (country, min_mcap)
+    cache_key = f"{country}|{min_mcap}"
+    now = _time.time()
+    if (_QUANT_CACHE["country"] == cache_key
+            and (now - _QUANT_CACHE["ts"]) < _QUANT_CACHE_TTL
+            and _QUANT_CACHE["data"]):
+        all_data = _QUANT_CACHE["data"]
+    else:
+        db = get_db()
+        try:
+            from edge_db import compute_quant_scores
+            all_data = compute_quant_scores(db, country=country,
+                                             min_market_cap=min_mcap,
+                                             max_universe=300)
+        finally:
+            db.close()
+        _QUANT_CACHE.update({"data": all_data, "ts": now, "country": cache_key})
+
+    # Sortera
+    if mode == "trifecta":
+        results = [s for s in all_data if s.get("is_quant_trifecta")]
+        results.sort(key=lambda s: -(s.get("composite_score") or 0))
+    elif mode == "quality":
+        results = [s for s in all_data if s.get("quality_score") is not None]
+        results.sort(key=lambda s: -(s.get("quality_score") or 0))
+    elif mode == "value":
+        results = [s for s in all_data if s.get("value_score") is not None]
+        results.sort(key=lambda s: -(s.get("value_score") or 0))
+    elif mode == "momentum":
+        results = [s for s in all_data if s.get("momentum_score") is not None]
+        results.sort(key=lambda s: -(s.get("momentum_score") or 0))
+    else:  # composite
+        results = [s for s in all_data if s.get("composite_score") is not None]
+        results.sort(key=lambda s: -(s.get("composite_score") or 0))
+
+    return jsonify({
+        "mode": mode,
+        "country": country,
+        "n_universe": len(all_data),
+        "n_results": len(results[:limit]),
+        "results": results[:limit],
+    })
+
+
+@app.route("/api/stock/<orderbook_id>/quant-rank")
+def api_stock_quant_rank(orderbook_id):
+    """Rangordna ett enskilt bolag mot universumet."""
+    country = request.args.get("country", "SE")
+    cache_key = f"{country}|500000000"
+    now = _time.time()
+    if (_QUANT_CACHE["country"] == cache_key
+            and (now - _QUANT_CACHE["ts"]) < _QUANT_CACHE_TTL
+            and _QUANT_CACHE["data"]):
+        all_data = _QUANT_CACHE["data"]
+    else:
+        db = get_db()
+        try:
+            from edge_db import compute_quant_scores
+            all_data = compute_quant_scores(db, country=country,
+                                             min_market_cap=500_000_000,
+                                             max_universe=300)
+        finally:
+            db.close()
+        _QUANT_CACHE.update({"data": all_data, "ts": now, "country": cache_key})
+
+    # Hitta target
+    target = None
+    for s in all_data:
+        if str(s.get("orderbook_id")) == str(orderbook_id):
+            target = s
+            break
+    if not target:
+        return jsonify({"error": "stock not in universe"}), 404
+
+    n = len(all_data)
+    # Räkna position
+    def rank_pos(score_field):
+        v = target.get(score_field)
+        if v is None: return None, None
+        ranked = sorted([s.get(score_field) for s in all_data
+                         if s.get(score_field) is not None], reverse=True)
+        try: pos = ranked.index(v) + 1
+        except ValueError: pos = None
+        return pos, len(ranked)
+
+    q_pos, q_total = rank_pos("quality_score")
+    v_pos, v_total = rank_pos("value_score")
+    m_pos, m_total = rank_pos("momentum_score")
+    c_pos, c_total = rank_pos("composite_score")
+
+    return jsonify({
+        "ticker": target.get("ticker"),
+        "n_universe": n,
+        "scores": {
+            "quality": target.get("quality_score"),
+            "value": target.get("value_score"),
+            "momentum": target.get("momentum_score"),
+            "composite": target.get("composite_score"),
+        },
+        "ranks": {
+            "quality": {"pos": q_pos, "total": q_total},
+            "value": {"pos": v_pos, "total": v_total},
+            "momentum": {"pos": m_pos, "total": m_total},
+            "composite": {"pos": c_pos, "total": c_total},
+        },
+        "is_quant_trifecta": target.get("is_quant_trifecta"),
+    })
 
 
 @app.route("/api/peers/<orderbook_id>")

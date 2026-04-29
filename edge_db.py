@@ -4182,6 +4182,170 @@ def _runway_dict(cash, ttm_burn, quarterly_burn, runway_months, currency, year, 
     }
 
 
+def get_latest_kpi_values(db, isin, kpi_ids=None):
+    """Hämta SENASTE årets värde per KPI för ett bolag från kpi-history.
+
+    Returnerar dict {kpi_id: value} för senaste tillgängliga år.
+    """
+    if not isin: return {}
+    ph = _ph()
+    if kpi_ids is None:
+        kpi_filter = ""
+        params = (isin, "year")
+    else:
+        ids_str = ",".join(str(int(k)) for k in kpi_ids)
+        kpi_filter = f"AND kpi_id IN ({ids_str})"
+        params = (isin, "year")
+    try:
+        rows = _fetchall(db,
+            f"SELECT kpi_id, period_year, value FROM borsdata_kpi_history "
+            f"WHERE isin = {ph} AND report_type = {ph} {kpi_filter} "
+            f"AND value IS NOT NULL "
+            f"ORDER BY period_year DESC", params)
+    except Exception:
+        return {}
+    # För varje KPI, ta första (senaste) värdet
+    out = {}
+    for r in rows:
+        rd = dict(r)
+        kid = rd.get("kpi_id")
+        val = rd.get("value")
+        if kid not in out:
+            out[kid] = val
+    return out
+
+
+def compute_quant_scores(db, country="SE", min_market_cap=500e6,
+                         max_universe=200):
+    """Beräkna kvantitativa Quality/Value/Momentum-scores för ett universum.
+
+    Använder senaste årets KPI-värden från borsdata_kpi_history (20 års data).
+    Rankar percent-vis mot universumet (t.ex. top 10% = score 90+).
+
+    Quality = ROE + ROIC + Net margin (alla högre = bättre)
+    Value = -P/E + -P/B + -EV/EBIT + Direkt yield (lägre multipel = bättre)
+    Momentum = Vinsttillväxt + Omsättningstillväxt (högre = bättre)
+
+    Returnerar list[dict]:
+        {orderbook_id, ticker, name, isin, country, last_price, market_cap,
+         quality_score, value_score, momentum_score,
+         composite_score, quality_rank, value_rank, momentum_rank,
+         is_quant_trifecta (top 30% i alla 3),
+         pe, pb, roe, roic, ...}
+    """
+    ph = _ph()
+
+    # Hämta universum
+    rows = _fetchall(db, f"""
+        SELECT s.orderbook_id, s.short_name as ticker, s.name, m.isin,
+               s.country, s.last_price, s.market_cap, s.currency
+        FROM stocks s
+        JOIN borsdata_instrument_map m ON s.short_name = m.ticker
+        WHERE s.country = {ph}
+        AND s.last_price > 0
+        AND s.market_cap >= {ph}
+        ORDER BY s.market_cap DESC
+        LIMIT {ph}
+    """, (country, min_market_cap, max_universe))
+    universe = [dict(r) for r in rows]
+    if not universe: return []
+
+    # Hämta KPI-värden för alla
+    # KPI-id: 2=P/E, 4=P/B, 10=EV/EBIT, 33=ROE, 37=ROIC, 30=Vinstmarginal,
+    #          1=Direktavkastning, 94=Omsättningstillväxt, 97=Vinsttillväxt
+    target_kpis = {2, 4, 10, 33, 37, 30, 1, 94, 97}
+    for s in universe:
+        kpis = get_latest_kpi_values(db, s["isin"], list(target_kpis))
+        s["pe"] = kpis.get(2)
+        s["pb"] = kpis.get(4)
+        s["ev_ebit"] = kpis.get(10)
+        s["roe"] = kpis.get(33)
+        s["roic"] = kpis.get(37)
+        s["profit_margin"] = kpis.get(30)
+        s["dy_pct"] = kpis.get(1)
+        s["rev_growth"] = kpis.get(94)
+        s["eps_growth"] = kpis.get(97)
+
+    # Percent-rank-funktion: returnerar 0-100 där högre värde = bättre
+    def pct_rank(values, lower_better=False):
+        valid_idx = [(i, v) for i, v in enumerate(values)
+                     if v is not None and isinstance(v, (int, float))
+                     and not (v != v) and abs(v) < 1e10]  # filter NaN/inf
+        if len(valid_idx) < 5:
+            return [None] * len(values)
+        # Sortera (lower_better → bästa = lägst)
+        if lower_better:
+            valid_idx.sort(key=lambda x: x[1])  # lägst först = bäst
+        else:
+            valid_idx.sort(key=lambda x: -x[1])  # högst först = bäst
+        # Dela ranks 0-100
+        n = len(valid_idx)
+        ranks = [None] * len(values)
+        for rank_pos, (i, _) in enumerate(valid_idx):
+            # rank_pos 0 = bäst → 100, sista → 0
+            ranks[i] = round(100 * (1 - rank_pos / max(n - 1, 1)), 1)
+        return ranks
+
+    # Beräkna individuella ranks
+    pe_vals = [s.get("pe") if s.get("pe") and s["pe"] > 0 else None for s in universe]
+    pb_vals = [s.get("pb") if s.get("pb") and s["pb"] > 0 else None for s in universe]
+    ev_ebit_vals = [s.get("ev_ebit") if s.get("ev_ebit") and s["ev_ebit"] > 0 else None for s in universe]
+    roe_vals = [s.get("roe") for s in universe]
+    roic_vals = [s.get("roic") for s in universe]
+    margin_vals = [s.get("profit_margin") for s in universe]
+    dy_vals = [s.get("dy_pct") for s in universe]
+    rev_g_vals = [s.get("rev_growth") for s in universe]
+    eps_g_vals = [s.get("eps_growth") for s in universe]
+
+    pe_rank = pct_rank(pe_vals, lower_better=True)
+    pb_rank = pct_rank(pb_vals, lower_better=True)
+    evebit_rank = pct_rank(ev_ebit_vals, lower_better=True)
+    roe_rank = pct_rank(roe_vals)
+    roic_rank = pct_rank(roic_vals)
+    margin_rank = pct_rank(margin_vals)
+    dy_rank = pct_rank(dy_vals)
+    rev_g_rank = pct_rank(rev_g_vals)
+    eps_g_rank = pct_rank(eps_g_vals)
+
+    # Kombinera
+    def avg(*vals):
+        valid = [v for v in vals if v is not None]
+        return sum(valid) / len(valid) if valid else None
+
+    for i, s in enumerate(universe):
+        # Quality = ROE + ROIC + Profit margin
+        q_score = avg(roe_rank[i], roic_rank[i], margin_rank[i])
+        # Value = -P/E + -P/B + -EV/EBIT + DY
+        v_score = avg(pe_rank[i], pb_rank[i], evebit_rank[i], dy_rank[i])
+        # Momentum = revenue + EPS growth
+        m_score = avg(rev_g_rank[i], eps_g_rank[i])
+
+        s["quality_score"] = round(q_score, 1) if q_score is not None else None
+        s["value_score"] = round(v_score, 1) if v_score is not None else None
+        s["momentum_score"] = round(m_score, 1) if m_score is not None else None
+
+        # Composite = vägt snitt (40% Q, 35% V, 25% M)
+        scores = []
+        if q_score is not None: scores.append(("q", q_score, 0.40))
+        if v_score is not None: scores.append(("v", v_score, 0.35))
+        if m_score is not None: scores.append(("m", m_score, 0.25))
+        if scores:
+            total_w = sum(w for _, _, w in scores)
+            comp = sum(s_ * w for _, s_, w in scores) / total_w
+            s["composite_score"] = round(comp, 1)
+        else:
+            s["composite_score"] = None
+
+        # Quant Trifecta: top 30% i ALLA tre
+        s["is_quant_trifecta"] = (
+            q_score is not None and q_score >= 70
+            and v_score is not None and v_score >= 70
+            and m_score is not None and m_score >= 70
+        )
+
+    return universe
+
+
 def compute_quality_persistence(db, isin, years=5):
     """Beräkna kvalitets-persistens från KPI-history (20 års data).
 
