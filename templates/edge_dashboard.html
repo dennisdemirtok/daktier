@@ -3872,6 +3872,124 @@ function renderPeerTable(data, container) {
         </div>`;
 }
 
+function renderQualityPersistence(s) {
+    /* Quality persistence från 5-års KPI-historik (v2.5).
+       Mått som inte kan fakas: ROIC ≥ 15% i 5 år rakt, ingen utspädning, etc. */
+    const qp = s.quality_persistence;
+    if (!qp) return '';
+
+    // Färgkodning baserat på score (0-4)
+    const styleMap = {
+        4: { bg: 'linear-gradient(135deg,#bbf7d0,#86efac)', color: '#065f46', icon: 'verified' },
+        3: { bg: 'linear-gradient(135deg,#d1fae5,#a7f3d0)', color: '#065f46', icon: 'task_alt' },
+        2: { bg: 'linear-gradient(135deg,#fef3c7,#fde68a)', color: '#92400e', icon: 'horizontal_rule' },
+        1: { bg: 'linear-gradient(135deg,#fed7aa,#fdba74)', color: '#9a3412', icon: 'warning' },
+        0: { bg: 'linear-gradient(135deg,#fee2e2,#fca5a5)', color: '#7f1d1d', icon: 'error' },
+    };
+    const sty = styleMap[qp.score] || styleMap[0];
+
+    function checkMark(condition, label, value) {
+        const icon = condition ? '✅' : '❌';
+        const color = condition ? sty.color : '#9ca3af';
+        return `<div style="display:flex;align-items:center;gap:6px;font-size:12px;color:${color};padding:3px 0">
+            ${icon} ${label}${value ? ` <span style="opacity:0.8;font-size:11px;margin-left:4px">${value}</span>` : ''}
+        </div>`;
+    }
+
+    const trendLabels = {
+        improving: { icon: '📈', label: 'Förbättrar', color: '#059669' },
+        stable: { icon: '➡️', label: 'Stabil', color: '#6b7280' },
+        declining: { icon: '📉', label: 'Försämras', color: '#dc2626' },
+    };
+    const trend = trendLabels[qp.margin_trend] || trendLabels.stable;
+
+    return `<div class="drawer-section" style="background:${sty.bg};border-radius:14px;padding:14px 16px;margin-top:12px">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:10px">
+            <div>
+                <div class="drawer-section-title" style="margin:0;color:${sty.color}">
+                    <span class="material-symbols-outlined" style="font-size:14px;vertical-align:middle">${sty.icon}</span>
+                    Kvalitets-persistens (${qp.years_analyzed} år)
+                </div>
+                <div style="font-size:11px;color:${sty.color};opacity:0.85;margin-top:2px">
+                    Mått som inte kan fakas — kräver konsekvens över tid
+                </div>
+            </div>
+            <span style="background:rgba(0,0,0,0.08);color:${sty.color};padding:3px 10px;border-radius:12px;font-size:11px;font-weight:700">
+                ${qp.label} ${qp.score}/4
+            </span>
+        </div>
+        <div style="background:rgba(255,255,255,0.6);padding:10px;border-radius:8px;margin-top:8px">
+            ${checkMark(qp.verified_compounder, 'ROIC ≥ 15% i 4 av 5 år',
+                `(snitt ${qp.roic_5y_avg}%, min ${qp.roic_5y_min}%)`)}
+            ${checkMark(qp.roe_5y_avg && qp.roe_5y_avg >= 15, 'ROE ≥ 15% i snitt',
+                qp.roe_5y_avg ? `(${qp.roe_5y_avg}%)` : '')}
+            ${checkMark(qp.no_dilution, 'Ingen meningsfull utspädning')}
+            ${checkMark(qp.margin_trend === 'improving' || qp.margin_trend === 'stable',
+                `Marginaler: ${trend.label}`)}
+        </div>
+        <div style="font-size:10px;color:${sty.color};opacity:0.7;margin-top:8px;font-style:italic;line-height:1.4">
+            Källa: Börsdata KPI-history 5 år. Verifierar att kvalitet är PERSISTANT,
+            inte ett enstaka peak-år. Hög score = svår att fejka.
+        </div>
+    </div>`;
+}
+
+
+function renderBacktestValidation(s) {
+    /* Backtest-statistik per setup-klass + rekommendation.
+       Visas i drawer som validering av agentens output mot historisk data. */
+    if (!s.v2 || !s.v2.setup) return '';
+
+    const SETUP_STATS = {
+        trifecta:               { alpha: 11.6, hit: 59, n: 61 },
+        value_destruction:      { alpha:  8.9, hit: 77, n: 17 },
+        quality_compounder:     { alpha:  6.3, hit: 50, n: 48 },
+        early_stage_turnaround: { alpha:  5.1, hit: 54, n: 46 },
+        balanced_quality:       { alpha:  0.8, hit: 53, n: 88 },
+        balanced_value:         { alpha: -0.3, hit: 54, n: 26 },
+        quality_under_pressure: { alpha: -0.3, hit: 40, n: 118 },
+        deep_value:             { alpha: 10.8, hit: 67, n:  3 },
+        mixed_signals:          { alpha: 46.0, hit: 100, n: 2 },
+        momentum_trap:          { alpha:  1.5, hit: 25, n:  4 },
+    };
+
+    const setup = s.v2.setup;
+    const stat = SETUP_STATS[setup];
+    if (!stat) return '';
+
+    // Rangordna alla setups efter alpha för kontext
+    const ranked = Object.entries(SETUP_STATS).sort((a, b) => b[1].alpha - a[1].alpha);
+    const myRank = ranked.findIndex(r => r[0] === setup) + 1;
+
+    const alphaColor = stat.alpha > 5 ? '#059669' : stat.alpha > 0 ? '#6b7280' : '#dc2626';
+    const conf = stat.n >= 30 ? 'hög' : stat.n >= 15 ? 'medel' : stat.n >= 5 ? 'låg' : 'mycket låg';
+
+    return `<div class="drawer-section" style="background:linear-gradient(135deg,#fafafa,#f1f5f9);border-radius:12px;padding:14px;margin-top:12px">
+        <div class="drawer-section-title" style="font-size:11px;display:flex;align-items:center;gap:6px;margin-bottom:8px">
+            <span class="material-symbols-outlined" style="font-size:14px;color:#475569">verified</span>
+            BACKTEST-VALIDERING
+        </div>
+        <div style="font-size:13px;line-height:1.5;color:#1f2937">
+            Detta setup (<strong>${setup.replace(/_/g,' ')}</strong>) har historiskt gett
+            <span style="color:${alphaColor};font-weight:700">${stat.alpha > 0 ? '+' : ''}${stat.alpha}% alpha</span>
+            vs OMXS30, med <strong>${stat.hit}% hit rate</strong>.
+        </div>
+        <div style="margin-top:8px;display:flex;flex-wrap:wrap;gap:6px;font-size:11px">
+            <span style="background:white;padding:3px 8px;border-radius:10px;border:1px solid #e5e7eb">
+                Rang ${myRank}/${ranked.length} av setup-klasser
+            </span>
+            <span style="background:white;padding:3px 8px;border-radius:10px;border:1px solid #e5e7eb">
+                n=${stat.n} obs · ${conf} statistisk power
+            </span>
+        </div>
+        <div style="font-size:10px;color:#6b7280;margin-top:8px;font-style:italic">
+            Källa: backtest 2015-2024, 50 svenska bolag, anti-leakage validerat.
+            Faktor-just. alpha = 0% (alfan är setup-exponering, inte stock-picking inom setup).
+        </div>
+    </div>`;
+}
+
+
 function renderInvestmentCompanySection(s) {
     if (!s.is_investment_company || !s.nav_data) return '';
     const nav = s.nav_data;
@@ -4064,12 +4182,47 @@ function openDrawer(s) {
             </div>`;
         }
 
+        // ── Setup-historisk prestanda från backtest 2015-2024 (n=413) ──
+        // Källa: backtest_v2 körd 2026-04-29, validerad anti-leakage.
+        const SETUP_BACKTEST_STATS = {
+            trifecta:               { alpha: 11.6, hit: 59, n: 61, label: 'STARK alfa', color: '#059669' },
+            value_destruction:      { alpha:  8.9, hit: 77, n: 17, label: 'BRA',         color: '#10b981' },
+            quality_compounder:     { alpha:  6.3, hit: 50, n: 48, label: 'OK',          color: '#10b981' },
+            early_stage_turnaround: { alpha:  5.1, hit: 54, n: 46, label: 'OK',          color: '#10b981' },
+            balanced_quality:       { alpha:  0.8, hit: 53, n: 88, label: 'NEUTRAL',     color: '#6b7280' },
+            balanced_value:         { alpha: -0.3, hit: 54, n: 26, label: 'NEUTRAL',     color: '#6b7280' },
+            quality_under_pressure: { alpha: -0.3, hit: 40, n: 118, label: 'SVAG',        color: '#dc2626' },
+            // Setups med n<5 i backtest — markeras som 'okänd'
+            deep_value:             { alpha: 10.8, hit: 67, n:  3, label: '?',           color: '#6b7280' },
+            mixed_signals:          { alpha:   46, hit: 100, n:  2, label: '?',          color: '#6b7280' },
+            momentum_trap:          { alpha:  1.5, hit: 25, n:  4, label: '?',           color: '#6b7280' },
+        };
+        const REC_BACKTEST_STATS = {
+            STRONG_BUY:    { alpha: 14.4, hit: 60, n:  43 },
+            BUY:           { alpha:  5.8, hit: 58, n: 166 },
+            STRONG_AVOID:  { alpha:  5.7, hit: 79, n:  14 },
+            AVOID:         { alpha:  3.9, hit: 52, n:  23 },
+            HOLD:          { alpha: -1.1, hit: 39, n: 167 },
+        };
+
+        const bt = SETUP_BACKTEST_STATS[v.setup];
+        const setupBacktestBadge = bt ? `
+            <div style="display:inline-flex;align-items:center;gap:6px;background:rgba(255,255,255,0.7);padding:4px 10px;border-radius:12px;font-size:11px;margin-top:6px;border:1px solid ${bt.color}40">
+                <span style="font-weight:700;color:${bt.color}">${bt.alpha > 0 ? '+' : ''}${bt.alpha}% alpha</span>
+                <span style="color:#6b7280">·</span>
+                <span style="color:#374151">${bt.hit}% hit</span>
+                <span style="color:#6b7280">·</span>
+                <span style="color:#6b7280">n=${bt.n}</span>
+                ${bt.n < 5 ? `<span style="color:#dc2626;font-weight:700;font-size:9px">⚠ för få obs</span>` : ''}
+            </div>` : '';
+
         html += `<div class="drawer-section" style="background:${setupBg};border-radius:14px;padding:16px 18px;margin-bottom:14px">
             <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:14px;margin-bottom:12px">
                 <div>
                     <div style="font-size:11px;color:#374151;text-transform:uppercase;letter-spacing:0.06em;font-weight:700">v2 Setup-klassificering</div>
                     <div style="font-size:22px;font-weight:800;line-height:1.1;margin-top:4px">${v.setup_label}</div>
                     <div style="font-size:13px;font-weight:600;color:#1f2937;margin-top:4px">${v.setup_action}</div>
+                    ${setupBacktestBadge}
                 </div>
                 <div style="text-align:right;font-size:11px">
                     <div style="font-weight:700;color:#1f2937">Confidence ${conf}%</div>
@@ -4444,6 +4597,12 @@ function openDrawer(s) {
 
     // ── MACRO-OVERLAY (10y-ränta + sektor-relevans) ──
     html += renderMacroOverlay(s);
+
+    // ── BACKTEST-VALIDERING (alfa per setup historiskt) ──
+    html += renderBacktestValidation(s);
+
+    // ── KVALITETS-PERSISTENS (5y ROIC/ROE-stabilitet) ──
+    html += renderQualityPersistence(s);
 
     // ── INVESTMENTBOLAG-PANEL (NAV/substansrabatt) — visas FÖRST om relevant ──
     html += renderInvestmentCompanySection(s);

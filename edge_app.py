@@ -676,6 +676,15 @@ def api_stock_detail(orderbook_id):
                         d["runway"] = runway
                 except Exception as e:
                     print(f"[stock detail] runway: {e}", file=sys.stderr)
+            # v2.5 — Quality persistence (5 års ROIC/ROE-stabilitet)
+            if d.get("isin"):
+                try:
+                    from edge_db import compute_quality_persistence
+                    qp = compute_quality_persistence(db, d["isin"], years=5)
+                    if qp:
+                        d["quality_persistence"] = qp
+                except Exception as e:
+                    print(f"[stock detail] quality_persistence: {e}", file=sys.stderr)
             # v2.4 — Insider-data (FI insynsregister) — enrich i realtid
             try:
                 from edge_db import get_insider_summary, _normalize_name

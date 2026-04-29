@@ -4182,6 +4182,121 @@ def _runway_dict(cash, ttm_burn, quarterly_burn, runway_months, currency, year, 
     }
 
 
+def compute_quality_persistence(db, isin, years=5):
+    """Beräkna kvalitets-persistens från KPI-history (20 års data).
+
+    Mått som inte kan fakas — kräver konsekvens över tid:
+    - ROIC stabil ≥ 15% i years år
+    - ROE stabil ≥ 15% i years år
+    - Marginal förbättrad eller stabil
+    - Aktieantal oförändrat eller minskat (ingen utspädning)
+
+    Returnerar dict eller None om data saknas:
+        {
+          "verified_compounder": bool,   # ROIC ≥ 15% i 5 år rakt
+          "roic_5y_avg": float,
+          "roic_5y_min": float,
+          "roe_5y_avg": float,
+          "no_dilution": bool,           # shares stable/down
+          "margin_trend": "improving"|"stable"|"declining",
+          "score": 0-4,                  # antal kriterier uppfyllda
+          "label": "Verifierad compounder" | "Hög kvalitet" | "Medel" | "Svag"
+        }
+    """
+    if not isin:
+        return None
+    ph = _ph()
+    try:
+        # KPI-IDs: 33=ROE, 37=ROIC, 30=vinstmarginal, 61=antal aktier
+        rows = _fetchall(db,
+            f"SELECT period_year, kpi_id, value FROM borsdata_kpi_history "
+            f"WHERE isin = {ph} AND report_type = {ph} "
+            f"AND kpi_id IN (33, 37, 30, 61) "
+            f"AND period_year IS NOT NULL "
+            f"ORDER BY period_year DESC LIMIT 100",
+            (isin, "year"))
+    except Exception:
+        return None
+    if not rows:
+        return None
+
+    by_year = {}
+    for r in rows:
+        rd = dict(r)
+        y, k, v = rd.get("period_year"), rd.get("kpi_id"), rd.get("value")
+        if y is None or v is None: continue
+        by_year.setdefault(y, {})[k] = v
+
+    if len(by_year) < years:
+        return None
+
+    # Senaste {years} år
+    recent_years = sorted(by_year.keys(), reverse=True)[:years]
+    recent_data = [by_year[y] for y in recent_years]
+
+    # ROIC-stabilitet (kpi 37)
+    roics = [d.get(37) for d in recent_data if d.get(37) is not None]
+    roes  = [d.get(33) for d in recent_data if d.get(33) is not None]
+    margins = [d.get(30) for d in recent_data if d.get(30) is not None]
+    shares = [(y, by_year[y].get(61)) for y in recent_years
+              if by_year[y].get(61) is not None]
+
+    if not roics or len(roics) < 3:
+        return None
+
+    roic_avg = sum(roics) / len(roics)
+    roic_min = min(roics)
+    roe_avg = (sum(roes) / len(roes)) if roes else None
+
+    # Verifierad compounder: ROIC ≥ 15% i alla 5 år (eller minst 4 av 5)
+    n_high_roic = sum(1 for r in roics if r >= 15)
+    verified_compounder = n_high_roic >= max(years - 1, 3)
+
+    # Utspädning: aktieantal stabilt eller ned
+    no_dilution = True
+    if len(shares) >= 2:
+        # Senaste vs äldsta i fönstret
+        sorted_shares = sorted(shares)  # äldst först
+        first = sorted_shares[0][1]
+        last = sorted_shares[-1][1]
+        if first and first > 0:
+            growth = (last - first) / first
+            no_dilution = growth <= 0.02 * (years - 1)  # max 2%/år
+
+    # Marginal-trend
+    margin_trend = "stable"
+    if len(margins) >= 3:
+        # Linjär trend: senaste vs äldsta
+        first_m = margins[-1]  # äldst
+        last_m = margins[0]    # senast
+        if last_m > first_m + 2: margin_trend = "improving"
+        elif last_m < first_m - 2: margin_trend = "declining"
+
+    # Score 0-4
+    score = 0
+    if verified_compounder: score += 1
+    if no_dilution: score += 1
+    if margin_trend in ("improving", "stable"): score += 1
+    if roe_avg and roe_avg >= 15: score += 1
+
+    if score == 4: label = "Verifierad compounder"
+    elif score == 3: label = "Hög kvalitet"
+    elif score == 2: label = "Medel"
+    else: label = "Svag/instabil"
+
+    return {
+        "years_analyzed": len(roics),
+        "roic_5y_avg": round(roic_avg, 1),
+        "roic_5y_min": round(roic_min, 1),
+        "roe_5y_avg": round(roe_avg, 1) if roe_avg else None,
+        "verified_compounder": verified_compounder,
+        "no_dilution": no_dilution,
+        "margin_trend": margin_trend,
+        "score": score,
+        "label": label,
+    }
+
+
 def compute_piotroski_fscore(db, isin):
     """Piotroski F-Score (1-9) från Börsdata-årsrapporter (senaste 2 år).
 
