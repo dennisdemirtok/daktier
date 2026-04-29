@@ -3879,27 +3879,33 @@ def api_backtest_v2_debug():
 
 @app.route("/api/borsdata/kpi-metadata")
 def api_borsdata_kpi_metadata():
-    """Hämta lista över ALLA tillgängliga KPI:er från Börsdata.
-
-    Visar deras id + namn. Behövs för att verifiera att TOP_KPIS
-    har korrekta KPI-id."""
+    """Hämta HELA listan över KPI:er från Börsdata + sök på namn."""
     try:
         from borsdata_fetcher import fetch_kpi_metadata, TOP_KPIS
         metadata = fetch_kpi_metadata()
-        # Filtrera till bara nyckel-info
-        simplified = []
-        for k in metadata[:200]:
-            simplified.append({
-                "id": k.get("kpiId") or k.get("id"),
-                "name": k.get("nameSv") or k.get("nameEn") or k.get("name"),
+        search = (request.args.get("q") or "").lower()
+
+        # Format:era ALLA
+        all_kpis = []
+        for k in metadata:
+            kid = k.get("kpiId") or k.get("id")
+            name = k.get("nameSv") or k.get("nameEn") or k.get("name") or ""
+            if not kid: continue
+            entry = {
+                "id": kid,
+                "name": name,
                 "format": k.get("format"),
-                "calcGroup": k.get("calcGroup"),
-                "calc": k.get("calc"),
-            })
+            }
+            if not search or search in name.lower():
+                all_kpis.append(entry)
+        all_kpis.sort(key=lambda x: x["id"])
+
         return jsonify({
             "n_total": len(metadata),
+            "n_filtered": len(all_kpis),
+            "search": search,
             "our_top_kpis": TOP_KPIS,
-            "first_50_in_borsdata": simplified[:50],
+            "results": all_kpis,
         })
     except Exception as e:
         import traceback
