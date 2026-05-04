@@ -4275,6 +4275,57 @@ def api_borsdata_kpi_metadata():
         return jsonify({"error": str(e), "tb": traceback.format_exc()[:500]}), 500
 
 
+@app.route("/api/borsdata/find-instrument")
+def api_borsdata_find_instrument():
+    """Sök Borsdata's instrument-katalog (Nordic + Global) efter ticker/ISIN.
+
+    Query: ?q=MSFT eller ?q=US5949181045
+
+    Returnerar matchande instruments från BÅDA Nordic och Global universe.
+    """
+    import requests
+    import os as _os
+    api_key = _os.environ.get("BORSDATA_API_KEY")
+    if not api_key:
+        return jsonify({"error": "BORSDATA_API_KEY saknas"}), 500
+    q = (request.args.get("q") or "").strip().upper()
+    if not q:
+        return jsonify({"error": "ange ?q=MSFT eller ISIN"}), 400
+
+    out = {"query": q, "matches": []}
+    base = "https://apiservice.borsdata.se/v1"
+    for tier, path in [("nordic", "/instruments"), ("global", "/instruments/global")]:
+        try:
+            resp = requests.get(f"{base}{path}",
+                                params={"authKey": api_key}, timeout=30)
+            if resp.status_code != 200:
+                out[f"{tier}_error"] = f"HTTP {resp.status_code}: {resp.text[:200]}"
+                continue
+            data = resp.json()
+            instruments = data.get("instruments", [])
+            for ins in instruments:
+                ticker = (ins.get("ticker") or "").upper()
+                name = (ins.get("name") or "").upper()
+                isin = (ins.get("isin") or "").upper()
+                yahoo = (ins.get("yahoo") or "").upper()
+                if (q == ticker or q == isin or q == yahoo or
+                    q in name or (q in ticker and len(q) >= 3)):
+                    out["matches"].append({
+                        "tier": tier,
+                        "insId": ins.get("insId"),
+                        "name": ins.get("name"),
+                        "ticker": ins.get("ticker"),
+                        "yahoo": ins.get("yahoo"),
+                        "isin": ins.get("isin"),
+                        "marketId": ins.get("marketId"),
+                        "countryId": ins.get("countryId"),
+                    })
+        except Exception as e:
+            out[f"{tier}_error"] = str(e)[:200]
+    out["match_count"] = len(out["matches"])
+    return jsonify(out)
+
+
 @app.route("/api/borsdata/diagnose-access")
 def api_borsdata_diagnose_access():
     """Diagnostiserar exakt vilken access vår API-nyckel har på Borsdata.
