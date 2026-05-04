@@ -4502,12 +4502,14 @@ def compute_quant_scores(db, country="SE", min_market_cap=500e6,
     """
     ph = _ph()
 
-    # Hämta universum
+    # Hämta universum (inkl sector_id för sektor-relativ ranking)
     rows = _fetchall(db, f"""
         SELECT s.orderbook_id, s.short_name as ticker, s.name, m.isin,
-               s.country, s.last_price, s.market_cap, s.currency
+               s.country, s.last_price, s.market_cap, s.currency,
+               m.sector_id, sec.name as sector_name
         FROM stocks s
         JOIN borsdata_instrument_map m ON s.short_name = m.ticker
+        LEFT JOIN borsdata_sectors sec ON m.sector_id = sec.sector_id
         WHERE s.country = {ph}
         AND s.last_price > 0
         AND s.market_cap >= {ph}
@@ -4638,6 +4640,59 @@ def compute_quant_scores(db, country="SE", min_market_cap=500e6,
             and v_score is not None and v_score >= 70
             and m_score is not None and m_score >= 70
         )
+
+    # ── Sektor-relativ ranking ──
+    # Beräkna percentile-rank inom respektive sektor istället för mot hela
+    # universumet. "Top 10% billigast inom industrials" är mer användbart än
+    # "top 10% billigast totalt" eftersom sektorer har olika multiplar
+    # (banker P/E ~10, tech P/E ~25 — direkt jämförelse är meningslös).
+    by_sector = {}  # {sector_id: [indices]}
+    for i, s in enumerate(universe):
+        sid = s.get("sector_id")
+        if sid is None: continue
+        by_sector.setdefault(sid, []).append(i)
+
+    for sid, indices in by_sector.items():
+        if len(indices) < 4:
+            # För få bolag i sektorn för meningsfull ranking
+            for i in indices:
+                universe[i]["sector_quality_rank"] = None
+                universe[i]["sector_value_rank"] = None
+                universe[i]["sector_momentum_rank"] = None
+                universe[i]["sector_n"] = len(indices)
+            continue
+
+        # Plocka ut värden för bolag i denna sektor
+        sec_pe = [pe_vals[i] for i in indices]
+        sec_pb = [pb_vals[i] for i in indices]
+        sec_evebit = [ev_ebit_vals[i] for i in indices]
+        sec_roe = [roe_vals[i] for i in indices]
+        sec_roic = [roic_vals[i] for i in indices]
+        sec_margin = [margin_vals[i] for i in indices]
+        sec_dy = [dy_vals[i] for i in indices]
+        sec_revg = [rev_g_vals[i] for i in indices]
+        sec_epsg = [eps_g_vals[i] for i in indices]
+
+        # Sektor-rankar (kräver minst 4 bolag i sektorn)
+        sec_pe_rank = pct_rank(sec_pe, lower_better=True) if len([v for v in sec_pe if v]) >= 4 else [None] * len(indices)
+        sec_pb_rank = pct_rank(sec_pb, lower_better=True) if len([v for v in sec_pb if v]) >= 4 else [None] * len(indices)
+        sec_evebit_rank = pct_rank(sec_evebit, lower_better=True) if len([v for v in sec_evebit if v]) >= 4 else [None] * len(indices)
+        sec_roe_rank = pct_rank(sec_roe) if len([v for v in sec_roe if v is not None]) >= 4 else [None] * len(indices)
+        sec_roic_rank = pct_rank(sec_roic) if len([v for v in sec_roic if v is not None]) >= 4 else [None] * len(indices)
+        sec_margin_rank = pct_rank(sec_margin) if len([v for v in sec_margin if v is not None]) >= 4 else [None] * len(indices)
+        sec_dy_rank = pct_rank(sec_dy) if len([v for v in sec_dy if v is not None]) >= 4 else [None] * len(indices)
+        sec_revg_rank = pct_rank(sec_revg) if len([v for v in sec_revg if v is not None]) >= 4 else [None] * len(indices)
+        sec_epsg_rank = pct_rank(sec_epsg) if len([v for v in sec_epsg if v is not None]) >= 4 else [None] * len(indices)
+
+        # Skriv tillbaka per bolag
+        for j, idx in enumerate(indices):
+            qs = avg(sec_roe_rank[j], sec_roic_rank[j], sec_margin_rank[j])
+            vs = avg(sec_pe_rank[j], sec_pb_rank[j], sec_evebit_rank[j], sec_dy_rank[j])
+            ms = avg(sec_revg_rank[j], sec_epsg_rank[j])
+            universe[idx]["sector_quality_rank"] = round(qs, 1) if qs is not None else None
+            universe[idx]["sector_value_rank"] = round(vs, 1) if vs is not None else None
+            universe[idx]["sector_momentum_rank"] = round(ms, 1) if ms is not None else None
+            universe[idx]["sector_n"] = len(indices)
 
     return universe
 

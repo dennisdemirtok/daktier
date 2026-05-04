@@ -3928,12 +3928,24 @@ function renderQuantRank(s) {
         ? `<span style="background:linear-gradient(135deg,#059669,#10b981);color:white;padding:3px 12px;border-radius:12px;font-size:11px;font-weight:700">⭐ QUANT TRIFECTA</span>`
         : '';
 
+    // Sektor-relativ rank (om data finns)
+    const hasSector = q.sector_quality_rank != null || q.sector_value_rank != null || q.sector_momentum_rank != null;
+    const sectorPanel = hasSector ? `
+        <div style="background:rgba(255,255,255,0.7);padding:10px;border-radius:8px;margin-top:8px">
+            <div style="font-size:10.5px;font-weight:700;color:#3730a3;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px">
+                Inom sektor: <span style="text-transform:none">${q.sector_name || 'okänd'}</span> (n=${q.sector_n || '?'})
+            </div>
+            ${scoreBar('💰 Value (sektor)', q.sector_value_rank)}
+            ${scoreBar('🏰 Quality (sektor)', q.sector_quality_rank)}
+            ${scoreBar('📈 Momentum (sektor)', q.sector_momentum_rank)}
+        </div>` : '';
+
     return `<div class="drawer-section" style="background:linear-gradient(135deg,#eef2ff,#e0e7ff);border-radius:14px;padding:14px 16px;margin-top:12px">
         <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:10px">
             <div>
                 <div class="drawer-section-title" style="margin:0;color:#3730a3">
                     <span class="material-symbols-outlined" style="font-size:14px;vertical-align:middle">leaderboard</span>
-                    KVANT-RANG (vs ${q.n_universe} svenska bolag)
+                    KVANT-RANG (vs ${q.n_universe} bolag)
                 </div>
                 <div style="font-size:11px;color:#3730a3;opacity:0.85;margin-top:2px">
                     Percent-rank på senaste KPI-värden från Börsdata 20y
@@ -3949,9 +3961,10 @@ function renderQuantRank(s) {
                 ${scoreBar('⭐ Composite (40Q + 35V + 25M)', q.composite_score)}
             </div>
         </div>
+        ${sectorPanel}
         <div style="font-size:10px;color:#3730a3;opacity:0.7;margin-top:8px;font-style:italic;line-height:1.4">
-            Ren kvantitativ ranking — ingen LLM. Trifecta = top 30% i alla 3 axlar samtidigt.
-            Kompletterar agenten med faktor-bas.
+            Ovanför: rank vs hela universumet. Sektor-rank: rank inom samma bransch
+            (mer rättvist — banker, tech, REIT har olika multipel-nivåer).
         </div>
     </div>`;
 }

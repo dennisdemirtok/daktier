@@ -726,6 +726,11 @@ def api_stock_detail(orderbook_id):
                             "momentum_score": target.get("momentum_score"),
                             "composite_score": target.get("composite_score"),
                             "is_quant_trifecta": target.get("is_quant_trifecta"),
+                            "sector_name": target.get("sector_name"),
+                            "sector_n": target.get("sector_n"),
+                            "sector_quality_rank": target.get("sector_quality_rank"),
+                            "sector_value_rank": target.get("sector_value_rank"),
+                            "sector_momentum_rank": target.get("sector_momentum_rank"),
                         }
                 except Exception as e:
                     print(f"[stock detail] quant_rank: {e}", file=sys.stderr)
@@ -1079,6 +1084,12 @@ def api_stock_extras(orderbook_id):
                     "momentum_score": target.get("momentum_score"),
                     "composite_score": target.get("composite_score"),
                     "is_quant_trifecta": target.get("is_quant_trifecta"),
+                    # Sektor-relativ ranking (jämfört bara med bolag i samma sektor)
+                    "sector_name": target.get("sector_name"),
+                    "sector_n": target.get("sector_n"),
+                    "sector_quality_rank": target.get("sector_quality_rank"),
+                    "sector_value_rank": target.get("sector_value_rank"),
+                    "sector_momentum_rank": target.get("sector_momentum_rank"),
                 }
         except Exception as e:
             print(f"[extras] quant_rank: {e}", file=sys.stderr)
