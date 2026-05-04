@@ -5333,10 +5333,12 @@ Varje rad har `period_type: "TTM"`. Q4 FY = årsomsättning, Q3 FY = TTM ending 
 ❌ **FÖRBJUDET**: "Q3 2026 omsättning $318B" (det är TTM, inte ett kvartal).
 ✅ **KORREKT**: "TTM-omsättning per Q3 2026 = $318B" eller "Senaste 12 mån omsättning: $318B".
 
-För **enskilt kvartalsvärde** använd `sales_quarterly_estimate` /
-`net_profit_quarterly_estimate` / `eps_quarterly_estimate` (= diff mot
-föregående TTM-rad). MSFT Q3 FY26 quarterly ≈ $13B från diff-beräkningen
-(rimligt — verkligt MSFT Q-omsättning är ~$70-80B per kvartal).
+**OBS — diff mellan TTM-rader är INTE enskilt kvartal.**
+`sales_yoy_quarterly_diff` är `Q_now - Q_one_year_ago` (= kvartalets YoY-tillskott
+i absoluta tal). MSFT Q3 FY26 yoy_diff = $12.8B betyder "Q3 FY26 var $12.8B större
+än Q3 FY25", INTE "Q3 FY26 omsatte $12.8B". Verklig Q3 FY26 är ~$77B.
+
+För enskilt kvartal saknar vi anchor — kan inte rekonstrueras från TTM-serie ensam.
 
 Sanity-check: om "kvartal" sales > $100B för MSFT/GOOGL/AAPL är det
 TTM-data (ingen enskilt kvartal är så stort). Flagga och säg TTM.

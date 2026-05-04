@@ -2581,21 +2581,21 @@ def get_historical_quarterly(db, orderbook_id):
     )
     out = [dict(r) for r in rows]
 
-    # Markera period-typ och beräkna quarterly_estimate (diff TTM_t - TTM_{t-1})
-    # som approximation för enskilt kvartal. Inte 100% exakt — kräver YoY-anchor —
-    # men ger korrekt nuvarande kvartalsbidrag.
+    # Markera period-typ. Diff mellan konsekutiva TTM-rader är INTE enskilt
+    # kvartalsbidrag — det är `Q_now - Q_one_year_ago` (= kvartalets YoY-tillväxt
+    # i absoluta tal). För enskilt kvartal saknar vi anchor i datan.
     prev_sales = None
     prev_ni = None
     prev_eps = None
     for r in out:
         r["period_type"] = "TTM"  # rolling 12 months — INTE enskilt kvartal
-        # Quarterly approx = diff mot föregående TTM-rad i serien
+        # Diff mellan TTM-rader = "Q_now - Q_one_year_ago" (YoY-bidrag)
         if prev_sales is not None and r.get("sales") is not None:
-            r["sales_quarterly_estimate"] = round(r["sales"] - prev_sales)
+            r["sales_yoy_quarterly_diff"] = round(r["sales"] - prev_sales)
         if prev_ni is not None and r.get("net_profit") is not None:
-            r["net_profit_quarterly_estimate"] = round(r["net_profit"] - prev_ni)
+            r["net_profit_yoy_quarterly_diff"] = round(r["net_profit"] - prev_ni)
         if prev_eps is not None and r.get("eps") is not None:
-            r["eps_quarterly_estimate"] = round(r["eps"] - prev_eps, 2)
+            r["eps_yoy_quarterly_diff"] = round(r["eps"] - prev_eps, 2)
         prev_sales = r.get("sales")
         prev_ni = r.get("net_profit")
         prev_eps = r.get("eps")
