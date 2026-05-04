@@ -4283,9 +4283,18 @@ def _runway_dict(cash, ttm_burn, quarterly_burn, runway_months, currency, year, 
 
 
 def get_latest_kpi_values(db, isin, kpi_ids=None):
-    """Hämta SENASTE årets värde per KPI för ett bolag från kpi-history.
+    """Hämta SENASTE KOMPLETTA årets värde per KPI för ett bolag från kpi-history.
 
-    Returnerar dict {kpi_id: value} för senaste tillgängliga år.
+    Borsdata returnerar både kompletta år (p=5) och partial-year-data (p=1
+    för Q1 av aktuellt år) i "year"-rapporten. Partial-data har ofullständiga
+    flow-värden (CapEx/OCF/etc) som ger felaktiga FCF-beräkningar.
+
+    Strategi: hämta senaste 3 år per KPI, välj första som inte är partial.
+    Heuristik för partial-detektion (eftersom vi inte alltid har p-flaggan):
+    - Om abs(senaste) < 30% av abs(föregående) → skip (partial year)
+    - För flow-data (CapEx, OCF) som varierar med säsong är detta robust nog
+
+    Returnerar dict {kpi_id: value}.
     """
     if not isin: return {}
     ph = _ph()
@@ -4304,14 +4313,34 @@ def get_latest_kpi_values(db, isin, kpi_ids=None):
             f"ORDER BY period_year DESC", params)
     except Exception:
         return {}
-    # För varje KPI, ta första (senaste) värdet
-    out = {}
+
+    # Bygg per-KPI-lista med senaste 3 år
+    by_kpi = {}  # {kpi_id: [(year, value), ...]}
     for r in rows:
         rd = dict(r)
         kid = rd.get("kpi_id")
-        val = rd.get("value")
-        if kid not in out:
-            out[kid] = val
+        if kid not in by_kpi:
+            by_kpi[kid] = []
+        if len(by_kpi[kid]) < 3:
+            by_kpi[kid].append((rd.get("period_year"), rd.get("value")))
+
+    # För varje KPI, välj senaste KOMPLETTA värdet
+    out = {}
+    for kid, history in by_kpi.items():
+        if not history:
+            continue
+        latest_year, latest_val = history[0]
+        # Heuristik: om senaste värde är abnormt litet jämfört med föregående,
+        # det är troligen partial year-data — använd näst senaste istället.
+        if (len(history) >= 2 and latest_val is not None
+                and history[1][1] is not None
+                and abs(history[1][1]) > 0):
+            ratio = abs(latest_val) / abs(history[1][1])
+            if ratio < 0.30:
+                # Partial year-detektor — använd näst senaste
+                out[kid] = history[1][1]
+                continue
+        out[kid] = latest_val
     return out
 
 
