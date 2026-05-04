@@ -4007,6 +4007,43 @@ def api_borsdata_sync_kpi_quarters():
                     "n_tickers": len(tickers) if tickers else "all"})
 
 
+@app.route("/api/borsdata/sync-quarters-sync", methods=["POST"])
+def api_borsdata_sync_quarters_sync():
+    """SYNKRON quarter-sync för debug — väntar tills klar och returnerar resultat."""
+    body = request.json if request.is_json else {}
+    tickers = body.get("tickers") or ["MSFT"]
+
+    try:
+        from edge_db import (sync_borsdata_kpi_quarters, _ph as ph_fn,
+                              _fetchall)
+        db = get_db()
+        try:
+            # Map tickers → ISIN
+            ph = ph_fn()
+            placeholders = ",".join([ph] * len(tickers))
+            sql = (f"SELECT isin FROM borsdata_instrument_map "
+                   f"WHERE ticker IN ({placeholders}) "
+                   f"AND isin NOT LIKE 'YAHOO_%'")
+            rows = _fetchall(db, sql, tuple(tickers))
+            isin_list = []
+            for r in rows:
+                rd = dict(r)
+                if rd.get("isin"):
+                    isin_list.append(rd["isin"])
+
+            res = sync_borsdata_kpi_quarters(db, isin_list=isin_list,
+                                              max_per_run=20, max_quarters=20)
+            return jsonify({
+                "isin_list": isin_list,
+                "result": res,
+            })
+        finally:
+            db.close()
+    except Exception as e:
+        import traceback
+        return jsonify({"error": str(e), "tb": traceback.format_exc()[:1500]}), 500
+
+
 @app.route("/api/stock/<orderbook_id>/quarter-data")
 def api_stock_quarter_data(orderbook_id):
     """Returnerar Borsdata's riktiga kvartalsdata för ett bolag."""
