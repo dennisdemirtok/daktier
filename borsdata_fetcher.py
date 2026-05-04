@@ -305,15 +305,15 @@ def fetch_kpi_history_for_instrument(insId, kpiId, report_type="year",
                                        max_count=20):
     """Hämta historik för en KPI för ett instrument.
 
-    Verifierat URL-format:
+    Verifierat URL-format (samma för Nordic + Global — ins_id är unika):
       /v1/instruments/{insId}/kpis/{kpiId}/{reportType}/{priceType}/history
 
-    Returnerar list av {"y": år, "p": period (0 för year), "v": värde}.
+    OBS: `is_global`-parametern är legacy och påverkar inte URL:en längre.
+    Tidigare lade vi till `/global/`-prefix för utländska bolag, men det är
+    fel format — Borsdata's API använder samma path för alla instruments.
+    Verifierat 2026: ins_id 11441 (MSFT) ger 200 OK utan /global/-prefix.
     """
-    base = f"{BORSDATA_BASE}/instruments"
-    if is_global:
-        base += "/global"
-    url = f"{base}/{insId}/kpis/{kpiId}/{report_type}/{price_type}/history"
+    url = f"{BORSDATA_BASE}/instruments/{insId}/kpis/{kpiId}/{report_type}/{price_type}/history"
     data = _rate_limited_get(url, params={"maxCount": max_count})
     return data.get("values", [])
 
