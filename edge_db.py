@@ -3671,7 +3671,13 @@ def sync_borsdata_reports(db, limit=None, max_age_days=7):
         bd_name = (inst.get("name") or "").strip().lower()
         bd_yahoo = inst.get("yahoo")
         bd_ticker = inst.get("ticker")
-        bd_isin = inst.get("isin") or f"YAHOO_{bd_yahoo}"  # fallback om ISIN saknas
+        bd_isin = inst.get("isin")
+        # SKIP bolag utan riktig ISIN. Tidigare fallade vi tillbaka på
+        # f"YAHOO_{yahoo}" men de raderna är meningslösa — de representerar
+        # sekundära listingar (polsk/italiensk MSFT) som inte har KPI-data
+        # i Borsdata. Ignorera dem helt.
+        if not bd_isin:
+            continue
         if bd_isin in matched_isins:
             continue
 
