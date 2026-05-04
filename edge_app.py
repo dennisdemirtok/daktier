@@ -4045,9 +4045,17 @@ def api_backtest_v2_run_quant():
                                           min_market_cap=min_market_cap,
                                           country=country)
             analysis = analyze_quant_results(results)
-            # Spara resultat så vi kan hämta dem senare
+            # Räkna unika tickers i resultaten
+            unique_tickers = sorted(set(r["ticker"] for r in results))
             return jsonify({
                 "n_observations": len(results),
+                "n_unique_tickers": len(unique_tickers),
+                "params": {
+                    "max_universe": max_universe,
+                    "min_market_cap": min_market_cap,
+                    "country": country,
+                },
+                "tickers_sample": unique_tickers[:20],
                 "period": f"{start_year}-{end_year}",
                 "analysis": analysis,
                 "sample_trifectas": [
