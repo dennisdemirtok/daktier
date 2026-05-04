@@ -3720,6 +3720,72 @@ def api_refresh_historical_reset():
         db.close()
 
 
+@app.route("/api/borsdata/refresh-stocks-isin", methods=["POST"])
+def api_borsdata_refresh_stocks_isin():
+    """Uppdaterar stocks.isin från borsdata_instrument_map.
+
+    Kör när mapping uppdaterats — t.ex. efter att YAHOO_-fallbacks ersatts
+    av riktiga ISIN:er. Uppdaterar både:
+    - stocks med NULL/tom isin
+    - stocks med YAHOO_-prefix (gamla felaktiga fallbacks)
+
+    Returnerar antal stocks uppdaterade.
+    """
+    db = get_db()
+    try:
+        from edge_db import _ph as ph_fn, _fetchall, _fetchone
+        ph = ph_fn()
+
+        # Räkna före
+        before = _fetchone(db,
+            "SELECT COUNT(*) as n FROM stocks "
+            "WHERE (isin IS NULL OR isin = '' OR isin LIKE 'YAHOO_%')")
+        n_before = (dict(before)["n"] if before else 0) or 0
+
+        # UPDATE stocks SET isin = m.isin from borsdata_instrument_map (Postgres)
+        # eller per-row för SQLite
+        try:
+            db.execute("""
+                UPDATE stocks
+                SET isin = m.isin
+                FROM borsdata_instrument_map m
+                WHERE stocks.short_name = m.ticker
+                AND m.isin NOT LIKE 'YAHOO_%'
+                AND m.isin IS NOT NULL AND m.isin != ''
+                AND (stocks.isin IS NULL OR stocks.isin = '' OR stocks.isin LIKE 'YAHOO_%')
+            """)
+            db.commit()
+        except Exception:
+            try: db.rollback()
+            except Exception: pass
+            # SQLite fallback
+            rows = db.execute(
+                "SELECT s.short_name, m.isin "
+                "FROM stocks s JOIN borsdata_instrument_map m ON s.short_name = m.ticker "
+                "WHERE m.isin IS NOT NULL AND m.isin != '' AND m.isin NOT LIKE 'YAHOO_%' "
+                "AND (s.isin IS NULL OR s.isin = '' OR s.isin LIKE 'YAHOO_%')"
+            ).fetchall()
+            for r in rows:
+                rd = dict(r)
+                db.execute(
+                    f"UPDATE stocks SET isin = {ph} WHERE short_name = {ph}",
+                    (rd["isin"], rd["short_name"]))
+            db.commit()
+
+        after = _fetchone(db,
+            "SELECT COUNT(*) as n FROM stocks "
+            "WHERE (isin IS NULL OR isin = '' OR isin LIKE 'YAHOO_%')")
+        n_after = (dict(after)["n"] if after else 0) or 0
+
+        return jsonify({
+            "stocks_with_bad_isin_before": n_before,
+            "stocks_with_bad_isin_after": n_after,
+            "fixed": n_before - n_after,
+        })
+    finally:
+        db.close()
+
+
 @app.route("/api/borsdata/inspect-mapping/<ticker>")
 def api_borsdata_inspect_mapping(ticker):
     """Visar borsdata_instrument_map-rader matchande ticker (för debug)."""
@@ -7185,18 +7251,20 @@ def _startup():
     db = get_db()
     stats = get_stats(db)
 
-    # ISIN-backfill: stocks.isin saknas för många SE-bolag, men finns i
-    # borsdata_instrument_map.ticker. Backfill från ticker-match en gång —
-    # därefter fungerar price-history, KPI-lookup och NAV-historik direkt.
+    # ISIN-backfill: stocks.isin saknas för många SE-bolag, eller har YAHOO_-
+    # fallback (gammalt felaktigt format) för utländska. Backfill från ticker-
+    # match — nu med YAHOO_-prefix-detektion. Krävs för att price-history,
+    # KPI-lookup och NAV-historik ska fungera korrekt.
     try:
         from edge_db import _fetchone, _ph as ph_fn
         ph = ph_fn()
         before = _fetchone(db,
             "SELECT COUNT(*) as n FROM stocks "
-            "WHERE (isin IS NULL OR isin = '') AND short_name IS NOT NULL")
+            "WHERE (isin IS NULL OR isin = '' OR isin LIKE 'YAHOO_%') "
+            "AND short_name IS NOT NULL")
         n_missing = (dict(before)["n"] if before else 0) or 0
         if n_missing > 0:
-            print(f"[STARTUP] ISIN-backfill: {n_missing} stocks saknar ISIN, kör backfill...")
+            print(f"[STARTUP] ISIN-backfill: {n_missing} stocks med saknad/YAHOO_-isin, kör backfill...")
             # Postgres + SQLite-kompatibel UPDATE FROM
             try:
                 db.execute("""
@@ -7204,8 +7272,8 @@ def _startup():
                     SET isin = m.isin
                     FROM borsdata_instrument_map m
                     WHERE stocks.short_name = m.ticker
-                    AND (stocks.isin IS NULL OR stocks.isin = '')
-                    AND m.isin IS NOT NULL AND m.isin != ''
+                    AND (stocks.isin IS NULL OR stocks.isin = '' OR stocks.isin LIKE 'YAHOO_%')
+                    AND m.isin IS NOT NULL AND m.isin != '' AND m.isin NOT LIKE 'YAHOO_%'
                 """)
                 db.commit()
             except Exception:
@@ -7214,7 +7282,8 @@ def _startup():
                 rows = db.execute(
                     "SELECT s.short_name, m.isin "
                     "FROM stocks s JOIN borsdata_instrument_map m ON s.short_name = m.ticker "
-                    "WHERE (s.isin IS NULL OR s.isin = '') AND m.isin IS NOT NULL AND m.isin != ''"
+                    "WHERE (s.isin IS NULL OR s.isin = '' OR s.isin LIKE 'YAHOO_%') "
+                    "AND m.isin IS NOT NULL AND m.isin != '' AND m.isin NOT LIKE 'YAHOO_%'"
                 ).fetchall()
                 for r in rows:
                     rd = dict(r)
@@ -7224,9 +7293,10 @@ def _startup():
                 db.commit()
             after = _fetchone(db,
                 "SELECT COUNT(*) as n FROM stocks "
-                "WHERE (isin IS NULL OR isin = '') AND short_name IS NOT NULL")
+                "WHERE (isin IS NULL OR isin = '' OR isin LIKE 'YAHOO_%') "
+                "AND short_name IS NOT NULL")
             n_after = (dict(after)["n"] if after else 0) or 0
-            print(f"[STARTUP] ISIN-backfill klar: {n_missing - n_after} bolag fick ISIN, {n_after} kvar utan ticker-match")
+            print(f"[STARTUP] ISIN-backfill klar: {n_missing - n_after} bolag fick rätt ISIN, {n_after} kvar utan ticker-match")
     except Exception as e:
         print(f"[STARTUP] ISIN-backfill fel: {e}", file=sys.stderr)
 
