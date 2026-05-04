@@ -4517,15 +4517,17 @@ def api_borsdata_diagnose_access():
     masked_key = api_key[:6] + "..." + api_key[-4:] if len(api_key) > 10 else "***"
 
     base = "https://apiservice.borsdata.se/v1"
+    # KORREKT URL-format för KPI-historik: /instruments/{insId}/... — INTE
+    # /instruments/global/{insId}/... (det formatet finns inte i Borsdata's API).
     tests = {
-        "1_markets_all_tier":         f"{base}/markets",
+        "1_markets_all_tier":          f"{base}/markets",
         "2_instruments_nordic":        f"{base}/instruments",
         "3_instruments_global_list":   f"{base}/instruments/global",
         "4_kpi_metadata":              f"{base}/instruments/kpis/metadata",
-        "5_global_msft_kpi64":         f"{base}/instruments/global/11441/kpis/64/year/mean/history",
+        "5_global_msft_kpi64":         f"{base}/instruments/11441/kpis/64/year/mean/history",
         "6_nordic_inveb_kpi64":        f"{base}/instruments/113/kpis/64/year/mean/history",
-        "7_global_msft_stockprice":    f"{base}/instruments/global/11441/stockprices/last",
-        "8_nordic_inveb_stockprice":   f"{base}/instruments/113/stockprices/last",
+        "7_global_msft_kpi_pe":        f"{base}/instruments/11441/kpis/2/year/mean/history",
+        "8_nordic_inveb_kpi_pe":       f"{base}/instruments/113/kpis/2/year/mean/history",
     }
     results = {"key_masked": masked_key, "tests": {}}
     for label, url in tests.items():
@@ -4539,15 +4541,16 @@ def api_borsdata_diagnose_access():
         except Exception as e:
             results["tests"][label] = {"error": str(e)[:150]}
 
-    # Tolkning baserat på resultaten
+    # Tolkning baserat på resultaten — använder rätt test-namn
     nordic_works = results["tests"].get("2_instruments_nordic", {}).get("status") == 200
     global_list_works = results["tests"].get("3_instruments_global_list", {}).get("status") == 200
-    global_kpi_works = results["tests"].get("5_se_msft_globalid_kpi64", {}).get("status") == 200
+    global_kpi_works = results["tests"].get("5_global_msft_kpi64", {}).get("status") == 200
+    global_pe_works = results["tests"].get("7_global_msft_kpi_pe", {}).get("status") == 200
 
-    if nordic_works and global_kpi_works:
-        results["diagnosis"] = "✅ Pro+ med API Global — full access"
-    elif nordic_works and global_list_works and not global_kpi_works:
-        results["diagnosis"] = "⚠️ Du kan LISTA globala bolag men inte hämta deras KPI/pris-data — sannolikt API Global add-on saknas"
+    if nordic_works and (global_kpi_works or global_pe_works):
+        results["diagnosis"] = "✅ Pro+ med API Global — full access (Nordic + Global KPIs fungerar)"
+    elif nordic_works and global_list_works and not (global_kpi_works or global_pe_works):
+        results["diagnosis"] = "⚠️ Du kan lista globala bolag men inte hämta deras KPI-data — kontrollera Pro+ API Global-tier"
     elif nordic_works and not global_list_works:
         results["diagnosis"] = "❌ Pro (Nordic only) — Pro+ med API Global behövs för att läsa global-data"
     elif not nordic_works:
