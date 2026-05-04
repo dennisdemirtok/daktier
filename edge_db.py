@@ -4961,6 +4961,23 @@ def _score_fcf_yield(s, classification):
     # ── Fallback: proxy-version (sektorbaserad CapEx + D/E EV) ──
     ocf = s.get("operating_cash_flow")
     market_cap = _market_cap_native(s)
+    isin = s.get("isin")
+    db_conn = s.get("_db")
+
+    # ── OCF-fallback: hämta från Borsdata KPI 62 (Operativ Kassaflöde) om
+    # Avanza screener inte returnerar det (vanligt för utländska bolag) ──
+    ocf_source = "avanza_screener" if ocf else None
+    if not ocf and isin and db_conn:
+        try:
+            kpi_vals_ocf = get_latest_kpi_values(db_conn, isin, [62])
+            if kpi_vals_ocf.get(62):
+                # KPI 62 är OCF i miljoner i nativa valutan
+                ocf = abs(kpi_vals_ocf[62]) * 1_000_000
+                ocf_source = "borsdata_kpi_62"
+        except Exception as e:
+            import sys
+            print(f"[ocf] borsdata fetch failed: {e}", file=sys.stderr)
+
     if not ocf or not market_cap or market_cap <= 0:
         return None
 
@@ -4973,10 +4990,8 @@ def _score_fcf_yield(s, classification):
     capex_actual = None
     capex_source = "sector_proxy"
     capex_pct_actual = None
-    isin = s.get("isin")
-    if isin and "_db" in s:  # databas-anslutning passas via s["_db"] om tillgänglig
+    if isin and db_conn:
         try:
-            db_conn = s["_db"]
             kpi_vals = get_latest_kpi_values(db_conn, isin, [25, 64])
             # KPI 64 = Capex (absolut belopp), KPI 25 = Capex %
             if kpi_vals.get(64) is not None and kpi_vals[64] != 0:
@@ -5051,6 +5066,7 @@ def _score_fcf_yield(s, classification):
         "currency": s.get("currency", "?"),
         "market_cap_native": round(market_cap),
         "operating_cash_flow_ttm": round(ocf),
+        "ocf_source": ocf_source,  # "avanza_screener" | "borsdata_kpi_62"
         "capex_pct_of_ocf": round(capex_pct * 100, 1),
         "capex": round(capex_proxy),
         "capex_source": capex_source,  # "borsdata_kpi_64" | "borsdata_kpi_25" | "sector_proxy"
