@@ -4530,6 +4530,107 @@ function openDrawer(s) {
     // V2 SETUP-CARD (renderad ovan, läggs in efter DAKTIER Score)
     html += setupHtml;
 
+    // ── 📚 BOK-MODELLER (13) — per-modell-breakdown ──
+    // Visar varje av de 13 bokmodellerna med score + mini-bar.
+    // Gruppindelning: Värde / Kvalitet / Trend & Övrigt så det blir överskådligt.
+    if (s.book_model_scores) {
+        const bms = s.book_model_scores;
+        const bookComp = s.book_composite;
+        const nAvail = s.book_models_available || 0;
+
+        // Modell-metadata: ikon + namn + grupp + tooltip
+        const MODEL_META = {
+            graham:   { icon:'📘', name:'Graham',   group:'value',   desc:'Defensiv: P/E×P/B < 22.5' },
+            klarman:  { icon:'🛡️', name:'Klarman',  group:'value',   desc:'Margin of safety — djupvärde' },
+            magic:    { icon:'📊', name:'Magic',    group:'value',   desc:'Greenblatt: hög ROCE × billigt EV/EBIT' },
+            divq:     { icon:'💰', name:'Utdelning',group:'value',   desc:'Stabil DY + hållbar payout' },
+            buffett:  { icon:'🏰', name:'Buffett',  group:'quality', desc:'ROE + låg skuld = moat' },
+            lynch:    { icon:'🔎', name:'Lynch',    group:'quality', desc:'PEG: P/E vs tillväxt' },
+            pabrai:   { icon:'🃏', name:'Pabrai',   group:'quality', desc:'ROA som moat-proxy + låg skuld' },
+            marks:    { icon:'🌊', name:'H. Marks', group:'quality', desc:'Asymmetrisk risk/reward' },
+            spier:    { icon:'🧘', name:'G. Spier', group:'quality', desc:'5y ROIC-stabil compounder' },
+            trend:    { icon:'📈', name:'Trend',    group:'momentum',desc:'Stinsen — undvik överköpta' },
+            owners:   { icon:'👥', name:'Ägare',    group:'momentum',desc:'Spiltan — owner momentum' },
+            taleb:    { icon:'🎯', name:'Taleb',    group:'risk',    desc:'Antifragile / barbell' },
+            kelly:    { icon:'🎲', name:'Kelly',    group:'risk',    desc:'Edge-baserad sizing' },
+        };
+        const GROUP_META = {
+            value:    { label:'Värde',     color:'#dc2626' },
+            quality:  { label:'Kvalitet',  color:'#059669' },
+            momentum: { label:'Momentum',  color:'#2563eb' },
+            risk:     { label:'Risk/sizing', color:'#9333ea' },
+        };
+
+        const modelRow = (key) => {
+            const meta = MODEL_META[key];
+            if (!meta) return '';
+            const v = bms[key];
+            const g = GROUP_META[meta.group];
+            if (v == null) {
+                return `<div title="${meta.desc} — N/A för denna bolagstyp" style="display:flex;align-items:center;gap:8px;padding:5px 0;opacity:0.45">
+                    <span style="font-size:14px;width:18px">${meta.icon}</span>
+                    <span style="font-size:12px;flex:1;color:#64748b">${meta.name}</span>
+                    <span style="font-size:10.5px;color:#94a3b8;font-style:italic">N/A</span>
+                </div>`;
+            }
+            const c = v >= 75 ? '#059669' : v >= 60 ? '#10b981' : v >= 45 ? '#64748b' : v >= 30 ? '#f59e0b' : '#dc2626';
+            return `<div title="${meta.desc}" style="display:flex;align-items:center;gap:8px;padding:5px 0">
+                <span style="font-size:14px;width:18px">${meta.icon}</span>
+                <span style="font-size:12px;flex:1;color:#0f172a;font-weight:500">${meta.name}</span>
+                <div style="flex:1;height:5px;background:#e2e8f0;border-radius:3px;max-width:80px;overflow:hidden">
+                    <div style="height:100%;width:${v}%;background:${c};border-radius:3px"></div>
+                </div>
+                <span style="font-size:13px;font-weight:800;color:${c};width:30px;text-align:right">${v.toFixed(0)}</span>
+            </div>`;
+        };
+
+        // Gruppera modeller efter sin "group"
+        const modelsByGroup = { value:[], quality:[], momentum:[], risk:[] };
+        Object.keys(MODEL_META).forEach(k => {
+            const g = MODEL_META[k].group;
+            modelsByGroup[g].push(k);
+        });
+
+        const groupSection = (gKey) => {
+            const g = GROUP_META[gKey];
+            const keys = modelsByGroup[gKey];
+            return `<div style="margin-top:8px">
+                <div style="font-size:10px;font-weight:700;color:${g.color};text-transform:uppercase;letter-spacing:0.5px;margin-bottom:2px">${g.label}</div>
+                ${keys.map(modelRow).join('')}
+            </div>`;
+        };
+
+        const compColor = bookComp == null ? '#64748b' :
+                         bookComp >= 75 ? '#059669' :
+                         bookComp >= 60 ? '#10b981' :
+                         bookComp >= 45 ? '#64748b' :
+                         bookComp >= 30 ? '#f59e0b' : '#dc2626';
+
+        html += `<details class="drawer-section" style="background:white;border-radius:14px;padding:14px 18px;margin-bottom:14px;border:1px solid rgba(0,0,0,0.06)">
+            <summary style="cursor:pointer;list-style:none;display:flex;align-items:center;justify-content:space-between;gap:10px">
+                <div>
+                    <div style="font-size:10.5px;color:#64748b;text-transform:uppercase;letter-spacing:0.5px;font-weight:700">📚 Bok-modeller</div>
+                    <div style="display:flex;align-items:baseline;gap:8px;margin-top:2px">
+                        <span style="font-size:24px;font-weight:900;color:${compColor}">${bookComp != null ? bookComp.toFixed(0) : '–'}</span>
+                        <span style="font-size:12px;color:#64748b;font-weight:600">composite · ${nAvail}/13 har data</span>
+                    </div>
+                </div>
+                <div style="font-size:11px;color:#64748b">Veckla ut för att se varje modell ▾</div>
+            </summary>
+            <div style="margin-top:12px;padding-top:10px;border-top:1px solid #f1f5f9">
+                ${groupSection('value')}
+                ${groupSection('quality')}
+                ${groupSection('momentum')}
+                ${groupSection('risk')}
+                <div style="margin-top:10px;padding-top:8px;border-top:1px dashed #e2e8f0;font-size:10.5px;color:#94a3b8;font-style:italic;line-height:1.5">
+                    Pabrai/Marks/Spier tillkom 2026 som komplement till de 10 ursprungliga modellerna.
+                    Pabrai bygger på ROA som moat-proxy, Marks på asymmetrisk risk/reward,
+                    Spier på 5y ROIC-stabilitet. Alla tre flyter in i bok-composite med vikt 1.0-1.1×.
+                </div>
+            </div>
+        </details>`;
+    }
+
     // ── DETALJSCORES (Edge + Meta) — komprimerat under DAKTIER Score ──
     // Visas bara om DAKTIER Score saknas, ELLER inuti collapsible "Detaljer"-panel
     const hasEdge = s.edge_score != null;
