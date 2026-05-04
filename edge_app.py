@@ -4275,6 +4275,51 @@ def api_borsdata_kpi_metadata():
         return jsonify({"error": str(e), "tb": traceback.format_exc()[:500]}), 500
 
 
+@app.route("/api/borsdata/test-all-kpis/<int:ins_id>")
+def api_borsdata_test_all_kpis(ins_id):
+    """Testar alla TOP_KPIS för ett specifikt ins_id (global eller nordic).
+
+    Query: ?global=1
+    """
+    import requests
+    import os as _os
+    from borsdata_fetcher import TOP_KPIS
+    api_key = _os.environ.get("BORSDATA_API_KEY")
+    if not api_key:
+        return jsonify({"error": "BORSDATA_API_KEY saknas"}), 500
+    is_global = request.args.get("global") == "1"
+    base = "https://apiservice.borsdata.se/v1"
+    prefix = f"{base}/instruments/global" if is_global else f"{base}/instruments"
+
+    # Testa flera priceType-format för icke-pris-KPIer
+    price_types_to_try = ["mean", "sum", "last"]
+
+    out = {"ins_id": ins_id, "is_global": is_global, "kpis": {}}
+    for kpi_id, kpi_name in list(TOP_KPIS.items())[:15]:  # första 15 för att inte överbelasta
+        result = {"name": kpi_name, "tries": {}}
+        for pt in price_types_to_try:
+            url = f"{prefix}/{ins_id}/kpis/{kpi_id}/year/{pt}/history"
+            try:
+                r = requests.get(url, params={"authKey": api_key, "maxCount": 3}, timeout=10)
+                if r.status_code == 200:
+                    j = r.json()
+                    vals = j.get("values", [])
+                    result["tries"][pt] = {
+                        "status": 200,
+                        "n_values": len(vals),
+                        "sample": vals[:2] if vals else None,
+                    }
+                    if vals:
+                        result["WORKING"] = pt
+                        break
+                else:
+                    result["tries"][pt] = {"status": r.status_code, "msg": r.text[:80]}
+            except Exception as e:
+                result["tries"][pt] = {"error": str(e)[:80]}
+        out["kpis"][kpi_id] = result
+    return jsonify(out)
+
+
 @app.route("/api/borsdata/find-instrument")
 def api_borsdata_find_instrument():
     """Sök Borsdata's instrument-katalog (Nordic + Global) efter ticker/ISIN.
