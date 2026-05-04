@@ -3609,9 +3609,34 @@ def sync_borsdata_reports(db, limit=None, max_age_days=7):
             matched.append((bd["isin"], bd, avz, False))
 
     # 2) Globala: matcha via name (t.ex. Avanza "Microsoft" = Börsdata "Microsoft Corp")
-    # samt via yahoo-ticker
+    # samt via yahoo-ticker.
+    #
+    # PRIORITERING (kritisk!): Sortera global_inst så att instruments MED
+    # riktig ISIN kommer först. Detta ger korrekt mapping även när samma
+    # ticker finns på flera börser (t.ex. MSFT i USA, Polen, Italien — bara
+    # USA-listingen har riktig ISIN US5949181045). Föredra också US/CA/EU
+    # över andra länder för retail-relevans.
+    PREFERRED_COUNTRIES = {5, 1, 6, 7, 4, 8, 9, 10}  # US, CA, UK, DE, FR, ...
+
+    def _global_inst_priority(inst):
+        """Lägre värde = högre prioritet."""
+        has_isin = bool(inst.get("isin"))
+        country_id = inst.get("countryId") or 99
+        country_pref = 0 if country_id in PREFERRED_COUNTRIES else 1
+        # Sortera först på (ISIN finns), sedan på (country preferred), sedan ticker-längd
+        # (kortare ticker = troligare primary listing — t.ex. "MSFT" > "1MSFT")
+        ticker_len = len(inst.get("ticker") or "")
+        return (
+            0 if has_isin else 1,    # ISIN-bolag först
+            country_pref,             # US/CA/EU innan andra
+            ticker_len,               # kortare ticker först
+        )
+
+    sorted_global_inst = sorted(global_inst, key=_global_inst_priority)
+
     matched_isins = {m[0] for m in matched}
-    for inst in global_inst:
+    matched_avz_oid = set()  # avoid att samma Avanza-bolag matchas till flera Borsdata
+    for inst in sorted_global_inst:
         bd_name = (inst.get("name") or "").strip().lower()
         bd_yahoo = inst.get("yahoo")
         bd_ticker = inst.get("ticker")
@@ -3623,6 +3648,8 @@ def sync_borsdata_reports(db, limit=None, max_age_days=7):
         # Försök ticker → short_name
         if bd_yahoo and bd_yahoo in avz_by_short:
             avz = avz_by_short[bd_yahoo]
+        if not avz and bd_ticker and bd_ticker in avz_by_short:
+            avz = avz_by_short[bd_ticker]
         # Annars: name-prefix match (t.ex. "Microsoft" → "Microsoft Corp")
         if not avz and bd_name:
             for avz_name_lc, avz_row in avz_by_name.items():
@@ -3635,8 +3662,12 @@ def sync_borsdata_reports(db, limit=None, max_age_days=7):
                         break
 
         if avz:
+            avz_oid = avz.get("orderbook_id")
+            if avz_oid in matched_avz_oid:
+                continue  # Avanza-bolaget redan mappat till en bättre Borsdata-listing
             matched.append((bd_isin, inst, avz, True))
             matched_isins.add(bd_isin)
+            matched_avz_oid.add(avz_oid)
 
     print(f"[Börsdata] Matchade {len(matched)} bolag totalt")
 

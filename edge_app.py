@@ -3720,6 +3720,40 @@ def api_refresh_historical_reset():
         db.close()
 
 
+@app.route("/api/borsdata/clean-yahoo-fallbacks", methods=["POST"])
+def api_borsdata_clean_yahoo_fallbacks():
+    """Rensar borsdata_instrument_map-rader där isin börjar med 'YAHOO_'.
+
+    Dessa skapades när Borsdata returnerade null-ISIN för fel listing av en
+    aktie (t.ex. polsk MSFT-listing). Efter mapping-fixen ska dessa rader
+    ersättas av riktiga ISIN:er vid nästa sync.
+
+    Returnerar antal rensade rader.
+    """
+    db = get_db()
+    try:
+        from edge_db import _ph as ph_fn
+        ph = ph_fn()
+        # Räkna först
+        before = db.execute(
+            "SELECT COUNT(*) as n FROM borsdata_instrument_map "
+            "WHERE isin LIKE 'YAHOO_%'"
+        ).fetchone()
+        n_before = (dict(before)["n"] if before else 0) or 0
+
+        if n_before > 0:
+            db.execute("DELETE FROM borsdata_instrument_map WHERE isin LIKE 'YAHOO_%'")
+            # Och rensa motsvarande KPI-rader (de är ändå värdelösa under fel ISIN)
+            db.execute("DELETE FROM borsdata_kpi_history WHERE isin LIKE 'YAHOO_%'")
+            db.commit()
+        return jsonify({
+            "rows_deleted": n_before,
+            "next_step": "POST /api/borsdata/sync med limit=300 för att rebygga mapping korrekt",
+        })
+    finally:
+        db.close()
+
+
 @app.route("/api/borsdata/sync", methods=["POST"])
 def api_borsdata_sync():
     """Synkar Börsdata-data (riktig FCF/EBIT/skuld) för svenska bolag.
