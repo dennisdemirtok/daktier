@@ -3961,6 +3961,75 @@ def api_borsdata_sync_kpis():
     return jsonify({"status": "started"})
 
 
+@app.route("/api/borsdata/sync-kpi-quarters", methods=["POST"])
+def api_borsdata_sync_kpi_quarters():
+    """Synkar KVARTALSDATA från Borsdata (riktiga enskilda kvartal, ej TTM).
+
+    Body: {tickers: [...], max_per_run: int, max_quarters: int (default 20)}
+    """
+    body = request.json if request.is_json else {}
+    tickers = body.get("tickers")
+    max_per_run = body.get("max_per_run", 500)
+    max_quarters = body.get("max_quarters", 20)
+
+    isin_list = None
+    if tickers:
+        # Map tickers → ISIN
+        db = get_db()
+        try:
+            from edge_db import _ph as ph_fn, _fetchall
+            ph = ph_fn()
+            placeholders = ",".join([ph] * len(tickers))
+            rows = _fetchall(db,
+                f"SELECT isin FROM borsdata_instrument_map "
+                f"WHERE ticker IN ({placeholders}) AND isin NOT LIKE 'YAHOO_%'",
+                tickers)
+            isin_list = [r["isin"] for r in rows]
+        finally:
+            db.close()
+
+    def _run():
+        from edge_db import sync_borsdata_kpi_quarters
+        db = get_db()
+        try:
+            res = sync_borsdata_kpi_quarters(db, isin_list=isin_list,
+                                              max_per_run=max_per_run,
+                                              max_quarters=max_quarters)
+            print(f"[Börsdata Quarters] Sync klar: {res}")
+        finally:
+            db.close()
+
+    threading.Thread(target=_run, daemon=True).start()
+    return jsonify({"status": "started", "tickers": tickers, "n_isins": len(isin_list) if isin_list else "all"})
+
+
+@app.route("/api/stock/<orderbook_id>/quarter-data")
+def api_stock_quarter_data(orderbook_id):
+    """Returnerar Borsdata's riktiga kvartalsdata för ett bolag."""
+    db = get_db()
+    try:
+        from edge_db import _ph as ph_fn, _fetchone, get_quarter_kpi_history
+        ph = ph_fn()
+        row = _fetchone(db,
+            f"SELECT isin, name FROM stocks WHERE CAST(orderbook_id AS TEXT) = CAST({ph} AS TEXT)",
+            (str(orderbook_id),))
+        if not row:
+            return jsonify({"error": "stock not found"}), 404
+        rd = dict(row)
+        isin = rd.get("isin")
+        if not isin or isin.startswith("YAHOO_"):
+            return jsonify({"error": "isin saknas eller felaktig", "isin": isin}), 404
+        # KPI 30=Vinstmarginal, 33=ROE, 37=ROIC, 64=CapEx, 62=OCF, 97=Vinsttillväxt
+        qkpis = get_quarter_kpi_history(db, isin, [30, 33, 37, 64, 62, 97], n_quarters=12)
+        return jsonify({
+            "name": rd.get("name"),
+            "isin": isin,
+            "quarters": qkpis,
+        })
+    finally:
+        db.close()
+
+
 @app.route("/api/backtest/run")
 def api_backtest_run():
     """Kör backtest av en setup-typ.

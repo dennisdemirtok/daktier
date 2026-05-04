@@ -2747,6 +2747,30 @@ def _attach_hist(db, stock_dict):
                     pass
             h["eps_quarters"] = eps_list
             h["roe_quarters"] = roe_list
+            # OBS: dessa är från historical_quarterly som är TTM-data hos Avanza.
+            # För utländska bolag — overrida med Borsdata's RIKTIGA kvartalsdata
+            # (KPI 33=ROE, 30=Vinstmarginal, 97=Vinsttillväxt) om tillgängligt.
+            isin = stock_dict.get("isin")
+            if isin and not isin.startswith("YAHOO_"):
+                try:
+                    qkpis = get_quarter_kpi_history(db, isin, [33, 30, 97], n_quarters=12)
+                    # Skriv över roe_quarters med riktiga Borsdata-kvartal
+                    if qkpis.get(33):
+                        roe_q = [(q["year"], q["quarter"], q["value"])
+                                  for q in qkpis[33]]
+                        h["roe_quarters_borsdata"] = roe_q  # markera som riktig data
+                        h["roe_quarters"] = roe_q  # override TTM-version
+                        h["quarter_data_source"] = "borsdata"
+                    if qkpis.get(30):  # Vinstmarginal per kvartal
+                        h["profit_margin_quarters_borsdata"] = [
+                            (q["year"], q["quarter"], q["value"])
+                            for q in qkpis[30]]
+                    if qkpis.get(97):  # Vinsttillväxt per kvartal
+                        h["earnings_growth_quarters_borsdata"] = [
+                            (q["year"], q["quarter"], q["value"])
+                            for q in qkpis[97]]
+                except Exception as e:
+                    pass  # tyst — fall tillbaka till TTM-version
         except Exception:
             pass
         if h:
@@ -3967,6 +3991,113 @@ def sync_borsdata_kpis(db, kpi_ids=None, isin_list=None, max_per_run=500):
     db.commit()
     return {"synced": synced, "total_rows": total_rows, "errors": errors,
             "total": len(targets)}
+
+
+def sync_borsdata_kpi_quarters(db, kpi_ids=None, isin_list=None, max_per_run=500,
+                                 max_quarters=20):
+    """Synkar KVARTALSDATA från Borsdata KPI-historik.
+
+    Används specifikt för utländska bolag där Avanza inte ger oss riktiga
+    enskilda kvartal — Borsdata har real Q1/Q2/Q3/Q4-data via report_type='quarter'.
+
+    Default-KPI:er: 30 (Vinstmarginal), 31 (FCF-marginal), 33 (ROE), 37 (ROIC),
+    62 (OCF), 64 (CapEx), 28 (Bruttomarginal), 29 (Rörelsemarginal).
+    """
+    try:
+        from borsdata_fetcher import (fetch_kpi_history_for_instrument,
+                                       TOP_KPIS, BORSDATA_KEY)
+    except ImportError:
+        return {"error": "borsdata_fetcher saknas"}
+    if not BORSDATA_KEY:
+        return {"error": "BORSDATA_API_KEY saknas"}
+
+    ph = _ph()
+    # Defaults: KPI:er som är meningsfulla per kvartal
+    if kpi_ids is None:
+        kpi_ids = [30, 31, 33, 37, 62, 64, 28, 29, 94, 97]
+
+    if isin_list is None:
+        rows = _fetchall(db, "SELECT isin, ins_id, is_global FROM borsdata_instrument_map")
+        targets = [(r["isin"], r["ins_id"], r["is_global"]) for r in rows]
+    else:
+        placeholders = ",".join([ph] * len(isin_list))
+        rows = _fetchall(db,
+            f"SELECT isin, ins_id, is_global FROM borsdata_instrument_map "
+            f"WHERE isin IN ({placeholders})", isin_list)
+        targets = [(r["isin"], r["ins_id"], r["is_global"]) for r in rows]
+
+    if max_per_run:
+        targets = targets[:max_per_run]
+
+    synced = 0
+    total_rows = 0
+    errors = 0
+    _kpi_sql = _upsert_sql("borsdata_kpi_history",
+                           ["isin", "kpi_id", "report_type",
+                            "period_year", "period_q", "value"],
+                           ["isin", "kpi_id", "report_type",
+                            "period_year", "period_q"])
+    for i, (isin, ins_id, is_global) in enumerate(targets):
+        for kpi_id in kpi_ids:
+            try:
+                values = fetch_kpi_history_for_instrument(
+                    ins_id, kpi_id, "quarter",
+                    is_global=bool(is_global), max_count=max_quarters)
+                for v in values:
+                    year = v.get("y")
+                    quarter = v.get("p")  # 1-4 för kvartal
+                    val = v.get("v")
+                    if year is None or quarter is None: continue
+                    # Sparar med report_type='quarter' och faktiskt period_q (1-4)
+                    db.execute(_kpi_sql,
+                        (isin, kpi_id, "quarter", year, quarter, val))
+                    total_rows += 1
+            except Exception as e:
+                errors += 1
+        synced += 1
+        if i % 50 == 0:
+            db.commit()
+    db.commit()
+    return {"synced": synced, "total_rows": total_rows, "errors": errors,
+            "total": len(targets)}
+
+
+def get_quarter_kpi_history(db, isin, kpi_ids, n_quarters=8):
+    """Hämtar enskilda kvartalsvärden för givna KPIs (RIKTIGA kvartal, inte TTM).
+
+    Returnerar dict {kpi_id: [{year, quarter, value}, ...]} sorterat ASC på datum.
+    """
+    if not isin or not kpi_ids:
+        return {}
+    ph = _ph()
+    ids_str = ",".join(str(int(k)) for k in kpi_ids)
+    try:
+        rows = _fetchall(db,
+            f"SELECT kpi_id, period_year, period_q, value "
+            f"FROM borsdata_kpi_history "
+            f"WHERE isin = {ph} AND report_type = {ph} "
+            f"AND kpi_id IN ({ids_str}) AND value IS NOT NULL "
+            f"ORDER BY period_year DESC, period_q DESC "
+            f"LIMIT {ph}",
+            (isin, "quarter", n_quarters * len(kpi_ids)))
+    except Exception:
+        return {}
+    by_kpi = {}
+    for r in rows:
+        rd = dict(r)
+        kid = rd["kpi_id"]
+        if kid not in by_kpi:
+            by_kpi[kid] = []
+        if len(by_kpi[kid]) < n_quarters:
+            by_kpi[kid].append({
+                "year": rd["period_year"],
+                "quarter": rd["period_q"],
+                "value": rd["value"],
+            })
+    # Sortera ASC inom varje KPI
+    for kid in by_kpi:
+        by_kpi[kid].reverse()
+    return by_kpi
 
 
 def get_borsdata_history_as_annual(db, isin, max_years=10):
