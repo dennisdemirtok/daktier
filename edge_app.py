@@ -3983,14 +3983,14 @@ def api_borsdata_sync_kpi_quarters():
                     ph = ph_fn()
                     placeholders = ",".join([ph] * len(tickers_inner))
                     sql = (f"SELECT isin FROM borsdata_instrument_map "
-                           f"WHERE ticker IN ({placeholders}) "
-                           f"AND isin NOT LIKE 'YAHOO_%'")
+                           f"WHERE ticker IN ({placeholders})")
                     rows = _fetchall(db, sql, tuple(tickers_inner))
                     isin_list_inner = []
                     for r in rows:
-                        rd = dict(r)  # konvertera Row till dict för safe access
-                        if rd.get("isin"):
-                            isin_list_inner.append(rd["isin"])
+                        rd = dict(r)
+                        isin = rd.get("isin")
+                        if isin and not isin.startswith("YAHOO_"):
+                            isin_list_inner.append(isin)
                     print(f"[Quarters] Mappade {len(tickers_inner)} tickers till {len(isin_list_inner)} ISIN:er")
                 res = sync_borsdata_kpi_quarters(db, isin_list=isin_list_inner,
                                                   max_per_run=max_per_run,
@@ -4018,18 +4018,20 @@ def api_borsdata_sync_quarters_sync():
                               _fetchall)
         db = get_db()
         try:
-            # Map tickers → ISIN
+            # Map tickers → ISIN. OBS: undvik LIKE '%'-mönster i SQL eftersom
+            # psycopg2 tolkar '%' som parameter-substitution när params passas.
+            # Filtrera 'YAHOO_'-prefix i Python istället.
             ph = ph_fn()
             placeholders = ",".join([ph] * len(tickers))
             sql = (f"SELECT isin FROM borsdata_instrument_map "
-                   f"WHERE ticker IN ({placeholders}) "
-                   f"AND isin NOT LIKE 'YAHOO_%'")
+                   f"WHERE ticker IN ({placeholders})")
             rows = _fetchall(db, sql, tuple(tickers))
             isin_list = []
             for r in rows:
                 rd = dict(r)
-                if rd.get("isin"):
-                    isin_list.append(rd["isin"])
+                isin = rd.get("isin")
+                if isin and not isin.startswith("YAHOO_"):
+                    isin_list.append(isin)
 
             res = sync_borsdata_kpi_quarters(db, isin_list=isin_list,
                                               max_per_run=20, max_quarters=20)
