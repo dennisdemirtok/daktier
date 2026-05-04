@@ -3720,6 +3720,26 @@ def api_refresh_historical_reset():
         db.close()
 
 
+@app.route("/api/borsdata/inspect-mapping/<ticker>")
+def api_borsdata_inspect_mapping(ticker):
+    """Visar borsdata_instrument_map-rader matchande ticker (för debug)."""
+    db = get_db()
+    try:
+        from edge_db import _ph as ph_fn, _fetchall
+        ph = ph_fn()
+        rows = _fetchall(db,
+            f"SELECT * FROM borsdata_instrument_map "
+            f"WHERE UPPER(ticker) = UPPER({ph}) OR UPPER(yahoo_ticker) = UPPER({ph}) "
+            f"OR UPPER(name) LIKE UPPER({ph})",
+            (ticker, ticker, f"%{ticker}%"))
+        return jsonify({
+            "ticker_query": ticker,
+            "matches": [dict(r) for r in rows],
+        })
+    finally:
+        db.close()
+
+
 @app.route("/api/borsdata/clean-yahoo-fallbacks", methods=["POST"])
 def api_borsdata_clean_yahoo_fallbacks():
     """Rensar borsdata_instrument_map-rader där isin börjar med 'YAHOO_'.
