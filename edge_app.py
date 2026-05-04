@@ -4275,6 +4275,78 @@ def api_borsdata_kpi_metadata():
         return jsonify({"error": str(e), "tb": traceback.format_exc()[:500]}), 500
 
 
+@app.route("/api/borsdata/diagnose-access")
+def api_borsdata_diagnose_access():
+    """Diagnostiserar exakt vilken access vår API-nyckel har på Borsdata.
+
+    Testar:
+    - /v1/markets (alla tier)
+    - /v1/instruments (Pro Nordic)
+    - /v1/instruments/global (Pro+ med API Global add-on)
+    - KPI-history för svenskt bolag (Investor B)
+    - KPI-history för MSFT (global)
+
+    Resultat visar exakt VILKA endpoints som ger 403 så vi kan diagnostisera
+    om det är Pro vs Pro+ vs separat API Global add-on.
+    """
+    import urllib.request
+    import urllib.error
+    import os as _os
+    api_key = _os.environ.get("BORSDATA_API_KEY")
+    if not api_key:
+        return jsonify({"error": "BORSDATA_API_KEY saknas"}), 500
+
+    # Maska nyckeln så den inte läcker i loggar
+    masked_key = api_key[:6] + "..." + api_key[-4:] if len(api_key) > 10 else "***"
+
+    base = "https://apiservice.borsdata.se/v1"
+    tests = {
+        "1_markets_all_tier":         f"{base}/markets",
+        "2_instruments_nordic":        f"{base}/instruments",
+        "3_instruments_global_list":   f"{base}/instruments/global",
+        "4_kpi_metadata":              f"{base}/instruments/kpis/metadata",
+        "5_se_msft_globalid_kpi64":    f"{base}/instruments/global/11441/kpis/64/year/mean/history",
+        "6_se_inveb_id113_kpi64":      f"{base}/instruments/113/kpis/64/year/mean/history",
+        "7_global_msft_stockprice":    f"{base}/instruments/global/11441/stockprices/last",
+        "8_nordic_inveb_stockprice":   f"{base}/instruments/113/stockprices/last",
+    }
+    results = {"key_masked": masked_key, "tests": {}}
+    for label, url in tests.items():
+        full_url = f"{url}?authKey={api_key}&maxCount=2"
+        try:
+            req = urllib.request.Request(full_url)
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                data = resp.read().decode()
+                results["tests"][label] = {
+                    "status": resp.status,
+                    "preview": data[:200],
+                }
+        except urllib.error.HTTPError as e:
+            try: body = e.read().decode()[:150]
+            except Exception: body = ""
+            results["tests"][label] = {"status": e.code, "body": body}
+        except Exception as e:
+            results["tests"][label] = {"error": str(e)[:150]}
+
+    # Tolkning baserat på resultaten
+    nordic_works = results["tests"].get("2_instruments_nordic", {}).get("status") == 200
+    global_list_works = results["tests"].get("3_instruments_global_list", {}).get("status") == 200
+    global_kpi_works = results["tests"].get("5_se_msft_globalid_kpi64", {}).get("status") == 200
+
+    if nordic_works and global_kpi_works:
+        results["diagnosis"] = "✅ Pro+ med API Global — full access"
+    elif nordic_works and global_list_works and not global_kpi_works:
+        results["diagnosis"] = "⚠️ Du kan LISTA globala bolag men inte hämta deras KPI/pris-data — sannolikt API Global add-on saknas"
+    elif nordic_works and not global_list_works:
+        results["diagnosis"] = "❌ Pro (Nordic only) — Pro+ med API Global behövs för att läsa global-data"
+    elif not nordic_works:
+        results["diagnosis"] = "❌ API-nyckeln verkar ogiltig eller saknar all access"
+    else:
+        results["diagnosis"] = "❓ Blandat resultat — se tests för detaljer"
+
+    return jsonify(results)
+
+
 @app.route("/api/borsdata/test-kpi-formats/<int:ins_id>/<int:kpi_id>")
 def api_borsdata_test_kpi_formats(ins_id, kpi_id):
     """Prova olika URL-format för att hitta rätt KPI-history-anrop.
