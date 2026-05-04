@@ -3972,35 +3972,39 @@ def api_borsdata_sync_kpi_quarters():
     max_per_run = body.get("max_per_run", 500)
     max_quarters = body.get("max_quarters", 20)
 
-    isin_list = None
-    if tickers:
-        # Map tickers → ISIN
-        db = get_db()
+    def _run(tickers_inner):
         try:
-            from edge_db import _ph as ph_fn, _fetchall
-            ph = ph_fn()
-            placeholders = ",".join([ph] * len(tickers))
-            rows = _fetchall(db,
-                f"SELECT isin FROM borsdata_instrument_map "
-                f"WHERE ticker IN ({placeholders}) AND isin NOT LIKE 'YAHOO_%'",
-                tickers)
-            isin_list = [r["isin"] for r in rows]
-        finally:
-            db.close()
+            from edge_db import (sync_borsdata_kpi_quarters, _ph as ph_fn,
+                                  _fetchall)
+            db = get_db()
+            try:
+                isin_list_inner = None
+                if tickers_inner:
+                    ph = ph_fn()
+                    placeholders = ",".join([ph] * len(tickers_inner))
+                    sql = (f"SELECT isin FROM borsdata_instrument_map "
+                           f"WHERE ticker IN ({placeholders}) "
+                           f"AND isin NOT LIKE 'YAHOO_%'")
+                    rows = _fetchall(db, sql, tuple(tickers_inner))
+                    isin_list_inner = []
+                    for r in rows:
+                        rd = dict(r)  # konvertera Row till dict för safe access
+                        if rd.get("isin"):
+                            isin_list_inner.append(rd["isin"])
+                    print(f"[Quarters] Mappade {len(tickers_inner)} tickers till {len(isin_list_inner)} ISIN:er")
+                res = sync_borsdata_kpi_quarters(db, isin_list=isin_list_inner,
+                                                  max_per_run=max_per_run,
+                                                  max_quarters=max_quarters)
+                print(f"[Börsdata Quarters] Sync klar: {res}")
+            finally:
+                db.close()
+        except Exception as e:
+            import traceback
+            print(f"[Börsdata Quarters] FEL: {e}\n{traceback.format_exc()}")
 
-    def _run():
-        from edge_db import sync_borsdata_kpi_quarters
-        db = get_db()
-        try:
-            res = sync_borsdata_kpi_quarters(db, isin_list=isin_list,
-                                              max_per_run=max_per_run,
-                                              max_quarters=max_quarters)
-            print(f"[Börsdata Quarters] Sync klar: {res}")
-        finally:
-            db.close()
-
-    threading.Thread(target=_run, daemon=True).start()
-    return jsonify({"status": "started", "tickers": tickers, "n_isins": len(isin_list) if isin_list else "all"})
+    threading.Thread(target=_run, args=(tickers,), daemon=True).start()
+    return jsonify({"status": "started", "tickers": tickers,
+                    "n_tickers": len(tickers) if tickers else "all"})
 
 
 @app.route("/api/stock/<orderbook_id>/quarter-data")
