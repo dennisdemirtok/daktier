@@ -178,13 +178,34 @@ def compute_earnings_stability_pct(eps_history_10y):
 
 
 def run_quant_backtest(db, universe=None, start_year=2015, end_year=2024,
-                        verbose=True):
+                        verbose=True, use_dynamic_universe=True,
+                        max_universe=100, min_market_cap=1e9, country="SE"):
     """Kör quant-only backtest för universum × datum.
+
+    Args:
+        universe: lista av (short, name) tuples. None = auto.
+        use_dynamic_universe: hämta från DB istället för DEFAULT_UNIVERSE.
+        max_universe: max antal bolag att inkludera.
+        min_market_cap: minsta market cap (SEK) för dynamiskt universum.
+        country: landskod (default 'SE').
 
     Returnerar list av observation-dicts med forward returns.
     """
     if universe is None:
-        universe = DEFAULT_UNIVERSE
+        if use_dynamic_universe:
+            try:
+                from backtest_v2.runner import get_dynamic_universe
+                universe = get_dynamic_universe(db, country=country,
+                                                  min_market_cap=min_market_cap,
+                                                  max_n=max_universe)
+                if verbose:
+                    print(f"Dynamiskt universum: {len(universe)} bolag (mcap>={min_market_cap/1e9:.1f}Md, country={country})")
+            except Exception as e:
+                if verbose:
+                    print(f"Fall tillbaka till DEFAULT_UNIVERSE: {e}")
+                universe = DEFAULT_UNIVERSE
+        else:
+            universe = DEFAULT_UNIVERSE
 
     # Mapping ticker → ISIN
     ticker_to_isin = {}

@@ -4029,6 +4029,9 @@ def api_backtest_v2_run_quant():
     body = request.json if request.is_json else {}
     start_year = int(body.get("start_year", 2015))
     end_year = int(body.get("end_year", 2024))
+    max_universe = int(body.get("max_universe", 100))
+    min_market_cap = float(body.get("min_market_cap", 1e9))
+    country = body.get("country", "SE")
 
     try:
         from backtest_v2.quant_runner import (run_quant_backtest,
@@ -4036,7 +4039,11 @@ def api_backtest_v2_run_quant():
         db = get_db()
         try:
             results = run_quant_backtest(db, start_year=start_year,
-                                          end_year=end_year, verbose=False)
+                                          end_year=end_year, verbose=False,
+                                          use_dynamic_universe=True,
+                                          max_universe=max_universe,
+                                          min_market_cap=min_market_cap,
+                                          country=country)
             analysis = analyze_quant_results(results)
             # Spara resultat så vi kan hämta dem senare
             return jsonify({
