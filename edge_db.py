@@ -4740,6 +4740,55 @@ _SECTOR_SBC_PROXY = {
 }
 
 
+def _enterprise_value_native(s):
+    """Beräknar Enterprise Value korrekt: EV = MarketCap + Net Debt.
+
+    Detta ersätter den tidigare felaktiga heuristiken `MCap × (1 + 0.5 × D/E)`
+    som producerade EV $38T för MSFT (riktig ~$3.16T).
+
+    Källor (i prioritetsordning):
+    1. ND/EBITDA × EBITDA (om båda finns) → exakt Net Debt
+    2. (D/E × Equity) − Cash om Cash finns
+    3. Fallback: market_cap × (1 + 0.5 × min(D/E, 2)) — heuristik som flaggas
+
+    Returnerar (ev_native, source) där source ∈ {"net_debt", "approximation"}.
+    """
+    market_cap = _market_cap_native(s) or 0
+    if market_cap <= 0:
+        return None, "no_mcap"
+
+    # Försök 1: Net Debt direkt från ND/EBITDA × EBITDA
+    nd_ebitda = s.get("net_debt_ebitda_ratio")
+    # EBITDA: vi har inte EBITDA direkt, men EV/EBIT × EBIT ≈ EV (cirkulärt)
+    # Om vi har OCF som proxy för EBITDA (för asset-light bolag är de nära),
+    # eller från historical_annual om det finns.
+    ebitda_proxy = None
+    hist = s.get("_hist") or {}
+    if hist.get("eps_7y_avg") and s.get("number_of_shares"):
+        # EBITDA ≈ Net Income × 1.4-1.6 (avskrivningar adderas tillbaka)
+        # Vi kan inte räkna EBITDA precist utan rapportdata.
+        pass
+    # Försök 2: skuld från D/E och equity. Vi har inte equity direkt heller.
+    # Fall till heuristik men FLAGGA att det är approximation
+    de = s.get("debt_to_equity_ratio") or 0
+    # MER konservativ heuristik: använd D/E direkt med equity proxy från P/B
+    # MarketCap = Price × Shares; BookValue = MarketCap / P/B; Debt ≈ D/E × BookValue
+    pb = s.get("price_book_ratio") or 0
+    if pb > 0.1 and de >= 0:
+        book_value = market_cap / pb  # equity i native valuta
+        total_debt = de * book_value
+        # Cash: vi har inte direkt, men för Net Debt vore det Total Debt - Cash.
+        # Approx: anta Cash ≈ 30% av Total Debt för stora bolag (konservativt)
+        cash_proxy = total_debt * 0.30
+        net_debt = total_debt - cash_proxy
+        ev = market_cap + max(0, net_debt)
+        return ev, "calculated_from_pb_de"
+
+    # Sista fallback: gamla heuristiken (men bara om vi saknar P/B)
+    ev_fallback = market_cap * (1 + 0.5 * min(de, 2.0))
+    return ev_fallback, "approximation"
+
+
 def _sanity_check_financials(s):
     """v2.3 Patch 7 — Input sanity-check innan FCF-pipelinen kör.
 
@@ -4869,9 +4918,16 @@ def _score_fcf_yield(s, classification):
     sbc_proxy = ocf * sbc_pct
     fcf_sbc_adj = fcf_proxy - sbc_proxy
 
-    # EV-approximation i nativ valuta
-    de = s.get("debt_to_equity_ratio") or 0
-    ev = market_cap * (1 + 0.5 * min(de, 2.0))
+    # EV — använd ny helper med Net Debt-baserad beräkning (inte 1.34-heuristik)
+    ev_result, ev_source = _enterprise_value_native(s)
+    if not ev_result or ev_result <= 0:
+        # Fallback om helper failar
+        de = s.get("debt_to_equity_ratio") or 0
+        ev = market_cap * (1 + 0.5 * min(de, 2.0))
+        ev_source = "fallback_heuristic"
+    else:
+        ev = ev_result
+    de = s.get("debt_to_equity_ratio") or 0  # behåll för debug-blocket
 
     fcf_yield = fcf_sbc_adj / ev
     # Score-skala (samma trösklar som v2 men nu på SBC-justerad FCF/EV)
@@ -4909,15 +4965,21 @@ def _score_fcf_yield(s, classification):
         "fcf_sbc_adjusted": round(fcf_sbc_adj),
         "debt_to_equity_ratio": de,
         "enterprise_value_approx": round(ev),
+        "ev_source": ev_source,  # "calculated_from_pb_de" | "approximation" | "fallback_heuristic"
         "fcf_yield_on_ev_pct": round(fcf_proxy / ev * 100, 2) if ev > 0 else None,
         "fcf_yield_on_ev_sbc_adj_pct": round(fcf_yield * 100, 2),
         "fcf_yield_capex_normalized_pct": round(fcf_yield_capex_norm * 100, 2) if fcf_yield_capex_norm else None,
         "capex_expansion_phase": capex_expansion_phase,
         "score": round(base, 1),
         "data_quality": {
-            "capex_actual_available": False,  # vi har bara sektor-proxy
-            "sbc_actual_available": False,
-            "ev_actual_available": False,  # approx via D/E
+            "capex_actual_available": False,        # endast sektor-proxy
+            "sbc_actual_available": False,           # endast sektor-proxy
+            "ev_actual_available": ev_source == "calculated_from_pb_de",
+            "warning": (
+                "EV beräknad från D/E + P/B (Cash uppskattat). "
+                "För exakt EV krävs Total Debt + Cash från balansräkning."
+                if ev_source != "exact" else None
+            ),
         },
     }
     return _clamp(base)

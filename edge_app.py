@@ -636,6 +636,36 @@ def api_stock_detail(orderbook_id):
         if not row:
             return jsonify({"error": "not found"}), 404
         d = dict(row)
+
+        # ──────────────────────────────────────────────────────────
+        # CURRENCY-FIX: Avanza/Börsdata returnerar market_cap för utländska
+        # bolag i SEK, men last_price är i nativ valuta. Detta gjorde att
+        # Microsoft visades som $28T market cap (= 28T SEK ≈ $3T efter
+        # konvertering). Konvertera market_cap till native currency innan
+        # API-svaret returneras.
+        # ──────────────────────────────────────────────────────────
+        try:
+            from edge_db import _market_cap_native, _fx_rate
+            currency = (d.get("currency") or "SEK").upper()
+            mcap_raw = d.get("market_cap")
+            if currency != "SEK" and mcap_raw and mcap_raw > 0:
+                mcap_native = _market_cap_native(d)
+                if mcap_native and mcap_native > 0:
+                    d["market_cap_native"] = round(mcap_native)
+                    d["market_cap_sek_original"] = round(mcap_raw)  # behåll original för referens
+                    d["market_cap"] = round(mcap_native)  # ÖVERSKRIV med native så UI/agent ser rätt
+            # Sanity-check: market_cap måste vara mellan 10M och 10T i native
+            if d.get("market_cap"):
+                mc = d["market_cap"]
+                if mc < 1e7 or mc > 1e13:
+                    d["market_cap_warning"] = (
+                        f"market_cap={mc:,.0f} {currency} utanför rimligt intervall "
+                        f"(10M-10T) — sannolikt enhetsfel"
+                    )
+                    print(f"[stock detail] {d.get('name')}: {d['market_cap_warning']}",
+                          file=sys.stderr)
+        except Exception as e:
+            print(f"[stock detail] market_cap currency-fix: {e}", file=sys.stderr)
         # On-demand historisk fetch om det saknas (snabb, cache:as 7 dagar)
         try:
             from edge_db import (_attach_hist, get_historical_annual,
@@ -5257,6 +5287,39 @@ DESSA REGLER VALIDERAS POST-STREAM. Brott rapporteras till användaren.
 - Använd MAX 1-2 emojis per sektionsrubrik. ALDRIG emojis i löpande prosatext.
 - Strukturera svaret med tydliga rubriker (## eller ###) och radbrytningar mellan sektioner.
 
+**KRITISKT — Position-plan-konsistens (TVINGANDE):**
+Du får ALDRIG ge tre olika positions-rekommendationer i samma rapport.
+ETT scenario gäller åt gången:
+
+A) **Conflict_action = "WAIT" / target = 0**: STARTER = 0%. Slutsats: "VÄNTA".
+   Skriv INTE "skala in vid -7%" eller "starter 2%". Position är blockerad.
+   Skriv vad som krävs för att ta position (t.ex. "vänta tills Azure-guidance bekräftas
+   ELLER tills modellkonflikten löses").
+
+B) **Conflict_action = "REDUCED STARTER"**: STARTER = 20% av target. Skala-in-plan
+   gäller. Slutsats: "REDUCED STARTER {target × 0.2}%, bygg gradvis vid -7% / -15% / -25%".
+
+C) **Inga konflikter**: STARTER = 25-50% av target enligt setup-typ. Full skala-in-plan.
+
+**Sanity-check innan slutsats**: kolla `v2.position.target_pct_of_portfolio` och
+`v2.position.conflict_action`. Om target = 0 → INTE rekommendera position.
+Om target > 0 → exakt EN siffra för "starter nu" + skala-in-villkor.
+
+**Confidence-rapportering**: visa ALLTID som procent (0-100), aldrig som decimal
+(0.0-1.0). "Confidence 30%" — inte "Confidence 0.3" eller "Confidence modifier 0.7".
+Det interna `confidence_modifier`-fältet (0.6-1.0) är en multiplier — visa INTE
+denna direkt till användaren.
+
+**Market cap & EV — sanity-check innan citering:**
+- Om `v2.fcf_debug.market_cap_native` finns: använd den siffran (i bolagets
+  rapporteringsvaluta), inte `market_cap` (som tidigare returnerades i SEK
+  för utländska bolag). En sanity-check är: USD market_cap > $1T för MSFT/AAPL/GOOGL/NVDA
+  är rimligt; > $10T är ALLTID fel — flagga det.
+- Om `v2.fcf_debug.ev_source = "approximation"` eller `"fallback_heuristic"`:
+  flagga att EV är uppskattat ("EV approximerat — kräver Total Debt + Cash för exakt").
+- CapEx är ALLTID en sektor-proxy hittills (`capex_actual_available: false`).
+  Flagga det när du citerar FCF — säg "CapEx-proxy {pct}%" inte bara "CapEx".
+
 **Smart Money — hårdkodad terminologi:**
 - "Smart money" = insider transactions + institutional flow ENDAST
 - Avanza/Nordnet/retail-data är ALDRIG smart money — det är RETAIL FLOW
@@ -5272,14 +5335,16 @@ Använd istället:
 Om get_full_stock returnerar `v2.earnings_revision_debug`, MÅSTE du citera
 YoY-tillväxt. "Data saknas" är förbjudet om quarterly EPS finns.
 
-**FCF Pipeline — visa beräkningskedja:**
+**FCF Pipeline — visa beräkningskedja (med data-quality-flaggor):**
 Om `v2.fcf_debug` finns, visa minst:
-- Market cap (i bolagscurrency)
+- Market cap (i bolagscurrency — använd `market_cap_native`, inte `market_cap` som
+  kan vara i SEK för utländska bolag i gamla data)
 - OCF TTM
-- CapEx-proxy %
+- CapEx-**proxy** % (FLAGGA att det är proxy, inte rapporterad CapEx)
 - FCF SBC-justerad
-- EV
+- EV (FLAGGA `ev_source` om det är "approximation" — inte exakt)
 - FCF Yield på EV (inte mcap)
+- Sanity: om `data_quality.warning` finns, citera den i analysen
 
 **Quality-trend:**
 Om `v2.quality_trend.modifier < 0.85`, NÄMN att Quality-poängen är
