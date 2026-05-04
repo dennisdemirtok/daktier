@@ -2244,6 +2244,13 @@ BOOK_MODELS = [
      "desc": "Edge-baserad viktning från Meta Score"},
     {"key": "owners",    "label": "Ägarmomentum",        "icon": "👥", "weight": 1.0,
      "desc": "Spiltan-approach — smart money följer kvalitet"},
+    # Nya: Pabrai / Marks / Spier — kompletterar med konkreta värdeinvesterar-perspektiv
+    {"key": "pabrai",    "label": "Pabrai Dhandho",      "icon": "🃏", "weight": 1.1,
+     "desc": "ROA som moat-proxy + låg skuld + 'idiot kan driva det'"},
+    {"key": "marks",     "label": "Howard Marks (Cycles)","icon": "🌊", "weight": 1.0,
+     "desc": "Asymmetrisk risk/reward — kvalitet till rimligt pris"},
+    {"key": "spier",     "label": "Guy Spier Compounder","icon": "🧘", "weight": 1.1,
+     "desc": "Långsiktig compounder — stabil ROIC 5y + ingen utspädning"},
 ]
 
 def _clamp(v, lo=0.0, hi=100.0):
@@ -5643,6 +5650,214 @@ def _score_book_models(s):
         scores["owners"] = None
 
     # ══════════════════════════════════════════════════════════
+    # PABRAI DHANDHO — "Heads I win, tails I don't lose much"
+    # ══════════════════════════════════════════════════════════
+    # Mohnish Pabrai bygger på Buffett: ROA är proxy för moat — hög ROA
+    # (>15% sustained) signalerar strukturell konkurrensfördel. Kombineras
+    # med Pabrais "låg risk, hög osäkerhet" — köp simpla bolag (låg skuld)
+    # till rimligt pris. "Invest in companies an idiot can run."
+    #
+    # Regler:
+    # 1) ROA-bas: 15% = 100, 10% = 80, 5% = 50, 0% = 0 (negativ = N/A)
+    # 2) Skuld-modifier: D/E ≤ 0.3 = 1.0×, ≤ 0.5 = 0.95×, ≤ 1.0 = 0.85×, > 1.5 = 0.65×
+    # 3) Pris-modifier: P/E ≤ 15 = 1.0×, ≤ 20 = 0.95×, ≤ 25 = 0.85×, > 30 = 0.7×
+    # 4) "Idiot-test" / earnings stability (om hist finns): ≥80% positiva år = 1.0×, <50% = 0.7×
+    # N/A: banker/insurance (ROA är meningslöst, andra mått gäller)
+    roa = s.get("return_on_assets")
+    if roa is not None:
+        # Normalisera om värdet ser ut att vara decimal (0.15 → 15%)
+        roa_pct = roa if abs(roa) >= 1.5 else roa * 100
+    else:
+        roa_pct = None
+
+    # Identifiera bank/insurance via classification eller sektor — Pabrai N/A
+    v2_classification = s.get("v2_classification") or {}
+    if isinstance(v2_classification, str):
+        try:
+            import json as _json_p
+            v2_classification = _json_p.loads(v2_classification)
+        except Exception:
+            v2_classification = {}
+    sector_p = (v2_classification or {}).get("sector") if isinstance(v2_classification, dict) else None
+    is_financials = sector_p in ("financials", "real_estate", "insurance")
+
+    if roa_pct is not None and roa_pct > 0 and not is_financials:
+        # Bas-ROA-score
+        if roa_pct >= 15:
+            base = 100
+        elif roa_pct >= 10:
+            base = 80 + (roa_pct - 10) * 4   # 10=80, 15=100
+        elif roa_pct >= 5:
+            base = 50 + (roa_pct - 5) * 6    # 5=50, 10=80
+        else:
+            base = roa_pct * 10               # 0=0, 5=50
+
+        # Skuld-modifier (Pabrais "tails I don't lose much")
+        if de is not None:
+            if de <= 0.3: base *= 1.0
+            elif de <= 0.5: base *= 0.95
+            elif de <= 1.0: base *= 0.85
+            elif de <= 1.5: base *= 0.75
+            else: base *= 0.65
+
+        # Pris-modifier (Pabrai vill köpa till rimliga multiplar)
+        if pe is not None and pe > 0:
+            if pe <= 15: base *= 1.0
+            elif pe <= 20: base *= 0.95
+            elif pe <= 25: base *= 0.85
+            elif pe <= 30: base *= 0.78
+            else: base *= 0.7
+
+        # "Idiot-test" / earnings stability — Pabrai vill se konsistens
+        if hist and hist.get("earnings_stability_pct") is not None:
+            stab = hist["earnings_stability_pct"]
+            if stab < 50: base *= 0.7        # mer än hälften av åren förlust → ej "simpelt"
+            elif stab < 70: base *= 0.85
+            elif stab >= 90: base *= 1.05    # boost för 9/10 vinstår
+            base = min(base, 100)
+
+        scores["pabrai"] = _clamp(base)
+    else:
+        scores["pabrai"] = None
+
+    # ══════════════════════════════════════════════════════════
+    # HOWARD MARKS — Asymmetrisk risk/reward + cykel-medvetenhet
+    # ══════════════════════════════════════════════════════════
+    # Marks ("The Most Important Thing"): andra-grads-tänkande — köp inte
+    # vad alla redan vet är bra. Risk = permanent förlust, inte volatilitet.
+    # Föredrar "kvalitet till rimligt pris" framför djupvärde eller premium.
+    # Asymmetri: bounded downside (låg skuld + cash-flow) + real upside (ROIC).
+    #
+    # Regler:
+    # 1) Quality-bas (ROCE/ROE blend): 20% = 90, 15% = 75, 10% = 55, 5% = 30
+    # 2) Asymmetri-boost: D/E < 0.5 OCH ROCE > 12% → +10p
+    # 3) Cykel-justering: extrem multipel (P/B > 5 ELLER P/E > 35) → cap 50
+    # 4) Risk-cap: D/E > 1.5 → cap 40 (för riskabelt — "tails dödar dig")
+    # 5) Mid-range bonus: Marks gillar "okeyaktier" som inte är hypeade —
+    #    P/E i 8-20-spannet med ROCE > 10% → +5p
+    if roce is not None or roe is not None:
+        quality_input = roce if roce is not None else roe
+        # Normalisera om decimal
+        if quality_input is not None and abs(quality_input) < 1.5:
+            quality_input *= 100
+
+        if quality_input is not None and quality_input > 0:
+            # Bas: kvalitet
+            if quality_input >= 20:
+                base = 90 + min(10, (quality_input - 20) * 0.5)  # cap 100
+            elif quality_input >= 15:
+                base = 75 + (quality_input - 15) * 3
+            elif quality_input >= 10:
+                base = 55 + (quality_input - 10) * 4
+            elif quality_input >= 5:
+                base = 30 + (quality_input - 5) * 5
+            else:
+                base = quality_input * 6
+
+            # Asymmetri-boost: bounded downside + real upside
+            if (de is not None and de < 0.5
+                and quality_input >= 12):
+                base += 10
+
+            # Mid-range boost (oupphypad kvalitet)
+            if (pe is not None and 8 <= pe <= 20
+                and quality_input >= 10):
+                base += 5
+
+            # Cykel/multipel-justering
+            if pe is not None and pe > 35:
+                base = min(base, 50)
+            if pb is not None and pb > 5:
+                base = min(base, 50)
+
+            # Risk-cap
+            if de is not None and de > 1.5:
+                base = min(base, 40)
+
+            # Earnings stability — Marks straffar volatil vinst hårdare än Pabrai
+            if hist and hist.get("earnings_stability_pct") is not None:
+                stab = hist["earnings_stability_pct"]
+                if stab < 60: base *= 0.75    # cykliska/förlustbolag — Marks varnar
+                elif stab >= 90: base *= 1.05
+
+            scores["marks"] = _clamp(base)
+        else:
+            scores["marks"] = None
+    else:
+        scores["marks"] = None
+
+    # ══════════════════════════════════════════════════════════
+    # GUY SPIER — Långsiktig compounder (5-10 år hold)
+    # ══════════════════════════════════════════════════════════
+    # Spier ("The Education of a Value Investor"): Buffett-discipulen som
+    # håller bolag 5-10+ år. Letar efter konsistent, stabil compoundering —
+    # inte engångsvinster. Viktigast: ROIC/ROE-stabilitet över FLERA år,
+    # ingen utspädning, lågriskbalans. "Compound your circle of competence."
+    #
+    # Regler (kräver historik — annars N/A):
+    # 1) ROE-konsistens 10y: roe_years_above_15pct ≥ 7 = 90, ≥ 5 = 75, ≥ 3 = 55, < 3 = 30
+    # 2) Vinst-stabilitet: earnings_stability_pct >= 90% = +10, < 70% = N/A (inte compounder)
+    # 3) Senaste vs median ROE: nuvarande > 0.85 × median = stable, < 0.6 = -15p
+    # 4) Skuld-disciplin (Spier undviker hög skuld): D/E <= 0.5 = 1.0×, > 1 = 0.85×, > 2 = 0.7×
+    # 5) Utdelningshistorik (extra plus): 10+ år av utdelning = +5p
+    if hist:
+        years_above_15 = hist.get("roe_years_above_15pct")
+        roe_median = hist.get("roe_10y_median")
+        roe_current_vs_median = hist.get("roe_current_vs_median")
+        earnings_stab = hist.get("earnings_stability_pct")
+        roe_years = hist.get("roe_years", 0)
+
+        # Måste ha minst 5 år historik för att vara compounder-kandidat
+        if roe_years >= 5 and earnings_stab is not None and earnings_stab >= 70:
+            # Bas: ROE-konsistens
+            if years_above_15 is not None:
+                if years_above_15 >= 7: base = 90
+                elif years_above_15 >= 5: base = 75
+                elif years_above_15 >= 3: base = 55
+                else: base = 30
+            elif roe_median is not None:
+                # Fallback: median ROE
+                rm = roe_median * 100 if roe_median < 1.5 else roe_median
+                if rm >= 18: base = 80
+                elif rm >= 12: base = 60
+                elif rm >= 8: base = 40
+                else: base = 20
+            else:
+                base = 50
+
+            # Stabilitet boost
+            if earnings_stab >= 95: base += 10
+            elif earnings_stab >= 90: base += 5
+
+            # Senaste vs median (har ROE rasat?)
+            if roe_current_vs_median is not None:
+                if roe_current_vs_median < 0.5:
+                    base -= 25       # ROE har halverats — ej längre compounder
+                elif roe_current_vs_median < 0.6:
+                    base -= 15
+                elif roe_current_vs_median > 1.3:
+                    base += 5        # ROE accelererande
+
+            # Skuld-modifier (Spier är konservativ)
+            if de is not None:
+                if de <= 0.5: base *= 1.0
+                elif de <= 1.0: base *= 0.92
+                elif de <= 2.0: base *= 0.80
+                else: base *= 0.65
+
+            # Utdelningshistorik bonus (compounding via dividends)
+            div_paid = hist.get("dividend_years_paid", 0)
+            if div_paid >= 10: base += 5
+            elif div_paid >= 5: base += 2
+
+            scores["spier"] = _clamp(base)
+        else:
+            # För kort historik eller för instabil → ej compounder
+            scores["spier"] = None
+    else:
+        scores["spier"] = None
+
+    # ══════════════════════════════════════════════════════════
     # VÄRDEFÄLLE-STRAFF — skydd mot cyklisk peak-earnings-fälla.
     #
     # Extrema värderingstal + extrem ROE/ROCE + fallande pris = marknaden
@@ -5659,7 +5874,10 @@ def _score_book_models(s):
     if trap_score >= 40:
         # Straff-skala: 40p trap → -10% av score, 80p → -30%, 100p → -40%
         penalty_pct = min(0.40, (trap_score - 30) * 0.006)
-        for key in ("graham", "buffett", "magic", "klarman"):
+        # Pabrai använder TTM ROA → också utsatt för cyklisk peak
+        # Marks använder TTM ROE/ROCE → också utsatt
+        # Spier använder historik → INTE utsatt (spelar ut peak-trap automatiskt)
+        for key in ("graham", "buffett", "magic", "klarman", "pabrai", "marks"):
             if scores.get(key) is not None:
                 scores[key] = _clamp(scores[key] * (1 - penalty_pct))
 
@@ -5680,23 +5898,25 @@ def _score_book_models(s):
     # Merlin (MRLN) hade bara Ägarmomentum-data → composite 100 utan att en
     # enda fundamental modell utvärderats. Det är vilseledande.
     #
-    # Regel:
-    #   < 3 modeller  → composite = None (otillförlitlig — bolaget ekluderas)
-    #   3-6 modeller  → dämpa composite gradvis (0.75-0.92×)
-    #   7+ modeller   → ingen dämpning
+    # Regel (skalad efter 13 modeller, i.e. originalmodeller + Pabrai/Marks/Spier):
+    #   < 4 modeller  → composite = None (otillförlitlig — bolaget exkluderas)
+    #   4-8 modeller  → dämpa composite gradvis (0.78-0.95×)
+    #   9+ modeller   → ingen dämpning
     # ══════════════════════════════════════════════════════════
-    if raw_composite is None or n_avail < 3:
+    n_total_models = len(BOOK_MODELS)
+    if raw_composite is None or n_avail < 4:
         scores["composite"] = None
         scores["composite_coverage_warning"] = (
-            f"Endast {n_avail}/10 bokmodeller har data — för lite för pålitligt composite"
+            f"Endast {n_avail}/{n_total_models} bokmodeller har data — för lite för pålitligt composite"
             if n_avail > 0 else None
         )
-    elif n_avail < 7:
-        # Lineär dämpning: 3 modeller = 0.75×, 6 modeller = 0.92×
-        coverage_factor = 0.65 + (n_avail / 10.0) * 0.45  # 3=0.80, 4=0.83, 5=0.875, 6=0.92
+    elif n_avail < 9:
+        # Lineär dämpning: 4 modeller = 0.78×, 8 modeller = 0.95×
+        coverage_factor = 0.62 + (n_avail / float(n_total_models)) * 0.42
+        coverage_factor = min(coverage_factor, 1.0)
         scores["composite"] = round(raw_composite * coverage_factor, 1)
         scores["composite_coverage_warning"] = (
-            f"{n_avail}/10 modeller — composite dämpat {int((1-coverage_factor)*100)}%"
+            f"{n_avail}/{n_total_models} modeller — composite dämpat {int((1-coverage_factor)*100)}%"
         )
     else:
         scores["composite"] = round(raw_composite, 1)

@@ -3069,7 +3069,7 @@ SIM_MODEL_INFO = {
         "label": "BOOKS — Böckernas portfölj",
         "icon": "📚",
         "target_size": "Max 10 aktier",
-        "universe": "≥200 ägare, minst 6 av 10 bokmodeller har data.",
+        "universe": "≥200 ägare, minst 7 av 13 bokmodeller har data.",
         "entry_rule": "Composite (Graham+Buffett+Lynch+Magic+Klarman+…) ≥ 65, placeras bland top 10.",
         "exit_rule": "Säljs när composite < 50 (kvalitetsfall) eller faller ur top 10 och composite < 65.",
         "allocation": "Equal weight, ≈10% per aktie vid start.",
@@ -3115,7 +3115,7 @@ SIM_MODEL_INFO = {
             "• ROCE ≥ 15% (Greenblatts kvalitets-sida)\n"
             "• D/E < 0.5 ELLER ND/EBITDA < 3 (Buffett: undvik hävstångsrisk)\n"
             "• EV/EBIT ≤ 15 (rimligt pris; Greenblatts pris-sida)\n"
-            "• Composite ≥ 70 (minst 7 av 10 bokmodeller godkänner)\n"
+            "• Composite ≥ 70 (minst 9 av 13 bokmodeller godkänner)\n"
             "• Volatilitet < 40% (inte spekulativ; Fisher)\n"
             "Rankas på (ROE + ROCE) × (1 − EV/EBIT/30) — kvalitet mot rimligt pris."
         ),
@@ -5065,7 +5065,7 @@ DEL 1 — DE 10 BOKMODELLERNA (exakta kriterier)
 DEL 2 — COMPOSITE & TOPPLISTOR
 ══════════════════════════════════════════════════════════════
 
-**COMPOSITE BOK-SCORE** = viktat snitt över de 10 modellerna ovan
+**COMPOSITE BOK-SCORE** = viktat snitt över de 13 modellerna ovan
 - ≥ 75: high-conviction buy (sällsynt, ofta stora kvalitetsbolag)
 - 65-74: bra investering enligt böckerna
 - 50-64: neutralt — vänta på bättre läge
@@ -5076,6 +5076,43 @@ DEL 2 — COMPOSITE & TOPPLISTOR
 - Composite 70-82 → cap 95
 - Composite 60-70 → cap 90
 - Composite < 60 → cap 85 (misstänkt enskild metric, ej all-round-bra)
+
+**Nya modeller (Pabrai/Marks/Spier — komplement till de 10 grund-modellerna):**
+
+🃏 **Pabrai Dhandho** ("Heads I win, tails I don't lose much"):
+- Mohnish Pabrai bygger på Buffetts moat-tanke: hög ROA = strukturell fördel
+  ("an idiot can run it" — företaget är så bra att även dålig ledning lyckas).
+- Score: ROA-bas (15%=100, 10%=80, 5%=50) × skuld-modifier (D/E < 0.5 = 1.0×,
+  D/E > 1.5 = 0.65×) × pris-modifier (P/E ≤ 15 = 1.0×, > 30 = 0.7×) ×
+  earnings-stabilitet (90%+ vinstår = +5%, <50% = ×0.7).
+- N/A: banker/insurance/REITs (ROA är meningslöst för räntebärande balansräkningar).
+- När du citerar Pabrai-score: "Pabrai 78 — hög ROA (14%), låg skuld, simpelt bolag."
+
+🌊 **Howard Marks (Cycles)** — Asymmetrisk risk/reward:
+- "The Most Important Thing": andra-grads-tänkande, risk = permanent förlust.
+  Marks vill ha kvalitet till rimligt pris (inte djupvärde, inte premium).
+- Score: ROCE/ROE-bas (20%=90, 15%=75, 10%=55) + asymmetri-boost (D/E < 0.5
+  OCH ROCE > 12% = +10p) + mid-range-bonus (P/E 8-20 + ROCE > 10% = +5p).
+- Caps: P/E > 35 ELLER P/B > 5 → cap 50 (för dyrt). D/E > 1.5 → cap 40 (för riskabelt).
+- När du citerar: "Marks 72 — kvalitet till rimligt pris, bounded downside."
+
+🧘 **Guy Spier Compounder** — Långsiktig (5-10 år hold):
+- Spier ("The Education of a Value Investor"): Buffett-discipulen — letar
+  konsistent compoundering över FLERA år, inte engångsvinster.
+- Kräver historik (annars N/A): minst 5 år ROE-data + earnings stability ≥ 70%.
+- Score: ROE-konsistens (≥7 år ROE>15% = 90, ≥5 år = 75) + stabilitet-boost
+  (95%+ vinstår = +10p) + nuvarande-vs-median (current < 0.5× median = -25p,
+  vilket signalerar att compoundering brutits) + skuld-disciplin + utdelningshistorik.
+- N/A för bolag yngre än 5 år eller med <70% vinstår — de är inte compounders ännu.
+- När du citerar: "Spier 80 — 8 av 10 år ROE > 15%, ingen utspädning, 12 års utdelningshistorik."
+
+**Hur agenten ska använda Pabrai/Marks/Spier:**
+- Citera bara om scoren är intressant (>65 stark, <40 svag) eller om användaren frågar.
+- Behandla dem som komplement till befintliga: Pabrai bekräftar moat-tesen,
+  Marks fångar cykel-medvetenhet, Spier validerar compounder-hållbarhet.
+- Vid konflikt — "Buffett 85 men Spier 30" — flagga: "Buffett ser TTM-kvalitet,
+  men Spier visar att kvaliteten inte är historiskt konsistent (current ROE
+  hälften av 5y median). Var skeptisk till mean-reversion."
 
 ══════════════════════════════════════════════════════════════
 DEL 3 — VÄRDEFÄLLA-DETEKTOR (cyklisk peak-earnings)
@@ -5487,11 +5524,33 @@ Citera EXAKTA siffror från DB:n — gissa aldrig på nyckeltal.
 - **DAKTIER Score (smart_score)** är vår primära siffra 0-100. Skala: ≥80 STARK KÖP,
   ≥70 KÖP, ≥55 OK, ≥40 VÄNTA, <40 UNDVIK. Citera ALLTID denna när användaren frågar
   "är X köpvärt?". Övriga scores (Meta, Edge, Bok-composite, Quant) är delkomponenter.
-- DAKTIER = 50% Bok-composite (10 modeller) + 50% Meta-score (4 modeller).
+- DAKTIER = 50% Bok-composite (13 modeller inkl. Pabrai/Marks/Spier) + 50% Meta-score (4 modeller).
 - Visa breakdown bara om användaren explicit frågar "varför är scoren XX?" eller
   "vad ingår?". Annars: en siffra + label.
 - Edge Score (momentum) och Meta Score (4 sub-modeller) är komponent-scores —
   diskutera dem bara som motivering för DAKTIER Scoren, inte som ersättningar.
+
+**INVESTERAR-FILOSOFI (när relevant — inte i varje svar):**
+Du har tre kloka röster att bjuda in när det passar analysen:
+
+- 🃏 **Pabrai-perspektiv**: "Hur ser ROA ut? Är detta ett 'idiot kan driva det'-bolag?"
+  Använd när: hög ROA + låg skuld + simpel affärsmodell. Säg: "Pabrai-checken: ROA 14%
+  + D/E 0.3 + en produktlinje. Detta är ett 'heads I win, tails I don't lose much'-case."
+
+- 🌊 **Howard Marks-perspektiv**: "Var står vi i cykeln? Är detta andra-grads-tänkande?"
+  Använd när: hög-värderad sektor (CAPE-context från macro), eller vid värderingsskifte.
+  Säg: "Marks: marknaden ser detta som [vad alla redan tror]. Andra-grads-tänkandet
+  är [vad mer initierade ser] — och risken är permanent förlust om [tesen bryts]."
+  Marks-pendeln: när alla är giriga → var rädd. När alla är rädda → leta kvalitet.
+
+- 🧘 **Guy Spier-perspektiv**: "Är detta ett bolag jag vill äga i 10 år?"
+  Använd när: bolaget har lång historik. Säg: "Spier-testet: 8 av 10 år ROE > 15%,
+  ingen utspädning, 12 års utdelningshistorik. Detta är en compounder du kan slumra på."
+  Spiers råd: lås in när du köper, läs Buffetts brev, undvik nyhetsbrus.
+
+**Citera filosoferna sparsamt** — högst en av dem per analys, och bara när scenariot
+passar. Inte tomma namedrops. Använd dem som inramnings-verktyg för att förklara
+varför en aktie är/inte är köpvärd, inte som auktoritetsargument.
 
 **Format**: svenska, punktlistor, fetstilta nyckeltal, kort. Använd 1-3 emojis sparsamt.
 
@@ -6345,7 +6404,7 @@ def _agent_tools_definition():
         },
         {
             "name": "get_full_stock",
-            "description": "Djupdyk i ETT specifikt bolag. Returnerar ALLA nyckeltal: P/E, P/B, ROE, ROCE, FCF (operating cash flow), book composite (10 modellers viktning), DAKTIER Score (vår primära score), Edge Score, momentum, ägarutveckling, värdefälla-flagga, rsi, etc. Använd när användaren frågar 'hur ser X ut?' eller 'är X köpvärt?'.",
+            "description": "Djupdyk i ETT specifikt bolag. Returnerar ALLA nyckeltal: P/E, P/B, ROE, ROCE, FCF (operating cash flow), book composite (13 modellers viktning inkl Pabrai/Marks/Spier), DAKTIER Score (vår primära score), Edge Score, momentum, ägarutveckling, värdefälla-flagga, rsi, etc. Använd när användaren frågar 'hur ser X ut?' eller 'är X köpvärt?'.",
             "input_schema": {
                 "type": "object",
                 "properties": {

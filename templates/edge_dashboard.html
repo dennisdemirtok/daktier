@@ -1505,7 +1505,7 @@ function renderSignalsTable() {
             <details style="margin-top:6px">
                 <summary style="cursor:pointer;font-weight:600">Vad ingår i DAKTIER Score?</summary>
                 <div style="margin-top:6px;font-size:12px;line-height:1.5">
-                    <strong>50% Bok-composite</strong> — viktat snitt av 10 bokmodeller (Graham, Buffett, Lynch, Greenblatt, Klarman, Bogle, Stinsen, Taleb, Kelly, Spiltan).<br>
+                    <strong>50% Bok-composite</strong> — viktat snitt av 13 bokmodeller (Graham, Buffett, Lynch, Greenblatt, Klarman, Bogle, Stinsen, Taleb, Kelly, Spiltan, <strong>Pabrai, Marks, Spier</strong>).<br>
                     <strong>50% Meta-score</strong> — Trav (30%, ägar-momentum) + DSM (25%, kontrarian) + ACE (25%, multi-faktor) + Magic Formula (20%, EV/EBIT + ROCE).<br>
                     Övriga score-kolumner i tabellen (Meta, Edge, Bok) är delkomponenter — DAKTIER Score är den siffran att sortera på.<br>
                     <strong>DD-skydd:</strong> Blockerar entry vid hög DD-risk (≥60) eller extrem pris-spike (6M &gt;150%, YTD &gt;200%).
@@ -1549,7 +1549,7 @@ function renderSignalsTable() {
         const bookCell = bookComp != null
             ? `<span class="score-value" style="color:${bookColor};font-size:13px" title="Composite över ${bookAvail} bokmodeller">${bookComp.toFixed(0)}</span>
                <div class="score-bar"><div class="score-bar-fill" style="width:${bookComp}%;background:${bookColor}"></div></div>
-               <div style="font-size:9px;color:var(--text-muted);margin-top:2px">${bookAvail}/10 modeller</div>`
+               <div style="font-size:9px;color:var(--text-muted);margin-top:2px">${bookAvail}/13 modeller</div>`
             : '<span style="color:var(--text-muted);font-size:11px">–</span>';
 
         // v2 Setup-cell — visar setup-typ + 3 mini-bars för Value/Quality/Momentum
@@ -1622,7 +1622,7 @@ function renderSignalsTable() {
                 <th onclick="doSort('v2_quality')" class="${thClass('v2_quality')}" style="min-width:90px" title="v2 Setup-typ + Value/Quality/Momentum-axlar (klassificerings-baserad analys, asset_light/compounder/etc).">🎯 v2 Setup${sortArrow('v2_quality')}</th>
                 <th onclick="doSort('meta')" class="${thClass('meta')}" style="min-width:140px">Meta Score${sortArrow('meta')}</th>
                 <th onclick="doSort('score')" class="${thClass('score')}" style="min-width:80px">Edge${sortArrow('score')}</th>
-                <th style="min-width:90px" title="Viktat composite över 10 bokmodeller — Graham, Buffett, Lynch, Greenblatt, Klarman m.fl.">📚 Bok</th>
+                <th style="min-width:90px" title="Viktat composite över 13 bokmodeller — Graham, Buffett, Lynch, Greenblatt, Klarman, Pabrai, Marks, Spier m.fl.">📚 Bok</th>
                 <th>Action / Fas</th>
                 <th onclick="doSort('name')" class="${thClass('name')}">Aktie${sortArrow('name')}</th>
                 <th style="text-align:center">7d</th>
@@ -4477,7 +4477,7 @@ function openDrawer(s) {
                         ${breakdownChip('Meta', s.meta_score, '50%')}
                     </div>
                     <div style="margin-top:8px;font-size:11px;color:#64748b">
-                        <strong>Bok-composite</strong> = Graham, Buffett, Klarman, Greenblatt m.fl. (10 modeller)<br>
+                        <strong>Bok-composite</strong> = Graham, Buffett, Klarman, Greenblatt, Pabrai, Marks, Spier m.fl. (13 modeller)<br>
                         <strong>Meta</strong> = Trav (ägar-momentum) + DSM + ACE + Magic Formula
                     </div>
                 </div>
