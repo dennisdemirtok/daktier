@@ -6202,48 +6202,86 @@ def _score_book_models(s):
     conflict_penalty = 0.1 * len(conflicts)
     scores["v2_confidence"] = round(max(0.05, base_conf - conflict_penalty), 2)
 
-    # ─── Position-sizing-output (basic enligt 7.2) ───
-    axes_factor_map = {
-        "trifecta": 1.5,
-        "deep_value": 1.2,
-        "quality_full_price": 1.0,
-        "quality_under_pressure": 0.6,  # v2.3 Patch 5 — försiktig + watchlist
-        "early_stage_turnaround": 0.05, # v2.4 — spekulativ pre-profitability
-        "quality_fair": 0.7,
-        "balanced_value": 0.9,
-        "balanced_quality": 0.8,
-        "cigar_butt": 0.5,
-        "mixed_signals": 0.3,
-        "momentum_trap": 0.0,
-        "value_destruction": 0.0,
-        "incomplete_data": 0.0,
+    # ─── Position-sizing — tier-baserad enligt värde-investerar-litteraturen ───
+    #
+    # FILOSOFI (vad Pabrai/Buffett/Munger/Spier/Klarman lär ut):
+    # - Buffett: "Diversification is for those who don't know what they're doing."
+    #   Konsentrerad portfölj — 5-10 positioner, ofta 20%+ i toppviktningar.
+    # - Munger: "Det finns inte 100 bra bolag att äga. 3-5 räcker."
+    # - Pabrai: "Few bets, big bets, infrequent bets." 5-10 positioner, 10% per stark.
+    # - Spier: 10-20 positioner, 5-10% per kvalitetscompounder.
+    # - Klarman (mer diversifierad): 30-50 positioner, 2-5% per
+    # - Greenblatt (Magic Formula systemskt): 20-30 stocks, 3-5% var.
+    # - Howard Marks: kvalitet > antal — koncentration när du har konviktion.
+    #
+    # KOMPROMISS för retail-investerare:
+    # - 8-15 positioner totalt (medelväg mellan Munger 5 och Klarman 30)
+    # - Konvektion-baserad sizing: 8-12% för stark konviktion, 4-6% medel, 2-3% lågt
+    # - ALDRIG under 2% — om sizing ger <2% är konvektionen för låg, AVSTÅ istället
+    # - ALDRIG över 15% — risk-management; även stark konviktion behöver tak
+    #
+    # TIER-MAPPING (axes_factor → max_target_pct för stark konviktion):
+    target_pct_map = {
+        "trifecta": 12.0,                 # Buffett-tier — Trifecta = stark konviktion
+        "deep_value": 10.0,               # Klarman-stil djupvärde — fortsatt stark
+        "quality_full_price": 8.0,        # Spier-compounder vid fullt pris
+        "quality_fair": 6.0,              # Något billigare → lite större
+        "balanced_value": 6.0,            # Pabrai-stil balanserat
+        "balanced_quality": 5.0,          # Mediokrare kvalitet → mindre
+        "quality_under_pressure": 4.0,    # Watchlist-tier
+        "cigar_butt": 3.0,                # Greenblatt-cigarrfimp — liten, snabb rotation
+        "early_stage_turnaround": 2.5,    # Spekulativ — minsta tier för att kvala in
+        "mixed_signals": 0.0,             # Ingen position
+        "momentum_trap": 0.0,             # Avstå
+        "value_destruction": 0.0,         # Avstå
+        "incomplete_data": 0.0,           # Otillräckligt — vänta
     }
-    axes_factor = axes_factor_map.get(setup, 0.5)
-    target_pct = 5.0  # 5% per position som default
+    max_target_pct = target_pct_map.get(setup, 0.0)
 
-    # v2.1 Patch 7 — Risk modifierar position-storlek (50%-100%)
-    # Hög risk halverar starter, låg risk lämnar oförändrad
+    # Risk-modifier: 0.7-1.0 (mindre aggressiv än tidigare 0.5-1.0)
+    # Hög risk → 70% av tier, låg risk → 100%
     if risk_axis is not None:
-        risk_modifier = 0.5 + 0.5 * (risk_axis / 100)
+        risk_modifier = 0.7 + 0.3 * (risk_axis / 100)
     else:
-        risk_modifier = 0.85  # konservativ default när data saknas
+        risk_modifier = 0.85
 
-    sized = target_pct * axes_factor * scores["v2_confidence"] * risk_modifier
-    base_starter = 25 if axes_factor < 1.0 else (50 if axes_factor >= 1.5 else 33)
-    risk_adjusted_starter = max(15, int(base_starter * risk_modifier))
+    # Konvektion-modifier: 0.6-1.0 (50-100% av tier-max baserat på confidence)
+    # confidence 30% → 0.79, confidence 50% → 0.85, confidence 80%+ → 1.0
+    conf = scores["v2_confidence"]
+    confidence_modifier = 0.6 + 0.4 * min(1.0, max(0.0, conf))
 
-    # v2.2 Gate 6 — Konfliktsmedveten position
+    sized_raw = max_target_pct * risk_modifier * confidence_modifier
+
+    # FLOOR: minst 2% för att kvala som investerbar position. Annars 0 (avstå).
+    if sized_raw > 0 and sized_raw < 2.0:
+        sized = 0.0
+        below_floor = True
+    else:
+        sized = round(min(15.0, sized_raw), 1)  # CAP vid 15%
+        below_floor = False
+
+    # Konflikt-hantering — påverkar STARTER, inte target.
+    # 1 konflikt: starter = 15-20% av målet (vänta på bekräftelse innan full position)
+    # 2+ konflikter: WAIT — sätt target = 0
     n_conflicts = len(conflicts)
     if n_conflicts >= 2:
-        # WAIT — flera olösta konflikter. Sätt position till mini.
-        sized = sized * 0.25
-        risk_adjusted_starter = max(10, int(risk_adjusted_starter * 0.5))
-        conflict_action = "WAIT — flera olösta modellkonflikter, vänta på mer data"
+        sized = 0.0
+        risk_adjusted_starter = 0
+        conflict_action = "WAIT — för många olösta modellkonflikter, ingen position"
     elif n_conflicts == 1:
-        sized = sized * 0.5
-        conflict_action = f"REDUCED_STARTER — halverad position pga konflikt: {conflicts[0]}"
+        # Minska starter (inte target) — bygg position gradvis när konflikten löses
+        risk_adjusted_starter = 20
+        conflict_action = f"REDUCED STARTER — bygg gradvis pga {conflicts[0].replace('_', ' ')}"
     else:
+        # Inga konflikter: starter beror på setup-typ
+        if setup == "trifecta": risk_adjusted_starter = 50
+        elif setup in ("deep_value", "quality_full_price"): risk_adjusted_starter = 33
+        else: risk_adjusted_starter = 25
         conflict_action = None
+
+    # Below-floor-fall: visa varför vi avstår
+    if below_floor and sized == 0.0:
+        conflict_action = f"AVSTÅ — sizing under 2%-floor (sized {sized_raw:.1f}%, för låg konviktion)"
 
     # v2.1 Patch 8 — Strukturerat stop_thesis-ramverk i 4 kategorier
     roce = s.get("return_on_capital_employed") or 0
@@ -6271,14 +6309,21 @@ def _score_book_models(s):
     }
 
     scores["v2_position"] = {
-        "axes_factor": axes_factor,
+        "max_target_pct": max_target_pct,                  # Tier-max för setup-typ
         "risk_modifier": round(risk_modifier, 2),
-        "target_pct_of_portfolio": round(sized, 2),
-        "starter_pct_of_target": risk_adjusted_starter,
+        "confidence_modifier": round(confidence_modifier, 2),
+        "target_pct_of_portfolio": round(sized, 2),       # Slutligt mål
+        "starter_pct_of_target": risk_adjusted_starter,   # % av målet att börja med
         "scale_in_at": [-7, -15, -25],
         "stop_thesis": stop_thesis,
         "conflict_action": conflict_action,
         "n_conflicts": n_conflicts,
+        "below_floor": below_floor,                       # True om sizing < 2%-floor
+        "philosophy_note": (                              # Visa hur sizing tänker
+            "Buffett/Munger/Pabrai: 5-15 positioner. Sizing capad 15% (risk), "
+            "floor 2% (under = avstå). Trifecta = stark konviktion (10-12%), "
+            "balanserat = 4-6%, cigarrfimp = 2-3%."
+        ),
     }
 
     # v2.2 — exponera debug-block för UI/agent

@@ -894,18 +894,20 @@ def api_stock_detail(orderbook_id):
                 d["graham_normalized_pe"] = sc["graham_normalized_pe"]
             if sc.get("buffett_uses_hist_roe"):
                 d["buffett_uses_hist_roe"] = True
-            # Beräkna köpzon så detaljvyn kan visa riktpris
-            try:
-                from edge_db import _compute_buy_zone
-                # _hist behövs igen för korrekt simulation
-                if "historical_context" in d and "_hist" not in d:
-                    d["_hist"] = d["historical_context"]
-                bz = _compute_buy_zone(d)
-                d.pop("_hist", None)
-                if bz is not None:
-                    d["buy_zone"] = bz
-            except Exception as e:
-                print(f"[stock detail] buy_zone failed: {e}", file=sys.stderr)
+            # Köpzon — TUNG (kör _score_book_models 10× för att simulera prisfall).
+            # Lazy-loadas via /extras i lite-mode för snabbare drawer-render.
+            if not is_lite:
+                try:
+                    from edge_db import _compute_buy_zone
+                    # _hist behövs igen för korrekt simulation
+                    if "historical_context" in d and "_hist" not in d:
+                        d["_hist"] = d["historical_context"]
+                    bz = _compute_buy_zone(d)
+                    d.pop("_hist", None)
+                    if bz is not None:
+                        d["buy_zone"] = bz
+                except Exception as e:
+                    print(f"[stock detail] buy_zone failed: {e}", file=sys.stderr)
         except Exception as e:
             print(f"[stock detail] composite failed: {e}", file=sys.stderr)
 
@@ -918,7 +920,9 @@ def api_stock_detail(orderbook_id):
         except Exception as e:
             print(f"[stock detail] smart_score_deltas: {e}", file=sys.stderr)
 
-        # v2.4 — Macro-overlay (kontext, påverkar inte score)
+        # Macro-overlay (kontext, påverkar inte score) — skip i lite-mode
+        if is_lite:
+            return jsonify(d)
         try:
             macro = _fetch_macro_indicators()
             sector = (d.get("v2", {}).get("classification") or {}).get("sector")
@@ -1042,6 +1046,23 @@ def api_stock_extras(orderbook_id):
                 }
         except Exception as e:
             print(f"[extras] quant_rank: {e}", file=sys.stderr)
+
+        # Köpzon (kör _score_book_models 10× — tungt)
+        try:
+            from edge_db import _compute_buy_zone, _attach_hist
+            # Behöver fullständig stock-rad för buy_zone
+            full_row = db.execute(
+                f"SELECT * FROM stocks WHERE CAST(orderbook_id AS TEXT) = CAST({_ph()} AS TEXT) LIMIT 1",
+                (str(orderbook_id),)
+            ).fetchone()
+            if full_row:
+                full_d = dict(full_row)
+                _attach_hist(db, full_d)
+                bz = _compute_buy_zone(full_d)
+                if bz is not None:
+                    out["buy_zone"] = bz
+        except Exception as e:
+            print(f"[extras] buy_zone: {e}", file=sys.stderr)
 
         # NAV-historik (om investmentbolag)
         if isin:

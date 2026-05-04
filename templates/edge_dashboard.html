@@ -4229,11 +4229,13 @@ function openDrawer(s) {
                         .then(extras => {
                             if (extras && !extras.error && _currentDrawerStock
                                 && String(_currentDrawerStock.orderbook_id) === String(full.orderbook_id)) {
+                                // Merge: top-level fields → full
                                 Object.assign(full, extras);
                                 // Merge nav_history in i nav_data
                                 if (extras.nav_history && full.nav_data) {
                                     Object.assign(full.nav_data, extras.nav_history);
                                 }
+                                // buy_zone kommer redan som top-level, läggs in via Object.assign
                                 openDrawer(full);  // re-render med extras
                             }
                         })
@@ -4247,7 +4249,10 @@ function openDrawer(s) {
 
     let html = '';
 
-    // ── 🎯 v2 SETUP (Aktieagent v2: tesklassificering + 3-axlar + position) ──
+    // ── 🎯 v2 SETUP (kompakt, modern design) ──
+    // Renderas EFTER DAKTIER Score nedan — placeras hit i koden men HTML:en
+    // bygger ihop sektionerna i rätt ordning sist.
+    let setupHtml = '';
     if (s.v2 && s.v2.setup) {
         const v = s.v2;
         const axes = v.axes || {};
@@ -4255,168 +4260,205 @@ function openDrawer(s) {
         const pos = v.position || {};
         const conf = v.confidence != null ? Math.round(v.confidence * 100) : 0;
 
-        // Färg per setup
-        const setupBg = {
-            trifecta: 'linear-gradient(135deg,#bbf7d0,#86efac)',
-            deep_value: 'linear-gradient(135deg,#fde68a,#fbbf24)',
-            cigar_butt: 'linear-gradient(135deg,#fed7aa,#fb923c)',
-            quality_full_price: 'linear-gradient(135deg,#dbeafe,#93c5fd)',
-            quality_fair: 'linear-gradient(135deg,#e0e7ff,#a5b4fc)',
-            balanced_value: 'linear-gradient(135deg,#d1fae5,#86efac)',
-            balanced_quality: 'linear-gradient(135deg,#e0e7ff,#a5b4fc)',
-            quality_under_pressure: 'linear-gradient(135deg,#fed7aa,#fdba74)',
-            early_stage_turnaround: 'linear-gradient(135deg,#fce7f3,#f9a8d4)',
-            mixed_signals: 'linear-gradient(135deg,#f3f4f6,#d1d5db)',
-            momentum_trap: 'linear-gradient(135deg,#fee2e2,#fca5a5)',
-            value_destruction: 'linear-gradient(135deg,#fee2e2,#f87171)',
-            incomplete_data: 'linear-gradient(135deg,#f3f4f6,#e5e7eb)',
-        }[v.setup] || 'linear-gradient(135deg,#f3f4f6,#e5e7eb)';
+        // Modern setup-färgkarta — mer subtila, premium-känsla
+        const setupTheme = {
+            trifecta:               { bg:'linear-gradient(135deg,#ecfdf5,#d1fae5)', accent:'#059669', icon:'🎯' },
+            deep_value:             { bg:'linear-gradient(135deg,#fffbeb,#fef3c7)', accent:'#d97706', icon:'💎' },
+            cigar_butt:             { bg:'linear-gradient(135deg,#fff7ed,#ffedd5)', accent:'#ea580c', icon:'🚬' },
+            quality_full_price:     { bg:'linear-gradient(135deg,#eff6ff,#dbeafe)', accent:'#2563eb', icon:'🏰' },
+            quality_fair:           { bg:'linear-gradient(135deg,#eef2ff,#e0e7ff)', accent:'#4f46e5', icon:'📐' },
+            balanced_value:         { bg:'linear-gradient(135deg,#f0fdf4,#d1fae5)', accent:'#059669', icon:'⚖️' },
+            balanced_quality:       { bg:'linear-gradient(135deg,#eef2ff,#e0e7ff)', accent:'#6366f1', icon:'⚖️' },
+            quality_under_pressure: { bg:'linear-gradient(135deg,#fff7ed,#ffedd5)', accent:'#c2410c', icon:'🩺' },
+            early_stage_turnaround: { bg:'linear-gradient(135deg,#fdf2f8,#fce7f3)', accent:'#db2777', icon:'🌱' },
+            mixed_signals:          { bg:'linear-gradient(135deg,#f9fafb,#f3f4f6)', accent:'#6b7280', icon:'🔄' },
+            momentum_trap:          { bg:'linear-gradient(135deg,#fef2f2,#fee2e2)', accent:'#dc2626', icon:'⚠️' },
+            value_destruction:      { bg:'linear-gradient(135deg,#fef2f2,#fee2e2)', accent:'#991b1b', icon:'💀' },
+            incomplete_data:        { bg:'linear-gradient(135deg,#f9fafb,#f3f4f6)', accent:'#6b7280', icon:'❓' },
+        }[v.setup] || { bg:'linear-gradient(135deg,#f9fafb,#f3f4f6)', accent:'#6b7280', icon:'•' };
 
-        function axisBar(label, val, color) {
+        // Backtest-data
+        const SETUP_BACKTEST_STATS = {
+            trifecta:               { alpha: 11.6, hit: 59, n: 61 },
+            value_destruction:      { alpha:  8.9, hit: 77, n: 17 },
+            quality_compounder:     { alpha:  6.3, hit: 50, n: 48 },
+            early_stage_turnaround: { alpha:  5.1, hit: 54, n: 46 },
+            balanced_quality:       { alpha:  0.8, hit: 53, n: 88 },
+            balanced_value:         { alpha: -0.3, hit: 54, n: 26 },
+            quality_under_pressure: { alpha: -0.3, hit: 40, n: 118 },
+            deep_value:             { alpha: 10.8, hit: 67, n:  3 },
+            mixed_signals:          { alpha:   46, hit: 100, n:  2 },
+            momentum_trap:          { alpha:  1.5, hit: 25, n:  4 },
+        };
+        const bt = SETUP_BACKTEST_STATS[v.setup];
+
+        // Mini axis-bar — minimalistisk
+        const axisRow = (label, val, color) => {
             const v_ = val == null ? 0 : val;
             const lbl = val == null ? '–' : val.toFixed(0);
-            return `<div style="flex:1">
-                <div style="display:flex;justify-content:space-between;font-size:10px;color:#374151;margin-bottom:3px;font-weight:700"><span>${label}</span><span style="font-size:13px">${lbl}</span></div>
-                <div style="height:6px;background:rgba(0,0,0,0.08);border-radius:3px;overflow:hidden">
+            return `<div style="display:flex;align-items:center;gap:10px;padding:6px 0">
+                <div style="font-size:11.5px;color:#475569;font-weight:600;width:80px;flex-shrink:0">${label}</div>
+                <div style="flex:1;height:5px;background:#e2e8f0;border-radius:3px;overflow:hidden">
                     <div style="height:100%;width:${v_}%;background:${color};border-radius:3px"></div>
                 </div>
+                <div style="font-size:13px;font-weight:800;color:${color};width:30px;text-align:right">${lbl}</div>
+            </div>`;
+        };
+
+        // Konflikt-rad — KOMPAKT (en rad istället för 2 stora paneler)
+        const hasConflict = (v.conflicts || []).length > 0;
+        const conflictRow = hasConflict ? `
+            <div style="display:flex;align-items:center;gap:10px;background:#fef2f2;border-left:3px solid #dc2626;padding:8px 12px;border-radius:0 8px 8px 0;margin-top:10px;font-size:12px">
+                <span style="font-size:14px">⚠️</span>
+                <div style="flex:1;color:#991b1b">
+                    <div style="font-weight:700">${pos.conflict_action || `Modellkonflikt: ${v.conflicts[0].replace(/_/g,' ')}`}</div>
+                    ${v.conflicts.length > 1 ? `<div style="font-size:11px;opacity:0.85;margin-top:1px">${v.conflicts.length} totalt</div>` : ''}
+                </div>
+            </div>` : '';
+
+        // Position-plan som CLEAN TABELL (à la screenshot 1)
+        let positionTableHtml = '';
+        if (pos.target_pct_of_portfolio > 0) {
+            const target = pos.target_pct_of_portfolio;
+            const starterPct = pos.starter_pct_of_target;
+            const starterAbs = (target * starterPct / 100).toFixed(2);
+            const scaleIn = pos.scale_in_at || [-7, -15, -25];
+            const phases = [
+                { phase: 'Starter', trigger: 'Vid nuvarande pris', alloc: `${starterAbs}%` },
+                { phase: 'Påfyllning 1', trigger: `${scaleIn[0]}% från nu`, alloc: `+${(target * 0.25).toFixed(2)}%` },
+                { phase: 'Påfyllning 2', trigger: `${scaleIn[1]}% från nu`, alloc: `+${(target * 0.25).toFixed(2)}%` },
+                { phase: 'Full position', trigger: `${scaleIn[2]}% eller katalysator`, alloc: `${target}%` },
+            ];
+            positionTableHtml = `
+            <div style="background:white;border-radius:10px;padding:12px;margin-top:12px;border:1px solid rgba(0,0,0,0.05)">
+                <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:10px">
+                    <div style="font-size:10.5px;text-transform:uppercase;letter-spacing:0.5px;color:#475569;font-weight:700">📊 Position-plan</div>
+                    <div style="font-size:11px;color:#64748b">Mål: <b style="color:${setupTheme.accent}">${target}%</b> av portfölj</div>
+                </div>
+                <table style="width:100%;border-collapse:collapse;font-size:12px">
+                    <thead>
+                        <tr style="color:#94a3b8;font-size:10px;text-transform:uppercase;letter-spacing:0.4px">
+                            <th style="text-align:left;padding:4px 0;font-weight:700">Fas</th>
+                            <th style="text-align:left;padding:4px 0;font-weight:700">Trigger</th>
+                            <th style="text-align:right;padding:4px 0;font-weight:700">Allokering</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${phases.map((p, i) => `
+                        <tr style="border-top:1px solid #f1f5f9">
+                            <td style="padding:7px 0;color:${i === 0 ? setupTheme.accent : '#1e293b'};font-weight:${i === 0 ? '700' : '500'}">${p.phase}</td>
+                            <td style="padding:7px 0;color:#475569">${p.trigger}</td>
+                            <td style="padding:7px 0;text-align:right;font-weight:600;color:#0f172a">${p.alloc}</td>
+                        </tr>`).join('')}
+                    </tbody>
+                </table>
+                ${pos.philosophy_note ? `
+                    <div style="font-size:10.5px;color:#94a3b8;margin-top:8px;padding-top:8px;border-top:1px solid #f1f5f9;font-style:italic">
+                        ${pos.philosophy_note}
+                    </div>` : ''}
+            </div>`;
+        } else if (pos.conflict_action) {
+            // Below floor / WAIT — visa varför vi avstår
+            positionTableHtml = `
+            <div style="background:#fef3c7;color:#78350f;border-radius:8px;padding:10px 14px;margin-top:12px;font-size:12px;border-left:3px solid #f59e0b">
+                <div style="font-weight:700">${pos.conflict_action}</div>
             </div>`;
         }
 
-        // ── Setup-historisk prestanda från backtest 2015-2024 (n=413) ──
-        // Källa: backtest_v2 körd 2026-04-29, validerad anti-leakage.
-        const SETUP_BACKTEST_STATS = {
-            trifecta:               { alpha: 11.6, hit: 59, n: 61, label: 'STARK alfa', color: '#059669' },
-            value_destruction:      { alpha:  8.9, hit: 77, n: 17, label: 'BRA',         color: '#10b981' },
-            quality_compounder:     { alpha:  6.3, hit: 50, n: 48, label: 'OK',          color: '#10b981' },
-            early_stage_turnaround: { alpha:  5.1, hit: 54, n: 46, label: 'OK',          color: '#10b981' },
-            balanced_quality:       { alpha:  0.8, hit: 53, n: 88, label: 'NEUTRAL',     color: '#6b7280' },
-            balanced_value:         { alpha: -0.3, hit: 54, n: 26, label: 'NEUTRAL',     color: '#6b7280' },
-            quality_under_pressure: { alpha: -0.3, hit: 40, n: 118, label: 'SVAG',        color: '#dc2626' },
-            // Setups med n<5 i backtest — markeras som 'okänd'
-            deep_value:             { alpha: 10.8, hit: 67, n:  3, label: '?',           color: '#6b7280' },
-            mixed_signals:          { alpha:   46, hit: 100, n:  2, label: '?',          color: '#6b7280' },
-            momentum_trap:          { alpha:  1.5, hit: 25, n:  4, label: '?',           color: '#6b7280' },
-        };
-        const REC_BACKTEST_STATS = {
-            STRONG_BUY:    { alpha: 14.4, hit: 60, n:  43 },
-            BUY:           { alpha:  5.8, hit: 58, n: 166 },
-            STRONG_AVOID:  { alpha:  5.7, hit: 79, n:  14 },
-            AVOID:         { alpha:  3.9, hit: 52, n:  23 },
-            HOLD:          { alpha: -1.1, hit: 39, n: 167 },
-        };
+        // Backtest-badge
+        const btBadge = bt ? `
+            <span style="background:rgba(255,255,255,0.7);padding:3px 8px;border-radius:8px;font-size:10.5px;border:1px solid rgba(0,0,0,0.06)">
+                <b style="color:${bt.alpha > 5 ? '#059669' : bt.alpha > 0 ? '#475569' : '#dc2626'}">${bt.alpha > 0 ? '+' : ''}${bt.alpha}%</b>
+                <span style="color:#64748b"> · ${bt.hit}% hit · n=${bt.n}</span>
+            </span>` : '';
 
-        const bt = SETUP_BACKTEST_STATS[v.setup];
-        const setupBacktestBadge = bt ? `
-            <div style="display:inline-flex;align-items:center;gap:6px;background:rgba(255,255,255,0.7);padding:4px 10px;border-radius:12px;font-size:11px;margin-top:6px;border:1px solid ${bt.color}40">
-                <span style="font-weight:700;color:${bt.color}">${bt.alpha > 0 ? '+' : ''}${bt.alpha}% alpha</span>
-                <span style="color:#6b7280">·</span>
-                <span style="color:#374151">${bt.hit}% hit</span>
-                <span style="color:#6b7280">·</span>
-                <span style="color:#6b7280">n=${bt.n}</span>
-                ${bt.n < 5 ? `<span style="color:#dc2626;font-weight:700;font-size:9px">⚠ för få obs</span>` : ''}
-            </div>` : '';
-
-        html += `<div class="drawer-section" style="background:${setupBg};border-radius:14px;padding:16px 18px;margin-bottom:14px">
-            <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:14px;margin-bottom:12px">
-                <div>
-                    <div style="font-size:11px;color:#374151;text-transform:uppercase;letter-spacing:0.06em;font-weight:700">v2 Setup-klassificering</div>
-                    <div style="font-size:22px;font-weight:800;line-height:1.1;margin-top:4px">${v.setup_label}</div>
-                    <div style="font-size:13px;font-weight:600;color:#1f2937;margin-top:4px">${v.setup_action}</div>
-                    ${setupBacktestBadge}
+        // Bygg setup-card
+        setupHtml = `<div class="drawer-section" style="background:${setupTheme.bg};border-radius:14px;padding:16px 18px;margin-bottom:14px;border:1px solid rgba(0,0,0,0.04)">
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:10px">
+                <div style="flex:1;min-width:0">
+                    <div style="font-size:10.5px;color:#64748b;text-transform:uppercase;letter-spacing:0.5px;font-weight:700">Setup-klassificering</div>
+                    <div style="display:flex;align-items:baseline;gap:8px;margin-top:4px">
+                        <span style="font-size:22px">${setupTheme.icon}</span>
+                        <div style="font-size:18px;font-weight:800;color:#0f172a;line-height:1.2">${v.setup_label}</div>
+                    </div>
+                    <div style="font-size:12px;color:#475569;margin-top:4px">${v.setup_action || ''}</div>
                 </div>
-                <div style="text-align:right;font-size:11px">
-                    <div style="font-weight:700;color:#1f2937">Confidence ${conf}%</div>
-                    <div style="color:#374151;margin-top:2px">${cls.asset_intensity || '–'} · ${cls.quality_regime || '–'}</div>
-                    <div style="color:#374151">${cls.sector || 'sektor okänd'}</div>
+                <div style="text-align:right;font-size:10.5px">
+                    <div style="background:white;padding:5px 10px;border-radius:8px;border:1px solid rgba(0,0,0,0.05);font-weight:700;color:${setupTheme.accent}">Conf ${conf}%</div>
+                    <div style="margin-top:4px;color:#64748b;font-size:10px">${[cls.asset_intensity, cls.quality_regime, cls.sector].filter(Boolean).join(' · ') || '–'}</div>
                 </div>
             </div>
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;background:rgba(255,255,255,0.5);padding:10px;border-radius:10px">
-                ${axisBar('💰 Value', axes.value, '#dc2626')}
-                ${axisBar('🏰 Quality', axes.quality, '#059669')}
-                ${axisBar('📈 Momentum', axes.momentum, '#2563eb')}
-                ${axisBar('⚠️ Risk', axes.risk, '#9333ea')}
+            ${btBadge ? `<div style="margin-bottom:10px">${btBadge}</div>` : ''}
+            ${conflictRow}
+            <div style="background:white;border-radius:10px;padding:8px 14px;margin-top:10px;border:1px solid rgba(0,0,0,0.04)">
+                ${axisRow('💰 Value', axes.value, '#dc2626')}
+                ${axisRow('🏰 Quality', axes.quality, '#059669')}
+                ${axisRow('📈 Momentum', axes.momentum, '#2563eb')}
+                ${axisRow('⚠️ Risk', axes.risk, '#9333ea')}
             </div>
-            ${v.reverse_dcf ? `
-                <div style="background:rgba(255,255,255,0.6);border-radius:10px;padding:10px 12px;margin-top:10px;font-size:12px">
-                    <strong>🧮 Reverse DCF:</strong> Marknaden prisar in <b>${v.reverse_dcf.implied_growth}%</b> årlig FCF-tillväxt över 10 år
-                    (rimlig förväntan: ${v.reverse_dcf.reasonable_g}%, gap ${v.reverse_dcf.realism_gap > 0 ? '+' : ''}${v.reverse_dcf.realism_gap}%)
-                    · WACC ${v.reverse_dcf.wacc_used}%
+            ${v.reverse_dcf_details ? `
+                <div style="background:white;border-radius:10px;padding:10px 14px;margin-top:10px;font-size:12px;border:1px solid rgba(0,0,0,0.04)">
+                    <div style="font-size:10.5px;text-transform:uppercase;letter-spacing:0.5px;color:#64748b;font-weight:700;margin-bottom:4px">🧮 Reverse DCF</div>
+                    <div style="color:#0f172a;line-height:1.5">
+                        Marknaden prisar in <b>${v.reverse_dcf_details.implied_growth}%</b> årlig FCF-tillväxt över 10 år
+                        <span style="color:#64748b">(rimlig ${v.reverse_dcf_details.reasonable_g}%, gap ${v.reverse_dcf_details.realism_gap > 0 ? '+' : ''}${v.reverse_dcf_details.realism_gap}%, WACC ${v.reverse_dcf_details.wacc_used}%)</span>
+                    </div>
                 </div>` : ''}
-            ${pos.target_pct_of_portfolio > 0 ? `
-                <div style="background:rgba(255,255,255,0.6);border-radius:10px;padding:10px 12px;margin-top:10px;font-size:12px">
-                    <strong>📊 Position-plan:</strong> mål ${pos.target_pct_of_portfolio}% av portföljen ·
-                    starter ${pos.starter_pct_of_target}% av målet ·
-                    skala in vid ${(pos.scale_in_at || []).map(x => x + '%').join(' / ')}
-                    ${pos.risk_modifier ? ` · risk-modifier ${(pos.risk_modifier * 100).toFixed(0)}%` : ''}
-                </div>` : ''}
+            ${positionTableHtml}
             ${pos.stop_thesis ? `
-                <details style="background:rgba(255,255,255,0.6);border-radius:10px;padding:8px 12px;margin-top:8px;font-size:11px">
-                    <summary style="cursor:pointer;font-weight:600">🛑 Stop_thesis (4 kategorier)</summary>
-                    <div style="margin-top:6px;display:grid;grid-template-columns:1fr 1fr;gap:6px">
+                <details style="background:white;border-radius:10px;padding:8px 14px;margin-top:10px;font-size:11.5px;border:1px solid rgba(0,0,0,0.04)">
+                    <summary style="cursor:pointer;font-weight:700;color:#475569">🛑 Stop-thesis (4 kategorier)</summary>
+                    <div style="margin-top:8px;display:grid;grid-template-columns:1fr 1fr;gap:8px;color:#475569">
                         ${Object.entries(pos.stop_thesis).map(([cat, items]) => `
-                            <div><strong style="text-transform:capitalize">${cat.replace(/_/g, ' ')}:</strong>
-                            <ul style="margin:2px 0 0 12px;padding:0">${(items||[]).map(it => `<li>${it}</li>`).join('')}</ul></div>
+                            <div><b style="text-transform:capitalize;color:#0f172a">${cat.replace(/_/g, ' ')}</b>
+                            <ul style="margin:2px 0 0 16px;padding:0">${(items||[]).map(it => `<li style="margin:2px 0">${it}</li>`).join('')}</ul></div>
                         `).join('')}
                     </div>
                 </details>` : ''}
-            ${(v.conflicts || []).length > 0 ? `
-                <div style="background:#fee2e2;color:#991b1b;border-radius:10px;padding:10px 12px;margin-top:10px;font-size:12px">
-                    <strong>⚠️ Modellkonflikter (${v.conflicts.length}):</strong>
-                    <ul style="margin:4px 0 0 16px;padding:0">
-                        ${v.conflicts.map(c => `<li>${c.replace(/_/g,' ')}</li>`).join('')}
-                    </ul>
-                    ${pos.conflict_action ? `<div style="margin-top:6px;font-weight:700">${pos.conflict_action}</div>` : ''}
-                </div>` : ''}
-            ${v.consistency && v.consistency.check === 'FAIL' ? `
-                <div style="background:#fef3c7;color:#78350f;border-radius:10px;padding:8px 12px;margin-top:8px;font-size:11px">
-                    <strong>🔬 Konsistenscheck FAIL:</strong> ROIC-Implied ${v.consistency.roic_implied_raw} vs Reverse DCF ${v.consistency.reverse_dcf_raw} (divergence ${v.consistency.divergence}). Båda capade till 50 i Value-axeln.
-                </div>` : ''}
-            ${v.fcf_debug ? `
-                <details style="background:rgba(255,255,255,0.6);border-radius:10px;padding:8px 12px;margin-top:8px;font-size:11px">
-                    <summary style="cursor:pointer;font-weight:600">🔍 FCF Pipeline (debug-block)</summary>
-                    <div style="margin-top:6px;display:grid;grid-template-columns:1fr 1fr;gap:4px;font-family:monospace;font-size:10.5px">
-                        <span style="color:#6b7280">Currency:</span><span>${v.fcf_debug.currency}</span>
-                        <span style="color:#6b7280">MarketCap (native):</span><span>${(v.fcf_debug.market_cap_native/1e9).toFixed(1)}B</span>
-                        <span style="color:#6b7280">OCF TTM:</span><span>${(v.fcf_debug.operating_cash_flow_ttm/1e9).toFixed(1)}B</span>
-                        <span style="color:#6b7280">CapEx-proxy:</span><span>${v.fcf_debug.capex_proxy_pct_of_ocf}% av OCF = ${(v.fcf_debug.capex_proxy/1e9).toFixed(1)}B</span>
-                        <span style="color:#6b7280">FCF raw:</span><span>${(v.fcf_debug.fcf_raw/1e9).toFixed(1)}B</span>
-                        <span style="color:#6b7280">SBC-proxy:</span><span>${(v.fcf_debug.stock_based_compensation_proxy/1e9).toFixed(1)}B</span>
-                        <span style="color:#6b7280">FCF SBC-just:</span><span><strong>${(v.fcf_debug.fcf_sbc_adjusted/1e9).toFixed(1)}B</strong></span>
-                        <span style="color:#6b7280">EV (approx):</span><span>${(v.fcf_debug.enterprise_value_approx/1e9).toFixed(1)}B</span>
-                        <span style="color:#6b7280">FCF Yield SBC-adj:</span><span><strong>${v.fcf_debug.fcf_yield_on_ev_sbc_adj_pct}%</strong></span>
-                        ${v.fcf_debug.fcf_yield_capex_normalized_pct != null ? `
-                            <span style="color:#6b7280">FCF Yield (capex-norm):</span><span>${v.fcf_debug.fcf_yield_capex_normalized_pct}%</span>` : ''}
-                        ${v.fcf_debug.capex_expansion_phase ? `
-                            <span style="grid-column:1/-1;color:#92400e;font-style:italic">⚠️ CapEx expansion phase — visar både rapporterad och normaliserad</span>` : ''}
+            ${(v.fcf_debug || v.earnings_revision_debug || v.ownership_signals || (v.na_models || []).length > 0) ? `
+                <details style="background:white;border-radius:10px;padding:8px 14px;margin-top:10px;font-size:11px;border:1px solid rgba(0,0,0,0.04)">
+                    <summary style="cursor:pointer;font-weight:700;color:#475569">🔬 Detaljerade beräkningar</summary>
+                    <div style="margin-top:8px;display:flex;flex-direction:column;gap:8px;color:#475569">
+                        ${v.consistency && v.consistency.check === 'FAIL' ? `
+                            <div style="background:#fef3c7;color:#78350f;padding:6px 10px;border-radius:6px">
+                                <b>Konsistenscheck FAIL:</b> ROIC-Implied ${v.consistency.roic_implied_raw} vs Reverse DCF ${v.consistency.reverse_dcf_raw} (divergence ${v.consistency.divergence}). Båda capade till 50.
+                            </div>` : ''}
+                        ${v.fcf_debug ? `
+                            <div>
+                                <b style="color:#0f172a">FCF Pipeline</b>
+                                <div style="display:grid;grid-template-columns:1fr 1fr;gap:2px 12px;font-family:monospace;font-size:10.5px;margin-top:4px">
+                                    <span>OCF TTM: ${(v.fcf_debug.operating_cash_flow_ttm/1e9).toFixed(1)}B ${v.fcf_debug.currency}</span>
+                                    <span>CapEx: ${v.fcf_debug.capex_proxy_pct_of_ocf}% av OCF</span>
+                                    <span>FCF SBC-just: <b>${(v.fcf_debug.fcf_sbc_adjusted/1e9).toFixed(1)}B</b></span>
+                                    <span>FCF Yield (EV): <b>${v.fcf_debug.fcf_yield_on_ev_sbc_adj_pct}%</b></span>
+                                </div>
+                            </div>` : ''}
+                        ${v.earnings_revision_debug ? `
+                            <div>
+                                <b style="color:#0f172a">Earnings Revision</b>
+                                <div style="font-family:monospace;font-size:10.5px;margin-top:2px">
+                                    Senaste 4Q EPS ${v.earnings_revision_debug.recent_4q_eps_sum} vs föregående ${v.earnings_revision_debug.older_4q_eps_sum}
+                                    → YoY <b>${v.earnings_revision_debug.yoy_growth_pct}%</b> (score ${v.earnings_revision_debug.score})
+                                </div>
+                            </div>` : ''}
+                        ${v.ownership_signals ? `
+                            <div>
+                                <b style="color:#0f172a">Ägarsignaler</b>
+                                <div style="font-size:10.5px;margin-top:2px">
+                                    Insider: ${v.ownership_signals.insider_activity.data_available
+                                        ? `${v.ownership_signals.insider_activity.buy_transactions}K/${v.ownership_signals.insider_activity.sell_transactions}S — ${v.ownership_signals.insider_activity.interpretation.replace(/_/g,' ')}`
+                                        : 'data saknas'} · Retail (Avanza): ${v.ownership_signals.retail_activity.owner_change_3m_pct?.toFixed(1)}% 3m
+                                </div>
+                            </div>` : ''}
+                        ${(v.na_models || []).length > 0 ? `
+                            <div style="font-size:10px;color:#94a3b8;font-style:italic;border-top:1px dashed #e2e8f0;padding-top:6px">
+                                Ej tillämpliga modeller: ${v.na_models.join(', ')}
+                            </div>` : ''}
                     </div>
                 </details>` : ''}
-            ${v.earnings_revision_debug ? `
-                <details style="background:rgba(255,255,255,0.6);border-radius:10px;padding:8px 12px;margin-top:8px;font-size:11px">
-                    <summary style="cursor:pointer;font-weight:600">📈 Earnings Revision (proxy: ${v.earnings_revision_debug.source})</summary>
-                    <div style="margin-top:6px;font-family:monospace;font-size:10.5px">
-                        Senaste 4 kv EPS: ${v.earnings_revision_debug.recent_4q_eps_sum} ·
-                        Föregående 4 kv: ${v.earnings_revision_debug.older_4q_eps_sum} ·
-                        YoY-tillväxt: <strong>${v.earnings_revision_debug.yoy_growth_pct}%</strong> ·
-                        Score: ${v.earnings_revision_debug.score}
-                    </div>
-                </details>` : ''}
-            ${v.ownership_signals ? `
-                <details style="background:rgba(255,255,255,0.6);border-radius:10px;padding:8px 12px;margin-top:8px;font-size:11px">
-                    <summary style="cursor:pointer;font-weight:600">👥 Ownership-signals (separerade)</summary>
-                    <div style="margin-top:6px;display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:10.5px">
-                        <div><strong>Insider:</strong> ${v.ownership_signals.insider_activity.data_available
-                            ? `${v.ownership_signals.insider_activity.buy_transactions} köp / ${v.ownership_signals.insider_activity.sell_transactions} sälj — <em>${v.ownership_signals.insider_activity.interpretation.replace(/_/g,' ')}</em>`
-                            : 'data saknas'}</div>
-                        <div><strong>Retail (Avanza):</strong> ${v.ownership_signals.retail_activity.owner_change_3m_pct?.toFixed(1)}% 3m, ${v.ownership_signals.retail_activity.owner_change_1y_pct?.toFixed(1)}% 1y — <em>${v.ownership_signals.retail_activity.contextual_interpretation.replace(/_/g,' ')}</em></div>
-                    </div>
-                </details>` : ''}
-            ${(v.na_models || []).length > 0 ? `
-                <div style="font-size:10px;color:#4b5563;margin-top:8px;font-style:italic">
-                    Ej tillämpliga modeller (N/A): ${v.na_models.join(', ')}
-                </div>` : ''}
         </div>`;
     }
+    // setupHtml byggs in EFTER DAKTIER Score nedan
 
     // ── ⭐ DAKTIER SCORE (en samlad, primär score) ──
     if (s.smart_score != null) {
@@ -4484,6 +4526,9 @@ function openDrawer(s) {
             </details>
         </div>`;
     }
+
+    // V2 SETUP-CARD (renderad ovan, läggs in efter DAKTIER Score)
+    html += setupHtml;
 
     // ── DETALJSCORES (Edge + Meta) — komprimerat under DAKTIER Score ──
     // Visas bara om DAKTIER Score saknas, ELLER inuti collapsible "Detaljer"-panel
