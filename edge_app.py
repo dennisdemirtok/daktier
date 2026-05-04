@@ -4289,8 +4289,9 @@ def api_borsdata_diagnose_access():
     Resultat visar exakt VILKA endpoints som ger 403 så vi kan diagnostisera
     om det är Pro vs Pro+ vs separat API Global add-on.
     """
-    import urllib.request
-    import urllib.error
+    # Använd requests-biblioteket (samma som borsdata_fetcher) — urllib
+    # blockeras av Cloudflare med error 1010 pga avsaknad User-Agent.
+    import requests
     import os as _os
     api_key = _os.environ.get("BORSDATA_API_KEY")
     if not api_key:
@@ -4305,26 +4306,20 @@ def api_borsdata_diagnose_access():
         "2_instruments_nordic":        f"{base}/instruments",
         "3_instruments_global_list":   f"{base}/instruments/global",
         "4_kpi_metadata":              f"{base}/instruments/kpis/metadata",
-        "5_se_msft_globalid_kpi64":    f"{base}/instruments/global/11441/kpis/64/year/mean/history",
-        "6_se_inveb_id113_kpi64":      f"{base}/instruments/113/kpis/64/year/mean/history",
+        "5_global_msft_kpi64":         f"{base}/instruments/global/11441/kpis/64/year/mean/history",
+        "6_nordic_inveb_kpi64":        f"{base}/instruments/113/kpis/64/year/mean/history",
         "7_global_msft_stockprice":    f"{base}/instruments/global/11441/stockprices/last",
         "8_nordic_inveb_stockprice":   f"{base}/instruments/113/stockprices/last",
     }
     results = {"key_masked": masked_key, "tests": {}}
     for label, url in tests.items():
-        full_url = f"{url}?authKey={api_key}&maxCount=2"
         try:
-            req = urllib.request.Request(full_url)
-            with urllib.request.urlopen(req, timeout=10) as resp:
-                data = resp.read().decode()
-                results["tests"][label] = {
-                    "status": resp.status,
-                    "preview": data[:200],
-                }
-        except urllib.error.HTTPError as e:
-            try: body = e.read().decode()[:150]
-            except Exception: body = ""
-            results["tests"][label] = {"status": e.code, "body": body}
+            resp = requests.get(url, params={"authKey": api_key, "maxCount": 2}, timeout=12)
+            preview = resp.text[:200]
+            results["tests"][label] = {
+                "status": resp.status_code,
+                "preview": preview,
+            }
         except Exception as e:
             results["tests"][label] = {"error": str(e)[:150]}
 
