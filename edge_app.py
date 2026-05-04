@@ -816,7 +816,10 @@ def api_stock_detail(orderbook_id):
             # Reattach internal _hist for scoring (removed above for API cleanliness)
             if "historical_context" in d:
                 d["_hist"] = d["historical_context"]
+            # Passa DB-ref så CapEx kan hämtas från Borsdata KPI 64/25
+            d["_db"] = db
             sc = _score_book_models(d)
+            d.pop("_db", None)
             if "_hist" in d and "historical_context" not in d:
                 d["historical_context"] = d["_hist"]
             d.pop("_hist", None)
@@ -5322,6 +5325,25 @@ denna direkt till användaren.
   flagga att EV är uppskattat ("EV approximerat — kräver Total Debt + Cash för exakt").
 - CapEx är ALLTID en sektor-proxy hittills (`capex_actual_available: false`).
   Flagga det när du citerar FCF — säg "CapEx-proxy {pct}%" inte bara "CapEx".
+
+**Kvartalsdata är TTM, INTE enskilda kvartal (KRITISKT):**
+`historical_quarterly`-rader är **Trailing Twelve Months** (rullande 12-månaders summor).
+Varje rad har `period_type: "TTM"`. Q4 FY = årsomsättning, Q3 FY = TTM ending Q3-slut.
+
+❌ **FÖRBJUDET**: "Q3 2026 omsättning $318B" (det är TTM, inte ett kvartal).
+✅ **KORREKT**: "TTM-omsättning per Q3 2026 = $318B" eller "Senaste 12 mån omsättning: $318B".
+
+För **enskilt kvartalsvärde** använd `sales_quarterly_estimate` /
+`net_profit_quarterly_estimate` / `eps_quarterly_estimate` (= diff mot
+föregående TTM-rad). MSFT Q3 FY26 quarterly ≈ $13B från diff-beräkningen
+(rimligt — verkligt MSFT Q-omsättning är ~$70-80B per kvartal).
+
+Sanity-check: om "kvartal" sales > $100B för MSFT/GOOGL/AAPL är det
+TTM-data (ingen enskilt kvartal är så stort). Flagga och säg TTM.
+
+YoY-tillväxt på TTM-värden är fortfarande meningsfull:
+TTM Q3 2026 vs TTM Q3 2025 = $318B / $270B - 1 = +17.8% YoY (korrekt!).
+Men kalla det "TTM YoY" eller "rolling 12m YoY", inte "Q3 YoY".
 
 **Smart Money — hårdkodad terminologi:**
 - "Smart money" = insider transactions + institutional flow ENDAST

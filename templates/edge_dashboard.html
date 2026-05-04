@@ -4428,7 +4428,7 @@ function openDrawer(s) {
                                 <b style="color:#0f172a">FCF Pipeline</b>
                                 <div style="display:grid;grid-template-columns:1fr 1fr;gap:2px 12px;font-family:monospace;font-size:10.5px;margin-top:4px">
                                     <span>OCF TTM: ${(v.fcf_debug.operating_cash_flow_ttm/1e9).toFixed(1)}B ${v.fcf_debug.currency}</span>
-                                    <span>CapEx: ${v.fcf_debug.capex_proxy_pct_of_ocf}% av OCF</span>
+                                    <span>CapEx: ${v.fcf_debug.capex_pct_of_ocf}% av OCF ${v.fcf_debug.capex_source && v.fcf_debug.capex_source !== 'sector_proxy' ? '<b style="color:#059669">(riktig)</b>' : '<span style="color:#dc2626">(sektor-proxy)</span>'}
                                     <span>FCF SBC-just: <b>${(v.fcf_debug.fcf_sbc_adjusted/1e9).toFixed(1)}B</b></span>
                                     <span>FCF Yield (EV): <b>${v.fcf_debug.fcf_yield_on_ev_sbc_adj_pct}%</b></span>
                                 </div>

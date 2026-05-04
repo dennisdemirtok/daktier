@@ -2562,7 +2562,16 @@ def get_historical_annual(db, orderbook_id):
 
 
 def get_historical_quarterly(db, orderbook_id):
-    """Returnerar lista (sorterad på år+kvartal) av kvartalsrader."""
+    """Returnerar lista (sorterad på år+kvartal) av kvartalsrader.
+
+    OBS — DATA ÄR TTM (Trailing Twelve Months), inte enskilda kvartal!
+    Avanza returnerar rolling 12-månaders summor på varje "kvartals"-rad.
+    Q4 FY = årsomsättning, Q3 FY = TTM ending Q3-slut, etc.
+
+    Vi flaggar varje rad med period_type="TTM" + lägger till en uträknad
+    quarterly_estimate (diff med föregående kvartal i serien) så agent +
+    UI kan välja vilken vy som passar.
+    """
     ph = _ph()
     rows = _fetchall(
         db,
@@ -2570,7 +2579,27 @@ def get_historical_quarterly(db, orderbook_id):
         f"ORDER BY financial_year ASC, quarter ASC",
         (orderbook_id,),
     )
-    return [dict(r) for r in rows]
+    out = [dict(r) for r in rows]
+
+    # Markera period-typ och beräkna quarterly_estimate (diff TTM_t - TTM_{t-1})
+    # som approximation för enskilt kvartal. Inte 100% exakt — kräver YoY-anchor —
+    # men ger korrekt nuvarande kvartalsbidrag.
+    prev_sales = None
+    prev_ni = None
+    prev_eps = None
+    for r in out:
+        r["period_type"] = "TTM"  # rolling 12 months — INTE enskilt kvartal
+        # Quarterly approx = diff mot föregående TTM-rad i serien
+        if prev_sales is not None and r.get("sales") is not None:
+            r["sales_quarterly_estimate"] = round(r["sales"] - prev_sales)
+        if prev_ni is not None and r.get("net_profit") is not None:
+            r["net_profit_quarterly_estimate"] = round(r["net_profit"] - prev_ni)
+        if prev_eps is not None and r.get("eps") is not None:
+            r["eps_quarterly_estimate"] = round(r["eps"] - prev_eps, 2)
+        prev_sales = r.get("sales")
+        prev_ni = r.get("net_profit")
+        prev_eps = r.get("eps")
+    return out
 
 
 def _median(values):
@@ -4908,9 +4937,42 @@ def _score_fcf_yield(s, classification):
     is_tech_or_asset_light = (sector == "tech" or
                                classification.get("asset_intensity") == "asset_light")
 
-    # CapEx-proxy: sektor-snitt × OCF
-    capex_pct = _SECTOR_CAPEX_PROXY.get(sector, 0.25)
-    capex_proxy = ocf * capex_pct
+    # ── CapEx — försök hämta riktig data från Borsdata KPI 64 (Capex)
+    # eller KPI 25 (Capex %) om vi har ISIN ──
+    capex_actual = None
+    capex_source = "sector_proxy"
+    capex_pct_actual = None
+    isin = s.get("isin")
+    if isin and "_db" in s:  # databas-anslutning passas via s["_db"] om tillgänglig
+        try:
+            db_conn = s["_db"]
+            kpi_vals = get_latest_kpi_values(db_conn, isin, [25, 64])
+            # KPI 64 = Capex (absolut belopp), KPI 25 = Capex %
+            if kpi_vals.get(64) is not None and kpi_vals[64] != 0:
+                # KPI 64 är CapEx i miljoner i nativa valutan — kan vara negativ (utflöde)
+                capex_actual = abs(kpi_vals[64]) * 1_000_000  # konvertera M → kronor
+                capex_source = "borsdata_kpi_64"
+                capex_pct_actual = capex_actual / abs(ocf) if ocf else None
+            elif kpi_vals.get(25) is not None:
+                # KPI 25 = Capex % av sales — vi behöver sales för att räkna ut
+                capex_pct_actual = abs(kpi_vals[25]) / 100  # % → decimal
+                capex_source = "borsdata_kpi_25"
+        except Exception as e:
+            import sys
+            print(f"[capex] real fetch failed: {e}", file=sys.stderr)
+
+    # CapEx-proxy: sektor-snitt × OCF (fallback om ingen Borsdata-data)
+    capex_pct_proxy = _SECTOR_CAPEX_PROXY.get(sector, 0.25)
+    if capex_actual is not None:
+        capex_proxy = capex_actual
+        capex_pct = capex_pct_actual or capex_pct_proxy
+    elif capex_pct_actual is not None and capex_source == "borsdata_kpi_25":
+        # Vi har CapEx % från KPI 25 — använd den med OCF
+        capex_pct = capex_pct_actual
+        capex_proxy = ocf * capex_pct
+    else:
+        capex_pct = capex_pct_proxy
+        capex_proxy = ocf * capex_pct
     fcf_proxy = ocf - capex_proxy
 
     # SBC-proxy: obligatorisk för tech/asset_light enligt Patch 5
@@ -4958,8 +5020,9 @@ def _score_fcf_yield(s, classification):
         "currency": s.get("currency", "?"),
         "market_cap_native": round(market_cap),
         "operating_cash_flow_ttm": round(ocf),
-        "capex_proxy_pct_of_ocf": round(capex_pct * 100, 1),
-        "capex_proxy": round(capex_proxy),
+        "capex_pct_of_ocf": round(capex_pct * 100, 1),
+        "capex": round(capex_proxy),
+        "capex_source": capex_source,  # "borsdata_kpi_64" | "borsdata_kpi_25" | "sector_proxy"
         "fcf_raw": round(fcf_proxy),
         "stock_based_compensation_proxy": round(sbc_proxy),
         "fcf_sbc_adjusted": round(fcf_sbc_adj),
@@ -4972,13 +5035,12 @@ def _score_fcf_yield(s, classification):
         "capex_expansion_phase": capex_expansion_phase,
         "score": round(base, 1),
         "data_quality": {
-            "capex_actual_available": False,        # endast sektor-proxy
+            "capex_actual_available": capex_source.startswith("borsdata"),
             "sbc_actual_available": False,           # endast sektor-proxy
             "ev_actual_available": ev_source == "calculated_from_pb_de",
             "warning": (
-                "EV beräknad från D/E + P/B (Cash uppskattat). "
-                "För exakt EV krävs Total Debt + Cash från balansräkning."
-                if ev_source != "exact" else None
+                "CapEx från sektor-proxy (riktig data saknas)" if capex_source == "sector_proxy"
+                else None
             ),
         },
     }
