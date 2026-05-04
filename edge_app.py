@@ -4277,24 +4277,28 @@ def api_borsdata_kpi_metadata():
 
 @app.route("/api/borsdata/test-kpi-formats/<int:ins_id>/<int:kpi_id>")
 def api_borsdata_test_kpi_formats(ins_id, kpi_id):
-    """Prova olika URL-format för att hitta rätt KPI-history-anrop."""
+    """Prova olika URL-format för att hitta rätt KPI-history-anrop.
+
+    Query: ?global=1 för utländska bolag (lägger till /global/ i URL).
+    """
     import urllib.request
     import os as _os
     api_key = _os.environ.get("BORSDATA_API_KEY")
     if not api_key:
         return jsonify({"error": "BORSDATA_API_KEY saknas"}), 500
 
+    is_global = request.args.get("global") == "1"
     base = "https://apiservice.borsdata.se/v1"
+    prefix = f"{base}/instruments/global" if is_global else f"{base}/instruments"
     formats = [
-        # Standardformat
-        f"{base}/instruments/{ins_id}/kpis/{kpi_id}/year/history",
-        # Alternativa
-        f"{base}/instruments/{ins_id}/kpis/{kpi_id}/year/last",
-        f"{base}/instruments/{ins_id}/kpis/{kpi_id}/last/year/latest",
-        f"{base}/instruments/{ins_id}/kpis/{kpi_id}/1year/history",
-        f"{base}/instruments/{ins_id}/kpis/{kpi_id}/1/year/history",
-        # Pris-historik som referens (vi vet att den fungerar)
-        f"{base}/instruments/{ins_id}/stockprices",
+        # Standard med priceType /mean/ (för pris-baserade KPI:er)
+        f"{prefix}/{ins_id}/kpis/{kpi_id}/year/mean/history",
+        f"{prefix}/{ins_id}/kpis/{kpi_id}/year/sum/history",     # för CapEx (sum, ej mean)
+        f"{prefix}/{ins_id}/kpis/{kpi_id}/year/last/history",
+        f"{prefix}/{ins_id}/kpis/{kpi_id}/year/history",          # utan priceType
+        f"{prefix}/{ins_id}/kpis/{kpi_id}/year/last",
+        # Pris-historik som referens
+        f"{prefix}/{ins_id}/stockprices",
     ]
     results = {}
     for url in formats:
