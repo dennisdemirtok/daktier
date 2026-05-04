@@ -25,9 +25,32 @@ from backtest_v2.runner import (DEFAULT_UNIVERSE, get_analysis_dates,
 from backtest_v2.pit_data import get_forward_return
 
 
-# KPI-id: 2=P/E, 4=P/B, 10=EV/EBIT, 33=ROE, 37=ROIC, 30=Vinstmarginal,
-#          1=Direktavkastning, 94=Omsättningstillväxt, 97=Vinsttillväxt
-TARGET_KPIS = [2, 4, 10, 33, 37, 30, 1, 94, 97]
+# KPI-id: 2=P/E, 4=P/B, 10=EV/EBIT, 33=ROE, 34=ROA, 37=ROIC, 30=Vinstmarginal,
+#          1=Direktavkastning, 94=Omsättningstillväxt, 97=Vinsttillväxt,
+#          61=Antal aktier, 62=OCF
+TARGET_KPIS = [2, 4, 10, 33, 34, 37, 30, 1, 94, 97, 61, 62]
+
+
+def get_kpi_history_at_date(db, isin, kpi_id, year, n_years=10):
+    """Hämta n_years senaste värdena för en KPI vid PIT-datum (år < analys-år).
+
+    Returnerar list av (year, value) sorterad descenderande på år.
+    Används för Spier Compounder Screen (kräver ROE-historik).
+    """
+    if not isin: return []
+    ph = _ph()
+    try:
+        rows = _fetchall(db,
+            f"SELECT period_year, value FROM borsdata_kpi_history "
+            f"WHERE isin = {ph} AND report_type = {ph} "
+            f"AND kpi_id = {ph} "
+            f"AND period_year < {ph} "
+            f"AND value IS NOT NULL "
+            f"ORDER BY period_year DESC LIMIT {ph}",
+            (isin, "year", kpi_id, year, n_years))
+    except Exception:
+        return []
+    return [(dict(r)["period_year"], dict(r)["value"]) for r in rows]
 
 
 def get_kpi_at_date(db, isin, kpi_ids, year):
@@ -75,6 +98,83 @@ def pct_rank(values, lower_better=False):
 def avg(*vals):
     valid = [v for v in vals if v is not None]
     return sum(valid) / len(valid) if valid else None
+
+
+# ───────────────────────────────────────────────────────────────────
+# SCREEN-KLASSIFICERARE — varje funktion returnerar True/False per obs
+# ───────────────────────────────────────────────────────────────────
+
+def classify_piotroski_hi_f_cheap(kpis, fscore, pb_tertile_threshold):
+    """Piotroski Hi-F + Cheap (akademisk klassiker, +7.5%/år 1976-1996).
+
+    Trigger: F-Score ≥ 8 (av 9) + P/B i nedersta tertilen.
+    """
+    if fscore is None or fscore < 8:
+        return False
+    pb = kpis.get(4)  # KPI 4 = P/B
+    if pb is None or pb <= 0:
+        return False
+    return pb <= pb_tertile_threshold
+
+
+def classify_magic_formula_top30(combined_rank, top_n=30, total=None):
+    """Magic Formula 30 (Greenblatt: rank(EV/EBIT) + rank(ROIC)).
+
+    Trigger: combined_rank ≤ top_n. combined_rank är summan av två rank-positioner
+    (lägre = bättre i båda dimensioner).
+    """
+    if combined_rank is None:
+        return False
+    return combined_rank <= top_n
+
+
+def classify_pabrai_dhandho(kpis, earnings_stab_pct):
+    """Pabrai Dhandho-screen ("Heads I win, tails I don't lose much").
+
+    Trigger: ROA ≥ 15% + D/E < 0.5 + earnings stability ≥ 90% + P/E ≤ 15.
+    """
+    roa = kpis.get(34)  # ROA i %
+    if roa is None or roa < 15:
+        return False
+    pe = kpis.get(2)
+    if pe is None or pe <= 0 or pe > 15:
+        return False
+    if earnings_stab_pct is None or earnings_stab_pct < 90:
+        return False
+    # D/E hämtas inte från KPI direkt — vi har det i stocks-tabellen.
+    # För enkelhets skull: kräv P/B ≤ 4 som proxy för måttlig skuld
+    # (banker med D/E > 5 har typiskt P/B > 4 också). Inte perfekt.
+    pb = kpis.get(4)
+    if pb is None or pb > 5:
+        return False
+    return True
+
+
+def classify_spier_compounder(roe_history_10y):
+    """Spier 10-Year Compounder.
+
+    Trigger: ROE ≥ 15% i ≥ 7 av senaste 10 åren.
+    Mätt på tabular-data — kräver historisk KPI 33 (ROE).
+    """
+    if not roe_history_10y or len(roe_history_10y) < 5:
+        return False
+    # Normalisera (Borsdata ROE är i %, ibland decimal)
+    roe_vals = [v for _, v in roe_history_10y if v is not None]
+    if not roe_vals:
+        return False
+    norm_roe = [v if abs(v) >= 1.5 else v * 100 for v in roe_vals]
+    n_above_15 = sum(1 for v in norm_roe if v >= 15)
+    return n_above_15 >= 7 and len(roe_vals) >= 7
+
+
+def compute_earnings_stability_pct(eps_history_10y):
+    """Beräknar % av åren där EPS > 0."""
+    if not eps_history_10y:
+        return None
+    valid = [v for _, v in eps_history_10y if v is not None]
+    if not valid:
+        return None
+    return 100 * sum(1 for v in valid if v > 0) / len(valid)
 
 
 def run_quant_backtest(db, universe=None, start_year=2015, end_year=2024,
@@ -139,6 +239,27 @@ def run_quant_backtest(db, universe=None, start_year=2015, end_year=2024,
         revg_rank = pct_rank(revg_vals)
         epsg_rank = pct_rank(epsg_vals)
 
+        # 2b. Magic Formula: combined rank av EV/EBIT (lägre=bättre) + ROIC (högre=bättre)
+        # Använd RAW rank-pos (0=best) inte percentile, summera, top 30 vinner
+        def rank_position(values, lower_better=False):
+            """Returnerar rank-pos (0=bäst) per index, eller None om saknas."""
+            valid = [(i, v) for i, v in enumerate(values) if v is not None]
+            if lower_better:
+                valid.sort(key=lambda x: x[1])
+            else:
+                valid.sort(key=lambda x: -x[1])
+            ranks = [None] * len(values)
+            for pos, (i, _) in enumerate(valid):
+                ranks[i] = pos
+            return ranks
+
+        evebit_rank_pos = rank_position(evebit_vals, lower_better=True)
+        roic_rank_pos = rank_position(roic_vals, lower_better=False)
+
+        # 2c. P/B-tertil-tröskel för Piotroski Hi-F + Cheap
+        valid_pbs = sorted([v for v in pb_vals if v is not None and v > 0])
+        pb_tertile = valid_pbs[len(valid_pbs)//3] if len(valid_pbs) >= 6 else None
+
         # 3. Sätt scores per bolag + forward return
         for i, (short, name, isin, kpis) in enumerate(universe_data):
             q_score = avg(roe_rank[i], roic_rank[i], margin_rank[i])
@@ -168,6 +289,30 @@ def run_quant_backtest(db, universe=None, start_year=2015, end_year=2024,
             except Exception:
                 fwd_12m = None
 
+            # ── EXTRA SCREENS ──
+            # Magic Formula 30: top-30 baserat på rank(EV/EBIT) + rank(ROIC)
+            mf_combined = None
+            if evebit_rank_pos[i] is not None and roic_rank_pos[i] is not None:
+                mf_combined = evebit_rank_pos[i] + roic_rank_pos[i]
+            is_magic_formula = classify_magic_formula_top30(mf_combined, top_n=30)
+
+            # Piotroski Hi-F + Cheap (kräver F-Score från historisk data)
+            from edge_db import compute_piotroski_fscore
+            try:
+                fscore_data = compute_piotroski_fscore(db, isin)
+                fscore_val = fscore_data.get("score") if fscore_data else None
+            except Exception:
+                fscore_val = None
+            is_piotroski_hi_cheap = (pb_tertile is not None and
+                                      classify_piotroski_hi_f_cheap(kpis, fscore_val, pb_tertile))
+
+            # Pabrai + Spier — kräver historik (10 år ROE/EPS)
+            roe_hist = get_kpi_history_at_date(db, isin, 33, year, n_years=10)
+            eps_hist = get_kpi_history_at_date(db, isin, 97, year, n_years=10)  # vinsttillv som proxy
+            earnings_stab = compute_earnings_stability_pct(eps_hist) if eps_hist else None
+            is_pabrai = classify_pabrai_dhandho(kpis, earnings_stab)
+            is_spier = classify_spier_compounder(roe_hist)
+
             results.append({
                 "ticker": short,
                 "name": name,
@@ -178,6 +323,11 @@ def run_quant_backtest(db, universe=None, start_year=2015, end_year=2024,
                 "m_score": round(m_score, 1) if m_score is not None else None,
                 "composite": round(composite, 1) if composite is not None else None,
                 "is_trifecta": is_trifecta,
+                "is_magic_formula": is_magic_formula,
+                "is_piotroski_hi_cheap": is_piotroski_hi_cheap,
+                "is_pabrai": is_pabrai,
+                "is_spier_compounder": is_spier,
+                "fscore": fscore_val,
                 "fwd_12m": fwd_12m,
             })
 
@@ -190,18 +340,45 @@ def run_quant_backtest(db, universe=None, start_year=2015, end_year=2024,
 
 
 def analyze_quant_results(results):
-    """Beräknar alpha för Quant Trifecta vs hela universumet."""
+    """Beräknar alpha för alla 5 screens vs hela universumet."""
     valid = [r for r in results if r["fwd_12m"] is not None]
 
     # Universum-snitt
     all_returns = [r["fwd_12m"] for r in valid]
     universe_mean = sum(all_returns) / len(all_returns) if all_returns else 0
 
-    # Trifecta
-    trifectas = [r for r in valid if r["is_trifecta"]]
-    tri_returns = [r["fwd_12m"] for r in trifectas]
-    tri_mean = sum(tri_returns) / len(tri_returns) if tri_returns else 0
-    tri_hit = sum(1 for r in tri_returns if r > 0) / len(tri_returns) * 100 if tri_returns else 0
+    def screen_stats(label, hits, all_returns_mean):
+        if not hits:
+            return {"name": label, "n": 0, "mean_12m_pct": 0,
+                    "alpha_pct": 0, "hit_rate_pct": 0}
+        rets = [r["fwd_12m"] for r in hits]
+        m = sum(rets) / len(rets)
+        return {
+            "name": label,
+            "n": len(hits),
+            "mean_12m_pct": round(m * 100, 2),
+            "alpha_pct": round((m - all_returns_mean) * 100, 2),
+            "hit_rate_pct": round(sum(1 for r in rets if r > 0) / len(rets) * 100, 1),
+        }
+
+    # Alla 5 screens
+    screens = [
+        screen_stats("Quant Trifecta",
+                      [r for r in valid if r["is_trifecta"]],
+                      universe_mean),
+        screen_stats("Magic Formula 30",
+                      [r for r in valid if r.get("is_magic_formula")],
+                      universe_mean),
+        screen_stats("Piotroski Hi-F + Cheap",
+                      [r for r in valid if r.get("is_piotroski_hi_cheap")],
+                      universe_mean),
+        screen_stats("Pabrai Dhandho",
+                      [r for r in valid if r.get("is_pabrai")],
+                      universe_mean),
+        screen_stats("Spier 10y Compounder",
+                      [r for r in valid if r.get("is_spier_compounder")],
+                      universe_mean),
+    ]
 
     # Composite-tier
     tiers = [
@@ -214,12 +391,7 @@ def analyze_quant_results(results):
     return {
         "n_total": len(valid),
         "universe_mean_12m": round(universe_mean * 100, 2),
-        "trifecta": {
-            "n": len(trifectas),
-            "mean_12m": round(tri_mean * 100, 2),
-            "alpha_vs_universe": round((tri_mean - universe_mean) * 100, 2),
-            "hit_rate_pct": round(tri_hit, 1),
-        },
+        "screens": screens,
         "by_composite_tier": [
             {
                 "tier": label,
