@@ -636,36 +636,10 @@ def api_stock_detail(orderbook_id):
         if not row:
             return jsonify({"error": "not found"}), 404
         d = dict(row)
+        # NOTE: market_cap är i SEK för utländska bolag — currency-konvertering
+        # till native sker EFTER scoring (se nedan, precis innan jsonify).
+        # Att konvertera tidigare gav double-conversion-bug i _score_book_models.
 
-        # ──────────────────────────────────────────────────────────
-        # CURRENCY-FIX: Avanza/Börsdata returnerar market_cap för utländska
-        # bolag i SEK, men last_price är i nativ valuta. Detta gjorde att
-        # Microsoft visades som $28T market cap (= 28T SEK ≈ $3T efter
-        # konvertering). Konvertera market_cap till native currency innan
-        # API-svaret returneras.
-        # ──────────────────────────────────────────────────────────
-        try:
-            from edge_db import _market_cap_native, _fx_rate
-            currency = (d.get("currency") or "SEK").upper()
-            mcap_raw = d.get("market_cap")
-            if currency != "SEK" and mcap_raw and mcap_raw > 0:
-                mcap_native = _market_cap_native(d)
-                if mcap_native and mcap_native > 0:
-                    d["market_cap_native"] = round(mcap_native)
-                    d["market_cap_sek_original"] = round(mcap_raw)  # behåll original för referens
-                    d["market_cap"] = round(mcap_native)  # ÖVERSKRIV med native så UI/agent ser rätt
-            # Sanity-check: market_cap måste vara mellan 10M och 10T i native
-            if d.get("market_cap"):
-                mc = d["market_cap"]
-                if mc < 1e7 or mc > 1e13:
-                    d["market_cap_warning"] = (
-                        f"market_cap={mc:,.0f} {currency} utanför rimligt intervall "
-                        f"(10M-10T) — sannolikt enhetsfel"
-                    )
-                    print(f"[stock detail] {d.get('name')}: {d['market_cap_warning']}",
-                          file=sys.stderr)
-        except Exception as e:
-            print(f"[stock detail] market_cap currency-fix: {e}", file=sys.stderr)
         # On-demand historisk fetch om det saknas (snabb, cache:as 7 dagar)
         try:
             from edge_db import (_attach_hist, get_historical_annual,
@@ -949,6 +923,35 @@ def api_stock_detail(orderbook_id):
                 d["smart_score_deltas"] = deltas
         except Exception as e:
             print(f"[stock detail] smart_score_deltas: {e}", file=sys.stderr)
+
+        # ──────────────────────────────────────────────────────────
+        # CURRENCY-FIX (post-scoring): Avanza/Börsdata returnerar
+        # market_cap för utländska bolag i SEK, men last_price är i nativ.
+        # Detta gjorde att MSFT visades som $28T (= 28T SEK ≈ $3T USD).
+        # Konvertera HÄR (efter scoring) så _score_book_models() kunde
+        # arbeta med originalvärdet utan double-conversion.
+        # ──────────────────────────────────────────────────────────
+        try:
+            from edge_db import _market_cap_native
+            currency = (d.get("currency") or "SEK").upper()
+            mcap_raw = d.get("market_cap")
+            if currency != "SEK" and mcap_raw and mcap_raw > 0:
+                mcap_native = _market_cap_native(d)
+                if mcap_native and mcap_native > 0 and abs(mcap_native - mcap_raw) > 1:
+                    d["market_cap_native"] = round(mcap_native)
+                    d["market_cap_sek_original"] = round(mcap_raw)
+                    d["market_cap"] = round(mcap_native)
+            if d.get("market_cap"):
+                mc = d["market_cap"]
+                if mc < 1e7 or mc > 1e13:
+                    d["market_cap_warning"] = (
+                        f"market_cap={mc:,.0f} {currency} utanför rimligt intervall "
+                        f"(10M-10T) — sannolikt enhetsfel"
+                    )
+                    print(f"[stock detail] {d.get('name')}: {d['market_cap_warning']}",
+                          file=sys.stderr)
+        except Exception as e:
+            print(f"[stock detail] market_cap currency-fix: {e}", file=sys.stderr)
 
         # Macro-overlay (kontext, påverkar inte score) — skip i lite-mode
         if is_lite:
