@@ -4018,6 +4018,45 @@ def api_borsdata_sync_kpi_quarters():
                     "n_tickers": len(tickers) if tickers else "all"})
 
 
+@app.route("/api/backtest-v2/run-quant", methods=["POST"])
+def api_backtest_v2_run_quant():
+    """Kör Quant-Trifecta-backtest 2015-2024 (utan LLM, ren KPI-screening).
+
+    Body: {start_year: 2015, end_year: 2024}
+    Returnerar: alpha för Quant Trifecta vs universum + tier-breakdown.
+    Synkron — tar ~30s eftersom bara DB-queries (ingen LLM).
+    """
+    body = request.json if request.is_json else {}
+    start_year = int(body.get("start_year", 2015))
+    end_year = int(body.get("end_year", 2024))
+
+    try:
+        from backtest_v2.quant_runner import (run_quant_backtest,
+                                                analyze_quant_results)
+        db = get_db()
+        try:
+            results = run_quant_backtest(db, start_year=start_year,
+                                          end_year=end_year, verbose=False)
+            analysis = analyze_quant_results(results)
+            # Spara resultat så vi kan hämta dem senare
+            return jsonify({
+                "n_observations": len(results),
+                "period": f"{start_year}-{end_year}",
+                "analysis": analysis,
+                "sample_trifectas": [
+                    {k: v for k, v in r.items() if k in ("ticker", "date", "q_score",
+                                                          "v_score", "m_score",
+                                                          "composite", "fwd_12m")}
+                    for r in results if r.get("is_trifecta")
+                ][:20],
+            })
+        finally:
+            db.close()
+    except Exception as e:
+        import traceback
+        return jsonify({"error": str(e), "tb": traceback.format_exc()[:1500]}), 500
+
+
 @app.route("/api/borsdata/sync-quarters-sync", methods=["POST"])
 def api_borsdata_sync_quarters_sync():
     """SYNKRON quarter-sync för debug — väntar tills klar och returnerar resultat."""
