@@ -1429,7 +1429,14 @@ def fetch_all_stocks_from_avanza(db, progress_callback=None):
                 next_company_report, next_dividend,
                 last_updated"""
             _update_cols = [c.strip() for c in _cols.split(",") if c.strip() != "orderbook_id"]
-            _update_set = ", ".join(f"{c} = EXCLUDED.{c}" for c in _update_cols)
+            # ISIN-fältet bevaras: Avanza returnerar tom isin för utländska bolag
+            # vilket skulle skriva över våra Borsdata-fixade ISIN:er. COALESCE
+            # behåller existing om EXCLUDED.isin är tom eller NULL.
+            def _update_expr(c):
+                if c == "isin":
+                    return f"isin = COALESCE(NULLIF(EXCLUDED.isin, ''), stocks.isin)"
+                return f"{c} = EXCLUDED.{c}"
+            _update_set = ", ".join(_update_expr(c) for c in _update_cols)
             upsert_sql = f"""INSERT INTO stocks ({_cols}) VALUES ({_ph(83)})
                 ON CONFLICT (orderbook_id) DO UPDATE SET {_update_set}"""
             cur = db.cursor()
