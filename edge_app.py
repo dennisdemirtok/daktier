@@ -8400,6 +8400,130 @@ def _startup():
 
         scheduler.add_job(scheduled_insider_sync, 'cron', hour=6, minute=30, id='insider_daily')
 
+        # Dagligt screen-snapshot (kl 17:00 lokal, efter US-marknad har öppnat)
+        # Sparar live-träffar för Confluence/Trifecta/Dual-Screen för
+        # senare 12m-uppföljning. Validerar live att backtest speglar verkligheten.
+        def scheduled_screen_snapshot():
+            try:
+                print(f"[AUTO] Dagligt screen-snapshot start {datetime.now().strftime('%H:%M')}")
+                from edge_db import _ph as ph_fn, _upsert_sql, compute_quant_scores
+                MODE_FILTERS = {
+                    "growth_trifecta": lambda s: s.get("is_growth_trifecta"),
+                    "magic_formula": lambda s: s.get("is_magic_formula"),
+                    "gt_mf_confluence": lambda s: (s.get("is_growth_trifecta")
+                                                    and s.get("is_magic_formula")),
+                    "c80_gt_confluence": lambda s: ((s.get("composite_score") or 0) >= 80
+                                                      and s.get("is_growth_trifecta")),
+                    "dual_screen": lambda s: s.get("is_dual_screen"),
+                    "composite_80": lambda s: (s.get("composite_score") or 0) >= 80,
+                }
+                screens = [
+                    ("gt_mf_confluence_us", "US", "gt_mf_confluence"),
+                    ("growth_trifecta_us", "US", "growth_trifecta"),
+                    ("magic_formula_us", "US", "magic_formula"),
+                    ("c80_gt_confluence_se", "SE", "c80_gt_confluence"),
+                    ("dual_screen_se", "SE", "dual_screen"),
+                    ("composite_80_se", "SE", "composite_80"),
+                ]
+                snap_date = datetime.now().strftime("%Y-%m-%d")
+                ph = ph_fn()
+                ins_sql = _upsert_sql("screen_snapshots",
+                    ["snapshot_date", "screen_name", "country", "ticker", "isin",
+                     "name", "price", "quality_score", "value_score", "momentum_score",
+                     "composite_score", "last_updated"],
+                    ["snapshot_date", "screen_name", "ticker"])
+                dbs = get_db()
+                try:
+                    cache = {}
+                    total_saved = 0
+                    for name, country, mode in screens:
+                        if country not in cache:
+                            cache[country] = compute_quant_scores(
+                                dbs, country=country, max_universe=300)
+                        f = MODE_FILTERS.get(mode)
+                        stocks = [x for x in cache[country] if f(x)] if f else cache[country]
+                        for stk in stocks:
+                            tk = stk.get("ticker") or stk.get("short_name")
+                            if not tk: continue
+                            try:
+                                dbs.execute(ins_sql, (
+                                    snap_date, name, country, tk,
+                                    stk.get("isin"), stk.get("name"), stk.get("last_price"),
+                                    stk.get("quality_score"), stk.get("value_score"),
+                                    stk.get("momentum_score"), stk.get("composite_score"),
+                                    datetime.now().isoformat()))
+                                total_saved += 1
+                            except Exception:
+                                dbs.rollback()
+                    dbs.commit()
+                    print(f"[AUTO] Screen-snapshot {snap_date}: {total_saved} sparade")
+                finally:
+                    dbs.close()
+            except Exception as e:
+                import traceback
+                print(f"[AUTO] Screen-snapshot fel: {e}\n{traceback.format_exc()[:800]}")
+
+        # 17:00 svensk tid varje vardag — efter både SE och US har öppnat
+        scheduler.add_job(scheduled_screen_snapshot, 'cron',
+                          day_of_week='mon-fri', hour=17, minute=0,
+                          id='screen_snapshot_daily')
+
+        # Uppdatera fwd-returns på söndagar — utvärderar gamla snapshots
+        def scheduled_update_fwd_returns():
+            try:
+                print(f"[AUTO] Uppdaterar fwd-returns för screen_snapshots")
+                from edge_db import _ph as ph_fn, _fetchall
+                from datetime import datetime as dtm, timedelta
+                ph = ph_fn()
+                dbf = get_db()
+                try:
+                    rows = _fetchall(dbf,
+                        "SELECT id, snapshot_date, isin, price FROM screen_snapshots "
+                        "WHERE price IS NOT NULL AND fwd_12m_pct IS NULL")
+                    today = dtm.now().date()
+                    updated = 0
+                    for r in rows:
+                        rd = dict(r)
+                        try:
+                            snap_dt = dtm.strptime(rd["snapshot_date"], "%Y-%m-%d").date()
+                        except Exception:
+                            continue
+                        days_since = (today - snap_dt).days
+                        if days_since < 90: continue
+                        isin = rd.get("isin")
+                        if not isin: continue
+                        for label, days in [("fwd_3m_pct", 90),
+                                             ("fwd_6m_pct", 180),
+                                             ("fwd_12m_pct", 365)]:
+                            if days_since < days: continue
+                            target = (snap_dt + timedelta(days=days)).isoformat()
+                            pr = _fetchall(dbf,
+                                f"SELECT close FROM borsdata_prices WHERE isin = {ph} "
+                                f"AND date <= {ph} ORDER BY date DESC LIMIT 1",
+                                (isin, target))
+                            if not pr: continue
+                            future = dict(pr[0])["close"]
+                            if not future or not rd["price"]: continue
+                            pct = (future / rd["price"] - 1) * 100
+                            try:
+                                dbf.execute(
+                                    f"UPDATE screen_snapshots SET {label} = {ph}, "
+                                    f"last_updated = {ph} WHERE id = {ph}",
+                                    (round(pct, 2), dtm.now().isoformat(), rd["id"]))
+                                updated += 1
+                            except Exception:
+                                dbf.rollback()
+                    dbf.commit()
+                    print(f"[AUTO] Fwd-returns uppdaterat: {updated}")
+                finally:
+                    dbf.close()
+            except Exception as e:
+                print(f"[AUTO] Fwd-returns fel: {e}")
+
+        scheduler.add_job(scheduled_update_fwd_returns, 'cron',
+                          day_of_week='sun', hour=8, minute=0,
+                          id='fwd_returns_weekly')
+
         # Nattlig Börsdata-prissync (04:00 lokal, efter hist sync) — inkrementellt
         # Hämtar bara nya datapunkter sedan senast (last_date+1), så det går snabbt.
         def scheduled_borsdata_prices():
