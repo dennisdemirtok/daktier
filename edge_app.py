@@ -7059,6 +7059,36 @@ När en US-aktie flaggar Growth Trifecta:
 
 När bolaget flaggar GT 2+ år i rad: ÄNNU starkare compounder-signal.
 
+**🎯 BUY/HOLD/AVOID — automatisk rekommendation per aktie:**
+
+compute_quant_scores sätter nu `recommendation` + `recommendation_reason`
+baserat på 7-marknads-backtest 2015-2024:
+
+**BUY (i prioritetsordning):**
+1. Super Confluence (≥4 flaggor): "INVE/INDU 2020 +44-63%"
+2. GT+MF Confluence US: "+21.57% alpha, 82% hit"
+3. C80+GT Confluence SE: "+19.64% alpha, 76% hit"
+4. Recurring Compounder flaggar GT idag
+5. Dual-Screen SE: "+18.35% alpha, 82% hit"
+
+**AVOID (anti-mönster):**
+1. Composite ≥80 i US utan GT: -11.76% alpha (premium-fälla)
+2. Quant Trifecta i US: -8.03% alpha (broken för US tech)
+3. Composite ≥80 i SE Finans/Fastighet: -4.8% alpha (preferensaktie-fälla)
+4. Magic Formula i NO: -7.11% alpha (cyklisk-marknad-fälla)
+
+**HOLD:**
+- Single screen-flagga (GT, MF, eller Composite ≥70 alone)
+- Moderat signal som kräver komplement
+
+**När agenten ser recommendation-fältet:**
+> "Vår automatiska rekommendation: **[BUY/AVOID/HOLD]** — [reason].
+> Detta är baserat på backtest 2015-2024 där detta mönster gav
+> [exakt alpha-siffra]."
+
+Drawer visar BUY/AVOID/HOLD-badge automatiskt. Agenten ska CITERA
+recommendation_reason när den finns — det är empiriskt validerad.
+
 **⚡ SUPER CONFLUENCE — 4+ samtidiga screen-flaggor:**
 
 När en aktie flaggar BÅDE Composite ≥80 + Growth Trifecta + Recurring +

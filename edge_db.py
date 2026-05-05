@@ -4768,6 +4768,68 @@ def compute_quant_scores(db, country="SE", min_market_cap=500e6,
             and s.get("is_magic_formula") is True
         )
 
+    # ── 🎯 RECOMMENDATION: BUY / HOLD / AVOID per aktie ──
+    # Baserat på 7-marknads-backtest 2015-2024.
+    # BUY  = Super Confluence ELLER GT+MF (US) ELLER C80+GT (SE) ELLER Recurring
+    # HOLD = single GT/MF/C80 — moderat alpha, kräver komplement
+    # AVOID = anti-mönster: Composite ≥80 alone i US, Quant Trifecta i US,
+    #         Magic Formula i NO, Composite ≥80 i Finans/Fastighet
+    for s in universe:
+        country = (s.get("country") or "").upper()
+        sector = (s.get("sector_name") or "").lower()
+        composite = s.get("composite_score") or 0
+        is_finance = "finans" in sector or "fastighet" in sector
+
+        # Räkna n_flags för super confluence
+        n_flags = 0
+        if s.get("is_dual_screen"): n_flags += 1
+        if composite >= 80 and s.get("is_growth_trifecta"): n_flags += 1
+        if s.get("is_recurring_compounder"): n_flags += 1
+        if s.get("is_quant_trifecta"): n_flags += 1
+        if s.get("is_magic_formula"): n_flags += 1
+        if s.get("is_growth_trifecta"): n_flags += 1
+        if composite >= 80: n_flags += 1
+        s["n_flags"] = n_flags
+
+        # BUY-villkor (i prioritetsordning)
+        if n_flags >= 4:
+            rec = "BUY"
+            reason = f"Super Confluence ({n_flags} flaggor) — INVE/INDU 2020 +44-63%"
+        elif country == "US" and s.get("is_growth_trifecta") and s.get("is_magic_formula"):
+            rec = "BUY"
+            reason = "GT+MF Confluence US (+21.57% alpha, 82% hit)"
+        elif country == "SE" and composite >= 80 and s.get("is_growth_trifecta"):
+            rec = "BUY"
+            reason = "C80+GT Confluence SE (+19.64% alpha, 76% hit)"
+        elif s.get("is_recurring_compounder"):
+            rec = "BUY"
+            reason = f"Recurring Compounder ({s.get('recurring_gt_years',0)} år) flaggar GT idag"
+        elif country == "SE" and s.get("is_dual_screen"):
+            rec = "BUY"
+            reason = "Dual-Screen SE (+18.35% alpha, 82% hit)"
+        # AVOID-villkor (anti-mönster)
+        elif country == "US" and composite >= 80 and not s.get("is_growth_trifecta"):
+            rec = "AVOID"
+            reason = "Composite ≥80 alone i US är fälla (-11.76% alpha)"
+        elif country == "US" and s.get("is_quant_trifecta") and not s.get("is_recurring_compounder"):
+            rec = "AVOID"
+            reason = "Quant Trifecta i US: -8.03% alpha (broken för US tech)"
+        elif country == "SE" and is_finance and composite >= 80 and not s.get("is_growth_trifecta"):
+            rec = "AVOID"
+            reason = "Composite ≥80 i Finans/Fastighet: -4.8% alpha (preferensaktie-fälla)"
+        elif country == "NO" and s.get("is_magic_formula"):
+            rec = "AVOID"
+            reason = "Magic Formula i NO: -7.11% alpha (cyklisk-marknad-fälla)"
+        # HOLD-villkor
+        elif s.get("is_growth_trifecta") or s.get("is_magic_formula") or composite >= 70:
+            rec = "HOLD"
+            reason = "Single screen-flagga — moderat signal"
+        else:
+            rec = None
+            reason = None
+        s["recommendation"] = rec
+        s["recommendation_reason"] = reason
+
     # ── Sektor-relativ ranking ──
     # Beräkna percentile-rank inom respektive sektor istället för mot hela
     # universumet. "Top 10% billigast inom industrials" är mer användbart än
