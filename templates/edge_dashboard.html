@@ -6264,15 +6264,19 @@ async function renderTrending() {
             <button class="tv-chip ${_trendingMode === 'quality' ? 'active' : ''}"
                     onclick="setTrendingMode('quality')">🏰 Trending Quality</button>
             <button class="tv-chip ${_trendingMode === 'quant_dual_screen' ? 'active' : ''}"
-                    onclick="setTrendingMode('quant_dual_screen')" title="BÄSTA SCREEN: Composite ≥80 + Magic Formula 30. Backtest 2015-2024: +19.26% alpha, Sharpe 1.23, 87% hit rate. n=15 över 9 år.">🏆 Dual-Screen (BÄST)</button>
-            <button class="tv-chip ${_trendingMode === 'quant_trifecta' ? 'active' : ''}"
-                    onclick="setTrendingMode('quant_trifecta')" title="Top 30% i Q+V+M alla samtidigt. Backtest 2015-2024: +9.2% alpha (n=26). OBS: koncentrerat till investmentbolag + post-2020-fenomen.">⭐ Quant Trifecta</button>
+                    onclick="setTrendingMode('quant_dual_screen')" title="BÄSTA SCREEN: Composite ≥80 + Magic Formula 30. Backtest +19.26% alpha. Restriktiv — kan ge 0 träffar i bull market.">🏆 Dual-Screen (BÄST)</button>
             <button class="tv-chip ${_trendingMode === 'quant_premium' ? 'active' : ''}"
-                    onclick="setTrendingMode('quant_premium')" title="Composite ≥80 (Finans/fastighet exkluderad pga preferensaktie-fälla -4.8% alpha där). Bästa sektorerna: Sällanköp +55%, Material +39%.">💎 Premium ≥80 (ex-finans)</button>
+                    onclick="setTrendingMode('quant_premium')" title="Composite ≥80 (Finans/fastighet exkluderad). Restriktiv — kan ge 0 träffar.">💎 Premium ≥80 (ex-finans)</button>
+            <button class="tv-chip ${_trendingMode === 'quant_mid_tier' ? 'active' : ''}"
+                    onclick="setTrendingMode('quant_mid_tier')" title="Composite ≥70 — mindre restriktivt, fler träffar. För bredare urval i alla marknader.">🥈 Mid-tier ≥70</button>
+            <button class="tv-chip ${_trendingMode === 'quant_quality_champ' ? 'active' : ''}"
+                    onclick="setTrendingMode('quant_quality_champ')" title="Top quality (Q ≥75) + ROIC ≥15%. Designat för US där Composite ≥80 sällan triggar.">🏰 Quality Champions</button>
+            <button class="tv-chip ${_trendingMode === 'quant_trifecta' ? 'active' : ''}"
+                    onclick="setTrendingMode('quant_trifecta')" title="Top 30% i Q+V+M alla samtidigt. Backtest +9.2% alpha (post-2020).">⭐ Trifecta</button>
             <button class="tv-chip ${_trendingMode === 'quant_magic' ? 'active' : ''}"
-                    onclick="setTrendingMode('quant_magic')" title="Greenblatt Magic Formula 30 — top 10% efter rank(EV/EBIT) + rank(ROIC). Backtest neutral SE-marknaden.">📊 Magic Formula</button>
+                    onclick="setTrendingMode('quant_magic')" title="Greenblatt Magic Formula 30 — top 10% rank(EV/EBIT) + rank(ROIC).">📊 Magic Formula</button>
             <button class="tv-chip ${_trendingMode === 'quant_composite' ? 'active' : ''}"
-                    onclick="setTrendingMode('quant_composite')" title="Alla bolag sorterade på composite (40Q+35V+25M)">🎯 Quant Composite</button>
+                    onclick="setTrendingMode('quant_composite')" title="Alla bolag sorterade på composite (40Q+35V+25M).">🎯 Quant Composite</button>
             <div style="flex:1"></div>
             <button class="tv-chip ${_trendingCountry === 'SE' ? 'active' : ''}"
                     onclick="setTrendingCountry('SE')">🇸🇪 Sverige</button>
@@ -6303,10 +6307,12 @@ async function fetchTrending() {
     } else if (_trendingMode === 'quant_composite') {
         url = `/api/quant-screen?country=${_trendingCountry}&mode=composite&limit=50`;
     } else if (_trendingMode === 'quant_premium') {
-        // Premium ≥80 — sektor-filter exkluderar Finans/fastighet pga preferensaktie-fälla (-4.8% alpha där)
         url = `/api/quant-screen?country=${_trendingCountry}&mode=composite_80&limit=50&exclude_sector=Finans+%26+Fastighet`;
+    } else if (_trendingMode === 'quant_mid_tier') {
+        url = `/api/quant-screen?country=${_trendingCountry}&mode=composite_70&limit=50`;
+    } else if (_trendingMode === 'quant_quality_champ') {
+        url = `/api/quant-screen?country=${_trendingCountry}&mode=quality_champions&limit=50`;
     } else if (_trendingMode === 'quant_dual_screen') {
-        // BÄSTA SCREEN — Composite ≥80 + Magic Formula = +19.26% alpha (87% hit, Sharpe 1.23)
         url = `/api/quant-screen?country=${_trendingCountry}&mode=dual_screen&limit=50`;
     } else if (_trendingMode === 'quant_magic') {
         url = `/api/quant-screen?country=${_trendingCountry}&mode=magic_formula&limit=50`;
@@ -6717,6 +6723,8 @@ const V2_SETUP_TABS = [
 const QUANT_SCREEN_TABS = [
     { key: 'dual_screen',  label: '🏆 Dual-Screen',  desc: 'Composite ≥80 + Magic Formula. Backtest: +19.26% alpha, Sharpe 1.23, 87% hit. Vår BÄSTA validerade signal.', mode: 'dual_screen' },
     { key: 'premium_80',   label: '💎 Premium ≥80',  desc: 'Composite ≥80 (Finans/fastighet exkluderad pga preferensaktie-fälla)', mode: 'composite_80', extra: '&exclude_sector=Finans+%26+Fastighet' },
+    { key: 'composite_70', label: '🥈 Mid-tier ≥70', desc: 'Composite ≥70 — mindre restriktivt, fler träffar (+4.92% alpha med n=178)', mode: 'composite_70' },
+    { key: 'quality_champ', label: '🏰 Quality Champions', desc: 'Top quality (Q ≥75) + ROIC ≥15%. För US-marknaden där Composite ≥80 sällan triggar pga höga värderingar.', mode: 'quality_champions' },
     { key: 'trifecta',     label: '⭐ Trifecta',     desc: 'Top 30% i Q+V+M alla. Backtest: +9.2% alpha (post-2020-fenomen)', mode: 'trifecta' },
     { key: 'magic',        label: '📊 Magic Formula', desc: 'Greenblatt: rank(EV/EBIT) + rank(ROIC) top 10%', mode: 'magic_formula' },
 ];
@@ -6743,9 +6751,21 @@ async function loadQuantScreens() {
         const results = data.results || [];
         const listEl = document.getElementById('quantScreenList');
         if (!results.length) {
+            // Smart förklaring vid 0 results — speciellt viktigt för US där
+            // Composite ≥80 sällan triggar pga höga värderingar
+            const isUS = (location.search || '').includes('country=US') || _trendingCountry === 'US';
+            const isStrictScreen = ['dual_screen', 'premium_80', 'trifecta'].includes(tab.key);
+            let helpText = '';
+            if (isStrictScreen) {
+                helpText = `<div style="margin-top:10px;padding:10px;background:#fef3c7;border-radius:8px;font-size:11px;color:#92400e;line-height:1.5">
+                    💡 <b>Detta är förväntat när marknaden är dyr.</b> Pipelinen är diskriminerande och säger "avstå" när alla bolag är pris-in efter en lång uppgång.
+                    Prova istället <b>🥈 Mid-tier ≥70</b> eller <b>🏰 Quality Champions</b> för bredare träffar.
+                </div>`;
+            }
             listEl.innerHTML = `<div style="padding:18px;color:var(--text-muted);font-size:13px;text-align:center">
                 Inga bolag kvalar i ${tab.label} just nu (${data.n_universe || 0} kollade).
                 <div style="margin-top:6px;font-size:11px;font-style:italic">${tab.desc}</div>
+                ${helpText}
             </div>`;
             return;
         }

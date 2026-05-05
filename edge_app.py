@@ -1527,6 +1527,18 @@ def api_quant_screen():
         # Magic Formula 30 (Greenblatt) — rank(EV/EBIT) + rank(ROIC) top 10%
         results = [s for s in all_data if s.get("is_magic_formula")]
         results.sort(key=lambda s: -(s.get("composite_score") or 0))
+    elif mode == "quality_champions":
+        # Quality Champions — top quality + ROIC ≥ 15%
+        # Designat för US där Composite ≥80 sällan triggar pga höga värderingar
+        results = [s for s in all_data
+                   if s.get("quality_score") is not None and s["quality_score"] >= 75
+                   and s.get("roic") is not None and s["roic"] >= 15]
+        results.sort(key=lambda s: -(s.get("quality_score") or 0))
+    elif mode == "composite_70":
+        # Mid-tier — Composite ≥70 (mindre restriktivt än ≥80)
+        results = [s for s in all_data if s.get("composite_score") is not None
+                                          and s["composite_score"] >= 70]
+        results.sort(key=lambda s: -(s.get("composite_score") or 0))
     elif mode == "quality":
         results = [s for s in all_data if s.get("quality_score") is not None]
         results.sort(key=lambda s: -(s.get("quality_score") or 0))
