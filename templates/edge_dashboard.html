@@ -6712,6 +6712,83 @@ const V2_SETUP_TABS = [
     { key: 'balanced_value', label: '⚖️ Balanserat värde', desc: 'Värde + medelkvalitet' },
 ];
 
+// ── 🏆 Backtest-validerade quant-screens på startsidan ──
+const QUANT_SCREEN_TABS = [
+    { key: 'dual_screen',  label: '🏆 Dual-Screen',  desc: 'Composite ≥80 + Magic Formula. Backtest: +19.26% alpha, Sharpe 1.23, 87% hit. Vår BÄSTA validerade signal.', mode: 'dual_screen' },
+    { key: 'premium_80',   label: '💎 Premium ≥80',  desc: 'Composite ≥80 (Finans/fastighet exkluderad pga preferensaktie-fälla)', mode: 'composite_80', extra: '&exclude_sector=Finans+%26+Fastighet' },
+    { key: 'trifecta',     label: '⭐ Trifecta',     desc: 'Top 30% i Q+V+M alla. Backtest: +9.2% alpha (post-2020-fenomen)', mode: 'trifecta' },
+    { key: 'magic',        label: '📊 Magic Formula', desc: 'Greenblatt: rank(EV/EBIT) + rank(ROIC) top 10%', mode: 'magic_formula' },
+];
+let _activeQuantTab = 'dual_screen';
+
+async function loadQuantScreens() {
+    const wrap = document.getElementById('quantScreensContent');
+    if (!wrap) return;
+    const tabsHtml = QUANT_SCREEN_TABS.map(t => `
+        <button class="v2-setup-tab ${_activeQuantTab === t.key ? 'active' : ''}"
+                onclick="setQuantTab('${t.key}')" title="${t.desc}">
+            ${t.label}
+        </button>
+    `).join('');
+    wrap.innerHTML = `
+        <div class="v2-setup-tabs" style="margin-bottom:10px">${tabsHtml}</div>
+        <div id="quantScreenList"><div class="loading-wrap" style="padding:24px">Laddar…</div></div>
+    `;
+    const tab = QUANT_SCREEN_TABS.find(t => t.key === _activeQuantTab) || QUANT_SCREEN_TABS[0];
+    const url = `/api/quant-screen?country=SE&mode=${tab.mode}&limit=10${tab.extra || ''}`;
+    try {
+        const r = await fetch(url);
+        const data = await r.json();
+        const results = data.results || [];
+        const listEl = document.getElementById('quantScreenList');
+        if (!results.length) {
+            listEl.innerHTML = `<div style="padding:18px;color:var(--text-muted);font-size:13px;text-align:center">
+                Inga bolag kvalar i ${tab.label} just nu (${data.n_universe || 0} kollade).
+                <div style="margin-top:6px;font-size:11px;font-style:italic">${tab.desc}</div>
+            </div>`;
+            return;
+        }
+        listEl.innerHTML = `
+            <div style="font-size:11px;color:var(--text-muted);margin-bottom:8px;padding-left:6px">${tab.desc}</div>
+            <table class="signals-table" style="width:100%">
+                <thead>
+                    <tr>
+                        <th style="width:30px">#</th>
+                        <th>Aktie</th>
+                        <th style="text-align:right">Composite</th>
+                        <th style="text-align:right">Quality</th>
+                        <th style="text-align:right">Value</th>
+                        <th style="text-align:right">Momentum</th>
+                        <th>Sektor</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${results.map((r, i) => {
+                        const flag = FLAGS[r.country] || '';
+                        return `<tr style="cursor:pointer" onclick="openDrawer({orderbook_id: ${r.orderbook_id}, name: '${(r.name || '').replace(/'/g, '&apos;')}', short_name: '${r.ticker || ''}', country: '${r.country || ''}'})">
+                            <td>${i + 1}</td>
+                            <td><b>${flag} ${r.name || r.ticker}</b><br><span style="font-size:11px;color:var(--text-muted)">${r.ticker}</span></td>
+                            <td style="text-align:right;font-weight:700;color:#7c3aed">${r.composite_score?.toFixed(0) || '-'}</td>
+                            <td style="text-align:right">${r.quality_score?.toFixed(0) || '-'}</td>
+                            <td style="text-align:right">${r.value_score?.toFixed(0) || '-'}</td>
+                            <td style="text-align:right">${r.momentum_score?.toFixed(0) || '-'}</td>
+                            <td style="font-size:11px;color:var(--text-muted)">${r.sector_name || '-'}</td>
+                        </tr>`;
+                    }).join('')}
+                </tbody>
+            </table>
+        `;
+    } catch(e) {
+        const listEl = document.getElementById('quantScreenList');
+        if (listEl) listEl.innerHTML = `<div style="color:var(--red);padding:12px">Fel: ${e.message}</div>`;
+    }
+}
+
+function setQuantTab(key) {
+    _activeQuantTab = key;
+    loadQuantScreens();
+}
+
 async function loadV2Setups() {
     const wrap = document.getElementById('v2SetupsContent');
     if (!wrap) return;
@@ -7064,7 +7141,11 @@ async function renderDashboard() {
             <div class="dash-section" id="buyZoneWatchWrap">
                 <div id="buyZoneWatchBanner" class="daily-picks-skel">Letar köpzon-kandidater...</div>
             </div>
-            <div class="dash-section" id="v2SetupsWrap">
+            <div class="dash-section" id="quantScreensWrap">
+                <h3 class="dash-heading">🏆 Backtest-validerade screens <span class="dash-sub">+19.26% alpha för Dual-Screen (2015-2024)</span></h3>
+                <div id="quantScreensContent" style="margin-top:8px"></div>
+            </div>
+            <div class="dash-section" id="v2SetupsWrap" style="display:none">
                 <h3 class="dash-heading">🎯 v2 Setup-listor <span class="dash-sub">klassificerings-baserad analys (Aktieagent v2)</span></h3>
                 <div id="v2SetupsContent" style="margin-top:8px"></div>
             </div>
@@ -7195,7 +7276,9 @@ function renderDashboardContent(d) {
     // ── Köpzon-watchlist (nära köpzon idag) ──
     loadBuyZoneWatchlist();
 
-    // ── v2 Setup-topplistor ──
+    // ── 🏆 Backtest-validerade quant-screens ──
+    loadQuantScreens();
+    // ── v2 Setup-topplistor (gömd som default — kvar för referens) ──
     loadV2Setups();
 
     // ── Top-listor per modell ──

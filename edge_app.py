@@ -1277,13 +1277,20 @@ def api_model_toplist():
         return jsonify(cached)
 
     db = get_db()
-    stocks = get_model_toplist(
-        db,
-        model=model,
-        limit=int(request.args.get("limit", 20)),
-        min_owners=int(request.args.get("min_owners", 100)),
-        country=request.args.get("country", ""),
-    )
+    try:
+        stocks = get_model_toplist(
+            db,
+            model=model,
+            limit=int(request.args.get("limit", 20)),
+            min_owners=int(request.args.get("min_owners", 100)),
+            country=request.args.get("country", ""),
+        )
+    except Exception as e:
+        import traceback
+        print(f"[model-toplist] FEL för model={model}: {e}\n{traceback.format_exc()}",
+              file=sys.stderr)
+        db.close()
+        return jsonify({"error": str(e), "model": model, "results": []}), 500
     db.close()
 
     # Plocka ut vilka fält frontend behöver (håll payload liten)

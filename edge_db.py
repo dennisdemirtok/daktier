@@ -7486,18 +7486,33 @@ def get_model_toplist(db, model="composite", limit=20, min_owners=100, country="
     rows = _fetchall(db, f"SELECT * FROM stocks {where}", params)
 
     dicts = [dict(r) for r in rows if not _is_pref_share(dict(r).get("name") or "")]
-    _attach_hist_bulk(db, dicts)
+    try:
+        _attach_hist_bulk(db, dicts)
+    except Exception as e:
+        import sys
+        print(f"[get_model_toplist] _attach_hist_bulk fel: {e}", file=sys.stderr)
 
     scored = []
+    n_errors = 0
     for d in dicts:
-        sc = _score_book_models(d)
-        v = sc.get(model)
-        if v is None:
+        try:
+            sc = _score_book_models(d)
+            v = sc.get(model)
+            if v is None:
+                continue
+            d["model_score"] = round(v, 1)
+            d["composite_score"] = round(sc["composite"], 1) if sc.get("composite") is not None else None
+            d["models_available"] = sc.get("models_available", 0)
+            scored.append(d)
+        except Exception as e:
+            n_errors += 1
+            if n_errors <= 3:
+                import sys
+                print(f"[get_model_toplist] scoring fel för {d.get('name')}: {e}", file=sys.stderr)
             continue
-        d["model_score"] = round(v, 1)
-        d["composite_score"] = round(sc["composite"], 1) if sc.get("composite") is not None else None
-        d["models_available"] = sc.get("models_available", 0)
-        scored.append(d)
+    if n_errors:
+        import sys
+        print(f"[get_model_toplist] {n_errors} aktier kunde inte scoras", file=sys.stderr)
 
     # Kräv minst 3 tillgängliga modeller för stabilitet
     scored = [s for s in scored if s["models_available"] >= 3]
