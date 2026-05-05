@@ -726,6 +726,8 @@ def api_stock_detail(orderbook_id):
                             "momentum_score": target.get("momentum_score"),
                             "composite_score": target.get("composite_score"),
                             "is_quant_trifecta": target.get("is_quant_trifecta"),
+                            "is_magic_formula": target.get("is_magic_formula"),
+                            "is_dual_screen": target.get("is_dual_screen"),
                             "sector_name": target.get("sector_name"),
                             "sector_n": target.get("sector_n"),
                             "sector_quality_rank": target.get("sector_quality_rank"),
@@ -1084,6 +1086,8 @@ def api_stock_extras(orderbook_id):
                     "momentum_score": target.get("momentum_score"),
                     "composite_score": target.get("composite_score"),
                     "is_quant_trifecta": target.get("is_quant_trifecta"),
+                    "is_magic_formula": target.get("is_magic_formula"),
+                    "is_dual_screen": target.get("is_dual_screen"),
                     # Sektor-relativ ranking (jämfört bara med bolag i samma sektor)
                     "sector_name": target.get("sector_name"),
                     "sector_n": target.get("sector_n"),
