@@ -106,10 +106,17 @@ def fetch_all_instruments_combined():
 
 
 def fetch_global_reports(insId, report_type="quarter"):
-    """Reports för globala instrument — separat endpoint."""
+    """Reports för globala instrument.
+
+    OBS: Tidigare använde vi /global/-prefix men det är fel format.
+    Borsdata använder samma path /instruments/{insId}/reports/... för
+    BÅDE Nordic och Global (samma bug som KPI-history hade).
+    Verifierat 2026: MSFT (insId 11441) ger 200 OK utan /global/.
+    """
     if report_type not in ("quarter", "year", "r12"):
         raise ValueError(f"Invalid report_type: {report_type}")
-    url = f"{BORSDATA_BASE}/instruments/global/{insId}/reports/{report_type}"
+    # Samma path som fetch_reports — ingen /global/-prefix behövs
+    url = f"{BORSDATA_BASE}/instruments/{insId}/reports/{report_type}"
     data = _rate_limited_get(url)
     return data.get("reports", [])
 
