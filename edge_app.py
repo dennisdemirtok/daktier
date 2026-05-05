@@ -1476,6 +1476,9 @@ def api_quant_screen():
     mode = request.args.get("mode", "composite")
     limit = int(request.args.get("limit", 50))
     min_mcap = int(request.args.get("min_market_cap", 500_000_000))
+    # Sektor-exkludering — t.ex. "Finans & Fastighet" som default i Premium
+    # eftersom backtest visar -4.8% alpha för Composite ≥80 där (preferensaktier)
+    exclude_sector = request.args.get("exclude_sector", "")
 
     # Cache (10 min) per (country, min_mcap)
     cache_key = f"{country}|{min_mcap}"
@@ -1504,6 +1507,15 @@ def api_quant_screen():
         results = [s for s in all_data if s.get("composite_score") is not None
                                           and s["composite_score"] >= 80]
         results.sort(key=lambda s: -(s.get("composite_score") or 0))
+    elif mode == "dual_screen":
+        # Composite ≥80 + Magic Formula 30 — VÅR BÄSTA validerade signal
+        # Backtest 2015-2024: +19.26% alpha, Sharpe 1.23, 87% hit rate, n=15
+        results = [s for s in all_data if s.get("is_dual_screen")]
+        results.sort(key=lambda s: -(s.get("composite_score") or 0))
+    elif mode == "magic_formula":
+        # Magic Formula 30 (Greenblatt) — rank(EV/EBIT) + rank(ROIC) top 10%
+        results = [s for s in all_data if s.get("is_magic_formula")]
+        results.sort(key=lambda s: -(s.get("composite_score") or 0))
     elif mode == "quality":
         results = [s for s in all_data if s.get("quality_score") is not None]
         results.sort(key=lambda s: -(s.get("quality_score") or 0))
@@ -1517,10 +1529,18 @@ def api_quant_screen():
         results = [s for s in all_data if s.get("composite_score") is not None]
         results.sort(key=lambda s: -(s.get("composite_score") or 0))
 
+    # Sektor-exkludering om query-param finns
+    n_before_filter = len(results)
+    if exclude_sector:
+        excluded = [x.strip().lower() for x in exclude_sector.split(",")]
+        results = [r for r in results if (r.get("sector_name") or "").lower() not in excluded]
+
     return jsonify({
         "mode": mode,
         "country": country,
         "n_universe": len(all_data),
+        "n_before_sector_filter": n_before_filter,
+        "exclude_sector": exclude_sector,
         "n_results": len(results[:limit]),
         "results": results[:limit],
     })

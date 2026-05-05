@@ -4647,6 +4647,37 @@ def compute_quant_scores(db, country="SE", min_market_cap=500e6,
             and m_score is not None and m_score >= 70
         )
 
+    # ── Magic Formula 30 (Greenblatt): rank(EV/EBIT) + rank(ROIC), top N ──
+    # För universum > 100: top N = N // 10 (top 10%). För mindre: top 15.
+    def _rank_pos(values, lower_better=False):
+        valid = [(i, v) for i, v in enumerate(values) if v is not None]
+        if lower_better:
+            valid.sort(key=lambda x: x[1])
+        else:
+            valid.sort(key=lambda x: -x[1])
+        ranks = [None] * len(values)
+        for pos, (i, _) in enumerate(valid):
+            ranks[i] = pos
+        return ranks
+
+    evebit_rank_pos = _rank_pos(ev_ebit_vals, lower_better=True)
+    roic_rank_pos = _rank_pos(roic_vals, lower_better=False)
+    n_top = max(15, len(universe) // 10)
+    for i, s in enumerate(universe):
+        s["is_magic_formula"] = False
+        if evebit_rank_pos[i] is not None and roic_rank_pos[i] is not None:
+            combined = evebit_rank_pos[i] + roic_rank_pos[i]
+            if combined <= n_top:
+                s["is_magic_formula"] = True
+
+    # ── Dubbel-signal-flagga: Composite ≥80 OCH Magic Formula = STARKAST screen ──
+    for s in universe:
+        s["is_dual_screen"] = (
+            s.get("composite_score") is not None
+            and s["composite_score"] >= 80
+            and s.get("is_magic_formula") is True
+        )
+
     # ── Sektor-relativ ranking ──
     # Beräkna percentile-rank inom respektive sektor istället för mot hela
     # universumet. "Top 10% billigast inom industrials" är mer användbart än

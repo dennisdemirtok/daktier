@@ -3926,11 +3926,18 @@ function renderQuantRank(s) {
 
     // Screen-flaggor — visar vilka backtest-validerade screens bolaget kvalar i
     const screenBadges = [];
+    // 🏆 Dual-Screen är BÄSTA signal — visa först om aktiv
+    if (q.is_dual_screen) {
+        screenBadges.push(`<span title="BÄSTA SIGNAL: Composite ≥80 OCH Magic Formula 30. Backtest +19.26% alpha, Sharpe 1.23, 87% hit." style="background:linear-gradient(135deg,#dc2626,#fbbf24);color:white;padding:4px 14px;border-radius:14px;font-size:12px;font-weight:800;box-shadow:0 2px 8px rgba(251,191,36,0.4)">🏆 DUAL-SCREEN (BÄST)</span>`);
+    }
     if (q.is_quant_trifecta) {
-        screenBadges.push(`<span title="Top 30% i Q+V+M alla. Backtest 2015-2024: +9.2% alpha, 70% hit. n=26 (litet — använd som extra signal)" style="background:linear-gradient(135deg,#059669,#10b981);color:white;padding:3px 12px;border-radius:12px;font-size:11px;font-weight:700">⭐ TRIFECTA</span>`);
+        screenBadges.push(`<span title="Top 30% i Q+V+M alla. Backtest 2015-2024: +9.2% alpha, 70% hit. n=26 (post-2020-fenomen)" style="background:linear-gradient(135deg,#059669,#10b981);color:white;padding:3px 12px;border-radius:12px;font-size:11px;font-weight:700">⭐ TRIFECTA</span>`);
     }
     if (q.composite_score != null && q.composite_score >= 80) {
-        screenBadges.push(`<span title="Composite ≥80. Backtest: 8/9 positiva år, +12% alpha. OBS: fångar ofta preferensaktier (låg volatilitet) — validera mot tes innan position" style="background:linear-gradient(135deg,#7c3aed,#a78bfa);color:white;padding:3px 12px;border-radius:12px;font-size:11px;font-weight:700">💎 PREMIUM ≥80</span>`);
+        screenBadges.push(`<span title="Composite ≥80. Backtest 8/9 positiva år. OBS: i finans/fastighet är det ofta preferensaktie-fälla (-4.8% alpha)" style="background:linear-gradient(135deg,#7c3aed,#a78bfa);color:white;padding:3px 12px;border-radius:12px;font-size:11px;font-weight:700">💎 PREMIUM ≥80</span>`);
+    }
+    if (q.is_magic_formula) {
+        screenBadges.push(`<span title="Greenblatt Magic Formula 30 — rank(EV/EBIT) + rank(ROIC) top 10%" style="background:linear-gradient(135deg,#0891b2,#06b6d4);color:white;padding:3px 12px;border-radius:12px;font-size:11px;font-weight:700">📊 MAGIC</span>`);
     }
     const trifectaBadge = screenBadges.join(' ');
 
@@ -6255,10 +6262,14 @@ async function renderTrending() {
                     onclick="setTrendingMode('value')">💰 Trending Value</button>
             <button class="tv-chip ${_trendingMode === 'quality' ? 'active' : ''}"
                     onclick="setTrendingMode('quality')">🏰 Trending Quality</button>
+            <button class="tv-chip ${_trendingMode === 'quant_dual_screen' ? 'active' : ''}"
+                    onclick="setTrendingMode('quant_dual_screen')" title="BÄSTA SCREEN: Composite ≥80 + Magic Formula 30. Backtest 2015-2024: +19.26% alpha, Sharpe 1.23, 87% hit rate. n=15 över 9 år.">🏆 Dual-Screen (BÄST)</button>
             <button class="tv-chip ${_trendingMode === 'quant_trifecta' ? 'active' : ''}"
-                    onclick="setTrendingMode('quant_trifecta')" title="Top 30% i Q+V+M alla samtidigt. Backtest 2015-2024: +9.2% alpha (n=26).">⭐ Quant Trifecta</button>
+                    onclick="setTrendingMode('quant_trifecta')" title="Top 30% i Q+V+M alla samtidigt. Backtest 2015-2024: +9.2% alpha (n=26). OBS: koncentrerat till investmentbolag + post-2020-fenomen.">⭐ Quant Trifecta</button>
             <button class="tv-chip ${_trendingMode === 'quant_premium' ? 'active' : ''}"
-                    onclick="setTrendingMode('quant_premium')" title="Composite ≥80 — premium-tier. Backtest: 8/9 positiva år, +12% alpha. OBS: fångar mest preferensaktier + investmentbolag.">💎 Quant Premium ≥80</button>
+                    onclick="setTrendingMode('quant_premium')" title="Composite ≥80 (Finans/fastighet exkluderad pga preferensaktie-fälla -4.8% alpha där). Bästa sektorerna: Sällanköp +55%, Material +39%.">💎 Premium ≥80 (ex-finans)</button>
+            <button class="tv-chip ${_trendingMode === 'quant_magic' ? 'active' : ''}"
+                    onclick="setTrendingMode('quant_magic')" title="Greenblatt Magic Formula 30 — top 10% efter rank(EV/EBIT) + rank(ROIC). Backtest neutral SE-marknaden.">📊 Magic Formula</button>
             <button class="tv-chip ${_trendingMode === 'quant_composite' ? 'active' : ''}"
                     onclick="setTrendingMode('quant_composite')" title="Alla bolag sorterade på composite (40Q+35V+25M)">🎯 Quant Composite</button>
             <div style="flex:1"></div>
@@ -6291,7 +6302,13 @@ async function fetchTrending() {
     } else if (_trendingMode === 'quant_composite') {
         url = `/api/quant-screen?country=${_trendingCountry}&mode=composite&limit=50`;
     } else if (_trendingMode === 'quant_premium') {
-        url = `/api/quant-screen?country=${_trendingCountry}&mode=composite_80&limit=50`;
+        // Premium ≥80 — sektor-filter exkluderar Finans/fastighet pga preferensaktie-fälla (-4.8% alpha där)
+        url = `/api/quant-screen?country=${_trendingCountry}&mode=composite_80&limit=50&exclude_sector=Finans+%26+Fastighet`;
+    } else if (_trendingMode === 'quant_dual_screen') {
+        // BÄSTA SCREEN — Composite ≥80 + Magic Formula = +19.26% alpha (87% hit, Sharpe 1.23)
+        url = `/api/quant-screen?country=${_trendingCountry}&mode=dual_screen&limit=50`;
+    } else if (_trendingMode === 'quant_magic') {
+        url = `/api/quant-screen?country=${_trendingCountry}&mode=magic_formula&limit=50`;
     } else {
         url = `/api/preset/${_trendingMode}?country=${_trendingCountry}&limit=50&min_owners=100`;
     }
