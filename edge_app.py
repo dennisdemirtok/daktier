@@ -7408,6 +7408,23 @@ landar US-edge på +1.06%/år. Det är ändå bra — index-fonder kostar
 - För hela portfolio → använd portfolio-CAGR-alpha (+1.06%/år US)
 - Var ÄRLIG: säg "modest men reel edge" inte "exceptionell alpha"
 
+**🚨 ANTI-INTUITIV INSIKT — Concentration förstör alpha:**
+
+| Strategi | US CAGR Alpha | SE CAGR Alpha |
+|---|---|---|
+| Balanced (15/10/8/5%) | **+1.06%** | +0.15% |
+| Aggressive (25/20/15%) | +1.06% (sektor-cap) | — |
+| Concentrated (top-3 only) | **-5.39%** | -2.12% |
+
+Att bara välja Super Confluence + Recurring (concentrated) underperformar
+universum med -5.39%/år! Anledning:
+1. Top-tier signaler är sällsynta (5-8 träffar idag) → låg allokering
+2. När de inte triggar är man i kassa → missar universum-rallyn
+3. Balanced spridning fångar bredare alpha med stabilare hit-rate
+
+**Lärdom:** Diversification > Concentration för screen-baserade strategier.
+Balanced default (max 10 positioner, tier-vikter 15-5%) är optimal.
+
 **🎯 BUY/HOLD/AVOID — automatisk rekommendation per aktie:**
 
 compute_quant_scores sätter nu `recommendation` + `recommendation_reason`
