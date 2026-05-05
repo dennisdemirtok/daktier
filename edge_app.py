@@ -4093,6 +4093,9 @@ def api_backtest_v2_run_quant():
                                           min_market_cap=min_market_cap,
                                           country=country)
             analysis = analyze_quant_results(results)
+            # Sektor-breakdown
+            from backtest_v2.quant_runner import analyze_by_sector
+            sectors = analyze_by_sector(db, results)
             # Räkna unika tickers i resultaten
             unique_tickers = sorted(set(r["ticker"] for r in results))
             return jsonify({
@@ -4106,6 +4109,7 @@ def api_backtest_v2_run_quant():
                 "tickers_sample": unique_tickers[:20],
                 "period": f"{start_year}-{end_year}",
                 "analysis": analysis,
+                "by_sector": sectors,
                 "sample_trifectas": [
                     {k: v for k, v in r.items() if k in ("ticker", "date", "q_score",
                                                           "v_score", "m_score",

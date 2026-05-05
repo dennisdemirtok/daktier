@@ -535,6 +535,72 @@ def run_quant_backtest(db, universe=None, start_year=2015, end_year=2024,
     return results
 
 
+def analyze_by_sector(db, results):
+    """Beräknar alpha per sektor för universum + composite-tier-screens.
+
+    Visar VAR alphan ligger — vilka sektorer driver den.
+    """
+    valid = [r for r in results if r["fwd_12m"] is not None]
+    if not valid:
+        return {}
+
+    # Hämta sector_id per ISIN från borsdata_instrument_map
+    ph = _ph()
+    isin_list = list(set(r["isin"] for r in valid))
+    sector_by_isin = {}
+    sector_names = {}
+    if isin_list:
+        try:
+            placeholders = ",".join([ph] * len(isin_list))
+            rows = _fetchall(db,
+                f"SELECT m.isin, m.sector_id, sec.name "
+                f"FROM borsdata_instrument_map m "
+                f"LEFT JOIN borsdata_sectors sec ON m.sector_id = sec.sector_id "
+                f"WHERE m.isin IN ({placeholders})", tuple(isin_list))
+            for r in rows:
+                rd = dict(r)
+                if rd.get("isin"):
+                    sector_by_isin[rd["isin"]] = rd.get("sector_id")
+                    sector_names[rd.get("sector_id")] = rd.get("name") or "Unknown"
+        except Exception as e:
+            import sys
+            print(f"[by_sector] {e}", file=sys.stderr)
+
+    # Gruppera per sektor
+    by_sec = {}
+    for r in valid:
+        sid = sector_by_isin.get(r["isin"])
+        if sid is None: continue
+        if sid not in by_sec:
+            by_sec[sid] = []
+        by_sec[sid].append(r)
+
+    universe_mean = sum(r["fwd_12m"] for r in valid) / len(valid)
+
+    sector_results = []
+    for sid, rs in by_sec.items():
+        if len(rs) < 5: continue
+        rets = [r["fwd_12m"] for r in rs]
+        mean = sum(rets) / len(rets)
+        # Composite ≥80 inom denna sektor
+        c80 = [r for r in rs if r.get("composite") is not None and r["composite"] >= 80]
+        c80_mean = sum(c["fwd_12m"] for c in c80) / len(c80) if c80 else None
+
+        sector_results.append({
+            "sector": sector_names.get(sid, "Unknown"),
+            "n_obs": len(rs),
+            "n_unique_tickers": len(set(r["ticker"] for r in rs)),
+            "mean_12m_pct": round(mean * 100, 2),
+            "alpha_vs_universe": round((mean - universe_mean) * 100, 2),
+            "hit_rate_pct": round(sum(1 for r in rets if r > 0) / len(rets) * 100, 1),
+            "composite_80_n": len(c80),
+            "composite_80_alpha": round((c80_mean - universe_mean) * 100, 2) if c80_mean is not None else None,
+        })
+
+    sector_results.sort(key=lambda x: -x["alpha_vs_universe"])
+    return sector_results
+
+
 def analyze_concentration(results, screen_filter):
     """Concentration-check: vilka tickers dominerar en screen + per-år breakdown.
 
@@ -639,7 +705,23 @@ def analyze_quant_results(results):
             "late_n": len(late),
         }
 
-    # Alla 8 screens
+    # ── KOMBINATIONS-SCREENS (ny): bolag som flaggas av flera oberoende screens ──
+    # Hypotes: när 2+ oberoende metoder pekar samma håll = stärker signal
+    def n_flags(r):
+        """Räknar hur många screens flaggade detta bolag."""
+        return sum([
+            bool(r.get("is_trifecta")),
+            bool(r.get("composite") is not None and r["composite"] >= 80),
+            bool(r.get("is_magic_formula")),
+            bool(r.get("is_piotroski_hi_cheap")),
+            bool(r.get("is_pabrai")),
+            bool(r.get("is_spier_compounder")),
+            bool(r.get("is_quality_momentum")),
+            bool(r.get("is_garp")),
+            bool(r.get("is_earnings_accel")),
+        ])
+
+    # Alla 8 screens (+ kombinationer)
     screens = [
         screen_stats("Quant Trifecta",
                       [r for r in valid if r["is_trifecta"]],
@@ -667,6 +749,27 @@ def analyze_quant_results(results):
                       universe_mean),
         screen_stats("Earnings Acceleration",
                       [r for r in valid if r.get("is_earnings_accel")],
+                      universe_mean),
+        # ── Kombinations-screens (multi-flag) ──
+        screen_stats("Multi-flag (2+ screens)",
+                      [r for r in valid if n_flags(r) >= 2],
+                      universe_mean),
+        screen_stats("Multi-flag (3+ screens)",
+                      [r for r in valid if n_flags(r) >= 3],
+                      universe_mean),
+        screen_stats("LLM-Trifecta + Quant",
+                      [r for r in valid
+                       if r.get("is_trifecta") and r.get("composite") is not None and r["composite"] >= 70],
+                      universe_mean),
+        screen_stats("Composite >=80 + Magic Formula",
+                      [r for r in valid
+                       if r.get("composite") is not None and r["composite"] >= 80
+                       and r.get("is_magic_formula")],
+                      universe_mean),
+        screen_stats("GARP + Composite >=70",
+                      [r for r in valid
+                       if r.get("is_garp")
+                       and r.get("composite") is not None and r["composite"] >= 70],
                       universe_mean),
     ]
 
