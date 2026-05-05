@@ -475,6 +475,29 @@ def _create_tables(db):
                 PRIMARY KEY (isin, kpi_id, report_type, period_year, period_q)
             );
 
+            -- Live screen-tracker: spara snapshot av screen-träffar för
+            -- senare 12m-uppföljning. Validering live att backtest
+            -- speglar verkligheten.
+            CREATE TABLE IF NOT EXISTS screen_snapshots (
+                id SERIAL PRIMARY KEY,
+                snapshot_date TEXT NOT NULL,
+                screen_name TEXT NOT NULL,
+                country TEXT,
+                ticker TEXT,
+                isin TEXT,
+                name TEXT,
+                price DOUBLE PRECISION,
+                quality_score DOUBLE PRECISION,
+                value_score DOUBLE PRECISION,
+                momentum_score DOUBLE PRECISION,
+                composite_score DOUBLE PRECISION,
+                fwd_3m_pct DOUBLE PRECISION,
+                fwd_6m_pct DOUBLE PRECISION,
+                fwd_12m_pct DOUBLE PRECISION,
+                last_updated TEXT,
+                UNIQUE(snapshot_date, screen_name, ticker)
+            );
+
             CREATE TABLE IF NOT EXISTS borsdata_sectors (
                 sector_id INTEGER PRIMARY KEY,
                 name TEXT
@@ -875,6 +898,27 @@ def _create_tables(db):
                 period_q INTEGER,
                 value REAL,
                 PRIMARY KEY (isin, kpi_id, report_type, period_year, period_q)
+            );
+
+            -- Live screen-tracker (SQLite): snapshot för 12m-uppföljning
+            CREATE TABLE IF NOT EXISTS screen_snapshots (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                snapshot_date TEXT NOT NULL,
+                screen_name TEXT NOT NULL,
+                country TEXT,
+                ticker TEXT,
+                isin TEXT,
+                name TEXT,
+                price REAL,
+                quality_score REAL,
+                value_score REAL,
+                momentum_score REAL,
+                composite_score REAL,
+                fwd_3m_pct REAL,
+                fwd_6m_pct REAL,
+                fwd_12m_pct REAL,
+                last_updated TEXT,
+                UNIQUE(snapshot_date, screen_name, ticker)
             );
 
             -- Sektor + bransch-metadata (riktig data från Börsdata)

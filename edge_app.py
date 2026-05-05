@@ -4215,6 +4215,170 @@ def api_backtest_v2_stock_history(ticker):
         return jsonify({"error": str(e), "tb": traceback.format_exc()[:1500]}), 500
 
 
+@app.route("/api/live-tracker/snapshot", methods=["POST"])
+def api_live_tracker_snapshot():
+    """Spara dagens screen-träffar för senare 12m-uppföljning.
+
+    Body: {screens: [{name, country, mode}], date?}
+    Hämtar live-träffar från /api/quant-screen och persisterar till
+    screen_snapshots-tabellen.
+    """
+    body = request.json if request.is_json else {}
+    snapshot_date = body.get("date") or datetime.now().strftime("%Y-%m-%d")
+    screens = body.get("screens") or [
+        {"name": "growth_trifecta_us", "country": "US", "mode": "growth_trifecta"},
+        {"name": "magic_formula_us", "country": "US", "mode": "magic_formula"},
+        {"name": "dual_screen_se", "country": "SE", "mode": "dual_screen"},
+        {"name": "composite_80_se", "country": "SE", "mode": "composite_80"},
+    ]
+
+    db = get_db()
+    try:
+        from edge_db import _ph as ph_fn, _upsert_sql, _fetchall
+        from edge_db import compute_quant_scores
+
+        ph = ph_fn()
+        ins_sql = _upsert_sql("screen_snapshots",
+            ["snapshot_date", "screen_name", "country", "ticker", "isin",
+             "name", "price", "quality_score", "value_score", "momentum_score",
+             "composite_score", "last_updated"],
+            ["snapshot_date", "screen_name", "ticker"])
+
+        results = {}
+        for s in screens:
+            screen_name = s.get("name")
+            country = s.get("country", "US")
+            mode = s.get("mode", "raw")
+
+            # Använd compute_quant_scores direkt
+            try:
+                stocks = compute_quant_scores(db, country=country, mode=mode, limit=300)
+            except Exception as e:
+                results[screen_name] = {"error": str(e)[:200]}
+                continue
+
+            n_saved = 0
+            for stk in stocks:
+                ticker = stk.get("ticker") or stk.get("short_name")
+                if not ticker: continue
+                try:
+                    db.execute(ins_sql, (
+                        snapshot_date, screen_name, country, ticker,
+                        stk.get("isin"), stk.get("name"), stk.get("last_price"),
+                        stk.get("quality_score"), stk.get("value_score"),
+                        stk.get("momentum_score"), stk.get("composite_score"),
+                        datetime.now().isoformat()
+                    ))
+                    n_saved += 1
+                except Exception:
+                    db.rollback()
+            db.commit()
+            results[screen_name] = {
+                "n_candidates": len(stocks),
+                "n_saved": n_saved,
+                "tickers": [s.get("ticker") or s.get("short_name") for s in stocks][:30],
+            }
+
+        return jsonify({
+            "snapshot_date": snapshot_date,
+            "screens": results,
+        })
+    except Exception as e:
+        import traceback
+        return jsonify({"error": str(e), "tb": traceback.format_exc()[:1500]}), 500
+    finally:
+        db.close()
+
+
+@app.route("/api/live-tracker/results")
+def api_live_tracker_results():
+    """Visar alla snapshots, eventuellt med uppdaterad fwd-return."""
+    db = get_db()
+    try:
+        from edge_db import _fetchall
+        rows = _fetchall(db,
+            "SELECT snapshot_date, screen_name, country, ticker, name, "
+            "price, quality_score, value_score, momentum_score, composite_score, "
+            "fwd_3m_pct, fwd_6m_pct, fwd_12m_pct "
+            "FROM screen_snapshots ORDER BY snapshot_date DESC, screen_name, composite_score DESC NULLS LAST "
+            "LIMIT 500")
+        snapshots = [dict(r) for r in rows]
+
+        # Gruppera per (date, screen)
+        by_screen = {}
+        for s in snapshots:
+            key = f"{s['snapshot_date']} | {s['screen_name']}"
+            if key not in by_screen:
+                by_screen[key] = []
+            by_screen[key].append(s)
+
+        return jsonify({
+            "n_total": len(snapshots),
+            "by_screen": {k: {"n": len(v), "candidates": v[:30]}
+                          for k, v in by_screen.items()},
+        })
+    except Exception as e:
+        import traceback
+        return jsonify({"error": str(e), "tb": traceback.format_exc()[:800]}), 500
+    finally:
+        db.close()
+
+
+@app.route("/api/live-tracker/update-fwd-returns", methods=["POST"])
+def api_live_tracker_update_fwd_returns():
+    """Uppdatera fwd_3m/6m/12m för befintliga snapshots."""
+    db = get_db()
+    try:
+        from edge_db import _ph as ph_fn, _fetchall
+        from datetime import datetime as dt, timedelta
+
+        ph = ph_fn()
+        rows = _fetchall(db,
+            "SELECT id, snapshot_date, ticker, isin, price FROM screen_snapshots "
+            "WHERE price IS NOT NULL")
+
+        updated = 0
+        today = dt.now().date()
+        for r in rows:
+            rd = dict(r)
+            try:
+                snap_dt = dt.strptime(rd["snapshot_date"], "%Y-%m-%d").date()
+            except Exception:
+                continue
+            days_since = (today - snap_dt).days
+            if days_since < 90: continue  # Vänta minst 3m
+
+            isin = rd.get("isin")
+            if not isin: continue
+
+            # Hämta priser för 3m/6m/12m senare
+            for label, days in [("fwd_3m_pct", 90), ("fwd_6m_pct", 180), ("fwd_12m_pct", 365)]:
+                if days_since < days: continue
+                target_date = (snap_dt + timedelta(days=days)).isoformat()
+                price_rows = _fetchall(db,
+                    f"SELECT close FROM borsdata_prices WHERE isin = {ph} "
+                    f"AND date <= {ph} ORDER BY date DESC LIMIT 1",
+                    (isin, target_date))
+                if not price_rows: continue
+                future_price = dict(price_rows[0])["close"]
+                if not future_price or not rd["price"]: continue
+                pct = (future_price / rd["price"] - 1) * 100
+                try:
+                    db.execute(
+                        f"UPDATE screen_snapshots SET {label} = {ph}, last_updated = {ph} WHERE id = {ph}",
+                        (round(pct, 2), dt.now().isoformat(), rd["id"]))
+                    updated += 1
+                except Exception:
+                    db.rollback()
+        db.commit()
+        return jsonify({"updated": updated, "n_snapshots": len(rows)})
+    except Exception as e:
+        import traceback
+        return jsonify({"error": str(e), "tb": traceback.format_exc()[:800]}), 500
+    finally:
+        db.close()
+
+
 @app.route("/api/backtest-v2/screen-detail", methods=["POST"])
 def api_backtest_v2_screen_detail():
     """Returnerar individuella observationer för en given screen.
