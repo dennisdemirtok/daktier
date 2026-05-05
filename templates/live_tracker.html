@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Live Tracker — DAKTIER</title>
+<style>
+  * { box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; max-width: 1200px;
+         margin: 0 auto; padding: 24px; background: #fafafa; color: #1f2937; line-height: 1.5; }
+  h1 { font-size: 28px; margin-bottom: 8px; }
+  .lede { color: #6b7280; margin-bottom: 24px; font-size: 15px; }
+  h2 { font-size: 20px; margin-top: 28px; padding-bottom: 6px; border-bottom: 2px solid #e5e7eb; }
+  table { border-collapse: collapse; width: 100%; margin-top: 12px; background: white;
+          border: 1px solid #e5e7eb; border-radius: 8px; overflow: hidden; }
+  th, td { padding: 10px 12px; text-align: left; font-size: 13px; }
+  th { background: #f9fafb; font-weight: 600; color: #374151; }
+  tr:nth-child(even) { background: #fafafa; }
+  td.num { text-align: right; font-variant-numeric: tabular-nums; }
+  .pos { color: #059669; font-weight: 600; }
+  .neg { color: #dc2626; font-weight: 600; }
+  .muted { color: #6b7280; font-size: 12px; }
+  .screen-card { background: white; border: 1px solid #e5e7eb; border-radius: 8px;
+                  padding: 16px; margin-bottom: 16px; }
+  .screen-card h3 { margin: 0 0 8px 0; font-size: 16px; }
+  .meta { color: #6b7280; font-size: 12px; margin-bottom: 12px; }
+  .actions { margin: 16px 0; padding: 12px; background: #f3f4f6; border-radius: 8px; }
+  .actions button { background: #4f46e5; color: white; border: none; padding: 8px 16px;
+                     border-radius: 6px; cursor: pointer; margin-right: 8px; font-size: 13px; }
+  .actions button:hover { background: #4338ca; }
+  .top-link { display: inline-block; margin-bottom: 16px; color: #4f46e5; text-decoration: none; font-weight: 500; }
+  .info { background: #ecfdf5; border-left: 4px solid #059669; padding: 12px 16px;
+           margin: 16px 0; border-radius: 4px; font-size: 14px; }
+  .pending { color: #f59e0b; font-style: italic; }
+</style>
+</head>
+<body>
+
+<a href="/" class="top-link">← Tillbaka till dashboard</a>
+
+<h1>📅 Live Screen Tracker</h1>
+<p class="lede">
+  Dagliga snapshots av screen-kandidater. Efter 12m kan vi mäta hur väl
+  backtest-alpha håller IRL. Schemalagt: vardagar 17:00 sparas snapshot,
+  veckovis söndag 08:00 uppdateras fwd_3m/6m/12m för gamla snapshots.
+</p>
+
+<div class="actions">
+  <button onclick="snapshotNow()">📸 Spara snapshot nu</button>
+  <button onclick="updateFwdReturns()">🔄 Uppdatera fwd-returns</button>
+  <button onclick="loadSnapshots()">↻ Ladda om</button>
+</div>
+
+<div id="status" class="muted"></div>
+
+<div id="snapshots">Laddar…</div>
+
+<script>
+async function loadSnapshots() {
+  const res = await fetch('/api/live-tracker/results');
+  const data = await res.json();
+  const container = document.getElementById('snapshots');
+  document.getElementById('status').textContent = `Total: ${data.n_total} snapshots`;
+
+  const screens = data.by_screen || {};
+  const keys = Object.keys(screens).sort().reverse();
+
+  if (!keys.length) {
+    container.innerHTML = '<p class="muted">Inga snapshots än. Klicka "Spara snapshot nu" för att börja.</p>';
+    return;
+  }
+
+  let html = '';
+  for (const key of keys) {
+    const info = screens[key];
+    const candidates = info.candidates || [];
+    const [date, screen] = key.split(' | ');
+    html += `<div class="screen-card">
+      <h3>${escapeHtml(screen)} <span class="muted">${date}</span></h3>
+      <div class="meta">${info.n} kandidater sparade</div>`;
+    if (candidates.length) {
+      html += `<table><thead><tr>
+        <th>Ticker</th><th>Namn</th>
+        <th class="num">Pris</th>
+        <th class="num">C</th><th class="num">Q</th><th class="num">V</th><th class="num">M</th>
+        <th class="num">3m fwd</th><th class="num">6m fwd</th><th class="num">12m fwd</th>
+      </tr></thead><tbody>`;
+      for (const c of candidates.slice(0, 20)) {
+        html += `<tr>
+          <td><strong>${escapeHtml(c.ticker || '')}</strong></td>
+          <td>${escapeHtml((c.name || '').slice(0, 25))}</td>
+          <td class="num">${c.price ? c.price.toFixed(2) : '—'}</td>
+          <td class="num">${fmt(c.composite_score)}</td>
+          <td class="num">${fmt(c.quality_score)}</td>
+          <td class="num">${fmt(c.value_score)}</td>
+          <td class="num">${fmt(c.momentum_score)}</td>
+          <td class="num">${fwd(c.fwd_3m_pct)}</td>
+          <td class="num">${fwd(c.fwd_6m_pct)}</td>
+          <td class="num">${fwd(c.fwd_12m_pct)}</td>
+        </tr>`;
+      }
+      html += `</tbody></table>`;
+    }
+    html += `</div>`;
+  }
+  container.innerHTML = html;
+}
+
+function fmt(v) { return v == null ? '—' : v.toFixed(0); }
+function fwd(v) {
+  if (v == null) return '<span class="pending">—</span>';
+  const cls = v > 0 ? 'pos' : 'neg';
+  return `<span class="${cls}">${v > 0 ? '+' : ''}${v.toFixed(1)}%</span>`;
+}
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+async function snapshotNow() {
+  const btn = event.target;
+  btn.disabled = true; btn.textContent = '⏳ Sparar…';
+  try {
+    const res = await fetch('/api/live-tracker/snapshot', {method: 'POST', headers:{'Content-Type':'application/json'}, body: '{}'});
+    const data = await res.json();
+    let total = 0;
+    for (const v of Object.values(data.screens || {})) {
+      if (v.n_saved) total += v.n_saved;
+    }
+    alert(`✅ Snapshot sparad: ${total} kandidater på ${Object.keys(data.screens || {}).length} screens (${data.snapshot_date})`);
+    await loadSnapshots();
+  } catch (e) {
+    alert(`❌ Fel: ${e.message}`);
+  } finally {
+    btn.disabled = false; btn.textContent = '📸 Spara snapshot nu';
+  }
+}
+
+async function updateFwdReturns() {
+  const btn = event.target;
+  btn.disabled = true; btn.textContent = '⏳ Uppdaterar…';
+  try {
+    const res = await fetch('/api/live-tracker/update-fwd-returns', {method: 'POST'});
+    const data = await res.json();
+    alert(`✅ Uppdaterade ${data.updated} fwd-returns av ${data.n_snapshots} snapshots`);
+    await loadSnapshots();
+  } catch (e) {
+    alert(`❌ Fel: ${e.message}`);
+  } finally {
+    btn.disabled = false; btn.textContent = '🔄 Uppdatera fwd-returns';
+  }
+}
+
+loadSnapshots();
+</script>
+
+<div class="info">
+  <strong>📊 Hur det här validerar backtesten:</strong><br>
+  Dagligen sparas dagens screen-kandidater. När 12 månader har passerat
+  beräknas faktisk fwd-return. Då har vi konkret IRL-data att jämföra med
+  backtest-alpha (GT+MF +21.57%, C80+GT +19.64%, etc.).<br>
+  Skillnad mellan backtest-alpha och IRL-alpha = vår "alpha decay"-mätning.
+</div>
+
+</body>
+</html>

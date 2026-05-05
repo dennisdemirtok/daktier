@@ -268,6 +268,12 @@ def backtest_report():
     return render_template("backtest_report.html")
 
 
+@app.route("/live-tracker")
+def live_tracker_page():
+    """Live tracker-vy: visar dagliga snapshots + fwd-returns när tillgängliga."""
+    return render_template("live_tracker.html")
+
+
 @app.route("/api/status")
 def api_status():
     db = get_db()
