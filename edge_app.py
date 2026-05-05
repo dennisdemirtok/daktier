@@ -4786,6 +4786,25 @@ def api_borsdata_diagnose_access():
     return jsonify(results)
 
 
+@app.route("/api/borsdata/test-reports/<int:ins_id>")
+def api_borsdata_test_reports(ins_id):
+    """Testar om vi kan hämta reports för ett ins_id (Nordic + Global)."""
+    try:
+        from borsdata_fetcher import fetch_reports
+        year_reports = fetch_reports(ins_id, "year")
+        q_reports = fetch_reports(ins_id, "quarter")
+        return jsonify({
+            "ins_id": ins_id,
+            "year_reports_count": len(year_reports),
+            "quarter_reports_count": len(q_reports),
+            "year_sample": year_reports[:2] if year_reports else None,
+            "quarter_sample": q_reports[:2] if q_reports else None,
+        })
+    except Exception as e:
+        import traceback
+        return jsonify({"error": str(e), "tb": traceback.format_exc()[:500]}), 500
+
+
 @app.route("/api/borsdata/test-kpi-formats/<int:ins_id>/<int:kpi_id>")
 def api_borsdata_test_kpi_formats(ins_id, kpi_id):
     """Prova olika URL-format för att hitta rätt KPI-history-anrop.
