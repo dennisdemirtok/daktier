@@ -4642,6 +4642,147 @@ def api_live_tracker_update_fwd_returns():
         db.close()
 
 
+@app.route("/api/backtest-v2/portfolio-simulator", methods=["POST"])
+def api_portfolio_simulator():
+    """Simulerar fullständig portfolio-allokering år för år 2015-2024.
+
+    För varje år:
+    1. Tar BUY-kandidater (super confluence, recurring, etc.)
+    2. Allokerar enligt tier-baserade vikter (samma som /portfolio/recommend)
+    3. Mäter 12m forward return per allokerad position
+    4. Beräknar portfolio-return (vägd snitt) det året
+    5. Compoundar till nästa år
+
+    Body: {start_year, end_year, country, max_positions}
+    Returnerar: per-år portfolio-return + total CAGR + jämfört med equal-weight.
+    """
+    body = request.json if request.is_json else {}
+    start_year = int(body.get("start_year", 2015))
+    end_year = int(body.get("end_year", 2023))
+    country = body.get("country", "US")
+    max_universe = int(body.get("max_universe", 200))
+    max_positions = int(body.get("max_positions", 10))
+
+    try:
+        from backtest_v2.quant_runner import run_quant_backtest
+        db = get_db()
+        try:
+            results = run_quant_backtest(db, start_year=start_year,
+                                          end_year=end_year, verbose=False,
+                                          use_dynamic_universe=True,
+                                          max_universe=max_universe,
+                                          country=country)
+
+            # Gruppera per år
+            by_year = {}
+            for r in results:
+                y = r["date"][:4]
+                by_year.setdefault(y, []).append(r)
+
+            # Tier-funktion (samma som /api/portfolio/recommend)
+            def tier(s):
+                composite = s.get("composite") or 0
+                n = 0
+                if composite >= 80 and s.get("is_growth_trifecta"): n += 1
+                if s.get("is_quant_trifecta"): n += 1
+                if s.get("is_magic_formula"): n += 1
+                if s.get("is_growth_trifecta"): n += 1
+                if composite >= 80: n += 1
+                if n >= 4: return 0  # super
+                if n >= 3: return 1
+                if s.get("is_growth_trifecta") and s.get("is_magic_formula"): return 1  # GT+MF
+                if composite >= 80 and s.get("is_growth_trifecta") and country == "SE": return 2
+                if s.get("is_growth_trifecta") and country == "US": return 3
+                return 4
+            TIER_W = {0: 0.15, 1: 0.10, 2: 0.10, 3: 0.08, 4: 0.05}
+
+            # För varje år, allokera och mät
+            yearly = []
+            cumulative = 1.0  # starta med 100% kapital
+            cumulative_eq = 1.0  # equal-weight benchmark
+
+            for y in sorted(by_year.keys()):
+                obs = by_year[y]
+                obs_with_fwd = [o for o in obs if o.get("fwd_12m") is not None]
+                if not obs_with_fwd: continue
+
+                # Filter BUY-kandidater (har minst 1 flag)
+                buys = [o for o in obs_with_fwd
+                        if o.get("is_growth_trifecta") or o.get("is_magic_formula")
+                           or (o.get("composite") or 0) >= 80
+                           or o.get("is_quant_trifecta")]
+
+                # Sortera efter tier
+                buys.sort(key=lambda s: (tier(s), -(s.get("composite") or 0)))
+
+                # Allokera (max_positions, max 25% per ticker, total ≤ 95%)
+                positions = []
+                total_w = 0.0
+                used_tk = set()
+                for b in buys:
+                    if len(positions) >= max_positions: break
+                    if total_w >= 0.95: break
+                    tk = b.get("ticker")
+                    if not tk or tk in used_tk: continue
+                    t = tier(b)
+                    w = TIER_W.get(t, 0.05)
+                    w = min(w, 0.95 - total_w)
+                    if w < 0.03: continue
+                    positions.append({"ticker": tk, "weight": w, "fwd": b["fwd_12m"]})
+                    used_tk.add(tk)
+                    total_w += w
+
+                # Portfolio return = sum(w_i * fwd_i) / total_w (om mindre än 100%)
+                # Anta: rest av portfolio i kassa (0% return)
+                portfolio_ret = sum(p["weight"] * p["fwd"] for p in positions)
+
+                # Equal-weight benchmark
+                eq_ret = sum(o["fwd_12m"] for o in obs_with_fwd) / len(obs_with_fwd)
+
+                cumulative *= (1 + portfolio_ret)
+                cumulative_eq *= (1 + eq_ret)
+
+                yearly.append({
+                    "year": y,
+                    "n_positions": len(positions),
+                    "total_allocation_pct": round(total_w * 100, 1),
+                    "portfolio_return_pct": round(portfolio_ret * 100, 2),
+                    "universe_return_pct": round(eq_ret * 100, 2),
+                    "alpha_pct": round((portfolio_ret - eq_ret) * 100, 2),
+                    "cumulative_value": round(cumulative * 100, 2),  # från 100
+                    "cumulative_universe": round(cumulative_eq * 100, 2),
+                    "top_positions": [
+                        {"ticker": p["ticker"], "weight_pct": round(p["weight"]*100, 1),
+                         "fwd_12m_pct": round(p["fwd"]*100, 2)}
+                        for p in sorted(positions, key=lambda x: -x["weight"])[:5]
+                    ],
+                })
+
+            n_years = len(yearly)
+            cagr_portfolio = ((cumulative ** (1/n_years)) - 1) * 100 if n_years > 0 else 0
+            cagr_universe = ((cumulative_eq ** (1/n_years)) - 1) * 100 if n_years > 0 else 0
+
+            return jsonify({
+                "country": country,
+                "period": f"{start_year}-{end_year}",
+                "max_positions": max_positions,
+                "n_years": n_years,
+                "final_value_portfolio": round(cumulative * 100, 2),  # 100 → ?
+                "final_value_universe": round(cumulative_eq * 100, 2),
+                "total_return_portfolio_pct": round((cumulative - 1) * 100, 2),
+                "total_return_universe_pct": round((cumulative_eq - 1) * 100, 2),
+                "cagr_portfolio_pct": round(cagr_portfolio, 2),
+                "cagr_universe_pct": round(cagr_universe, 2),
+                "cagr_alpha_pct": round(cagr_portfolio - cagr_universe, 2),
+                "yearly": yearly,
+            })
+        finally:
+            db.close()
+    except Exception as e:
+        import traceback
+        return jsonify({"error": str(e), "tb": traceback.format_exc()[:1500]}), 500
+
+
 @app.route("/api/backtest-v2/long-period-forward", methods=["POST"])
 def api_backtest_v2_long_period_forward():
     """Backtesta screens med längre forward-perioder (36m, 60m).
