@@ -4662,6 +4662,15 @@ def api_portfolio_simulator():
     country = body.get("country", "US")
     max_universe = int(body.get("max_universe", 200))
     max_positions = int(body.get("max_positions", 10))
+    strategy = body.get("strategy", "balanced")  # balanced | concentrated | aggressive
+
+    # Strategi-baserade vikter
+    STRATEGY_WEIGHTS = {
+        "balanced":     {0: 0.15, 1: 0.10, 2: 0.10, 3: 0.08, 4: 0.05},  # default
+        "concentrated": {0: 0.20, 1: 0.15, 2: 0.12, 3: 0.00, 4: 0.00},  # bara top-tier
+        "aggressive":   {0: 0.25, 1: 0.20, 2: 0.15, 3: 0.10, 4: 0.07},
+    }
+    tier_w = STRATEGY_WEIGHTS.get(strategy, STRATEGY_WEIGHTS["balanced"])
 
     try:
         from backtest_v2.quant_runner import run_quant_backtest
@@ -4694,7 +4703,7 @@ def api_portfolio_simulator():
                 if composite >= 80 and s.get("is_growth_trifecta") and country == "SE": return 2
                 if s.get("is_growth_trifecta") and country == "US": return 3
                 return 4
-            TIER_W = {0: 0.15, 1: 0.10, 2: 0.10, 3: 0.08, 4: 0.05}
+            TIER_W = tier_w
 
             # För varje år, allokera och mät
             yearly = []
@@ -4765,6 +4774,8 @@ def api_portfolio_simulator():
             return jsonify({
                 "country": country,
                 "period": f"{start_year}-{end_year}",
+                "strategy": strategy,
+                "tier_weights": tier_w,
                 "max_positions": max_positions,
                 "n_years": n_years,
                 "final_value_portfolio": round(cumulative * 100, 2),  # 100 → ?
