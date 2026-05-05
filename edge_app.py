@@ -4018,6 +4018,49 @@ def api_borsdata_sync_kpi_quarters():
                     "n_tickers": len(tickers) if tickers else "all"})
 
 
+@app.route("/api/backtest-v2/quant-diagnostics", methods=["POST"])
+def api_backtest_v2_quant_diagnostics():
+    """Detaljerad diagnostik per screen — concentration check, per-år breakdown."""
+    body = request.json if request.is_json else {}
+    start_year = int(body.get("start_year", 2015))
+    end_year = int(body.get("end_year", 2024))
+    max_universe = int(body.get("max_universe", 100))
+
+    try:
+        from backtest_v2.quant_runner import (run_quant_backtest,
+                                                analyze_concentration)
+        db = get_db()
+        try:
+            results = run_quant_backtest(db, start_year=start_year,
+                                          end_year=end_year, verbose=False,
+                                          use_dynamic_universe=True,
+                                          max_universe=max_universe,
+                                          country="SE")
+
+            # Diagnostik per screen
+            screens = {
+                "composite_80_plus": lambda r: r.get("composite") is not None and r["composite"] >= 80,
+                "quant_trifecta": lambda r: r.get("is_trifecta"),
+                "piotroski_hi_cheap": lambda r: r.get("is_piotroski_hi_cheap"),
+                "spier_compounder": lambda r: r.get("is_spier_compounder"),
+                "magic_formula": lambda r: r.get("is_magic_formula"),
+            }
+            diagnostics = {}
+            for name, f in screens.items():
+                diagnostics[name] = analyze_concentration(results, f)
+
+            return jsonify({
+                "n_total_obs": len(results),
+                "n_unique_tickers": len(set(r["ticker"] for r in results)),
+                "screens": diagnostics,
+            })
+        finally:
+            db.close()
+    except Exception as e:
+        import traceback
+        return jsonify({"error": str(e), "tb": traceback.format_exc()[:1500]}), 500
+
+
 @app.route("/api/backtest-v2/run-quant", methods=["POST"])
 def api_backtest_v2_run_quant():
     """Kör Quant-Trifecta-backtest 2015-2024 (utan LLM, ren KPI-screening).

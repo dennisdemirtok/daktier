@@ -360,6 +360,61 @@ def run_quant_backtest(db, universe=None, start_year=2015, end_year=2024,
     return results
 
 
+def analyze_concentration(results, screen_filter):
+    """Concentration-check: vilka tickers dominerar en screen + per-år breakdown.
+
+    Returnerar:
+    - top_tickers: lista av (ticker, n_appearances, avg_return)
+    - per_year: dict {year: {n, mean_12m, tickers}}
+    - tickers_in_screen: alla unika tickers som någonsin matchar screenen
+    """
+    valid = [r for r in results if r["fwd_12m"] is not None and screen_filter(r)]
+    if not valid:
+        return {"n": 0, "top_tickers": [], "per_year": {}, "unique_tickers": 0}
+
+    # Per-ticker frequency + avg return
+    by_ticker = {}
+    for r in valid:
+        t = r["ticker"]
+        if t not in by_ticker:
+            by_ticker[t] = []
+        by_ticker[t].append(r["fwd_12m"])
+
+    top_tickers = sorted(
+        [(t, len(rets), round(sum(rets) / len(rets) * 100, 2))
+         for t, rets in by_ticker.items()],
+        key=lambda x: -x[1]
+    )
+
+    # Per-år
+    by_year = {}
+    for r in valid:
+        y = r["date"][:4]
+        if y not in by_year:
+            by_year[y] = []
+        by_year[y].append(r)
+
+    per_year = {}
+    for y, rs in sorted(by_year.items()):
+        rets = [r["fwd_12m"] for r in rs]
+        per_year[y] = {
+            "n": len(rs),
+            "mean_12m_pct": round(sum(rets) / len(rets) * 100, 2),
+            "best": max(rs, key=lambda r: r["fwd_12m"])["ticker"],
+            "best_return": round(max(rets) * 100, 2),
+            "worst": min(rs, key=lambda r: r["fwd_12m"])["ticker"],
+            "worst_return": round(min(rets) * 100, 2),
+            "tickers": [r["ticker"] for r in rs],
+        }
+
+    return {
+        "n": len(valid),
+        "unique_tickers": len(by_ticker),
+        "top_tickers": top_tickers[:10],  # top 10 mest frekventa
+        "per_year": per_year,
+    }
+
+
 def analyze_quant_results(results):
     """Beräknar alpha för alla 5 screens vs hela universumet."""
     valid = [r for r in results if r["fwd_12m"] is not None]
