@@ -4673,6 +4673,170 @@ def api_live_tracker_update_fwd_returns():
         db.close()
 
 
+@app.route("/api/backtest-v2/bootstrap-validation", methods=["POST"])
+def api_bootstrap_validation():
+    """Bootstrap 95% CI + Benjamini-Hochberg FDR-korrigering.
+
+    Användaren hade rätt — punktestimat är vilseledande när n=11.
+    Detta endpoint kör 10 000 bootstraps och rapporterar:
+    - 95% CI per screen
+    - Effective n efter ticker-clustering (cluster bootstrap)
+    - p-värden från permutation test
+    - FDR-justerade p-värden (Benjamini-Hochberg)
+
+    Body: {country, start_year, end_year, n_iter (default 10000), max_universe}
+    """
+    body = request.json if request.is_json else {}
+    country = body.get("country", "US")
+    start_year = int(body.get("start_year", 2015))
+    end_year = int(body.get("end_year", 2024))
+    n_iter = int(body.get("n_iter", 10000))
+    max_universe = int(body.get("max_universe", 200))
+
+    try:
+        from backtest_v2.quant_runner import run_quant_backtest
+        import random
+        random.seed(42)
+
+        db = get_db()
+        try:
+            results = run_quant_backtest(db, start_year=start_year,
+                                          end_year=end_year, verbose=False,
+                                          use_dynamic_universe=True,
+                                          max_universe=max_universe,
+                                          country=country)
+            valid = [r for r in results if r.get("fwd_12m") is not None]
+            if not valid:
+                return jsonify({"error": "no valid observations"}), 400
+
+            universe_returns = [r["fwd_12m"] for r in valid]
+            universe_mean = sum(universe_returns) / len(universe_returns)
+
+            # Definiera alla screens vi vill testa
+            SCREENS = {
+                "growth_trifecta": lambda r: r.get("is_growth_trifecta"),
+                "magic_formula": lambda r: r.get("is_magic_formula"),
+                "gt_mf_confluence": lambda r: r.get("is_growth_trifecta") and r.get("is_magic_formula"),
+                "trifecta": lambda r: r.get("is_trifecta"),
+                "composite_80": lambda r: (r.get("composite") or 0) >= 80,
+                "c80_gt_confluence": lambda r: (r.get("composite") or 0) >= 80 and r.get("is_growth_trifecta"),
+                "piotroski_hi_cheap": lambda r: r.get("is_piotroski_hi_cheap"),
+                "spier_compounder": lambda r: r.get("is_spier_compounder"),
+                "quality_momentum": lambda r: r.get("is_quality_momentum"),
+                "garp": lambda r: r.get("is_garp"),
+            }
+
+            screen_results = {}
+            for name, f in SCREENS.items():
+                matches = [r for r in valid if f(r)]
+                if not matches:
+                    screen_results[name] = {"n": 0, "skipped": "no matches"}
+                    continue
+
+                returns = [r["fwd_12m"] for r in matches]
+                tickers = [r["ticker"] for r in matches]
+                obs_alpha = (sum(returns) / len(returns)) - universe_mean
+
+                # ── Naive bootstrap (sampling with replacement från matches) ──
+                naive_alphas = []
+                for _ in range(n_iter):
+                    sample = random.choices(returns, k=len(returns))
+                    naive_alphas.append((sum(sample) / len(sample)) - universe_mean)
+                naive_alphas.sort()
+                naive_ci_lower = naive_alphas[int(0.025 * n_iter)]
+                naive_ci_upper = naive_alphas[int(0.975 * n_iter)]
+
+                # ── Cluster bootstrap (sample TICKERS, not obs) ──
+                # Detta hanterar ticker-concentration som NVDA/LRCX-3x-problemet
+                ticker_groups = {}
+                for r in matches:
+                    ticker_groups.setdefault(r["ticker"], []).append(r["fwd_12m"])
+                unique_tickers = list(ticker_groups.keys())
+                eff_n = len(unique_tickers)  # konservativ effective n
+
+                cluster_alphas = []
+                for _ in range(n_iter):
+                    sampled_tickers = random.choices(unique_tickers, k=len(unique_tickers))
+                    sampled_returns = []
+                    for tk in sampled_tickers:
+                        sampled_returns.extend(ticker_groups[tk])
+                    if not sampled_returns: continue
+                    cluster_alphas.append((sum(sampled_returns) / len(sampled_returns)) - universe_mean)
+                cluster_alphas.sort()
+                if cluster_alphas:
+                    cluster_ci_lower = cluster_alphas[int(0.025 * len(cluster_alphas))]
+                    cluster_ci_upper = cluster_alphas[int(0.975 * len(cluster_alphas))]
+                else:
+                    cluster_ci_lower = cluster_ci_upper = None
+
+                # ── Permutation test för p-värde ──
+                # H0: ingen edge — random subset av samma storlek skulle ge samma alpha
+                better_or_equal = 0
+                n_perm = min(n_iter, 5000)  # snabbare
+                for _ in range(n_perm):
+                    perm_sample = random.sample(universe_returns, len(returns))
+                    perm_alpha = (sum(perm_sample) / len(perm_sample)) - universe_mean
+                    if perm_alpha >= obs_alpha:
+                        better_or_equal += 1
+                p_value = (better_or_equal + 1) / (n_perm + 1)  # +1 för bias-correction
+
+                screen_results[name] = {
+                    "n": len(returns),
+                    "n_unique_tickers": eff_n,
+                    "obs_alpha_pct": round(obs_alpha * 100, 2),
+                    "naive_ci_95_pct": [round(naive_ci_lower * 100, 2),
+                                          round(naive_ci_upper * 100, 2)],
+                    "cluster_ci_95_pct": [round(cluster_ci_lower * 100, 2) if cluster_ci_lower is not None else None,
+                                            round(cluster_ci_upper * 100, 2) if cluster_ci_upper is not None else None],
+                    "p_value_permutation": round(p_value, 4),
+                    "ci_includes_zero": (naive_ci_lower < 0 if naive_ci_lower else None),
+                }
+
+            # ── Benjamini-Hochberg FDR correction ──
+            # Sortera p-värden ASC. För varje k: kontrollera p_(k) <= k/m * alpha
+            valid_screens = [(name, d.get("p_value_permutation"))
+                             for name, d in screen_results.items()
+                             if d.get("p_value_permutation") is not None]
+            valid_screens.sort(key=lambda x: x[1])
+            m = len(valid_screens)
+            bh_alpha = 0.05
+            bh_thresholds = [(k+1)/m * bh_alpha for k in range(m)]
+            survives_fdr = {}
+            # Hitta största k sådan att p_k <= threshold_k
+            largest_k = -1
+            for k, (name, p) in enumerate(valid_screens):
+                if p <= bh_thresholds[k]:
+                    largest_k = k
+            for k, (name, p) in enumerate(valid_screens):
+                survives_fdr[name] = (k <= largest_k)
+                screen_results[name]["bh_threshold"] = round(bh_thresholds[k], 4)
+                screen_results[name]["survives_fdr_5pct"] = survives_fdr[name]
+
+            # Summary
+            summary = {
+                "country": country,
+                "period": f"{start_year}-{end_year}",
+                "n_iterations": n_iter,
+                "n_universe_obs": len(valid),
+                "universe_mean_pct": round(universe_mean * 100, 2),
+                "n_screens_tested": m,
+                "n_surviving_fdr": sum(1 for v in survives_fdr.values() if v),
+                "fdr_alpha": bh_alpha,
+                "screens": screen_results,
+                "warning": ("Punktestimat är vilseledande när n liten. CI visar "
+                            "verklig osäkerhet. cluster_ci behandlar samma ticker i "
+                            "flera år som beroende observationer. Endast screens "
+                            "som överlever FDR-korrigering bör betraktas som "
+                            "statistiskt signifikanta."),
+            }
+            return jsonify(summary)
+        finally:
+            db.close()
+    except Exception as e:
+        import traceback
+        return jsonify({"error": str(e), "tb": traceback.format_exc()[:1500]}), 500
+
+
 @app.route("/api/backtest-v2/portfolio-simulator", methods=["POST"])
 def api_portfolio_simulator():
     """Simulerar fullständig portfolio-allokering år för år 2015-2024.
