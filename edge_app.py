@@ -4587,6 +4587,37 @@ def api_live_tracker_results():
         db.close()
 
 
+@app.route("/api/live-tracker/cleanup-test", methods=["POST"])
+def api_live_tracker_cleanup():
+    """Rensa skräp-snapshots från test-körningar (screen_name innehåller 'test')."""
+    db = get_db()
+    try:
+        from edge_db import _ph as ph_fn
+        ph = ph_fn()
+        # Räkna först
+        from edge_db import _fetchall, _fetchone
+        n_before = _fetchone(db, "SELECT COUNT(*) as n FROM screen_snapshots") or {"n": 0}
+        n_test = _fetchone(db,
+            f"SELECT COUNT(*) as n FROM screen_snapshots WHERE screen_name LIKE {ph}",
+            ("%test%",)) or {"n": 0}
+        # Radera
+        db.execute(
+            f"DELETE FROM screen_snapshots WHERE screen_name LIKE {ph}",
+            ("%test%",))
+        db.commit()
+        n_after = _fetchone(db, "SELECT COUNT(*) as n FROM screen_snapshots") or {"n": 0}
+        return jsonify({
+            "before": dict(n_before).get("n", 0),
+            "deleted_test": dict(n_test).get("n", 0),
+            "after": dict(n_after).get("n", 0),
+        })
+    except Exception as e:
+        import traceback
+        return jsonify({"error": str(e), "tb": traceback.format_exc()[:500]}), 500
+    finally:
+        db.close()
+
+
 @app.route("/api/live-tracker/update-fwd-returns", methods=["POST"])
 def api_live_tracker_update_fwd_returns():
     """Uppdatera fwd_3m/6m/12m för befintliga snapshots."""
