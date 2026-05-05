@@ -4260,6 +4260,8 @@ def api_live_tracker_snapshot():
     body = request.json if request.is_json else {}
     snapshot_date = body.get("date") or datetime.now().strftime("%Y-%m-%d")
     screens = body.get("screens") or [
+        {"name": "recurring_us", "country": "US", "mode": "recurring_compounders"},
+        {"name": "recurring_se", "country": "SE", "mode": "recurring_compounders"},
         {"name": "gt_mf_confluence_us", "country": "US", "mode": "gt_mf_confluence"},
         {"name": "growth_trifecta_us", "country": "US", "mode": "growth_trifecta"},
         {"name": "magic_formula_us", "country": "US", "mode": "magic_formula"},
@@ -4288,6 +4290,7 @@ def api_live_tracker_snapshot():
                                             and s.get("is_magic_formula")),
             "c80_gt_confluence": lambda s: ((s.get("composite_score") or 0) >= 80
                                               and s.get("is_growth_trifecta")),
+            "recurring_compounders": lambda s: s.get("is_recurring_compounder"),
             "trifecta": lambda s: s.get("is_quant_trifecta"),
             "dual_screen": lambda s: s.get("is_dual_screen"),
             "composite_80": lambda s: (s.get("composite_score") or 0) >= 80,
@@ -7030,6 +7033,31 @@ När en US-aktie flaggar Growth Trifecta:
 - **Cite 60m-alpha för buy-and-hold compounders** (+138.96%, 93% hit, +12.63% CAGR alpha)
 
 När bolaget flaggar GT 2+ år i rad: ÄNNU starkare compounder-signal.
+
+**🌟 RECURRING COMPOUNDER-AUTOFLAGG (i compute_quant_scores):**
+
+Bolag som flaggat GT 3+ år i historik 2015-2024 är hardcoded som
+recurring compounders. När de flaggar GT IDAG sätts:
+- `is_recurring_compounder = True`
+- `recurring_gt_years = N` (antal historiska år)
+
+**US recurring compounders:**
+ANET (6 år) +67.7%, NVDA (5) +116.9%, GOOGL (5) +17.5%, ADBE (5) +27.1%,
+ISRG (4) +44.2%, LRCX (4) +36.8%, EW (4) +36.5%, AMAT (4) +11.5%,
+AVGO/VRTX/INTU (3) +37-52%, EBAY/ULTA/REGN/APO (3) mixed.
+
+**SE recurring compounders:**
+INDU A/C (4 år) +15-16%, CRED A (4) +40%, INVE A/B (3) +22-27%,
+BETS B (2) +14%, KINV B (2) -0.5%.
+
+**När agenten ser is_recurring_compounder=True:**
+> "🌟 RECURRING COMPOUNDER-FLAGGA: bolaget har flaggat Growth Trifecta
+> [N] år i rad i backtest 2015-2024. Detta är inte slumpmässigt — det
+> är ett structural compounder. När det flaggar GT idag är sannolikheten
+> för stark 12m fwd-return ÄNNU högre än för vanlig GT-flagga."
+
+Detta är vår starkaste enskilda signal — ny mode 'recurring_compounders'
+i UI visar bara dessa.
 
 **Per-år GT alpha 2015-2024 (US):**
 - 2016: +29.9%, 2017: +12.8%, **2018: -13.4%** (litet n=8)
