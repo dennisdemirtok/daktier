@@ -4215,6 +4215,123 @@ def api_backtest_v2_stock_history(ticker):
         return jsonify({"error": str(e), "tb": traceback.format_exc()[:1500]}), 500
 
 
+@app.route("/api/backtest-v2/screen-detail", methods=["POST"])
+def api_backtest_v2_screen_detail():
+    """Returnerar individuella observationer för en given screen.
+
+    Body: {start_year, end_year, country, screen}
+    screen: "growth_trifecta" | "magic_formula" | "trifecta" | "composite_80"
+            | "piotroski_hi_cheap" | "spier_compounder" | "quality_momentum"
+            | "garp" | "earnings_accel" | "pabrai"
+    Returnerar lista av {ticker, date, q/v/m/composite, fwd_12m, ...}
+    Användning: drawdown-analys + confluence-detection.
+    """
+    body = request.json if request.is_json else {}
+    start_year = int(body.get("start_year", 2015))
+    end_year = int(body.get("end_year", 2024))
+    country = body.get("country", "US")
+    max_universe = int(body.get("max_universe", 300))
+    screen = body.get("screen", "growth_trifecta")
+
+    SCREEN_FILTERS = {
+        "growth_trifecta": lambda r: r.get("is_growth_trifecta"),
+        "magic_formula": lambda r: r.get("is_magic_formula"),
+        "trifecta": lambda r: r.get("is_trifecta"),
+        "composite_80": lambda r: r.get("composite") is not None and r["composite"] >= 80,
+        "composite_70": lambda r: r.get("composite") is not None and r["composite"] >= 70,
+        "piotroski_hi_cheap": lambda r: r.get("is_piotroski_hi_cheap"),
+        "spier_compounder": lambda r: r.get("is_spier_compounder"),
+        "quality_momentum": lambda r: r.get("is_quality_momentum"),
+        "garp": lambda r: r.get("is_garp"),
+        "earnings_accel": lambda r: r.get("is_earnings_accel"),
+        "pabrai": lambda r: r.get("is_pabrai"),
+    }
+    f = SCREEN_FILTERS.get(screen)
+    if not f:
+        return jsonify({"error": f"unknown screen: {screen}",
+                        "options": list(SCREEN_FILTERS.keys())}), 400
+
+    try:
+        from backtest_v2.quant_runner import run_quant_backtest
+        db = get_db()
+        try:
+            results = run_quant_backtest(db, start_year=start_year,
+                                          end_year=end_year, verbose=False,
+                                          use_dynamic_universe=True,
+                                          max_universe=max_universe,
+                                          country=country)
+
+            valid = [r for r in results if r.get("fwd_12m") is not None]
+            matches = [r for r in valid if f(r)]
+
+            # Universe-mean för alpha
+            universe_mean = (sum(r["fwd_12m"] for r in valid) / len(valid)
+                             if valid else 0.0)
+
+            # Drawdown / worst case-analys
+            sorted_by_fwd = sorted(matches, key=lambda r: r["fwd_12m"])
+            worst_5 = sorted_by_fwd[:5]
+            best_5 = sorted_by_fwd[-5:]
+
+            # Per-år breakdown
+            per_year = {}
+            for r in matches:
+                y = r["date"][:4]
+                if y not in per_year:
+                    per_year[y] = []
+                per_year[y].append(r["fwd_12m"])
+
+            per_year_summary = {}
+            for y, rets in per_year.items():
+                per_year_summary[y] = {
+                    "n": len(rets),
+                    "mean_pct": round(sum(rets) / len(rets) * 100, 2),
+                    "alpha_pct": round((sum(rets) / len(rets) - universe_mean) * 100, 2),
+                    "worst_pct": round(min(rets) * 100, 2),
+                    "best_pct": round(max(rets) * 100, 2),
+                }
+
+            return jsonify({
+                "screen": screen,
+                "country": country,
+                "period": f"{start_year}-{end_year}",
+                "n_matches": len(matches),
+                "n_unique_tickers": len(set(r["ticker"] for r in matches)),
+                "universe_mean_pct": round(universe_mean * 100, 2),
+                "per_year": per_year_summary,
+                "worst_5": [
+                    {"ticker": r["ticker"], "date": r["date"],
+                     "fwd_12m_pct": round(r["fwd_12m"] * 100, 2),
+                     "composite": r.get("composite"),
+                     "q": r.get("q_score"), "v": r.get("v_score"), "m": r.get("m_score")}
+                    for r in worst_5
+                ],
+                "best_5": [
+                    {"ticker": r["ticker"], "date": r["date"],
+                     "fwd_12m_pct": round(r["fwd_12m"] * 100, 2),
+                     "composite": r.get("composite"),
+                     "q": r.get("q_score"), "v": r.get("v_score"), "m": r.get("m_score")}
+                    for r in best_5
+                ],
+                "all_matches": [
+                    {"ticker": r["ticker"], "date": r["date"],
+                     "fwd_12m_pct": round(r["fwd_12m"] * 100, 2),
+                     "composite": r.get("composite"),
+                     "q": r.get("q_score"), "v": r.get("v_score"), "m": r.get("m_score"),
+                     "is_magic_formula": r.get("is_magic_formula"),
+                     "is_growth_trifecta": r.get("is_growth_trifecta"),
+                     "is_piotroski": r.get("is_piotroski_hi_cheap"),
+                     "mom_12_1_pct": r.get("mom_12_1_pct")}
+                    for r in matches
+                ],
+            })
+        finally:
+            db.close()
+    except Exception as e:
+        import traceback
+        return jsonify({"error": str(e), "tb": traceback.format_exc()[:1500]}), 500
+
+
 @app.route("/api/backtest-v2/run-quant", methods=["POST"])
 def api_backtest_v2_run_quant():
     """Kör Quant-Trifecta-backtest 2015-2024 (utan LLM, ren KPI-screening).
