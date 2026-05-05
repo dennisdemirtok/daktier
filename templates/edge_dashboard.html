@@ -6785,6 +6785,64 @@ const QUANT_SCREEN_TABS = [
 ];
 let _activeQuantTab = 'gt_mf_confluence';
 
+// ── 🎯 Dagens BUY/AVOID-signaler på dashboard ──
+async function loadTodaysSignals() {
+    const wrap = document.getElementById('todaysSignalsContent');
+    if (!wrap) return;
+    try {
+        const [seRes, usRes] = await Promise.all([
+            fetch('/api/quant-screen?country=SE&limit=300&mode=raw').then(r => r.json()),
+            fetch('/api/quant-screen?country=US&limit=300&mode=raw').then(r => r.json()),
+        ]);
+        const all = [...(seRes.results || []), ...(usRes.results || [])];
+        const buys = all.filter(r => r.recommendation === 'BUY');
+        const avoids = all.filter(r => r.recommendation === 'AVOID');
+
+        // Sort BUYs: super-confluence first, then by composite
+        buys.sort((a, b) => {
+            const aFlags = a.n_flags || 0, bFlags = b.n_flags || 0;
+            if (bFlags !== aFlags) return bFlags - aFlags;
+            return (b.composite_score || 0) - (a.composite_score || 0);
+        });
+
+        const buyHtml = buys.length ? buys.slice(0, 12).map(r => {
+            const tk = r.ticker || r.short_name || '?';
+            const flag = r.country === 'US' ? '🇺🇸' : (r.country === 'SE' ? '🇸🇪' : '');
+            const nFlags = r.n_flags || 0;
+            const ringColor = nFlags >= 4 ? '#fbbf24' : (r.is_recurring_compounder ? '#dc2626' : '#10b981');
+            return `<div style="background:white;padding:12px 14px;border-radius:10px;border-left:4px solid ${ringColor};box-shadow:0 1px 3px rgba(0,0,0,0.05);cursor:pointer" onclick="openStockDrawer(${r.orderbook_id})">
+                <div style="display:flex;justify-content:space-between;align-items:start;gap:10px">
+                    <div>
+                        <div style="font-weight:700;font-size:14px">${flag} ${escapeHtml(tk)} <span style="color:#6b7280;font-weight:400;font-size:12px">${escapeHtml((r.name || '').slice(0, 30))}</span></div>
+                        <div style="font-size:11px;color:#374151;margin-top:3px">${escapeHtml(r.recommendation_reason || '')}</div>
+                    </div>
+                    <div style="text-align:right;flex-shrink:0">
+                        <div style="font-size:11px;color:#6b7280">C / Q / M</div>
+                        <div style="font-size:13px;font-weight:600;font-variant-numeric:tabular-nums">${fmtScore(r.composite_score)} / ${fmtScore(r.quality_score)} / ${fmtScore(r.momentum_score)}</div>
+                    </div>
+                </div>
+            </div>`;
+        }).join('') : '<div style="color:#6b7280;padding:12px">Inga BUY-signaler idag.</div>';
+
+        const avoidHtml = avoids.length ? avoids.slice(0, 8).map(r => {
+            const tk = r.ticker || r.short_name || '?';
+            const flag = r.country === 'US' ? '🇺🇸' : (r.country === 'SE' ? '🇸🇪' : '');
+            return `<div style="background:#fef2f2;padding:8px 12px;border-radius:8px;border-left:3px solid #dc2626;cursor:pointer;font-size:12px" onclick="openStockDrawer(${r.orderbook_id})">
+                <div style="font-weight:600">${flag} ${escapeHtml(tk)} <span style="color:#7f1d1d;font-weight:400">${escapeHtml((r.name || '').slice(0, 25))}</span></div>
+                <div style="font-size:10.5px;color:#7f1d1d;margin-top:2px">${escapeHtml(r.recommendation_reason || '')}</div>
+            </div>`;
+        }).join('') : '';
+
+        wrap.innerHTML = `
+            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:8px;margin-bottom:14px">${buyHtml}</div>
+            ${avoidHtml ? `<details style="margin-top:12px"><summary style="cursor:pointer;font-weight:600;color:#dc2626;font-size:13px">🚫 ${avoids.length} AVOID-flaggor (klicka för att visa)</summary><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:6px;margin-top:8px">${avoidHtml}</div></details>` : ''}
+        `;
+    } catch (e) {
+        wrap.innerHTML = `<div style="color:#dc2626">Fel: ${e.message}</div>`;
+    }
+}
+function fmtScore(v) { return v == null ? '—' : v.toFixed(0); }
+
 // Country-aware default-screen baserat på backtest 2015-2024
 const COUNTRY_BEST_SCREEN = {
     'SE': { mode: 'c80_gt_confluence', label: '👑 C80+GT (SE bäst, +19.64%)' },
@@ -7236,8 +7294,12 @@ async function renderDashboard() {
             <div class="dash-section" id="buyZoneWatchWrap">
                 <div id="buyZoneWatchBanner" class="daily-picks-skel">Letar köpzon-kandidater...</div>
             </div>
+            <div class="dash-section" id="todaysSignalsWrap">
+                <h3 class="dash-heading">🎯 Dagens BUY/AVOID-signaler <span class="dash-sub">empiriskt validerat från backtest 2015-2024</span></h3>
+                <div id="todaysSignalsContent" style="margin-top:8px"><div class="loading-wrap" style="padding:24px">Laddar dagens rekommendationer…</div></div>
+            </div>
             <div class="dash-section" id="quantScreensWrap">
-                <h3 class="dash-heading">🏆 Backtest-validerade screens <span class="dash-sub">+19.26% alpha för Dual-Screen (2015-2024)</span></h3>
+                <h3 class="dash-heading">🏆 Backtest-validerade screens <span class="dash-sub">+19.64% alpha för C80+GT Confluence (SE)</span></h3>
                 <div id="quantScreensContent" style="margin-top:8px"></div>
             </div>
             <div class="dash-section" id="v2SetupsWrap" style="display:none">
@@ -7370,6 +7432,9 @@ function renderDashboardContent(d) {
 
     // ── Köpzon-watchlist (nära köpzon idag) ──
     loadBuyZoneWatchlist();
+
+    // ── 🎯 Dagens BUY/AVOID-signaler (empiriskt validerade) ──
+    loadTodaysSignals();
 
     // ── 🏆 Backtest-validerade quant-screens ──
     loadQuantScreens();
