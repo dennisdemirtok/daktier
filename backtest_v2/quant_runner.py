@@ -167,6 +167,60 @@ def classify_spier_compounder(roe_history_10y):
     return n_above_15 >= 7 and len(roe_vals) >= 7
 
 
+def compute_piotroski_pit(db, isin, year):
+    """Förenklad Piotroski F-Score med PIT-data (utan look-ahead bias).
+
+    8 punkter (av 9 ursprungliga) — använder bara KPI-history < year:
+    1. ROA[0] > 0 (lönsamhet)
+    2. ROA[0] > ROA[1] (lönsamhet förbättras)
+    3. ROE[0] > 0
+    4. Vinstmarginal[0] > Vinstmarginal[1] (marginalförbättring)
+    5. Bruttomarginal[0] > Bruttomarginal[1] (operating leverage)
+    6. Antal aktier[0] <= antal aktier[1] (ingen utspädning)
+    7. Omsättningstillväxt > 0
+    8. Vinsttillväxt > 0
+
+    Returnerar score 0-8 (motsvarar Piotroski 8/9, F-Score-skalan).
+    """
+    if not isin:
+        return None
+    # Hämta 2 senaste år för varje KPI
+    roa = get_kpi_history_at_date(db, isin, 34, year, n_years=2)
+    roe = get_kpi_history_at_date(db, isin, 33, year, n_years=1)
+    vmarg = get_kpi_history_at_date(db, isin, 30, year, n_years=2)
+    bmarg = get_kpi_history_at_date(db, isin, 28, year, n_years=2)
+    shares = get_kpi_history_at_date(db, isin, 61, year, n_years=2)
+    revg = get_kpi_history_at_date(db, isin, 94, year, n_years=1)
+    epsg = get_kpi_history_at_date(db, isin, 97, year, n_years=1)
+
+    score = 0
+    # 1. ROA[0] > 0
+    if roa and roa[0][1] is not None and roa[0][1] > 0:
+        score += 1
+    # 2. ROA[0] > ROA[1]
+    if len(roa) >= 2 and roa[0][1] is not None and roa[1][1] is not None and roa[0][1] > roa[1][1]:
+        score += 1
+    # 3. ROE > 0
+    if roe and roe[0][1] is not None and roe[0][1] > 0:
+        score += 1
+    # 4. Vinstmarginal[0] > Vinstmarginal[1]
+    if len(vmarg) >= 2 and vmarg[0][1] is not None and vmarg[1][1] is not None and vmarg[0][1] > vmarg[1][1]:
+        score += 1
+    # 5. Bruttomarginal[0] > Bruttomarginal[1]
+    if len(bmarg) >= 2 and bmarg[0][1] is not None and bmarg[1][1] is not None and bmarg[0][1] > bmarg[1][1]:
+        score += 1
+    # 6. Antal aktier[0] <= antal aktier[1] (ingen utspädning)
+    if len(shares) >= 2 and shares[0][1] is not None and shares[1][1] is not None and shares[0][1] <= shares[1][1] * 1.01:
+        score += 1
+    # 7. Omsättningstillväxt > 0
+    if revg and revg[0][1] is not None and revg[0][1] > 0:
+        score += 1
+    # 8. Vinsttillväxt > 0
+    if epsg and epsg[0][1] is not None and epsg[0][1] > 0:
+        score += 1
+    return score
+
+
 def get_price_momentum_12_1(db, isin, date_iso):
     """Beräkna 12-1 momentum (return från 12m sedan till 1m sedan).
 
@@ -413,15 +467,15 @@ def run_quant_backtest(db, universe=None, start_year=2015, end_year=2024,
                 mf_combined = evebit_rank_pos[i] + roic_rank_pos[i]
             is_magic_formula = classify_magic_formula_top30(mf_combined, top_n=30)
 
-            # Piotroski Hi-F + Cheap (kräver F-Score från historisk data)
-            from edge_db import compute_piotroski_fscore
-            try:
-                fscore_data = compute_piotroski_fscore(db, isin)
-                fscore_val = fscore_data.get("score") if fscore_data else None
-            except Exception:
-                fscore_val = None
-            is_piotroski_hi_cheap = (pb_tertile is not None and
-                                      classify_piotroski_hi_f_cheap(kpis, fscore_val, pb_tertile))
+            # Piotroski Hi-F + Cheap — PIT-version (ingen look-ahead bias)
+            # Tröskel: F-Score ≥ 6 av 8 (vår förenklade skala).
+            fscore_val = compute_piotroski_pit(db, isin, year)
+            is_piotroski_hi_cheap = (
+                pb_tertile is not None
+                and fscore_val is not None and fscore_val >= 6
+                and kpis.get(4) is not None and kpis.get(4) > 0
+                and kpis[4] <= pb_tertile
+            )
 
             # Pabrai + Spier — kräver historik (10 år ROE/EPS)
             roe_hist = get_kpi_history_at_date(db, isin, 33, year, n_years=10)
