@@ -1563,6 +1563,12 @@ def api_quant_screen():
                    if (s.get("composite_score") or 0) >= 80
                    and s.get("is_growth_trifecta")]
         results.sort(key=lambda s: -(s.get("composite_score") or 0))
+    elif mode == "recurring_compounders":
+        # RECURRING COMPOUNDERS — bolag som flaggat GT 3+ år i rad
+        # ANET (6 år) +67.7%, NVDA (5 år) +116.9%, GOOGL/ADBE (5 år)
+        # När de flaggar GT IDAG = structural compounder, ÄNNU starkare.
+        results = [s for s in all_data if s.get("is_recurring_compounder")]
+        results.sort(key=lambda s: -(s.get("recurring_gt_years") or 0))
     elif mode == "quality_champions":
         # Quality Champions — top quality + ROIC ≥ 15%
         # Designat för US där Composite ≥80 sällan triggar pga höga värderingar

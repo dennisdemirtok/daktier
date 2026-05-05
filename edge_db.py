@@ -4701,6 +4701,37 @@ def compute_quant_scores(db, country="SE", min_market_cap=500e6,
             and s.get("momentum_score") is not None and s["momentum_score"] >= 70
         )
 
+    # ── RECURRING COMPOUNDERS (validerade 2015-2024) ──
+    # Bolag som flaggat Growth Trifecta 3+ år i rad i backtest 2015-2024.
+    # Avg 12m fwd returns för dessa har varit extraordinära:
+    # ANET (6 år) +67.7%, NVDA (5 år) +116.9%, GOOGL (5 år), ADBE (5 år),
+    # ISRG/LRCX/EW/AMAT (4 år), AVGO/VRTX/INTU (3 år).
+    # När dessa flaggar GT idag = ÄNNU starkare signal (structural compounders).
+    RECURRING_COMPOUNDERS_US = {
+        "NVDA": 5, "ANET": 6, "GOOGL": 5, "ADBE": 5, "ISRG": 4, "LRCX": 4,
+        "EW": 4, "AMAT": 4, "AVGO": 3, "VRTX": 3, "INTU": 3, "EBAY": 3,
+        "ULTA": 3, "REGN": 3, "APO": 3,
+    }
+    RECURRING_COMPOUNDERS_SE = {
+        # SE C80+GT 2015-2024 återkommande tickers (n≥2 i backtest):
+        "INVE A": 3, "INVE B": 3, "INDU A": 4, "INDU C": 4,
+        "CRED A": 4, "BETS B": 2, "KINV B": 2,
+    }
+    for s in universe:
+        ticker = s.get("ticker") or s.get("short_name") or ""
+        country = (s.get("country") or "").upper()
+        if country == "US":
+            n_recurring = RECURRING_COMPOUNDERS_US.get(ticker, 0)
+        elif country == "SE":
+            n_recurring = RECURRING_COMPOUNDERS_SE.get(ticker, 0)
+        else:
+            n_recurring = 0
+        s["recurring_gt_years"] = n_recurring
+        # is_recurring_compounder = flaggar GT idag OCH har historik 3+ år
+        s["is_recurring_compounder"] = (
+            s.get("is_growth_trifecta") and n_recurring >= 3
+        )
+
     # ── Magic Formula 30 (Greenblatt): rank(EV/EBIT) + rank(ROIC), top N ──
     # För universum > 100: top N = N // 10 (top 10%). För mindre: top 15.
     def _rank_pos(values, lower_better=False):

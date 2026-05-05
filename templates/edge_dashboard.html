@@ -3932,6 +3932,11 @@ function renderQuantRank(s) {
     // Screen-flaggor — visar vilka backtest-validerade screens bolaget kvalar i
     const screenBadges = [];
     const isUS = (q.country || '').toUpperCase() === 'US';
+    // 🌟 Recurring Compounder — STÖRSTA STATUSEN
+    if (q.is_recurring_compounder) {
+        const yrs = q.recurring_gt_years || 3;
+        screenBadges.push(`<span title="STRUCTURAL COMPOUNDER: bolaget har flaggat Growth Trifecta ${yrs} år i rad i backtest 2015-2024. Avg 12m fwd-return historiskt: NVDA +116.9%, ANET +67.7%, ADBE +27.1%. När det flaggar GT idag = compounder fortsätter." style="background:linear-gradient(135deg,#fbbf24,#dc2626,#7c3aed);color:white;padding:5px 16px;border-radius:16px;font-size:13px;font-weight:900;box-shadow:0 4px 12px rgba(251,191,36,0.5);letter-spacing:0.3px">🌟 RECURRING COMPOUNDER (${yrs} år)</span>`);
+    }
     // 🎯 GT+MF Confluence (US) — HÖGSTA SIGNAL
     if (q.is_growth_trifecta && q.is_magic_formula && isUS) {
         screenBadges.push(`<span title="GT + MF CONFLUENCE: BÅDA Growth Trifecta + Magic Formula. Backtest US: +21.57% alpha, 82% hit (n=11). Vår högsta US-signal — 3.5x bättre än GT alone." style="background:linear-gradient(135deg,#dc2626,#f59e0b);color:white;padding:4px 14px;border-radius:14px;font-size:12px;font-weight:800;box-shadow:0 2px 8px rgba(245,158,11,0.5)">🎯 GT+MF CONFLUENCE (US #1)</span>`);
@@ -6738,6 +6743,7 @@ const V2_SETUP_TABS = [
 
 // ── 🏆 Backtest-validerade quant-screens på startsidan ──
 const QUANT_SCREEN_TABS = [
+    { key: 'recurring', label: '🌟 Recurring Compounders', desc: 'Bolag som flaggat Growth Trifecta 3+ år i rad i backtest 2015-2024. ANET (6år) +67.7%, NVDA (5år) +116.9%. Strukturella vinnare.', mode: 'recurring_compounders' },
     { key: 'gt_mf_confluence', label: '🎯 GT+MF Confluence', desc: 'Growth Trifecta + Magic Formula. Backtest US 2015-2024: +21.57% alpha, 82% hit (n=11). VÅR HÖGSTA US-SIGNAL.', mode: 'gt_mf_confluence' },
     { key: 'c80_gt_confluence', label: '👑 C80+GT (SE)', desc: 'Composite ≥80 + Growth Trifecta. Backtest SE 2015-2024: +19.64% alpha, 76% hit (n=29). HÖGSTA SE-ALPHA.', mode: 'c80_gt_confluence' },
     { key: 'dual_screen',  label: '🏆 Dual-Screen',  desc: 'Composite ≥80 + Magic Formula. Backtest SE: +18.35% alpha, 82% hit (n=17). Robust värde-fokuserad signal.', mode: 'dual_screen' },
