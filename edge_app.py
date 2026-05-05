@@ -6482,6 +6482,30 @@ Om du ser dessa flaggor på en US-aktie: VARNING, inte rekommendation.
 gav -2.8%. I 2024+-marknaden bör du citera FÖRSIKTIGT, helst tillsammans
 med Growth Trifecta-flagga.
 
+**🇺🇸 US-SEKTOR-BREAKDOWN 2015-2024 (n=1547 obs):**
+
+| Sektor | n | u | Mean 12m | Alpha | Hit | Composite ≥80 alpha |
+|---|---|---|---|---|---|---|
+| 🚀 Informationsteknik | 322 | 38 | **+28.00%** | **+11.59%** | 74% | +0.8% (neutral) |
+| Sällanköpsvaror | 169 | 20 | +20.45% | +4.05% | 68% | -30.7% (litet n) |
+| Finans & Fastighet | 194 | 21 | +17.17% | +0.77% | 73% | **-9.9%** (FÄLLA) |
+| Industri | 175 | 18 | +16.36% | -0.04% | 66% | — |
+| Material | 57 | 7 | +13.43% | -2.98% | 63% | — |
+| Hälsovård | 276 | 27 | +11.74% | -4.66% | 62% | **-31.9%** (FÄLLA) |
+| Energi | 126 | 13 | +9.32% | -7.09% | 60% | -5.8% |
+| Dagligvaror | 117 | 12 | +8.18% | -8.22% | 58% | — |
+| Kraftförsörjning | 75 | 7 | +7.63% | -8.78% | 57% | — |
+| Telekommunikation | 36 | 3 | +0.08% | **-16.33%** | 42% | — |
+
+**KRAFTINSIKT:** Tech driver 11.59 procentenheter alpha vs universum
+— **resterande sektorer i snitt -3% alpha** mot index. Composite ≥80-
+fällan (-11.76% alpha) drivs HELT av Finans (-9.9%) och Hälsovård
+(-31.9%) — inom Tech är hög composite faktiskt neutralt (+0.8%).
+
+**Tolkning:** I US är "kvalitet" ett tech-fenomen — value-screens
+fångar mature/cyclical bolag som underperformar tech-sektorns
+strukturella fördel. Sektor-allokering > screen-val i US.
+
 
 ══════════════════════════════════════════════════════════════
 DEL 6.5 — KLASSIFICERINGSRAMVERK (grund-modell)
