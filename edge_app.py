@@ -6085,68 +6085,85 @@ Tydlig rekommendation i 3-5 meningar. Skriv färdigt — trunkera aldrig här.
 - Modeller exkluderade (N/A): ...
 
 ══════════════════════════════════════════════════════════════
-DEL 6.45 — KVANT-SCREENS (oberoende av LLM-analys)
+DEL 6.45 — KVANT-SCREENS (UPPDATERAD med Sharpe + sub-period validering)
 ══════════════════════════════════════════════════════════════
 
-Utöver den LLM-baserade analysen finns 5 oberoende kvantitativa screens
-som backtestats mot svenska marknaden 2015-2024 (200 bolag, 1823 obs).
-Dessa flaggar i `s.quant_rank` och kan citeras separat i analyser.
+Vi har 8 kvantitativa screens backtestade mot svenska marknaden 2015-2024
+(200 bolag, 1823 obs). Sub-period-test (2015-2019 vs 2020-2024) avslöjar
+vilka som är ROBUSTA över olika regimer vs vilka som är post-2020-fenomen.
 
-**Backtest-validerade alpha-siffror (200 svenska bolag, 9 år):**
+**Backtest-resultat (uppdaterad efter look-ahead-fix):**
 
-| Screen | Alpha vs universum | Hit | n obs | Trovärdighet |
-|---|---|---|---|---|
-| Quant Trifecta (Q+V+M ≥70) | +9.2% | 70% | 26 | OK — koncentrerat |
-| Piotroski Hi-F + Cheap | +5-7% | 73% | 71 | **STARKT** — bredd |
-| Composite ≥80 | +12% | 8/9 år+ | 62 | OK men preferens-bias |
-| Spier 10y Compounder | +1% | 69% | 347 | Svag — for mycket spridning |
-| Magic Formula 30 | +0% | 71% | 33 | Neutral i SE-marknaden |
+| Screen | Alpha | Sharpe | Hit | 2015-19 | 2020-24 | Robust? |
+|---|---|---|---|---|---|---|
+| **Composite ≥80** | +5.0% | +0.46 | 68% | **+12.4%** | **+2.3%** | ✅ JA — enda |
+| Quant Trifecta | +8.1% | +0.70 | 65% | −16.4% | +12.6% | ❌ post-2020 |
+| GARP (Lynch) | −0.1% | +0.43 | 64% | −4.8% | +4.0% | ❌ neutral |
+| Spier Compounder | −1.2% | +0.42 | 65% | −1.0% | −1.4% | ❌ ingen alpha |
+| Quality Momentum | −2.3% | +0.28 | 54% | −0.2% | −3.5% | ❌ neg |
+| Earnings Acceleration | −3.0% | +0.45 | 70% | 0% | −3% | ❌ neg |
+| Piotroski Hi-F+Cheap | varierar | — | — | — | — | ⚠ PIT-fix klar |
+| Magic Formula 30 | −4.2% | +0.30 | 63% | −8.6% | −2.2% | ❌ för generös |
+| Pabrai Dhandho | N/A | — | — | — | — | 0 SE-matches |
 
-**KRITISKA CAVEATS — så agenten inte oversells:**
+**KRITISKA CAVEATS — vad agenten ska veta:**
 
-1. **Composite ≥80 har preferensaktie-bias** — top frekventa är CORE/VOLO/
-   NP3 PREF (preferensaktier med låg volatilitet, hög Q+V-rank men låg
-   total return). Skapat alpha kommer mer från INDU/INVE i kris-år (2017,
-   2020, 2022) än från preferensaktierna i sig. Säg INTE bara "Composite
-   ≥80 = +12% alpha" — säg "Composite ≥80 fångar både preferensaktier
-   (low-vol) och investmentbolag (compounders)".
+1. **Bara Composite ≥80 är robust över BÅDA tidsperioder** (+12.4% i
+   2015-2019 och +2.3% i 2020-2024). Alla andra antingen har bara
+   alpha i en period eller ingen alpha alls.
 
-2. **Quant Trifecta är koncentrerad** — 13 unika tickers över 9 år. Mest
-   Investor + Industrivärden + några råvaru-spikes (LUG, SSAB, IPCO). N=26
-   är litet, slutsatsen "+9.2% alpha" är **inte statistiskt signifikant**
-   med så få obs.
+2. **Quant Trifecta var post-2020-fenomen.** 2015-2019 var alphan
+   −16.4%! Hela "vinsten" kom från corona-rebound + inflation-cykel.
+   Använd försiktigt — INTE en evergreen-strategi.
 
-3. **2021 var dåligt år för alla quant-screens** (-18% för Composite ≥80).
-   Quant fångar inte alla regimer.
+3. **Pris-momentum funkar INTE på svenska smallcaps.** Quality Momentum,
+   Earnings Acceleration, GARP — alla negativa eller noll alpha.
+   Akademisk momentum-research bygger på US large-cap.
 
-4. **Spier underperformar** — 347 obs men bara +1% alpha. Långsiktig
-   compounder-screen fångar för många "redan högt prissatta" bolag.
-   Akademisk litteratur visar samma — quality-premium är mestadels priskat in.
+4. **Composite ≥80 har preferensaktie-bias** — top frekventa är
+   CORE/VOLO/NP3 PREF (preferensaktier med stabil ROE → höga ranks
+   men låg total return). Den faktiska alphan kommer från INDU/INVE
+   i kris-år (2017, 2020, 2022). Validera tes innan position.
 
-5. **Pabrai 0 matches på SE-data** — kraven (ROA ≥15% + P/E ≤15 +
-   90%+ vinstår) är extrema för svenska marknaden. Säg **N/A**, inte att
-   "Pabrai-screenet ger noll" (det betyder ingen kvalar in, inte att de
-   som kvalar går dåligt).
+5. **Pabrai 0 matches på SE-data** — extrema krav. För US-marknaden
+   troligen meningsfullt, men säg N/A för svenska bolag.
 
 **När agenten ska citera screens:**
 
-- Om `s.quant_rank.composite_score >= 80` → nämn "kvant-screen Composite ≥80
-  — backtest 2015-2024 ger +12% alpha med 8/9 positiva år, men screenen
-  fångar mest preferensaktier (låg volatilitet) och investmentbolag i
-  kris-år, så validera mot specifik tes innan du tar position."
+- Om `s.quant_rank.composite_score >= 80`:
+  > "Quant Composite ≥80 — den ENDA av våra 8 backtest-validerade
+  > screens med positiv alpha i båda tidsperioder (2015-2019: +12.4%,
+  > 2020-2024: +2.3%). Sharpe 0.46. OBS: fångar mest preferensaktier
+  > (låg volatilitet) + investmentbolag i kris-år."
 
-- Om `s.quant_rank.is_quant_trifecta` → nämn "kvant-trifecta — top 30%
-  i Q+V+M alla samtidigt. Backtestat +9.2% alpha men n=26 över 9 år är
-  litet. Använd som extra signal, inte som ensam grund."
+- Om `s.quant_rank.is_quant_trifecta`:
+  > "Kvant-Trifecta — top 30% i Q+V+M. Backtest 2020-2024: +12.6% alpha,
+  > men 2015-2019: −16.4% alpha. Detta är ett **regime-specifikt** mönster
+  > (post-corona mean-reversion). Inte robust som ensam signal."
 
-- Om Piotroski-flagga (kommer i framtida release): "Piotroski F-Score ≥8
-  + P/B i nedersta tertilen — akademiskt validerat (Piotroski 2000,
-  +7.5%/år). Vår SE-backtest ger +5-7% alpha med 73% hit rate."
+- Om både Composite ≥80 OCH LLM-Trifecta flaggar:
+  > "Stark dubbel-signal: kvant-Composite ≥80 (mekanisk) + LLM-Trifecta
+  > (kvalitativ bedömning). När båda oberoende analysmetoder pekar
+  > samma håll är konvektionsgraden hög."
+
+**Vad agenten INTE ska säga:**
+
+- ❌ "Magic Formula 30 ger 19% CAGR" (Greenblatts ursprungssiffra för US
+  marknaden — vår SE-backtest visar −4.2% alpha, screenen är för generös)
+- ❌ "Piotroski är akademiskt validerad +7.5%/år" (utan att precisera att
+  den siffran är från US small-cap 1976-1996, inte SE 2015-2024)
+- ❌ "Quality Momentum kombinerar bästa av båda världar" (vi har testat
+  och det levererar inte alpha på svenska marknaden)
 
 **Skiljelinje LLM vs Kvant:**
-- LLM-trifecta = 4-axel-bedömning av 13 bok-modeller (kvalitativ)
-- Kvant-trifecta = percent-rank top 30% i Q+V+M (mekanisk)
+- LLM-trifecta = kvalitativ bedömning av 13 bok-modeller
+- Kvant-trifecta = mekanisk percent-rank top 30% i Q+V+M
 - De är OBEROENDE — när BÅDA flaggar samma bolag är signalen starkare
+
+**Survivorship bias-disclaimer:** Vår backtest använder endast bolag som
+fortfarande existerar 2026 i Avanzas screener (>500M mcap). Akademisk
+forskning visar 2-4% överskattning av alpha pga survivorship. Sätt mental
+adjustment: våra +5% alpha-siffror är troligen +2-3% i verkligheten.
 
 
 ══════════════════════════════════════════════════════════════
