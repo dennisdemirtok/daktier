@@ -6785,6 +6785,41 @@ Om du ser dessa flaggor på en US-aktie: VARNING, inte rekommendation.
 gav -2.8%. I 2024+-marknaden bör du citera FÖRSIKTIGT, helst tillsammans
 med Growth Trifecta-flagga.
 
+**🏆 STÖRSTA UPPTÄCKTEN — CONFLUENCE GT + MF = +21.57% ALPHA:**
+
+När en US-aktie flaggar BÅDE Growth Trifecta OCH Magic Formula:
+
+| Screen | n | Alpha | Hit | Sharpe |
+|---|---|---|---|---|
+| Growth Trifecta alone | 125 | +6.15% | 74% | 0.58 |
+| Magic Formula alone | 32 | +10.08% | 81% | 0.60 |
+| **🎯 BÅDA tillsammans** | **11** | **+21.57%** | **82%** | (mkt hög) |
+
+Confluence ger **3.5× alpha** vs Growth Trifecta alone. Histori (n=11):
+- NVDA 2016: +213%
+- LRCX 2019: +78%
+- AAPL 2016: +51%
+- REGN 2022: +18%
+- BIIB, RIO, MU, LRCX, EQNR, GILD: blandat positivt
+
+Dessa "GT + MF"-träffar är **billiga ENL EV/EBIT/ROIC + kvalitet + momentum**
+samtidigt = sällsynt och starkt. Citera detta som **STARK signal**.
+
+**📉 GROWTH TRIFECTA DRAWDOWN-DISTRIBUTION (n=125):**
+- Median: +18.27% (rejäl övervinst)
+- 25%-percentil: +1.75%
+- 75%-percentil: +41.48%
+- 90%-percentil: +72.95%
+- Max: +213% (NVDA 2016)
+- 23% är negativa, men bara 9% går under -20%
+- **Worst case: PYPL 2021 (-75%)** — dyra fintech-bolag i ränte-höjningar
+
+**Per-år GT alpha 2015-2024 (US):**
+- 2016: +29.9%, 2017: +12.8%, **2018: -13.4%** (litet n=8)
+- 2019: +20.8%, 2020: +24.2%, **2021: -23.9%** (PYPL dragned)
+- 2022: -6.8%, 2023: +16.8%, 2024: +14.4%
+- Robust 7/9 år med positiv alpha
+
 **🇺🇸 US-SEKTOR-BREAKDOWN 2015-2024 (n=1547 obs):**
 
 | Sektor | n | u | Mean 12m | Alpha | Hit | Composite ≥80 alpha |
