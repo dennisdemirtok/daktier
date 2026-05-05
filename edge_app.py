@@ -7360,6 +7360,45 @@ def _build_agent_context(db, max_per_list=20):
     except Exception:
         pass
 
+    # 🎯 DAGENS BUY/AVOID — empiriskt validerade från backtest 2015-2024
+    try:
+        from edge_db import compute_quant_scores
+        buys_se, avoids_se, buys_us, avoids_us = [], [], [], []
+        for country, buys, avoids in [("SE", buys_se, avoids_se), ("US", buys_us, avoids_us)]:
+            try:
+                data = compute_quant_scores(db, country=country, max_universe=300)
+                for s in data:
+                    if s.get("recommendation") == "BUY":
+                        buys.append(s)
+                    elif s.get("recommendation") == "AVOID":
+                        avoids.append(s)
+            except Exception:
+                continue
+
+        # Sortera BUY på n_flags desc, sen composite
+        for lst in [buys_se, buys_us]:
+            lst.sort(key=lambda s: (-(s.get("n_flags") or 0), -(s.get("composite_score") or 0)))
+
+        buy_lines = []
+        for s in (buys_se + buys_us)[:15]:
+            tk = s.get("ticker") or s.get("short_name", "?")
+            country = s.get("country", "?")
+            reason = s.get("recommendation_reason", "")
+            buy_lines.append(f"  - {tk} ({country}) — {reason}")
+        if buy_lines:
+            parts.append("🎯 DAGENS BUY-SIGNALER (empiriskt validerade backtest 2015-2024):\n" + "\n".join(buy_lines))
+
+        avoid_lines = []
+        for s in (avoids_se + avoids_us)[:8]:
+            tk = s.get("ticker") or s.get("short_name", "?")
+            country = s.get("country", "?")
+            reason = s.get("recommendation_reason", "")
+            avoid_lines.append(f"  - {tk} ({country}) — {reason}")
+        if avoid_lines:
+            parts.append("🚫 DAGENS AVOID-SIGNALER (anti-mönster från backtest):\n" + "\n".join(avoid_lines))
+    except Exception as e:
+        print(f"[agent ctx] BUY/AVOID-error: {e}", file=sys.stderr)
+
     return "\n\n".join(parts)
 
 
