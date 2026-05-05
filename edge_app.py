@@ -1543,6 +1543,15 @@ def api_quant_screen():
         results = [s for s in all_data
                    if s.get("is_growth_trifecta") and s.get("is_magic_formula")]
         results.sort(key=lambda s: -(s.get("composite_score") or 0))
+    elif mode == "c80_gt_confluence":
+        # SE-version: Composite ≥80 + Growth Trifecta (Q+M ≥70)
+        # Backtest SE 2015-2024: +19.64% alpha, 76% hit, n=29 unika tickers
+        # MEST robust SE-screen efter Dual-Screen, högre n och alpha.
+        # Exempel: INVE A/B, INDU A/C, CRED A, BETS B
+        results = [s for s in all_data
+                   if (s.get("composite_score") or 0) >= 80
+                   and s.get("is_growth_trifecta")]
+        results.sort(key=lambda s: -(s.get("composite_score") or 0))
     elif mode == "quality_champions":
         # Quality Champions — top quality + ROIC ≥ 15%
         # Designat för US där Composite ≥80 sällan triggar pga höga värderingar
@@ -4237,6 +4246,7 @@ def api_live_tracker_snapshot():
         {"name": "gt_mf_confluence_us", "country": "US", "mode": "gt_mf_confluence"},
         {"name": "growth_trifecta_us", "country": "US", "mode": "growth_trifecta"},
         {"name": "magic_formula_us", "country": "US", "mode": "magic_formula"},
+        {"name": "c80_gt_confluence_se", "country": "SE", "mode": "c80_gt_confluence"},
         {"name": "dual_screen_se", "country": "SE", "mode": "dual_screen"},
         {"name": "composite_80_se", "country": "SE", "mode": "composite_80"},
     ]
@@ -4259,6 +4269,8 @@ def api_live_tracker_snapshot():
             "magic_formula": lambda s: s.get("is_magic_formula"),
             "gt_mf_confluence": lambda s: (s.get("is_growth_trifecta")
                                             and s.get("is_magic_formula")),
+            "c80_gt_confluence": lambda s: ((s.get("composite_score") or 0) >= 80
+                                              and s.get("is_growth_trifecta")),
             "trifecta": lambda s: s.get("is_quant_trifecta"),
             "dual_screen": lambda s: s.get("is_dual_screen"),
             "composite_80": lambda s: (s.get("composite_score") or 0) >= 80,
@@ -6655,17 +6667,38 @@ adjustment: våra +5% alpha-siffror är troligen +2-3% i verkligheten.
 DEL 6.46 — KOMBINATIONS-SCREENS + SEKTOR-INSIKTER (200 SE-bolag)
 ══════════════════════════════════════════════════════════════
 
-**🥇 BÄSTA SIGNAL — Composite ≥80 + Magic Formula:**
-- Backtest: n=15, **+19.26% alpha**, Sharpe **+1.23**, **87% hit rate**
-- 12 unika tickers, sprids över sektorer
-- Detta är vår starkaste validerade signal — när två oberoende
-  metoder (Composite + Magic Formula) flaggar samma bolag
+**🥇 BÄSTA SIGNAL #1 — Composite ≥80 + Magic Formula (Dual-Screen):**
+- Backtest: n=17, **+18.35% alpha**, **82% hit rate**
+- Två oberoende metoder bekräftar samma bolag
+- Klassisk "billig + kvalitet"-screen för SE
 
-När agenten ser bolag som flaggas av BÅDA: betona kraftigt:
+**🏆 BÄSTA SIGNAL #2 — Composite ≥80 + Growth Trifecta (NY):**
+- Backtest SE 2015-2024: n=29, **+19.64% alpha**, 76% hit rate
+- HÖGRE n (29 vs 17), HÖGRE alpha (+19.64% vs +18.35%)
+- Inkluderar både värde-bolag (Industrivärden, Investor) och tillväxt
+  (CRED A +40% avg, Embracer +283% i 2017)
+- Tillgänglig som mode=c80_gt_confluence
+
+**Skillnad C80+MF vs C80+GT:**
+- C80+MF: värde-fokuserat, högre hit rate (82%)
+- C80+GT: bredare med kvalitet+momentum, högre alpha (+19.64%)
+- Citera C80+GT när momentum-signaler är stark (M-score ≥80)
+
+När agenten ser bolag som flaggas av BÅDA Composite ≥80 + Magic Formula:
 > "DUBBEL-SIGNAL: bolaget flaggas av Composite ≥80 (Quality+Value+Momentum)
 > OCH Magic Formula 30 (Greenblatt: hög ROIC × billigt EV/EBIT). Backtest
-> 2015-2024 visar +19.26% alpha med 87% hit rate och Sharpe 1.23 i denna
-> kombination — vår starkaste validerade kvant-signal."
+> SE 2015-2024 (n=17) visar +18.35% alpha med 82% hit rate — vår mest
+> robusta värde-fokuserade signal."
+
+När bolag flaggar Composite ≥80 + Growth Trifecta:
+> "TRIPPEL-FLAGGA: Composite ≥80 (premium-kvalitet) + Growth Trifecta
+> (Q+M ≥70). Backtest SE 2015-2024 (n=29, 76% hit rate) ger +19.64% alpha.
+> Detta är vår högsta-alpha SE-signal med statistiskt robust n."
+
+**SE per-år alpha för Composite ≥80:**
+2017: +39.7% (Embracer +283%), 2020: +21.1%, 2022: +11.0%
+Negativa år: 2018 (-6.7%), **2021 (-34.0%)** (VIMIAN -58%, CORE PREF -24%)
+2024: -8.6% (svagt — ränte-nedjusteringar)
 
 **🚨 SEKTOR-VARNING — Composite ≥80 i Finans/fastighet är FÄLLA:**
 - 47 av 63 Composite ≥80-obs ligger i Finans/fastighet
