@@ -4244,18 +4244,40 @@ def api_live_tracker_snapshot():
              "composite_score", "last_updated"],
             ["snapshot_date", "screen_name", "ticker"])
 
+        # Mode-filter (samma som /api/quant-screen)
+        MODE_FILTERS = {
+            "growth_trifecta": lambda s: s.get("is_growth_trifecta"),
+            "magic_formula": lambda s: s.get("is_magic_formula"),
+            "trifecta": lambda s: s.get("is_quant_trifecta"),
+            "dual_screen": lambda s: s.get("is_dual_screen"),
+            "composite_80": lambda s: (s.get("composite_score") or 0) >= 80,
+            "composite_70": lambda s: (s.get("composite_score") or 0) >= 70,
+            "quality_champions": lambda s: ((s.get("quality_score") or 0) >= 75
+                                              and (s.get("roic") or 0) >= 15),
+        }
+
         results = {}
+        # Cache scoring per country (sparar tid om flera screens samma country)
+        scoring_cache = {}
         for s in screens:
             screen_name = s.get("name")
             country = s.get("country", "US")
-            mode = s.get("mode", "raw")
+            mode = s.get("mode", "composite_80")
 
-            # Använd compute_quant_scores direkt
             try:
-                stocks = compute_quant_scores(db, country=country, mode=mode, limit=300)
+                if country not in scoring_cache:
+                    scoring_cache[country] = compute_quant_scores(
+                        db, country=country, max_universe=300)
+                all_data = scoring_cache[country]
             except Exception as e:
                 results[screen_name] = {"error": str(e)[:200]}
                 continue
+
+            f = MODE_FILTERS.get(mode)
+            if f is None:
+                stocks = all_data
+            else:
+                stocks = [x for x in all_data if f(x)]
 
             n_saved = 0
             for stk in stocks:
@@ -4276,7 +4298,7 @@ def api_live_tracker_snapshot():
             results[screen_name] = {
                 "n_candidates": len(stocks),
                 "n_saved": n_saved,
-                "tickers": [s.get("ticker") or s.get("short_name") for s in stocks][:30],
+                "tickers": [x.get("ticker") or x.get("short_name") for x in stocks][:30],
             }
 
         return jsonify({
