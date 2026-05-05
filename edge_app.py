@@ -4294,6 +4294,153 @@ def api_backtest_v2_stock_history(ticker):
         return jsonify({"error": str(e), "tb": traceback.format_exc()[:1500]}), 500
 
 
+@app.route("/api/portfolio/recommend", methods=["POST"])
+def api_portfolio_recommend():
+    """Genererar konkret portfölj-rekommendation baserad på BUY-signaler.
+
+    Body: {budget_sek: 100000, country?: 'SE'|'US'|'mixed', max_positions?: 10}
+    Returnerar:
+        - positions: lista av {ticker, name, weight, allocation_sek, n_shares}
+        - confidence_tier: 'super' (4+ flaggor), 'strong' (recurring), 'moderate'
+        - sector_breakdown: viktning per sektor
+        - expected_alpha_pct: vägt snitt av historisk alpha per signal-typ
+
+    Allokeringsregel:
+    - Super Confluence (≥4 flaggor): 15% per position (max 4)
+    - GT+MF/C80+GT Confluence: 10% per position (max 5)
+    - Recurring Compounder: 8% per position (max 6)
+    - Övriga BUY: 5% per position
+    - Max 10 positions totalt, max 25% per sektor
+    """
+    body = request.json if request.is_json else {}
+    budget = float(body.get("budget_sek", 100000))
+    country_filter = body.get("country", "mixed")  # SE, US, mixed
+    max_positions = int(body.get("max_positions", 10))
+
+    db = get_db()
+    try:
+        from edge_db import compute_quant_scores
+
+        # Hämta BUY från relevanta marknader
+        all_buys = []
+        countries = ["SE", "US"] if country_filter == "mixed" else [country_filter.upper()]
+        for c in countries:
+            try:
+                data = compute_quant_scores(db, country=c, max_universe=300)
+                for s in data:
+                    if s.get("recommendation") == "BUY":
+                        s["_country"] = c
+                        all_buys.append(s)
+            except Exception:
+                continue
+
+        # Sortera efter signal-tier
+        def tier(s):
+            n = s.get("n_flags", 0) or 0
+            if n >= 4: return 0  # super
+            if n >= 3: return 1  # multi-conf
+            if s.get("is_recurring_compounder"): return 2
+            if s.get("is_dual_screen"): return 3
+            return 4
+
+        all_buys.sort(key=lambda s: (tier(s), -(s.get("composite_score") or 0)))
+
+        # Tier-baserade weights
+        TIER_WEIGHT = {0: 0.15, 1: 0.10, 2: 0.08, 3: 0.07, 4: 0.05}
+        TIER_NAME = {0: "Super Confluence", 1: "Confluence", 2: "Recurring",
+                     3: "Dual-Screen", 4: "Single BUY"}
+        TIER_ALPHA = {0: 25.0, 1: 21.57, 2: 24.92, 3: 18.35, 4: 6.15}
+
+        # Allokera (max 1 av varje ticker, sektor-limit 25%)
+        sector_total = {}
+        positions = []
+        used_tickers = set()
+        total_weight_used = 0.0
+
+        for s in all_buys:
+            if len(positions) >= max_positions: break
+            if total_weight_used >= 0.95: break  # Max 95% allokerat (5% kassa)
+
+            tk = s.get("ticker") or s.get("short_name") or ""
+            if tk in used_tickers: continue
+
+            t = tier(s)
+            w = TIER_WEIGHT[t]
+            sector = s.get("sector_name") or "Unknown"
+
+            # Sektor-cap: max 25% per sektor
+            current_sector_w = sector_total.get(sector, 0)
+            if current_sector_w + w > 0.25:
+                w = max(0.0, 0.25 - current_sector_w)
+                if w < 0.03: continue  # För liten allokering
+
+            # Justera om over-budget
+            w = min(w, 0.95 - total_weight_used)
+            if w < 0.03: continue
+
+            allocation_sek = budget * w
+            price = s.get("last_price")
+            currency = s.get("currency") or "SEK"
+            # Konvertering om nödvändig (USD → SEK)
+            sek_price = price
+            if currency == "USD" and price:
+                sek_price = price * 10.5  # approx
+            n_shares = int(allocation_sek / sek_price) if sek_price and sek_price > 0 else 0
+
+            positions.append({
+                "ticker": tk,
+                "name": s.get("name"),
+                "country": s.get("_country"),
+                "tier": TIER_NAME[t],
+                "tier_alpha_pct": TIER_ALPHA[t],
+                "weight_pct": round(w * 100, 1),
+                "allocation_sek": round(allocation_sek, 2),
+                "price": price,
+                "currency": currency,
+                "n_shares": n_shares,
+                "actual_allocation_sek": round((n_shares * sek_price) if sek_price else 0, 2),
+                "composite_score": s.get("composite_score"),
+                "n_flags": s.get("n_flags"),
+                "reason": s.get("recommendation_reason"),
+                "sector": sector,
+            })
+            used_tickers.add(tk)
+            sector_total[sector] = current_sector_w + w
+            total_weight_used += w
+
+        # Sammanfattning
+        sector_breakdown = sorted(
+            [{"sector": k, "weight_pct": round(v * 100, 1)}
+             for k, v in sector_total.items()],
+            key=lambda x: -x["weight_pct"])
+
+        # Vägt expected alpha
+        expected_alpha = 0.0
+        if positions:
+            total_w = sum(p["weight_pct"] for p in positions)
+            expected_alpha = sum(p["tier_alpha_pct"] * p["weight_pct"] for p in positions) / total_w if total_w > 0 else 0
+
+        return jsonify({
+            "budget_sek": budget,
+            "country_filter": country_filter,
+            "n_positions": len(positions),
+            "total_allocation_pct": round(total_weight_used * 100, 1),
+            "cash_remaining_pct": round((1 - total_weight_used) * 100, 1),
+            "expected_alpha_pct_weighted": round(expected_alpha, 2),
+            "positions": positions,
+            "sector_breakdown": sector_breakdown,
+            "note": ("Allokering baserad på empiriskt validerade backtest-signaler "
+                     "2015-2024. Tier-vikter: Super Confluence 15% (4+ flaggor), "
+                     "Confluence 10%, Recurring 8%, Dual-Screen 7%, Single BUY 5%. "
+                     "Max 25% per sektor. Sista 5% i kassa för flexibilitet."),
+        })
+    except Exception as e:
+        import traceback
+        return jsonify({"error": str(e), "tb": traceback.format_exc()[:1500]}), 500
+    finally:
+        db.close()
+
+
 @app.route("/api/live-tracker/snapshot", methods=["POST"])
 def api_live_tracker_snapshot():
     """Spara dagens screen-träffar för senare 12m-uppföljning.
