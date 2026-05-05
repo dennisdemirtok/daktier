@@ -6750,21 +6750,40 @@ const QUANT_SCREEN_TABS = [
 ];
 let _activeQuantTab = 'gt_mf_confluence';
 
+// Country-aware default-screen baserat på backtest 2015-2024
+const COUNTRY_BEST_SCREEN = {
+    'SE': { mode: 'c80_gt_confluence', label: '👑 C80+GT (SE bäst, +19.64%)' },
+    'US': { mode: 'gt_mf_confluence',  label: '🎯 GT+MF (US bäst, +21.57%)' },
+    'NO': { mode: 'composite_80',      label: '💎 Composite ≥80 (NO bäst, +4.38%)' },
+    'FI': { mode: 'composite_80',      label: '💎 Composite ≥80 (FI bäst, +16.34%)' },
+    'DK': { mode: 'magic_formula',     label: '📊 Magic Formula (DK bäst, +2.63%)' },
+    'DE': { mode: 'magic_formula',     label: '📊 Magic Formula (DE-data n=22)' },
+};
+
 async function loadQuantScreens() {
     const wrap = document.getElementById('quantScreensContent');
     if (!wrap) return;
-    const tabsHtml = QUANT_SCREEN_TABS.map(t => `
-        <button class="v2-setup-tab ${_activeQuantTab === t.key ? 'active' : ''}"
-                onclick="setQuantTab('${t.key}')" title="${t.desc}">
-            ${t.label}
-        </button>
-    `).join('');
+    const country = _trendingCountry || 'SE';
+    const bestForCountry = COUNTRY_BEST_SCREEN[country];
+    const tabsHtml = QUANT_SCREEN_TABS.map(t => {
+        const isBest = bestForCountry && bestForCountry.mode === t.mode;
+        return `<button class="v2-setup-tab ${_activeQuantTab === t.key ? 'active' : ''}"
+                onclick="setQuantTab('${t.key}')" title="${t.desc}"
+                style="${isBest ? 'border:2px solid #f59e0b;font-weight:700' : ''}">
+            ${t.label}${isBest ? ' ⭐' : ''}
+        </button>`;
+    }).join('');
+    const countryHint = bestForCountry ?
+        `<div style="font-size:12px;color:#6b7280;margin-bottom:8px">
+            För <strong>${country}</strong>: ${bestForCountry.label} är bäst enligt backtest 2015-2024
+        </div>` : '';
     wrap.innerHTML = `
+        ${countryHint}
         <div class="v2-setup-tabs" style="margin-bottom:10px">${tabsHtml}</div>
         <div id="quantScreenList"><div class="loading-wrap" style="padding:24px">Laddar…</div></div>
     `;
     const tab = QUANT_SCREEN_TABS.find(t => t.key === _activeQuantTab) || QUANT_SCREEN_TABS[0];
-    const url = `/api/quant-screen?country=SE&mode=${tab.mode}&limit=10${tab.extra || ''}`;
+    const url = `/api/quant-screen?country=${country}&mode=${tab.mode}&limit=10${tab.extra || ''}`;
     try {
         const r = await fetch(url);
         const data = await r.json();
