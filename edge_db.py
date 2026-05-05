@@ -4647,6 +4647,16 @@ def compute_quant_scores(db, country="SE", min_market_cap=500e6,
             and m_score is not None and m_score >= 70
         )
 
+    # ── Growth Trifecta — Quality + Momentum HÖGT (ignorerar Value)
+    # Designat för US tech-bolag som NVDA/MSFT/AAPL där V är låg pga
+    # höga multiplar men Q+M är stark. Kompletterar Quant Trifecta som
+    # missar dessa systematiskt. ──
+    for s in universe:
+        s["is_growth_trifecta"] = (
+            s.get("quality_score") is not None and s["quality_score"] >= 70
+            and s.get("momentum_score") is not None and s["momentum_score"] >= 70
+        )
+
     # ── Magic Formula 30 (Greenblatt): rank(EV/EBIT) + rank(ROIC), top N ──
     # För universum > 100: top N = N // 10 (top 10%). För mindre: top 15.
     def _rank_pos(values, lower_better=False):

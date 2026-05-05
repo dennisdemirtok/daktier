@@ -443,6 +443,13 @@ def run_quant_backtest(db, universe=None, start_year=2015, end_year=2024,
                 and m_score is not None and m_score >= 70
             )
 
+            # Growth Trifecta — Q + M ≥70 (utan V-krav)
+            # För dyra tech-bolag där Value-axeln aldrig kvalar
+            is_growth_trifecta = (
+                q_score is not None and q_score >= 70
+                and m_score is not None and m_score >= 70
+            )
+
             # Composite (40Q + 35V + 25M)
             scores = []
             if q_score is not None: scores.append((q_score, 0.40))
@@ -515,6 +522,7 @@ def run_quant_backtest(db, universe=None, start_year=2015, end_year=2024,
                 "m_score": round(m_score, 1) if m_score is not None else None,
                 "composite": round(composite, 1) if composite is not None else None,
                 "is_trifecta": is_trifecta,
+                "is_growth_trifecta": is_growth_trifecta,
                 "is_magic_formula": is_magic_formula,
                 "is_piotroski_hi_cheap": is_piotroski_hi_cheap,
                 "is_pabrai": is_pabrai,
@@ -725,6 +733,9 @@ def analyze_quant_results(results):
     screens = [
         screen_stats("Quant Trifecta",
                       [r for r in valid if r["is_trifecta"]],
+                      universe_mean),
+        screen_stats("Growth Trifecta (Q+M)",
+                      [r for r in valid if r.get("is_growth_trifecta")],
                       universe_mean),
         screen_stats("Composite >=80",
                       [r for r in valid if r.get("composite") is not None and r["composite"] >= 80],

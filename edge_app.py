@@ -1527,6 +1527,12 @@ def api_quant_screen():
         # Magic Formula 30 (Greenblatt) — rank(EV/EBIT) + rank(ROIC) top 10%
         results = [s for s in all_data if s.get("is_magic_formula")]
         results.sort(key=lambda s: -(s.get("composite_score") or 0))
+    elif mode == "growth_trifecta":
+        # Growth Trifecta — Q+M ≥70 (utan V-krav). För dyra-men-starka tech-bolag
+        # som annars missas av klassisk Trifecta. Akademisk grund: Asness et al.
+        # "Quality at a Reasonable Price" (2013) visar Q+M utan V också ger alpha.
+        results = [s for s in all_data if s.get("is_growth_trifecta")]
+        results.sort(key=lambda s: -((s.get("quality_score") or 0) + (s.get("momentum_score") or 0)))
     elif mode == "quality_champions":
         # Quality Champions — top quality + ROIC ≥ 15%
         # Designat för US där Composite ≥80 sällan triggar pga höga värderingar
