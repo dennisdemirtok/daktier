@@ -7518,16 +7518,19 @@ Om du ser dessa flaggor på en US-aktie: VARNING, inte rekommendation.
 gav -2.8%. I 2024+-marknaden bör du citera FÖRSIKTIGT, helst tillsammans
 med Growth Trifecta-flagga.
 
-**🚨 ÄRLIG STATISTISK VALIDERING (5000 bootstrap-iter, ticker-clustering):**
+**🚨 ÄRLIG STATISTISK VALIDERING — bootstrap CI + cluster + transaktionskostnader:**
 
-| Screen | n | n_unique | Punktestimat | Cluster 95% CI | Status |
-|---|---|---|---|---|---|
-| **Dual-Screen SE (C80+MF)** | 17 | 12 | +18.35% | **[+8.2%, +31.1%]** | ✅ MEST ROBUST |
-| **C80+GT Confluence SE** | 29 | 16 | +19.64% | [+3.5%, +47.4%] | ✅ Robust |
-| **Growth Trifecta US** | 125 | 61 | +10.10% | [+1.2%, +20.0%] | ✅ Robust |
-| GT+MF Confluence US | 11 | 9 | +21.57% | **[-7.3%, +65.5%]** | ⚠️ EJ SIGNIFIKANT |
-| Magic Formula US | 22 | 17 | +13.81% | [-1.5%, +36.6%] | ⚠️ Gränsfall |
-| Composite ≥80 SE | 63 | 26 | +5.19% | [-5.1%, +22.3%] | ⚠️ Gränsfall |
+| Screen | n | n_unique | Gross α | Cluster CI | Turnover | Net CI lower | Status |
+|---|---|---|---|---|---|---|---|
+| **Dual-Screen SE (C80+MF)** | 17 | 12 | +18.35% | [+8.2%, +31.1%] | 70% | **+7.99%** | ✅ **MEST ROBUST** |
+| C80+GT Confluence SE | 29 | 16 | +19.64% | [+3.5%, +47.4%] | ~50% | ~+2% | ✅ Robust |
+| Growth Trifecta US | 125 | 61 | +10.10% | [+1.2%, +20.0%] | 60% | +1.02% | ✅ Robust |
+| GT+MF Confluence US | 11 | 9 | +21.57% | [-7.3%, +65.5%] | — | — | ⚠️ EJ SIGNIFIKANT |
+| Magic Formula US | 22 | 17 | +13.81% | [-1.5%, +36.6%] | 66% | -1.70% | ❌ Eaten av kostnader |
+| Composite ≥80 SE | 63 | 26 | +5.19% | [-5.1%, +22.3%] | 46% | -5.24% | ❌ Inte signifikant |
+
+**Antagande:** 15 bps per trade (10 bps round-trip + 5 bps spread).
+Cost = turnover × 15 × 2 bps per år.
 
 **KRITISK INSIKT FÖR AGENTEN:**
 
