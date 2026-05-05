@@ -3927,22 +3927,31 @@ function renderQuantRank(s) {
 
     // Screen-flaggor — visar vilka backtest-validerade screens bolaget kvalar i
     const screenBadges = [];
-    // 🏆 Dual-Screen är BÄSTA signal — visa först om aktiv
+    const isUS = (q.country || '').toUpperCase() === 'US';
+    // 🎯 GT+MF Confluence (US) — HÖGSTA SIGNAL
+    if (q.is_growth_trifecta && q.is_magic_formula && isUS) {
+        screenBadges.push(`<span title="GT + MF CONFLUENCE: BÅDA Growth Trifecta + Magic Formula. Backtest US: +21.57% alpha, 82% hit (n=11). Vår högsta US-signal — 3.5x bättre än GT alone." style="background:linear-gradient(135deg,#dc2626,#f59e0b);color:white;padding:4px 14px;border-radius:14px;font-size:12px;font-weight:800;box-shadow:0 2px 8px rgba(245,158,11,0.5)">🎯 GT+MF CONFLUENCE (US #1)</span>`);
+    }
+    // 👑 C80+GT (SE) — HÖGSTA SE-SIGNAL
+    if (q.is_growth_trifecta && q.composite_score != null && q.composite_score >= 80 && !isUS) {
+        screenBadges.push(`<span title="C80+GT CONFLUENCE: Composite ≥80 + Growth Trifecta. Backtest SE: +19.64% alpha, 76% hit (n=29). Högsta SE-alpha med statistiskt robust n." style="background:linear-gradient(135deg,#7c3aed,#dc2626);color:white;padding:4px 14px;border-radius:14px;font-size:12px;font-weight:800;box-shadow:0 2px 8px rgba(124,58,237,0.5)">👑 C80+GT (SE #1)</span>`);
+    }
+    // 🏆 Dual-Screen — BÄSTA value-fokuserad signal
     if (q.is_dual_screen) {
-        screenBadges.push(`<span title="BÄSTA SIGNAL: Composite ≥80 OCH Magic Formula 30. Backtest +19.26% alpha, Sharpe 1.23, 87% hit." style="background:linear-gradient(135deg,#dc2626,#fbbf24);color:white;padding:4px 14px;border-radius:14px;font-size:12px;font-weight:800;box-shadow:0 2px 8px rgba(251,191,36,0.4)">🏆 DUAL-SCREEN (BÄST)</span>`);
+        screenBadges.push(`<span title="DUAL-SCREEN: Composite ≥80 OCH Magic Formula 30. Backtest SE: +18.35% alpha, 82% hit (n=17). Robust värde-fokuserad signal." style="background:linear-gradient(135deg,#dc2626,#fbbf24);color:white;padding:4px 14px;border-radius:14px;font-size:12px;font-weight:800;box-shadow:0 2px 8px rgba(251,191,36,0.4)">🏆 DUAL-SCREEN</span>`);
     }
     if (q.is_quant_trifecta) {
         screenBadges.push(`<span title="Top 30% i Q+V+M alla. Backtest 2015-2024: +9.2% alpha, 70% hit. n=26 (post-2020-fenomen)" style="background:linear-gradient(135deg,#059669,#10b981);color:white;padding:3px 12px;border-radius:12px;font-size:11px;font-weight:700">⭐ TRIFECTA</span>`);
     }
-    if (q.is_growth_trifecta && !q.is_quant_trifecta) {
-        // Visa Growth Trifecta endast om classic Trifecta INTE flaggar (annars duplicat)
-        screenBadges.push(`<span title="Q+M ≥70 (utan V-krav). Bästa US-screen. Backtest US 2015-2024: +23.61% alpha, Sharpe 0.76, 85% hit rate." style="background:linear-gradient(135deg,#ea580c,#fb923c);color:white;padding:3px 12px;border-radius:12px;font-size:11px;font-weight:700">🚀 GROWTH TRI</span>`);
+    if (q.is_growth_trifecta && !q.is_quant_trifecta && !(q.is_magic_formula && isUS) && !(q.composite_score >= 80 && !isUS)) {
+        // Visa Growth Trifecta endast om confluence-versioner INTE redan visas
+        screenBadges.push(`<span title="Q+M ≥70 (utan V-krav). Backtest US 2015-2024: +6.15% alpha, 76% hit (n=125). Robust över både early (+10.9%) och late (+2.7%) period." style="background:linear-gradient(135deg,#ea580c,#fb923c);color:white;padding:3px 12px;border-radius:12px;font-size:11px;font-weight:700">🚀 GROWTH TRI</span>`);
     }
-    if (q.composite_score != null && q.composite_score >= 80) {
-        screenBadges.push(`<span title="Composite ≥80. Backtest 8/9 positiva år. OBS: i finans/fastighet är det ofta preferensaktie-fälla (-4.8% alpha)" style="background:linear-gradient(135deg,#7c3aed,#a78bfa);color:white;padding:3px 12px;border-radius:12px;font-size:11px;font-weight:700">💎 PREMIUM ≥80</span>`);
+    if (q.composite_score != null && q.composite_score >= 80 && !q.is_growth_trifecta) {
+        screenBadges.push(`<span title="Composite ≥80. Backtest SE 8/9 positiva år. OBS: i finans/fastighet är det ofta preferensaktie-fälla (-4.8% alpha). I US är det FÄLLA: -11.76% alpha." style="background:linear-gradient(135deg,#7c3aed,#a78bfa);color:white;padding:3px 12px;border-radius:12px;font-size:11px;font-weight:700">💎 PREMIUM ≥80</span>`);
     }
-    if (q.is_magic_formula) {
-        screenBadges.push(`<span title="Greenblatt Magic Formula 30 — rank(EV/EBIT) + rank(ROIC) top 10%" style="background:linear-gradient(135deg,#0891b2,#06b6d4);color:white;padding:3px 12px;border-radius:12px;font-size:11px;font-weight:700">📊 MAGIC</span>`);
+    if (q.is_magic_formula && !q.is_growth_trifecta) {
+        screenBadges.push(`<span title="Greenblatt Magic Formula 30 — rank(EV/EBIT) + rank(ROIC) top 10%. Backtest US: +10.08% alpha total, men late-period (2020-2024) -2.8%." style="background:linear-gradient(135deg,#0891b2,#06b6d4);color:white;padding:3px 12px;border-radius:12px;font-size:11px;font-weight:700">📊 MAGIC</span>`);
     }
     const trifectaBadge = screenBadges.join(' ');
 
@@ -6725,15 +6734,17 @@ const V2_SETUP_TABS = [
 
 // ── 🏆 Backtest-validerade quant-screens på startsidan ──
 const QUANT_SCREEN_TABS = [
-    { key: 'dual_screen',  label: '🏆 Dual-Screen',  desc: 'Composite ≥80 + Magic Formula. Backtest: +19.26% alpha, Sharpe 1.23, 87% hit. Vår BÄSTA validerade signal.', mode: 'dual_screen' },
+    { key: 'gt_mf_confluence', label: '🎯 GT+MF Confluence', desc: 'Growth Trifecta + Magic Formula. Backtest US 2015-2024: +21.57% alpha, 82% hit (n=11). VÅR HÖGSTA US-SIGNAL.', mode: 'gt_mf_confluence' },
+    { key: 'c80_gt_confluence', label: '👑 C80+GT (SE)', desc: 'Composite ≥80 + Growth Trifecta. Backtest SE 2015-2024: +19.64% alpha, 76% hit (n=29). HÖGSTA SE-ALPHA.', mode: 'c80_gt_confluence' },
+    { key: 'dual_screen',  label: '🏆 Dual-Screen',  desc: 'Composite ≥80 + Magic Formula. Backtest SE: +18.35% alpha, 82% hit (n=17). Robust värde-fokuserad signal.', mode: 'dual_screen' },
+    { key: 'growth_trifecta', label: '🚀 Growth Trifecta', desc: 'Q+M ≥70 (ignorerar V). Backtest US: +6.15% alpha, 76% hit, n=125. Fångar dyra-men-starka tech-bolag som klassisk Trifecta missar.', mode: 'growth_trifecta' },
+    { key: 'magic',        label: '📊 Magic Formula', desc: 'Greenblatt: rank(EV/EBIT) + rank(ROIC) top 10%. Backtest US: +10.08% alpha (alpha mest 2015-2019, försiktigt 2024+).', mode: 'magic_formula' },
     { key: 'premium_80',   label: '💎 Premium ≥80',  desc: 'Composite ≥80 (Finans/fastighet exkluderad pga preferensaktie-fälla)', mode: 'composite_80', extra: '&exclude_sector=Finans+%26+Fastighet' },
     { key: 'composite_70', label: '🥈 Mid-tier ≥70', desc: 'Composite ≥70 — mindre restriktivt, fler träffar (+4.92% alpha med n=178)', mode: 'composite_70' },
-    { key: 'growth_trifecta', label: '🚀 Growth Trifecta', desc: 'Q+M ≥70 (ignorerar V). Fångar dyra-men-starka tech-bolag (NVDA, MSFT, AAPL) som klassisk Trifecta missar pga hög P/E.', mode: 'growth_trifecta' },
     { key: 'quality_champ', label: '🏰 Quality Champions', desc: 'Top quality (Q ≥75) + ROIC ≥15%. För US-marknaden där Composite ≥80 sällan triggar pga höga värderingar.', mode: 'quality_champions' },
     { key: 'trifecta',     label: '⭐ Trifecta',     desc: 'Top 30% i Q+V+M alla. Backtest: +9.2% alpha (post-2020-fenomen)', mode: 'trifecta' },
-    { key: 'magic',        label: '📊 Magic Formula', desc: 'Greenblatt: rank(EV/EBIT) + rank(ROIC) top 10%', mode: 'magic_formula' },
 ];
-let _activeQuantTab = 'dual_screen';
+let _activeQuantTab = 'gt_mf_confluence';
 
 async function loadQuantScreens() {
     const wrap = document.getElementById('quantScreensContent');
