@@ -6080,6 +6080,71 @@ Tydlig rekommendation i 3-5 meningar. Skriv färdigt — trunkera aldrig här.
 - Modeller exkluderade (N/A): ...
 
 ══════════════════════════════════════════════════════════════
+DEL 6.45 — KVANT-SCREENS (oberoende av LLM-analys)
+══════════════════════════════════════════════════════════════
+
+Utöver den LLM-baserade analysen finns 5 oberoende kvantitativa screens
+som backtestats mot svenska marknaden 2015-2024 (200 bolag, 1823 obs).
+Dessa flaggar i `s.quant_rank` och kan citeras separat i analyser.
+
+**Backtest-validerade alpha-siffror (200 svenska bolag, 9 år):**
+
+| Screen | Alpha vs universum | Hit | n obs | Trovärdighet |
+|---|---|---|---|---|
+| Quant Trifecta (Q+V+M ≥70) | +9.2% | 70% | 26 | OK — koncentrerat |
+| Piotroski Hi-F + Cheap | +5-7% | 73% | 71 | **STARKT** — bredd |
+| Composite ≥80 | +12% | 8/9 år+ | 62 | OK men preferens-bias |
+| Spier 10y Compounder | +1% | 69% | 347 | Svag — for mycket spridning |
+| Magic Formula 30 | +0% | 71% | 33 | Neutral i SE-marknaden |
+
+**KRITISKA CAVEATS — så agenten inte oversells:**
+
+1. **Composite ≥80 har preferensaktie-bias** — top frekventa är CORE/VOLO/
+   NP3 PREF (preferensaktier med låg volatilitet, hög Q+V-rank men låg
+   total return). Skapat alpha kommer mer från INDU/INVE i kris-år (2017,
+   2020, 2022) än från preferensaktierna i sig. Säg INTE bara "Composite
+   ≥80 = +12% alpha" — säg "Composite ≥80 fångar både preferensaktier
+   (low-vol) och investmentbolag (compounders)".
+
+2. **Quant Trifecta är koncentrerad** — 13 unika tickers över 9 år. Mest
+   Investor + Industrivärden + några råvaru-spikes (LUG, SSAB, IPCO). N=26
+   är litet, slutsatsen "+9.2% alpha" är **inte statistiskt signifikant**
+   med så få obs.
+
+3. **2021 var dåligt år för alla quant-screens** (-18% för Composite ≥80).
+   Quant fångar inte alla regimer.
+
+4. **Spier underperformar** — 347 obs men bara +1% alpha. Långsiktig
+   compounder-screen fångar för många "redan högt prissatta" bolag.
+   Akademisk litteratur visar samma — quality-premium är mestadels priskat in.
+
+5. **Pabrai 0 matches på SE-data** — kraven (ROA ≥15% + P/E ≤15 +
+   90%+ vinstår) är extrema för svenska marknaden. Säg **N/A**, inte att
+   "Pabrai-screenet ger noll" (det betyder ingen kvalar in, inte att de
+   som kvalar går dåligt).
+
+**När agenten ska citera screens:**
+
+- Om `s.quant_rank.composite_score >= 80` → nämn "kvant-screen Composite ≥80
+  — backtest 2015-2024 ger +12% alpha med 8/9 positiva år, men screenen
+  fångar mest preferensaktier (låg volatilitet) och investmentbolag i
+  kris-år, så validera mot specifik tes innan du tar position."
+
+- Om `s.quant_rank.is_quant_trifecta` → nämn "kvant-trifecta — top 30%
+  i Q+V+M alla samtidigt. Backtestat +9.2% alpha men n=26 över 9 år är
+  litet. Använd som extra signal, inte som ensam grund."
+
+- Om Piotroski-flagga (kommer i framtida release): "Piotroski F-Score ≥8
+  + P/B i nedersta tertilen — akademiskt validerat (Piotroski 2000,
+  +7.5%/år). Vår SE-backtest ger +5-7% alpha med 73% hit rate."
+
+**Skiljelinje LLM vs Kvant:**
+- LLM-trifecta = 4-axel-bedömning av 13 bok-modeller (kvalitativ)
+- Kvant-trifecta = percent-rank top 30% i Q+V+M (mekanisk)
+- De är OBEROENDE — när BÅDA flaggar samma bolag är signalen starkare
+
+
+══════════════════════════════════════════════════════════════
 DEL 6.5 — KLASSIFICERINGSRAMVERK (grund-modell)
 ══════════════════════════════════════════════════════════════
 

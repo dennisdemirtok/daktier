@@ -3924,9 +3924,15 @@ function renderQuantRank(s) {
         </div>`;
     }
 
-    const trifectaBadge = q.is_quant_trifecta
-        ? `<span style="background:linear-gradient(135deg,#059669,#10b981);color:white;padding:3px 12px;border-radius:12px;font-size:11px;font-weight:700">⭐ QUANT TRIFECTA</span>`
-        : '';
+    // Screen-flaggor — visar vilka backtest-validerade screens bolaget kvalar i
+    const screenBadges = [];
+    if (q.is_quant_trifecta) {
+        screenBadges.push(`<span title="Top 30% i Q+V+M alla. Backtest 2015-2024: +9.2% alpha, 70% hit. n=26 (litet — använd som extra signal)" style="background:linear-gradient(135deg,#059669,#10b981);color:white;padding:3px 12px;border-radius:12px;font-size:11px;font-weight:700">⭐ TRIFECTA</span>`);
+    }
+    if (q.composite_score != null && q.composite_score >= 80) {
+        screenBadges.push(`<span title="Composite ≥80. Backtest: 8/9 positiva år, +12% alpha. OBS: fångar ofta preferensaktier (låg volatilitet) — validera mot tes innan position" style="background:linear-gradient(135deg,#7c3aed,#a78bfa);color:white;padding:3px 12px;border-radius:12px;font-size:11px;font-weight:700">💎 PREMIUM ≥80</span>`);
+    }
+    const trifectaBadge = screenBadges.join(' ');
 
     // Sektor-relativ rank (om data finns)
     const hasSector = q.sector_quality_rank != null || q.sector_value_rank != null || q.sector_momentum_rank != null;
