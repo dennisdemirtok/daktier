@@ -726,6 +726,7 @@ def api_stock_detail(orderbook_id):
                             "momentum_score": target.get("momentum_score"),
                             "composite_score": target.get("composite_score"),
                             "is_quant_trifecta": target.get("is_quant_trifecta"),
+                            "is_growth_trifecta": target.get("is_growth_trifecta"),
                             "is_magic_formula": target.get("is_magic_formula"),
                             "is_dual_screen": target.get("is_dual_screen"),
                             "sector_name": target.get("sector_name"),
@@ -1086,6 +1087,7 @@ def api_stock_extras(orderbook_id):
                     "momentum_score": target.get("momentum_score"),
                     "composite_score": target.get("composite_score"),
                     "is_quant_trifecta": target.get("is_quant_trifecta"),
+                    "is_growth_trifecta": target.get("is_growth_trifecta"),
                     "is_magic_formula": target.get("is_magic_formula"),
                     "is_dual_screen": target.get("is_dual_screen"),
                     # Sektor-relativ ranking (jämfört bara med bolag i samma sektor)
@@ -6384,6 +6386,53 @@ mycket starkt (alpha 8-55%). Inom finans/fastighet är det fälla.
 - Tolkning: bolag som flaggas av många screens är STABILA/dyra
   bolag (Investor, Industrivärden) som redan är pris-in. Mer
   signaler ≠ bättre — kvalitet > kvantitet i screen-kombinationer.
+
+══════════════════════════════════════════════════════════════
+DEL 6.47 — MARKNADS-SPECIFIKA SCREENS (US vs SE)
+══════════════════════════════════════════════════════════════
+
+**KRITISK INSIKT från US-backtest 2015-2024:**
+
+Vår klassiska Quant Trifecta missade SYSTEMATISKT US tech-marknaden.
+Composite ≥80 fångade bara JPM (3 obs). Quant Trifecta fångade noll.
+Men universum-snittet var +21.44%/år (drivit av NVDA/AAPL/MSFT m.fl.)
+— pipelinen missade hela tech-rallyt.
+
+**ROOT CAUSE:** Trifecta kräver Value≥70 (=billig). US tech har P/E
+25-115, V-score 16-50. De kvalar ALDRIG på V-axeln, oavsett hur stark
+Q och M är.
+
+**LÖSNING — Growth Trifecta (Q+M utan V):**
+- Backtest US 2015-2024: +23.61% alpha, Sharpe 0.76, 85% hit rate, n=13
+- 6 unika tickers — bra spridning
+- Akademisk grund: Asness 2013 "Quality Minus Junk"
+
+**Marknads-specifika rekommendationer:**
+
+| Marknad | Bästa screen | Alpha | Anledning |
+|---|---|---|---|
+| 🇸🇪 SE | Dual-Screen (Composite ≥80 + Magic Formula) | +19.26% | Värdedriven SE-marknad |
+| 🇺🇸 US | **Growth Trifecta (Q+M ≥70)** | +23.61% | Tech-rallies driver US |
+
+**När agenten ska citera Growth Trifecta:**
+
+För US-aktier som flaggar Growth Trifecta (Q≥70 + M≥70, oavsett V):
+> "🚀 Growth Trifecta-flagga: Quality 98 + Momentum 90. Backtest US
+> 2015-2024 visar +23.61% alpha med 85% hit rate i denna kombination.
+> OBS: bolaget är dyrt enligt klassisk värdering (V-score låg) men
+> kvalitet+momentum-stark. Akademiskt validerat (Asness 2013) — i
+> US-marknaden är Q+M ofta starkare prediktor än V+Q+M."
+
+**När INTE citera Growth Trifecta:**
+- För SE-aktier: använd Dual-Screen istället (mer validerat för SE)
+- Om bolaget redan flaggas av classic Trifecta — duplicerat (alla
+  Trifecta är också Growth Trifecta per definition)
+- Om Q eller M är nära 70-tröskeln (svag signal)
+
+**Skiljelinje:**
+- Quant Trifecta = "billig kvalitet med momentum" → SE-värdebolag
+- Growth Trifecta = "kvalitet med momentum" → US-tech, växande bolag
+- Båda behövs — fångar olika typer av investeringar
 
 
 ══════════════════════════════════════════════════════════════

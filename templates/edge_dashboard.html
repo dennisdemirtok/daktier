@@ -3934,6 +3934,10 @@ function renderQuantRank(s) {
     if (q.is_quant_trifecta) {
         screenBadges.push(`<span title="Top 30% i Q+V+M alla. Backtest 2015-2024: +9.2% alpha, 70% hit. n=26 (post-2020-fenomen)" style="background:linear-gradient(135deg,#059669,#10b981);color:white;padding:3px 12px;border-radius:12px;font-size:11px;font-weight:700">⭐ TRIFECTA</span>`);
     }
+    if (q.is_growth_trifecta && !q.is_quant_trifecta) {
+        // Visa Growth Trifecta endast om classic Trifecta INTE flaggar (annars duplicat)
+        screenBadges.push(`<span title="Q+M ≥70 (utan V-krav). Bästa US-screen. Backtest US 2015-2024: +23.61% alpha, Sharpe 0.76, 85% hit rate." style="background:linear-gradient(135deg,#ea580c,#fb923c);color:white;padding:3px 12px;border-radius:12px;font-size:11px;font-weight:700">🚀 GROWTH TRI</span>`);
+    }
     if (q.composite_score != null && q.composite_score >= 80) {
         screenBadges.push(`<span title="Composite ≥80. Backtest 8/9 positiva år. OBS: i finans/fastighet är det ofta preferensaktie-fälla (-4.8% alpha)" style="background:linear-gradient(135deg,#7c3aed,#a78bfa);color:white;padding:3px 12px;border-radius:12px;font-size:11px;font-weight:700">💎 PREMIUM ≥80</span>`);
     }
