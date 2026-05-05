@@ -7518,25 +7518,35 @@ Om du ser dessa flaggor på en US-aktie: VARNING, inte rekommendation.
 gav -2.8%. I 2024+-marknaden bör du citera FÖRSIKTIGT, helst tillsammans
 med Growth Trifecta-flagga.
 
-**🏆 STÖRSTA UPPTÄCKTEN — CONFLUENCE GT + MF = +21.57% ALPHA:**
+**🚨 ÄRLIG STATISTISK VALIDERING (5000 bootstrap-iter, ticker-clustering):**
 
-När en US-aktie flaggar BÅDE Growth Trifecta OCH Magic Formula:
+| Screen | n | n_unique | Punktestimat | Cluster 95% CI | Status |
+|---|---|---|---|---|---|
+| **Dual-Screen SE (C80+MF)** | 17 | 12 | +18.35% | **[+8.2%, +31.1%]** | ✅ MEST ROBUST |
+| **C80+GT Confluence SE** | 29 | 16 | +19.64% | [+3.5%, +47.4%] | ✅ Robust |
+| **Growth Trifecta US** | 125 | 61 | +10.10% | [+1.2%, +20.0%] | ✅ Robust |
+| GT+MF Confluence US | 11 | 9 | +21.57% | **[-7.3%, +65.5%]** | ⚠️ EJ SIGNIFIKANT |
+| Magic Formula US | 22 | 17 | +13.81% | [-1.5%, +36.6%] | ⚠️ Gränsfall |
+| Composite ≥80 SE | 63 | 26 | +5.19% | [-5.1%, +22.3%] | ⚠️ Gränsfall |
 
-| Screen | n | Alpha | Hit | Sharpe |
-|---|---|---|---|---|
-| Growth Trifecta alone | 125 | +6.15% | 74% | 0.58 |
-| Magic Formula alone | 32 | +10.08% | 81% | 0.60 |
-| **🎯 BÅDA tillsammans** | **11** | **+21.57%** | **82%** | (mkt hög) |
+**KRITISK INSIKT FÖR AGENTEN:**
 
-Confluence ger **3.5× alpha** vs Growth Trifecta alone. Histori (n=11):
-- NVDA 2016: +213%
-- LRCX 2019: +78%
-- AAPL 2016: +51%
-- REGN 2022: +18%
-- BIIB, RIO, MU, LRCX, EQNR, GILD: blandat positivt
+1. **GT+MF Confluence (US) är INTE den säkra vinnaren punktestimat antyder.**
+   Med n=11 och bara 9 unika tickers ger cluster bootstrap CI [-7.3%, +65.5%].
+   Den kan lika gärna vara -7% som +66%. Citera ALDRIG +21.57% som
+   "vår starkaste US-signal" — det är p-hackat.
 
-Dessa "GT + MF"-träffar är **billiga ENL EV/EBIT/ROIC + kvalitet + momentum**
-samtidigt = sällsynt och starkt. Citera detta som **STARK signal**.
+2. **Dual-Screen SE (Composite ≥80 + Magic Formula) är vår starkaste signal.**
+   CI [+8.2%, +31.1%] är smal och helt positiv. Detta är den ENDA screen
+   där punktestimat är pålitlig.
+
+3. **Growth Trifecta US (n=125) är robust** men i lägre nivå än headline.
+   Cluster CI [+1.2%, +20.0%] — alpha existerar men är osäker storlek.
+
+**Citat-regel:**
+- ALLTID rapportera CI tillsammans med punktestimat
+- Aldrig säg "+21.57%" utan att nämna [-7%, +66%] för GT+MF
+- Skilj robust (✅) från gränsfall (⚠️) i rekommendationer
 
 **📉 GROWTH TRIFECTA DRAWDOWN-DISTRIBUTION (n=125):**
 - Median: +18.27% (rejäl övervinst)

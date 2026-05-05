@@ -44,10 +44,31 @@
   Senast uppdaterad: 2026-05-05. Universum: SE 198 unika tickers, US 167.
 </p>
 
-<div class="insight">
-  <strong>🎯 STÖRSTA UPPTÄCKTEN — Confluence-screens:</strong><br>
-  GT+MF Confluence (US): <span class="pos">+21.57%</span> alpha — 3.5× bättre än Growth Trifecta alone.<br>
-  C80+GT Confluence (SE): <span class="pos">+19.64%</span> alpha — högsta SE-alpha med n=29.
+<div class="warning">
+  <strong>🚨 ÄRLIG STATISTISK VALIDERING — Bootstrap 5000 iter + ticker-clustering:</strong>
+</div>
+
+<table>
+  <thead>
+    <tr><th>Screen</th><th class="num">n</th><th class="num">unik</th><th class="num">Punktestimat</th><th class="num">Cluster 95% CI</th><th>Status</th></tr>
+  </thead>
+  <tbody>
+    <tr class="winner"><td><strong>Dual-Screen SE (C80+MF)</strong></td><td class="num">17</td><td class="num">12</td><td class="num pos">+18.35%</td><td class="num pos">[+8.2%, +31.1%]</td><td>✅ MEST ROBUST</td></tr>
+    <tr class="winner"><td>C80+GT Confluence SE</td><td class="num">29</td><td class="num">16</td><td class="num pos">+19.64%</td><td class="num pos">[+3.5%, +47.4%]</td><td>✅ Robust</td></tr>
+    <tr class="winner"><td>Growth Trifecta US</td><td class="num">125</td><td class="num">61</td><td class="num pos">+10.10%</td><td class="num pos">[+1.2%, +20.0%]</td><td>✅ Robust</td></tr>
+    <tr><td>GT+MF Confluence US</td><td class="num">11</td><td class="num">9</td><td class="num">+21.57%</td><td class="num neg">[-7.3%, +65.5%]</td><td>⚠️ EJ signifikant</td></tr>
+    <tr><td>Magic Formula US</td><td class="num">22</td><td class="num">17</td><td class="num">+13.81%</td><td class="num neg">[-1.5%, +36.6%]</td><td>⚠️ Gränsfall</td></tr>
+    <tr><td>Composite ≥80 SE</td><td class="num">63</td><td class="num">26</td><td class="num">+5.19%</td><td class="num neg">[-5.1%, +22.3%]</td><td>⚠️ Gränsfall</td></tr>
+  </tbody>
+</table>
+
+<div class="warning">
+  <strong>📌 Ärlig läsning:</strong> Tidigare rapporterade jag GT+MF Confluence US +21.57%
+  som "vår starkaste signal". Det är vilseledande — med n=11 (9 unika tickers) sträcker
+  cluster bootstrap CI från -7% till +66%. Punktestimat var p-hackat.<br><br>
+  <strong>Den ENDA screen med smal positiv CI är Dual-Screen SE [+8.2%, +31.1%].</strong>
+  Detta är vår mest pålitliga signal. Andra "winnare" är robusta i tecken men osäker
+  storlek. Använd CI istället för punktestimat när du fattar beslut.
 </div>
 
 <h2>🇺🇸 US-marknaden 2015-2024 (167 tickers, 1547 obs)</h2>
