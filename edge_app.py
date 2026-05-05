@@ -7373,6 +7373,30 @@ När en US-aktie flaggar Growth Trifecta:
 
 När bolaget flaggar GT 2+ år i rad: ÄNNU starkare compounder-signal.
 
+**📊 SLUTGILTIGT EMPIRISKT BEVIS — Portfolio-simulator 2015-2023:**
+
+Hel strategi år för år, med tier-baserade vikter, max 25% per sektor:
+
+| Marknad | 100 SEK → | CAGR Portfolio | CAGR Universum | CAGR Alpha |
+|---|---|---|---|---|
+| 🇺🇸 US | **334.79 SEK** | **+16.30%/år** | +15.25%/år | **+1.06%/år** |
+| 🇸🇪 SE | 323.23 SEK | +15.79%/år | +15.64%/år | +0.15%/år |
+
+**Per-år alpha (US):**
+- Bästa år: 2016 (+20.2%), 2019 (+14.2%), 2017 (+3.5%)
+- Sämsta år: 2020 (-14.2%, post-COVID rally för junk), 2018 (-8.1%)
+
+**Tolkning:** Headline-screens (GT+MF +21.57%, Recurring +12.63% CAGR)
+gäller SPECIFIKA TRÄFFAR, inte hela portfolio-strategin. När man tar
+hela strategin (inkluderar svaga år, sektor-cap, mindre tier-vikter)
+landar US-edge på +1.06%/år. Det är ändå bra — index-fonder kostar
+0.2-0.5%/år och aktiv förvaltning sällan slår +1% efter avgifter.
+
+**Citat-regel för agenten:**
+- För enskilda screens → använd screen-alpha (GT+MF +21.57%)
+- För hela portfolio → använd portfolio-CAGR-alpha (+1.06%/år US)
+- Var ÄRLIG: säg "modest men reel edge" inte "exceptionell alpha"
+
 **🎯 BUY/HOLD/AVOID — automatisk rekommendation per aktie:**
 
 compute_quant_scores sätter nu `recommendation` + `recommendation_reason`
