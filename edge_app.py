@@ -6957,6 +6957,38 @@ samtidigt = sällsynt och starkt. Citera detta som **STARK signal**.
 - 23% är negativa, men bara 9% går under -20%
 - **Worst case: PYPL 2021 (-75%)** — dyra fintech-bolag i ränte-höjningar
 
+**🚀 STÖRSTA UPPTÄCKTEN — GROWTH TRIFECTA SOM MULTI-YEAR COMPOUNDER:**
+
+| Period | Screen | n | Alpha | Hit | CAGR alpha |
+|---|---|---|---|---|---|
+| 12m | GT alone | 125 | +6.15% | 74% | +6.15%/år |
+| 36m | GT alone | 93 | +24.92% | 89% | +6.09%/år |
+| **60m** | **GT alone** | **54** | **+138.96%** | **93%** | **+12.63%/år** ⚡ |
+| 12m | GT+MF Conf | 11 | +21.57% | 82% | +21.57%/år |
+| 36m | GT+MF Conf | 8 | +56.67% | 75% | +13.06%/år |
+| 12m | SE C80+GT | 29 | +19.64% | 76% | +19.64%/år |
+| 36m | SE C80+GT | 14 | +44.48% | 86% | +10.24%/år |
+
+**KRITISK OBSERVATION:**
+- GT 60m hit rate = **93%** (vs 74% för 12m) — bolagen återhämtar sig om de faller
+- GT 60m CAGR alpha = **+12.63%/år** — DUBBELD vs 12m-alpha
+- Total 5y return: +242.78% (vs universum +103.82%)
+- Bästa 5y: NVDA 2020 (+364% på 3y), ANET 2016 (+294% på 3y)
+
+**TOLKNING:** Growth Trifecta är INTE en 1-årsstrategi. Det är en
+**multi-year compounder-strategi**. Bolagen är strukturella vinnare:
+- ANET flaggade 2016+2017+2018+2020+2023+2024 (6 år)
+- NVDA flaggade 2016+2018+2019+2020+2023 (5 år)
+- AVGO, VRTX, ISRG, INTU = återkommande compounders
+
+**Implikation för agenten:**
+När en US-aktie flaggar Growth Trifecta:
+- **Cite 12m-alpha för kortsiktig tradin**g (+6.15%, 74% hit)
+- **Cite 36m-alpha för mid-term-investering** (+24.92%, 89% hit)
+- **Cite 60m-alpha för buy-and-hold compounders** (+138.96%, 93% hit, +12.63% CAGR alpha)
+
+När bolaget flaggar GT 2+ år i rad: ÄNNU starkare compounder-signal.
+
 **Per-år GT alpha 2015-2024 (US):**
 - 2016: +29.9%, 2017: +12.8%, **2018: -13.4%** (litet n=8)
 - 2019: +20.8%, 2020: +24.2%, **2021: -23.9%** (PYPL dragned)
