@@ -1499,6 +1499,11 @@ def api_quant_screen():
     if mode == "trifecta":
         results = [s for s in all_data if s.get("is_quant_trifecta")]
         results.sort(key=lambda s: -(s.get("composite_score") or 0))
+    elif mode == "composite_80":
+        # Composite ≥ 80 — premium-tier, backtest 8/9 positiva år
+        results = [s for s in all_data if s.get("composite_score") is not None
+                                          and s["composite_score"] >= 80]
+        results.sort(key=lambda s: -(s.get("composite_score") or 0))
     elif mode == "quality":
         results = [s for s in all_data if s.get("quality_score") is not None]
         results.sort(key=lambda s: -(s.get("quality_score") or 0))

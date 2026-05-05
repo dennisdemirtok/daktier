@@ -6256,9 +6256,11 @@ async function renderTrending() {
             <button class="tv-chip ${_trendingMode === 'quality' ? 'active' : ''}"
                     onclick="setTrendingMode('quality')">🏰 Trending Quality</button>
             <button class="tv-chip ${_trendingMode === 'quant_trifecta' ? 'active' : ''}"
-                    onclick="setTrendingMode('quant_trifecta')">⭐ Quant Trifecta</button>
+                    onclick="setTrendingMode('quant_trifecta')" title="Top 30% i Q+V+M alla samtidigt. Backtest 2015-2024: +9.2% alpha (n=26).">⭐ Quant Trifecta</button>
+            <button class="tv-chip ${_trendingMode === 'quant_premium' ? 'active' : ''}"
+                    onclick="setTrendingMode('quant_premium')" title="Composite ≥80 — premium-tier. Backtest: 8/9 positiva år, +12% alpha. OBS: fångar mest preferensaktier + investmentbolag.">💎 Quant Premium ≥80</button>
             <button class="tv-chip ${_trendingMode === 'quant_composite' ? 'active' : ''}"
-                    onclick="setTrendingMode('quant_composite')">🎯 Quant Composite</button>
+                    onclick="setTrendingMode('quant_composite')" title="Alla bolag sorterade på composite (40Q+35V+25M)">🎯 Quant Composite</button>
             <div style="flex:1"></div>
             <button class="tv-chip ${_trendingCountry === 'SE' ? 'active' : ''}"
                     onclick="setTrendingCountry('SE')">🇸🇪 Sverige</button>
@@ -6288,6 +6290,8 @@ async function fetchTrending() {
         url = `/api/quant-screen?country=${_trendingCountry}&mode=trifecta&limit=50`;
     } else if (_trendingMode === 'quant_composite') {
         url = `/api/quant-screen?country=${_trendingCountry}&mode=composite&limit=50`;
+    } else if (_trendingMode === 'quant_premium') {
+        url = `/api/quant-screen?country=${_trendingCountry}&mode=composite_80&limit=50`;
     } else {
         url = `/api/preset/${_trendingMode}?country=${_trendingCountry}&limit=50&min_owners=100`;
     }
