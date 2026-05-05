@@ -129,29 +129,31 @@ def get_dynamic_universe(db, country="SE", min_market_cap=1e9, max_n=100):
                 for r in rows
                 if (r["n_q"] or 0) >= 5][:max_n]
     else:
-        # Utländska: kräv bara att ISIN finns + att vi har KPI-data
+        # Utländska: kräv bara att vi har KPI-data via bulk-query
+        # (samma approach som compute_quant_scores)
         ph2 = _ph()
-        result = []
-        for r in rows:
-            isin = r.get("isin") if isinstance(r, dict) else None
-            if not isin:
-                try: isin = r["isin"]
-                except (KeyError, IndexError): isin = None
-            if not isin:
-                continue
-            try:
-                kpi_count = _fetchone(db,
-                    f"SELECT COUNT(*) as n FROM borsdata_kpi_history "
-                    f"WHERE isin = {ph2} AND report_type = {ph2}",
-                    (isin, "year"))
-                kc = (dict(kpi_count).get("n") if kpi_count else 0) or 0
-                if kc >= 10:  # minst 10 KPI-rader
-                    result.append((r["short_name"], r["name"]))
-            except Exception:
-                pass
-            if len(result) >= max_n:
-                break
-        return result
+        rows_list = [dict(r) for r in rows]
+        isin_list = [r["isin"] for r in rows_list if r.get("isin")]
+        if not isin_list:
+            return []
+        kpi_isins = set()
+        try:
+            isin_ph = ",".join([ph2] * len(isin_list))
+            kpi_rows = _fetchall(db,
+                f"SELECT DISTINCT isin FROM borsdata_kpi_history "
+                f"WHERE isin IN ({isin_ph}) AND report_type = {ph2}",
+                (*isin_list, "year"))
+            for kr in kpi_rows:
+                kr_d = dict(kr)
+                if kr_d.get("isin"):
+                    kpi_isins.add(kr_d["isin"])
+        except Exception as e:
+            import sys
+            print(f"[get_dynamic_universe US] KPI-check fail: {e}", file=sys.stderr)
+        # Returnera bolag som har KPI-data
+        return [(r["short_name"], r["name"])
+                for r in rows_list
+                if r.get("isin") and r["isin"] in kpi_isins][:max_n]
 
 
 def find_isin_for_ticker(db, short_name):
