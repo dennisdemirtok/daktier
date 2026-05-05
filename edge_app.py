@@ -4424,6 +4424,94 @@ def api_live_tracker_update_fwd_returns():
         db.close()
 
 
+@app.route("/api/backtest-v2/long-period-forward", methods=["POST"])
+def api_backtest_v2_long_period_forward():
+    """Backtesta screens med längre forward-perioder (36m, 60m).
+
+    Body: {start_year, end_year, country, screen, months}
+    months: 12 (default), 36 (3y), 60 (5y)
+    Visar om compounders verkligen compoundas över längre tid.
+    """
+    body = request.json if request.is_json else {}
+    start_year = int(body.get("start_year", 2015))
+    end_year = int(body.get("end_year", 2020))  # 5y forward = end_year + 5
+    country = body.get("country", "US")
+    max_universe = int(body.get("max_universe", 200))
+    screen = body.get("screen", "growth_trifecta")
+    months = int(body.get("months", 36))
+
+    SCREEN_FILTERS = {
+        "growth_trifecta": lambda r: r.get("is_growth_trifecta"),
+        "magic_formula": lambda r: r.get("is_magic_formula"),
+        "gt_mf_confluence": lambda r: r.get("is_growth_trifecta") and r.get("is_magic_formula"),
+        "trifecta": lambda r: r.get("is_trifecta"),
+        "composite_80": lambda r: (r.get("composite") or 0) >= 80,
+        "c80_gt": lambda r: (r.get("composite") or 0) >= 80 and r.get("is_growth_trifecta"),
+    }
+    f = SCREEN_FILTERS.get(screen)
+    if not f:
+        return jsonify({"error": f"unknown screen", "options": list(SCREEN_FILTERS.keys())}), 400
+
+    try:
+        from backtest_v2.quant_runner import run_quant_backtest
+        from backtest_v2.pit_data import get_forward_return
+        db = get_db()
+        try:
+            results = run_quant_backtest(db, start_year=start_year,
+                                          end_year=end_year, verbose=False,
+                                          use_dynamic_universe=True,
+                                          max_universe=max_universe,
+                                          country=country)
+
+            # Skapa long-period fwd för varje obs
+            with_long_fwd = []
+            for r in results:
+                try:
+                    long_fwd = get_forward_return(db, r["isin"], r["date"], months)
+                except Exception:
+                    long_fwd = None
+                if long_fwd is None: continue
+                r2 = dict(r)
+                r2["fwd_long_pct"] = round(long_fwd * 100, 2)
+                with_long_fwd.append(r2)
+
+            valid = with_long_fwd
+            matches = [r for r in valid if f(r)]
+
+            universe_mean = (sum(r["fwd_long_pct"] for r in valid) / len(valid)
+                             if valid else 0.0)
+            screen_mean = (sum(r["fwd_long_pct"] for r in matches) / len(matches)
+                           if matches else 0.0)
+            alpha = screen_mean - universe_mean
+            hit = sum(1 for r in matches if r["fwd_long_pct"] > 0) / len(matches) * 100 if matches else 0
+
+            sorted_m = sorted(matches, key=lambda r: -r["fwd_long_pct"])
+            return jsonify({
+                "screen": screen,
+                "country": country,
+                "period": f"{start_year}-{end_year}",
+                "fwd_months": months,
+                "n_universe": len(valid),
+                "n_matches": len(matches),
+                "n_unique_tickers": len(set(r["ticker"] for r in matches)),
+                "universe_mean_long_pct": round(universe_mean, 2),
+                "screen_mean_long_pct": round(screen_mean, 2),
+                "alpha_long_pct": round(alpha, 2),
+                "hit_rate_long_pct": round(hit, 1),
+                "best_5": [{"ticker": r["ticker"], "date": r["date"],
+                             "fwd_long_pct": r["fwd_long_pct"]} for r in sorted_m[:5]],
+                "worst_5": [{"ticker": r["ticker"], "date": r["date"],
+                              "fwd_long_pct": r["fwd_long_pct"]} for r in sorted_m[-5:]],
+                "all_matches": [{"ticker": r["ticker"], "date": r["date"],
+                                  "fwd_long_pct": r["fwd_long_pct"]} for r in sorted_m],
+            })
+        finally:
+            db.close()
+    except Exception as e:
+        import traceback
+        return jsonify({"error": str(e), "tb": traceback.format_exc()[:1500]}), 500
+
+
 @app.route("/api/backtest-v2/screen-detail", methods=["POST"])
 def api_backtest_v2_screen_detail():
     """Returnerar individuella observationer för en given screen.
