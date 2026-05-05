@@ -593,6 +593,12 @@ def analyze_by_sector(db, results):
         # Composite ≥80 inom denna sektor
         c80 = [r for r in rs if r.get("composite") is not None and r["composite"] >= 80]
         c80_mean = sum(c["fwd_12m"] for c in c80) / len(c80) if c80 else None
+        # Growth Trifecta inom denna sektor
+        gt = [r for r in rs if r.get("is_growth_trifecta")]
+        gt_mean = sum(g["fwd_12m"] for g in gt) / len(gt) if gt else None
+        # Magic Formula inom denna sektor
+        mf = [r for r in rs if r.get("is_magic_formula")]
+        mf_mean = sum(m["fwd_12m"] for m in mf) / len(mf) if mf else None
 
         sector_results.append({
             "sector": sector_names.get(sid, "Unknown"),
@@ -603,6 +609,10 @@ def analyze_by_sector(db, results):
             "hit_rate_pct": round(sum(1 for r in rets if r > 0) / len(rets) * 100, 1),
             "composite_80_n": len(c80),
             "composite_80_alpha": round((c80_mean - universe_mean) * 100, 2) if c80_mean is not None else None,
+            "growth_trifecta_n": len(gt),
+            "growth_trifecta_alpha": round((gt_mean - universe_mean) * 100, 2) if gt_mean is not None else None,
+            "magic_formula_n": len(mf),
+            "magic_formula_alpha": round((mf_mean - universe_mean) * 100, 2) if mf_mean is not None else None,
         })
 
     sector_results.sort(key=lambda x: -x["alpha_vs_universe"])
