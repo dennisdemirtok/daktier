@@ -746,12 +746,22 @@ def api_stock_detail(orderbook_id):
                             "is_growth_trifecta": target.get("is_growth_trifecta"),
                             "is_magic_formula": target.get("is_magic_formula"),
                             "is_dual_screen": target.get("is_dual_screen"),
+                            "is_recurring_compounder": target.get("is_recurring_compounder"),
+                            "recurring_gt_years": target.get("recurring_gt_years"),
+                            "n_flags": target.get("n_flags"),
+                            "recommendation": target.get("recommendation"),
+                            "recommendation_reason": target.get("recommendation_reason"),
                             "sector_name": target.get("sector_name"),
                             "sector_n": target.get("sector_n"),
                             "sector_quality_rank": target.get("sector_quality_rank"),
                             "sector_value_rank": target.get("sector_value_rank"),
                             "sector_momentum_rank": target.get("sector_momentum_rank"),
                         }
+                        # Top-level flags så drawer fångar dem
+                        d["is_recurring_compounder"] = target.get("is_recurring_compounder")
+                        d["recommendation"] = target.get("recommendation")
+                        d["recommendation_reason"] = target.get("recommendation_reason")
+                        d["n_flags"] = target.get("n_flags")
                 except Exception as e:
                     print(f"[stock detail] quant_rank: {e}", file=sys.stderr)
             # Insider-data (FI insynsregister) — enrich i realtid (cachad i Python-modul)
@@ -1107,6 +1117,11 @@ def api_stock_extras(orderbook_id):
                     "is_growth_trifecta": target.get("is_growth_trifecta"),
                     "is_magic_formula": target.get("is_magic_formula"),
                     "is_dual_screen": target.get("is_dual_screen"),
+                    "is_recurring_compounder": target.get("is_recurring_compounder"),
+                    "recurring_gt_years": target.get("recurring_gt_years"),
+                    "n_flags": target.get("n_flags"),
+                    "recommendation": target.get("recommendation"),
+                    "recommendation_reason": target.get("recommendation_reason"),
                     # Sektor-relativ ranking (jämfört bara med bolag i samma sektor)
                     "sector_name": target.get("sector_name"),
                     "sector_n": target.get("sector_n"),
@@ -1114,6 +1129,11 @@ def api_stock_extras(orderbook_id):
                     "sector_value_rank": target.get("sector_value_rank"),
                     "sector_momentum_rank": target.get("sector_momentum_rank"),
                 }
+                # Top-level för drawer
+                out["is_recurring_compounder"] = target.get("is_recurring_compounder")
+                out["recommendation"] = target.get("recommendation")
+                out["recommendation_reason"] = target.get("recommendation_reason")
+                out["n_flags"] = target.get("n_flags")
         except Exception as e:
             print(f"[extras] quant_rank: {e}", file=sys.stderr)
 
