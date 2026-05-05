@@ -167,6 +167,102 @@ def classify_spier_compounder(roe_history_10y):
     return n_above_15 >= 7 and len(roe_vals) >= 7
 
 
+def get_price_momentum_12_1(db, isin, date_iso):
+    """Beräkna 12-1 momentum (return från 12m sedan till 1m sedan).
+
+    Akademisk standard för momentum: skip senaste månaden för att undvika
+    short-term reversal. Returnerar None om data saknas.
+    """
+    from datetime import datetime, timedelta
+    if not isin:
+        return None
+    try:
+        d = datetime.strptime(date_iso, "%Y-%m-%d")
+    except Exception:
+        return None
+    d_12m = (d - timedelta(days=365)).strftime("%Y-%m-%d")
+    d_1m = (d - timedelta(days=30)).strftime("%Y-%m-%d")
+    ph = _ph()
+    try:
+        # Pris vid 12m och 1m sedan (närmaste handelsdag)
+        p_12m_row = _fetchone(db,
+            f"SELECT close FROM borsdata_prices WHERE isin = {ph} "
+            f"AND date <= {ph} ORDER BY date DESC LIMIT 1",
+            (isin, d_12m))
+        p_1m_row = _fetchone(db,
+            f"SELECT close FROM borsdata_prices WHERE isin = {ph} "
+            f"AND date <= {ph} ORDER BY date DESC LIMIT 1",
+            (isin, d_1m))
+    except Exception:
+        return None
+    if not p_12m_row or not p_1m_row:
+        return None
+    p_12m = (dict(p_12m_row).get("close") or 0)
+    p_1m = (dict(p_1m_row).get("close") or 0)
+    if p_12m <= 0 or p_1m <= 0:
+        return None
+    return (p_1m / p_12m) - 1
+
+
+def classify_quality_momentum(kpis, mom_12_1, mom_threshold_pct=20):
+    """Quality Momentum — kombinerar pris-momentum med kvalitet-filter.
+
+    Akademisk evidens: pris-momentum + ROIC ≥ 15% ger momentum-alpha utan
+    junk-rallies (Asness 2013, Frazzini 2018). Skyddar mot meme-stocks och
+    pump-and-dumps som har momentum men noll fundamenta.
+
+    Trigger:
+    - Pris-momentum 12-1m ≥ 20% (top tier)
+    - ROIC ≥ 15% ELLER ROE ≥ 18% (kvalitet-filter)
+    """
+    if mom_12_1 is None or mom_12_1 < (mom_threshold_pct / 100):
+        return False
+    roic = kpis.get(37)
+    roe = kpis.get(33)
+    # Normalisera till %
+    roic_pct = roic if (roic and abs(roic) >= 1.5) else (roic * 100 if roic else None)
+    roe_pct = roe if (roe and abs(roe) >= 1.5) else (roe * 100 if roe else None)
+    if (roic_pct is not None and roic_pct >= 15) or \
+       (roe_pct is not None and roe_pct >= 18):
+        return True
+    return False
+
+
+def classify_garp(kpis):
+    """GARP — Growth at Reasonable Price (Lynch-stil).
+
+    Trigger: Vinsttillväxt ≥ 15% + P/E ≤ 25 + tillväxt > P/E (PEG < 1.7).
+    Grymare än Lynch 1.0 eftersom svenska bolag har högre värdering historiskt.
+    """
+    eps_growth = kpis.get(97)  # vinsttillväxt %
+    pe = kpis.get(2)
+    if eps_growth is None or eps_growth < 15:
+        return False
+    if pe is None or pe <= 0 or pe > 25:
+        return False
+    # PEG-style: tillväxt ska vara > P/E / 1.7
+    if eps_growth < (pe / 1.7):
+        return False
+    return True
+
+
+def classify_earnings_acceleration(eps_growth_quarters):
+    """Earnings Acceleration — Q-by-Q-tillväxt accelererar.
+
+    Trigger: senaste 3 kvartal har monotont stigande YoY-vinsttillväxt.
+    Q1_yoy < Q2_yoy < Q3_yoy (där Q3 är senaste).
+    """
+    if not eps_growth_quarters or len(eps_growth_quarters) < 3:
+        return False
+    # Senaste 3 kvartal
+    last3 = eps_growth_quarters[-3:]
+    vals = [v for _, v in last3 if v is not None]
+    if len(vals) < 3:
+        return False
+    # Måste vara monotont stigande
+    return vals[0] < vals[1] < vals[2] and vals[2] > 10  # senaste > 10%
+
+
 def compute_earnings_stability_pct(eps_history_10y):
     """Beräknar % av åren där EPS > 0."""
     if not eps_history_10y:
@@ -334,6 +430,27 @@ def run_quant_backtest(db, universe=None, start_year=2015, end_year=2024,
             is_pabrai = classify_pabrai_dhandho(kpis, earnings_stab)
             is_spier = classify_spier_compounder(roe_hist)
 
+            # ── NYA SCREENS: momentum + tillväxt-kvalitet ──
+            mom_12_1 = get_price_momentum_12_1(db, isin, date_iso)
+            is_quality_momentum = classify_quality_momentum(kpis, mom_12_1)
+            is_garp = classify_garp(kpis)
+            # Earnings acceleration: kräver kvartalsdata. Använd EPS-tillväxt-historik
+            # från quarter-data (KPI 97 quarter)
+            try:
+                eps_growth_q = _fetchall(db,
+                    f"SELECT period_year, period_q, value FROM borsdata_kpi_history "
+                    f"WHERE isin = {_ph()} AND report_type = {_ph()} "
+                    f"AND kpi_id = {_ph()} AND value IS NOT NULL "
+                    f"AND period_year < {_ph()} "
+                    f"ORDER BY period_year DESC, period_q DESC LIMIT 6",
+                    (isin, "quarter", 97, year))
+                eps_q_list = [((dict(r)["period_year"], dict(r)["period_q"]), dict(r)["value"])
+                               for r in eps_growth_q]
+                eps_q_list.reverse()  # ASC
+                is_earnings_accel = classify_earnings_acceleration(eps_q_list)
+            except Exception:
+                is_earnings_accel = False
+
             results.append({
                 "ticker": short,
                 "name": name,
@@ -348,6 +465,10 @@ def run_quant_backtest(db, universe=None, start_year=2015, end_year=2024,
                 "is_piotroski_hi_cheap": is_piotroski_hi_cheap,
                 "is_pabrai": is_pabrai,
                 "is_spier_compounder": is_spier,
+                "is_quality_momentum": is_quality_momentum,
+                "is_garp": is_garp,
+                "is_earnings_accel": is_earnings_accel,
+                "mom_12_1_pct": round(mom_12_1 * 100, 1) if mom_12_1 is not None else None,
                 "fscore": fscore_val,
                 "fwd_12m": fwd_12m,
             })
@@ -426,21 +547,51 @@ def analyze_quant_results(results):
     def screen_stats(label, hits, all_returns_mean):
         if not hits:
             return {"name": label, "n": 0, "mean_12m_pct": 0,
-                    "alpha_pct": 0, "hit_rate_pct": 0}
+                    "alpha_pct": 0, "hit_rate_pct": 0, "sharpe": 0,
+                    "max_drawdown_pct": 0, "early_alpha_pct": 0,
+                    "late_alpha_pct": 0, "unique_tickers": 0}
         rets = [r["fwd_12m"] for r in hits]
         m = sum(rets) / len(rets)
+        # Standardavvikelse + Sharpe (annualiserad, antar redan 12m)
+        if len(rets) >= 2:
+            var = sum((x - m) ** 2 for x in rets) / (len(rets) - 1)
+            std = var ** 0.5
+            sharpe = (m / std) if std > 0 else 0
+        else:
+            std = 0
+            sharpe = 0
+        # Max drawdown — sämsta enskilda observation
+        max_dd = min(rets)
+        # Sub-period analys: 2015-2019 vs 2020-2024
+        early = [r["fwd_12m"] for r in hits if r["date"][:4] <= "2019"]
+        late = [r["fwd_12m"] for r in hits if r["date"][:4] >= "2020"]
+        early_alpha = (sum(early) / len(early) - all_returns_mean) if early else 0
+        late_alpha = (sum(late) / len(late) - all_returns_mean) if late else 0
+        # Unika tickers — koncentrationscheck
+        unique_tickers = len(set(r["ticker"] for r in hits))
         return {
             "name": label,
             "n": len(hits),
+            "unique_tickers": unique_tickers,
             "mean_12m_pct": round(m * 100, 2),
             "alpha_pct": round((m - all_returns_mean) * 100, 2),
             "hit_rate_pct": round(sum(1 for r in rets if r > 0) / len(rets) * 100, 1),
+            "stdev_pct": round(std * 100, 2),
+            "sharpe": round(sharpe, 2),
+            "max_drawdown_pct": round(max_dd * 100, 2),
+            "early_alpha_pct": round(early_alpha * 100, 2),  # 2015-2019
+            "late_alpha_pct": round(late_alpha * 100, 2),    # 2020-2024
+            "early_n": len(early),
+            "late_n": len(late),
         }
 
-    # Alla 5 screens
+    # Alla 8 screens
     screens = [
         screen_stats("Quant Trifecta",
                       [r for r in valid if r["is_trifecta"]],
+                      universe_mean),
+        screen_stats("Composite >=80",
+                      [r for r in valid if r.get("composite") is not None and r["composite"] >= 80],
                       universe_mean),
         screen_stats("Magic Formula 30",
                       [r for r in valid if r.get("is_magic_formula")],
@@ -453,6 +604,15 @@ def analyze_quant_results(results):
                       universe_mean),
         screen_stats("Spier 10y Compounder",
                       [r for r in valid if r.get("is_spier_compounder")],
+                      universe_mean),
+        screen_stats("Quality Momentum",
+                      [r for r in valid if r.get("is_quality_momentum")],
+                      universe_mean),
+        screen_stats("GARP (Lynch-stil)",
+                      [r for r in valid if r.get("is_garp")],
+                      universe_mean),
+        screen_stats("Earnings Acceleration",
+                      [r for r in valid if r.get("is_earnings_accel")],
                       universe_mean),
     ]
 
