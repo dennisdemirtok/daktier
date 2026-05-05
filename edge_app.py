@@ -6886,12 +6886,34 @@ Motsatt SE där hög composite vinner.
 - 2020-2024 (late): +2.7% alpha (post-COVID + rate-höjningar)
 - Slutsats: Growth Trifecta fungerar i BÅDA regimer, MF bara i early.
 
-**Marknads-specifika rekommendationer:**
+**Marknads-specifika rekommendationer (5 marknader testade):**
 
-| Marknad | Bästa screen | Alpha | Anledning |
-|---|---|---|---|
-| 🇸🇪 SE | Dual-Screen (Composite ≥80 + Magic Formula) | +19.26% | Värdedriven SE-marknad |
-| 🇺🇸 US | **Growth Trifecta (Q+M ≥70)** | +6.15% | Tech-driven, robust båda regimer |
+| Marknad | n_obs | Universum | Bästa screen | Alpha |
+|---|---|---|---|---|
+| 🇸🇪 SE | 1823 | +20% | C80+GT Confluence | **+19.64%** |
+| 🇺🇸 US | 1547 | +16.41% | GT+MF Confluence | **+21.57%** |
+| 🇳🇴 NO | 931 | +15.77% | Piotroski Hi-F + Cheap | +6.14% |
+| 🇫🇮 FI | 585 | +10.25% | Composite ≥80 (litet n=11) | +16.34% |
+| 🇩🇰 DK | 483 | +12.61% | Magic Formula 30 | +2.63% |
+
+**🇳🇴 NORGE — INVERTERAD MAGIC FORMULA (kritisk insikt):**
+- NO Magic Formula 30: **-7.11%** alpha (FÄLLA i NO! vs US +10.08%)
+- NO Growth Trifecta: **-4.25%** alpha (FÄLLA!)
+- NO Piotroski Hi-F + Cheap: **+6.14%** (BÄST, n=118)
+- NO Composite ≥80: +4.38% (n=38)
+- Tolkning: NO är cykliskt (olja, shipping, lax) — value/kvalitet-screens
+  som passar US-tech failar. Piotroski (operativ kvalitet på cykliska) vinner.
+
+**🇫🇮 FINLAND — Composite ≥80 starkt men låg n:**
+- FI Composite ≥80: +16.34% alpha (n=11, hit 54%, för litet för robusthet)
+- Magic Formula 30: +4.63% alpha (n=77)
+- Earnings Acceleration: +9.72% alpha (n=23)
+
+**🇩🇰 DANMARK — Svag marknad för screens:**
+- Mest screens negativa
+- Endast Magic Formula 30: +2.63% alpha (svagt)
+- Tolkning: DK domineras av få stora bolag (Novo, Maersk, Ørsted) —
+  liten utdelning från screening
 
 **När agenten ska citera Growth Trifecta:**
 
