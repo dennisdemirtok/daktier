@@ -4073,6 +4073,7 @@ def api_backtest_v2_quant_diagnostics():
     start_year = int(body.get("start_year", 2015))
     end_year = int(body.get("end_year", 2024))
     max_universe = int(body.get("max_universe", 100))
+    country = body.get("country", "SE")
 
     try:
         from backtest_v2.quant_runner import (run_quant_backtest,
@@ -4083,7 +4084,7 @@ def api_backtest_v2_quant_diagnostics():
                                           end_year=end_year, verbose=False,
                                           use_dynamic_universe=True,
                                           max_universe=max_universe,
-                                          country="SE")
+                                          country=country)
 
             # Diagnostik per screen
             screens = {
