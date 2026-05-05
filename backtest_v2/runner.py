@@ -94,14 +94,18 @@ def get_analysis_dates(start_year=None, end_year=None, mode="yearly_10y"):
     return [f"{y}-07-15" for y in range(s, e + 1)]
 
 
-def get_dynamic_universe(db, country="SE", min_market_cap=1e9, max_n=100):
+def get_dynamic_universe(db, country="SE", min_market_cap=1e9, max_n=100,
+                          relaxed=False):
     """Hämta dynamiskt universum från borsdata_instrument_map + stocks.
 
     Använder Avanza-stocks med ISIN-mappning till Börsdata. Filtrerar:
     - country (default SE)
     - min market cap (default 1 Mdr SEK)
     - har ISIN i borsdata_instrument_map
-    - har minst 5 quarterly reports
+    - har minst 5 quarterly reports (om relaxed=False)
+
+    relaxed=True: skippar quarterly-kravet, kräver bara KPI-history.
+                  Används för OOS-test där quarterly inte finns för pre-2021.
 
     Returnerar list av (short_name, name) tuples, sorterad market_cap desc.
     """
@@ -123,11 +127,26 @@ def get_dynamic_universe(db, country="SE", min_market_cap=1e9, max_n=100):
     # Filtrera till bolag med faktisk quarterly-data (Nordic) ELLER
     # KPI-history (Global — vi har bara KPI inte reports för US/EU).
     # Om ingen kvartalsrapport men ISIN finns + KPI → tillåt anyway.
-    if country == "SE":
+    if country == "SE" and not relaxed:
         # SE: kräv quarterly reports
         return [(r["short_name"], r["name"])
                 for r in rows
                 if (r["n_q"] or 0) >= 5][:max_n]
+    elif country == "SE" and relaxed:
+        # SE relaxed: kräv bara KPI-history (för OOS pre-2021)
+        rows_list = [dict(r) for r in rows]
+        isin_list = [r["isin"] for r in rows_list if r.get("isin")]
+        if not isin_list: return []
+        ph2 = _ph()
+        isin_ph = ",".join([ph2] * len(isin_list))
+        kpi_rows = _fetchall(db,
+            f"SELECT DISTINCT isin FROM borsdata_kpi_history "
+            f"WHERE isin IN ({isin_ph}) AND report_type = {ph2}",
+            (*isin_list, "year"))
+        kpi_isins = {dict(r)["isin"] for r in kpi_rows}
+        return [(r["short_name"], r["name"])
+                for r in rows_list
+                if r.get("isin") in kpi_isins][:max_n]
     else:
         # Utländska: kräv bara att vi har KPI-data via bulk-query
         # (samma approach som compute_quant_scores)

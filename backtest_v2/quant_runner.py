@@ -329,7 +329,8 @@ def compute_earnings_stability_pct(eps_history_10y):
 
 def run_quant_backtest(db, universe=None, start_year=2015, end_year=2024,
                         verbose=True, use_dynamic_universe=True,
-                        max_universe=100, min_market_cap=1e9, country="SE"):
+                        max_universe=100, min_market_cap=1e9, country="SE",
+                        relaxed_universe=False):
     """Kör quant-only backtest för universum × datum.
 
     Args:
@@ -338,6 +339,7 @@ def run_quant_backtest(db, universe=None, start_year=2015, end_year=2024,
         max_universe: max antal bolag att inkludera.
         min_market_cap: minsta market cap (SEK) för dynamiskt universum.
         country: landskod (default 'SE').
+        relaxed_universe: skippa quarterly-krav, för OOS pre-2021.
 
     Returnerar list av observation-dicts med forward returns.
     """
@@ -347,7 +349,8 @@ def run_quant_backtest(db, universe=None, start_year=2015, end_year=2024,
                 from backtest_v2.runner import get_dynamic_universe
                 universe = get_dynamic_universe(db, country=country,
                                                   min_market_cap=min_market_cap,
-                                                  max_n=max_universe)
+                                                  max_n=max_universe,
+                                                  relaxed=relaxed_universe)
                 if verbose:
                     print(f"Dynamiskt universum: {len(universe)} bolag (mcap>={min_market_cap/1e9:.1f}Md, country={country})")
             except Exception as e:

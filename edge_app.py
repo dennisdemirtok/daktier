@@ -5208,6 +5208,7 @@ def api_backtest_v2_run_quant():
     max_universe = int(body.get("max_universe", 100))
     min_market_cap = float(body.get("min_market_cap", 1e9))
     country = body.get("country", "SE")
+    relaxed_universe = bool(body.get("relaxed_universe", False))
 
     try:
         from backtest_v2.quant_runner import (run_quant_backtest,
@@ -5219,7 +5220,8 @@ def api_backtest_v2_run_quant():
                                           use_dynamic_universe=True,
                                           max_universe=max_universe,
                                           min_market_cap=min_market_cap,
-                                          country=country)
+                                          country=country,
+                                          relaxed_universe=relaxed_universe)
             analysis = analyze_quant_results(results)
             # Sektor-breakdown
             from backtest_v2.quant_runner import analyze_by_sector
