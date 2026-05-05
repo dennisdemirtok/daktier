@@ -6391,37 +6391,65 @@ mycket starkt (alpha 8-55%). Inom finans/fastighet är det fälla.
 DEL 6.47 — MARKNADS-SPECIFIKA SCREENS (US vs SE)
 ══════════════════════════════════════════════════════════════
 
-**KRITISK INSIKT från US-backtest 2015-2024:**
+**KRITISK INSIKT från US-backtest 2015-2024 (n=1058 obs, 112 unika tickers):**
 
 Vår klassiska Quant Trifecta missade SYSTEMATISKT US tech-marknaden.
-Composite ≥80 fångade bara JPM (3 obs). Quant Trifecta fångade noll.
-Men universum-snittet var +21.44%/år (drivit av NVDA/AAPL/MSFT m.fl.)
-— pipelinen missade hela tech-rallyt.
+Composite ≥80 underperformar och Quant Trifecta är direkt skadlig.
+Universum-snitt: +16.56%/år. Klassiska value-screens FAILAR i US.
 
 **ROOT CAUSE:** Trifecta kräver Value≥70 (=billig). US tech har P/E
 25-115, V-score 16-50. De kvalar ALDRIG på V-axeln, oavsett hur stark
 Q och M är.
 
-**LÖSNING — Growth Trifecta (Q+M utan V):**
-- Backtest US 2015-2024: +23.61% alpha, Sharpe 0.76, 85% hit rate, n=13
-- 6 unika tickers — bra spridning
-- Akademisk grund: Asness 2013 "Quality Minus Junk"
+**FULLSTÄNDIG SCREEN-RANKING US 2015-2024 (robust, n>30):**
+
+| Screen | n | u | Alpha | Sharpe | Hit | Early | Late |
+|---|---|---|---|---|---|---|---|
+| 🏆 Magic Formula 30 | 35 | 18 | **+10.08%** | 0.62 | 74% | +14.3% | +5.0% |
+| 🚀 Growth Trifecta (Q+M ≥70) | 79 | 40 | **+8.93%** | 0.61 | 76% | +11.8% | +7.1% |
+| Quality Momentum | 207 | 85 | -1.36% | 0.42 | 62% | -0.6% | -1.8% |
+| GARP+Composite ≥70 | 61 | 33 | -2.85% | 0.45 | 70% | -10.1% | +2.2% |
+| Spier 10y Compounder | 395 | 56 | -4.00% | 0.47 | 68% | -3.9% | -4.0% |
+| GARP (Lynch) | 242 | 83 | -5.59% | 0.33 | 64% | -11.6% | +0.4% |
+| Piotroski Hi-F + Cheap | 143 | 45 | **-10.67%** | 0.18 | 60% | -15.5% | -5.3% |
+| Composite ≥80 | 25 | 10 | **-12.51%** | 0.21 | 64% | -14.7% | -11.0% |
+| Composite ≥80 + Magic | 6 | 4 | -17.78% | -0.07 | 50% | -26.0% | -9.5% |
+| Quant Trifecta | 10 | 7 | **-20.42%** | -0.24 | 50% | -21.5% | -20.2% |
+
+**INVERS COMPOSITE-RELATION i US:**
+| Tier | n | mean 12m | alpha |
+|---|---|---|---|
+| Composite ≥80 | 25 | +4.04% | -12.51% (FÄLLA!) |
+| 60-80 | 243 | +16.50% | -0.06% |
+| 40-60 | 542 | +15.01% | -1.54% |
+| <40 | 248 | **+21.25%** | **+4.70%** (vinnare!) |
+
+I US: hög composite = pris-in, låg composite + momentum = alfa.
+Motsatt SE där hög composite vinner.
+
+**ENDA TVÅ ROBUSTA US-SCREENS:**
+- 🏆 **Magic Formula 30** (+10.08% alpha, n=35, u=18, hit 74%)
+- 🚀 **Growth Trifecta (Q+M ≥70)** (+8.93% alpha, n=79, u=40, hit 76%)
+
+Båda har alpha både early-period (2015-2019) och late-period (2020-2024)
+— inget regime-bias.
 
 **Marknads-specifika rekommendationer:**
 
 | Marknad | Bästa screen | Alpha | Anledning |
 |---|---|---|---|
 | 🇸🇪 SE | Dual-Screen (Composite ≥80 + Magic Formula) | +19.26% | Värdedriven SE-marknad |
-| 🇺🇸 US | **Growth Trifecta (Q+M ≥70)** | +23.61% | Tech-rallies driver US |
+| 🇺🇸 US | **Magic Formula 30** ELLER **Growth Trifecta (Q+M)** | +10.08% / +8.93% | Tech-driven US |
 
 **När agenten ska citera Growth Trifecta:**
 
 För US-aktier som flaggar Growth Trifecta (Q≥70 + M≥70, oavsett V):
 > "🚀 Growth Trifecta-flagga: Quality 98 + Momentum 90. Backtest US
-> 2015-2024 visar +23.61% alpha med 85% hit rate i denna kombination.
-> OBS: bolaget är dyrt enligt klassisk värdering (V-score låg) men
-> kvalitet+momentum-stark. Akademiskt validerat (Asness 2013) — i
-> US-marknaden är Q+M ofta starkare prediktor än V+Q+M."
+> 2015-2024 (n=79, 40 unika tickers) visar +8.93% alpha med 76% hit
+> rate och Sharpe 0.61. Robust över både early (2015-2019, +11.8%)
+> och late (2020-2024, +7.1%) — ingen regim-bias. OBS: bolaget är
+> dyrt enligt klassisk värdering (V-score låg) men kvalitet+momentum-
+> stark. Akademiskt validerat (Asness 2013 'Quality Minus Junk')."
 
 **När INTE citera Growth Trifecta:**
 - För SE-aktier: använd Dual-Screen istället (mer validerat för SE)
@@ -6433,6 +6461,14 @@ För US-aktier som flaggar Growth Trifecta (Q≥70 + M≥70, oavsett V):
 - Quant Trifecta = "billig kvalitet med momentum" → SE-värdebolag
 - Growth Trifecta = "kvalitet med momentum" → US-tech, växande bolag
 - Båda behövs — fångar olika typer av investeringar
+
+**🚨 ANTI-MÖNSTER för US (citera ALDRIG dessa som positiva signaler):**
+- Composite ≥80 alone — alpha **-12.51%** (premium-fälla i US)
+- Quant Trifecta — alpha **-20.42%** (broken för US tech)
+- Piotroski Hi-F + Cheap — alpha **-10.67%** (low-quality value-fälla)
+- Earnings Acceleration — alpha **-20.07%** (mean reversion-fälla)
+
+Om du ser dessa flaggor på en US-aktie: VARNING, inte rekommendation.
 
 
 ══════════════════════════════════════════════════════════════
