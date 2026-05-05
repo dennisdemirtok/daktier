@@ -274,6 +274,12 @@ def live_tracker_page():
     return render_template("live_tracker.html")
 
 
+@app.route("/portfolio-builder")
+def portfolio_builder_page():
+    """Portfölj-builder: bygg konkret allokering från BUY-signaler."""
+    return render_template("portfolio_builder.html")
+
+
 @app.route("/api/status")
 def api_status():
     db = get_db()

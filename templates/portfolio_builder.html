@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Portfölj-Builder — DAKTIER</title>
+<style>
+  * { box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; max-width: 1100px;
+         margin: 0 auto; padding: 24px; background: #fafafa; color: #1f2937; line-height: 1.5; }
+  h1 { font-size: 28px; margin-bottom: 8px; }
+  .lede { color: #6b7280; margin-bottom: 24px; font-size: 15px; }
+  h2 { font-size: 20px; margin-top: 28px; padding-bottom: 6px; border-bottom: 2px solid #e5e7eb; }
+  .controls { background: white; border: 1px solid #e5e7eb; border-radius: 8px;
+              padding: 16px; margin-bottom: 16px; display: flex; gap: 12px; flex-wrap: wrap; align-items: end; }
+  .controls label { font-size: 12px; font-weight: 600; color: #374151; display: block; margin-bottom: 4px; }
+  .controls input, .controls select { padding: 8px 12px; border: 1px solid #d1d5db;
+                                       border-radius: 6px; font-size: 13px; }
+  .controls button { background: #4f46e5; color: white; border: none; padding: 10px 20px;
+                      border-radius: 6px; cursor: pointer; font-weight: 600; font-size: 13px; }
+  .controls button:hover { background: #4338ca; }
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+           gap: 12px; margin-bottom: 20px; }
+  .stat-card { background: white; padding: 14px; border-radius: 8px; border: 1px solid #e5e7eb; }
+  .stat-label { font-size: 11px; color: #6b7280; text-transform: uppercase; letter-spacing: 0.5px; }
+  .stat-value { font-size: 22px; font-weight: 700; color: #111827; margin-top: 4px; }
+  .stat-value.pos { color: #059669; }
+  table { border-collapse: collapse; width: 100%; background: white;
+          border: 1px solid #e5e7eb; border-radius: 8px; overflow: hidden; }
+  th, td { padding: 10px 12px; text-align: left; font-size: 13px; }
+  th { background: #f9fafb; font-weight: 600; }
+  tr:nth-child(even) { background: #fafafa; }
+  td.num { text-align: right; font-variant-numeric: tabular-nums; }
+  .pos { color: #059669; font-weight: 600; }
+  .tier-super { background: linear-gradient(135deg, #fbbf24, #f59e0b); color: white;
+                  padding: 2px 8px; border-radius: 6px; font-size: 11px; font-weight: 700; }
+  .tier-recurring { background: linear-gradient(135deg, #dc2626, #ef4444); color: white;
+                     padding: 2px 8px; border-radius: 6px; font-size: 11px; font-weight: 600; }
+  .tier-conf { background: linear-gradient(135deg, #7c3aed, #a78bfa); color: white;
+                padding: 2px 8px; border-radius: 6px; font-size: 11px; font-weight: 600; }
+  .tier-dual { background: linear-gradient(135deg, #0891b2, #06b6d4); color: white;
+                padding: 2px 8px; border-radius: 6px; font-size: 11px; font-weight: 600; }
+  .tier-single { background: #6b7280; color: white;
+                  padding: 2px 8px; border-radius: 6px; font-size: 11px; font-weight: 600; }
+  .reason { font-size: 11px; color: #6b7280; margin-top: 2px; }
+  .top-link { display: inline-block; margin-bottom: 16px; color: #4f46e5; text-decoration: none; font-weight: 500; }
+  .info { background: #ecfdf5; border-left: 4px solid #059669; padding: 12px 16px;
+           margin: 16px 0; border-radius: 4px; font-size: 13px; }
+  .sector-bars { display: flex; gap: 4px; height: 24px; border-radius: 6px; overflow: hidden;
+                  background: #f3f4f6; }
+  .sector-bar { display: flex; align-items: center; justify-content: center; color: white;
+                  font-size: 10px; font-weight: 600; }
+</style>
+</head>
+<body>
+
+<a href="/" class="top-link">← Tillbaka till dashboard</a>
+
+<h1>📦 Portfölj-Builder</h1>
+<p class="lede">
+  Generera konkret allokering baserat på dagens BUY-signaler. Tier-baserade vikter:
+  Super Confluence 15%, Confluence 10%, Recurring 8%, Dual-Screen 7%, Single BUY 5%.
+  Max 25% per sektor.
+</p>
+
+<div class="controls">
+  <div>
+    <label>Budget (SEK)</label>
+    <input type="number" id="budget" value="100000" min="1000" step="10000">
+  </div>
+  <div>
+    <label>Marknad</label>
+    <select id="country">
+      <option value="mixed">Blandat (SE + US)</option>
+      <option value="SE">🇸🇪 Endast SE</option>
+      <option value="US">🇺🇸 Endast US</option>
+    </select>
+  </div>
+  <div>
+    <label>Max positioner</label>
+    <input type="number" id="max_positions" value="10" min="3" max="20">
+  </div>
+  <button onclick="buildPortfolio()">📊 Bygg portfölj</button>
+</div>
+
+<div id="output">
+  <p style="color:#6b7280;text-align:center;padding:40px">Klicka "Bygg portfölj" för att generera.</p>
+</div>
+
+<script>
+async function buildPortfolio() {
+  const budget = +document.getElementById('budget').value;
+  const country = document.getElementById('country').value;
+  const max_positions = +document.getElementById('max_positions').value;
+
+  const out = document.getElementById('output');
+  out.innerHTML = '<p style="text-align:center;padding:40px">⏳ Bygger…</p>';
+
+  try {
+    const res = await fetch('/api/portfolio/recommend', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({budget_sek: budget, country, max_positions})
+    });
+    const data = await res.json();
+    if (data.error) {
+      out.innerHTML = `<p style="color:red">Fel: ${data.error}</p>`;
+      return;
+    }
+    renderPortfolio(data);
+  } catch (e) {
+    out.innerHTML = `<p style="color:red">Fel: ${e.message}</p>`;
+  }
+}
+
+function renderPortfolio(d) {
+  const out = document.getElementById('output');
+  const totalAllocated = (d.positions || []).reduce((s, p) => s + p.actual_allocation_sek, 0);
+  const stats = `
+    <div class="stats">
+      <div class="stat-card"><div class="stat-label">Positioner</div><div class="stat-value">${d.n_positions}</div></div>
+      <div class="stat-card"><div class="stat-label">Allokerat</div><div class="stat-value">${(d.total_allocation_pct).toFixed(0)}%</div></div>
+      <div class="stat-card"><div class="stat-label">Kassa</div><div class="stat-value">${(d.cash_remaining_pct).toFixed(0)}%</div></div>
+      <div class="stat-card"><div class="stat-label">Förväntad alpha</div><div class="stat-value pos">+${(d.expected_alpha_pct_weighted || 0).toFixed(1)}%</div></div>
+    </div>
+  `;
+
+  // Sector breakdown bar
+  const colors = ['#3b82f6','#8b5cf6','#ec4899','#f59e0b','#10b981','#06b6d4','#ef4444','#6b7280'];
+  const sectorBars = (d.sector_breakdown || []).map((s, i) =>
+    `<div class="sector-bar" style="flex:${s.weight_pct};background:${colors[i % colors.length]}" title="${s.sector}: ${s.weight_pct}%">${s.weight_pct}%</div>`
+  ).join('');
+
+  let html = stats + `<h2>📊 Sektor-fördelning</h2>
+    <div class="sector-bars">${sectorBars}</div>
+    <div style="margin-top:6px;font-size:11px;color:#6b7280">${(d.sector_breakdown || []).map((s,i) => `<span style="color:${colors[i % colors.length]}">●</span> ${escapeHtml(s.sector)} (${s.weight_pct}%)`).join('  ')}</div>
+    <h2>💼 Positioner</h2>
+    <table><thead><tr>
+      <th>Ticker</th><th>Bolag</th><th>Tier</th>
+      <th class="num">Vikt</th><th class="num">SEK</th><th class="num">Antal</th>
+      <th class="num">Pris</th><th class="num">Hist α</th><th>Sektor</th>
+    </tr></thead><tbody>`;
+  for (const p of (d.positions || [])) {
+    const tierCls = p.tier === 'Super Confluence' ? 'tier-super' :
+                     (p.tier === 'Recurring' ? 'tier-recurring' :
+                      (p.tier === 'Confluence' ? 'tier-conf' :
+                       (p.tier === 'Dual-Screen' ? 'tier-dual' : 'tier-single')));
+    const flag = p.country === 'US' ? '🇺🇸' : '🇸🇪';
+    html += `<tr>
+      <td><strong>${flag} ${escapeHtml(p.ticker || '')}</strong>
+        <div class="reason">${escapeHtml(p.reason || '')}</div></td>
+      <td>${escapeHtml((p.name || '').slice(0, 25))}</td>
+      <td><span class="${tierCls}">${escapeHtml(p.tier)}</span></td>
+      <td class="num">${p.weight_pct}%</td>
+      <td class="num">${(p.actual_allocation_sek || 0).toLocaleString('sv-SE')}</td>
+      <td class="num">${p.n_shares}</td>
+      <td class="num">${p.price ? p.price.toFixed(2) : '—'} ${p.currency || ''}</td>
+      <td class="num pos">+${p.tier_alpha_pct.toFixed(1)}%</td>
+      <td>${escapeHtml(p.sector || '')}</td>
+    </tr>`;
+  }
+  html += `</tbody></table>
+    <div class="info">
+      <strong>📌 Info:</strong> ${escapeHtml(d.note || '')}<br>
+      Total faktisk allokering: ${totalAllocated.toLocaleString('sv-SE')} SEK
+      (${((totalAllocated/d.budget_sek)*100).toFixed(1)}% av budget).
+    </div>`;
+  out.innerHTML = html;
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+// Auto-build vid load
+buildPortfolio();
+</script>
+
+</body>
+</html>
