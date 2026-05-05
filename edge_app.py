@@ -6886,15 +6886,29 @@ Motsatt SE där hög composite vinner.
 - 2020-2024 (late): +2.7% alpha (post-COVID + rate-höjningar)
 - Slutsats: Growth Trifecta fungerar i BÅDA regimer, MF bara i early.
 
-**Marknads-specifika rekommendationer (5 marknader testade):**
+**Marknads-specifika rekommendationer (7 marknader testade):**
 
 | Marknad | n_obs | Universum | Bästa screen | Alpha |
 |---|---|---|---|---|
 | 🇸🇪 SE | 1823 | +20% | C80+GT Confluence | **+19.64%** |
 | 🇺🇸 US | 1547 | +16.41% | GT+MF Confluence | **+21.57%** |
-| 🇳🇴 NO | 931 | +15.77% | Piotroski Hi-F + Cheap | +6.14% |
-| 🇫🇮 FI | 585 | +10.25% | Composite ≥80 (litet n=11) | +16.34% |
+| 🇳🇴 NO | 931 | +15.77% | **Piotroski Hi-F + Cheap** | +6.14% |
+| 🇫🇮 FI | 585 | +10.25% | Composite ≥80 (n=11) | +16.34% |
 | 🇩🇰 DK | 483 | +12.61% | Magic Formula 30 | +2.63% |
+| 🇩🇪 DE | 88 | +5.26% | **Piotroski Hi-F + Cheap** (94% hit!) | **+12.88%** |
+| 🇫🇷 FR | 135 | +12.26% | (alla screens negativa) | — |
+
+**🎯 PIOTROSKI HI-F + CHEAP — Norden + Tyskland-vinnare, US-fälla:**
+| Marknad | Alpha | Tolkning |
+|---|---|---|
+| 🇩🇪 DE | +12.88% (94% hit) | Bästa screen för tysk industri |
+| 🇳🇴 NO | +6.14% | Cykliska + operativ kvalitet |
+| 🇸🇪 SE | -12.26% | Premium-pref-aktiefälla |
+| 🇺🇸 US | -9.57% | Tech-marknad, value-fälla |
+| 🇫🇷 FR | -6.28% | Luxury-driven, ej Piotroski-passande |
+
+Kritisk lärdom: **Piotroski är cyklisk-marknads-screen** (Tyskland industri,
+Norge olja/lax). Failar i tech-marknader (US, SE-Tech) eller luxury (FR).
 
 **🇳🇴 NORGE — INVERTERAD MAGIC FORMULA (kritisk insikt):**
 - NO Magic Formula 30: **-7.11%** alpha (FÄLLA i NO! vs US +10.08%)
