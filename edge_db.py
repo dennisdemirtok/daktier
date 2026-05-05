@@ -4708,9 +4708,13 @@ def compute_quant_scores(db, country="SE", min_market_cap=500e6,
     # ISRG/LRCX/EW/AMAT (4 år), AVGO/VRTX/INTU (3 år).
     # När dessa flaggar GT idag = ÄNNU starkare signal (structural compounders).
     RECURRING_COMPOUNDERS_US = {
+        # 12m + 36m validerade compounders (alla har 3+ år GT-flagga
+        # OCH avg 36m fwd >+50%):
         "NVDA": 5, "ANET": 6, "GOOGL": 5, "ADBE": 5, "ISRG": 4, "LRCX": 4,
         "EW": 4, "AMAT": 4, "AVGO": 3, "VRTX": 3, "INTU": 3, "EBAY": 3,
         "ULTA": 3, "REGN": 3, "APO": 3,
+        # Tillagda från 36m-analys (top-15 vinnare som saknades):
+        "MSFT": 2, "V": 2, "SPGI": 2, "FTNT": 2,
     }
     RECURRING_COMPOUNDERS_SE = {
         # SE C80+GT 2015-2024 återkommande tickers (n≥2 i backtest):
@@ -4727,9 +4731,10 @@ def compute_quant_scores(db, country="SE", min_market_cap=500e6,
         else:
             n_recurring = 0
         s["recurring_gt_years"] = n_recurring
-        # is_recurring_compounder = flaggar GT idag OCH har historik 3+ år
+        # is_recurring_compounder = flaggar GT idag OCH har historik 2+ år
+        # (sänkt från 3 för att inkludera MSFT/V/SPGI/FTNT från 36m-analys)
         s["is_recurring_compounder"] = (
-            s.get("is_growth_trifecta") and n_recurring >= 3
+            s.get("is_growth_trifecta") and n_recurring >= 2
         )
 
     # ── Magic Formula 30 (Greenblatt): rank(EV/EBIT) + rank(ROIC), top N ──
