@@ -120,10 +120,38 @@ def get_dynamic_universe(db, country="SE", min_market_cap=1e9, max_n=100):
         LIMIT {ph}
     """, (country, min_market_cap, max_n * 2))
 
-    # Filtrera till bolag med faktisk quarterly-data
-    return [(r["short_name"], r["name"])
-            for r in rows
-            if (r["n_q"] or 0) >= 5][:max_n]
+    # Filtrera till bolag med faktisk quarterly-data (Nordic) ELLER
+    # KPI-history (Global — vi har bara KPI inte reports för US/EU).
+    # Om ingen kvartalsrapport men ISIN finns + KPI → tillåt anyway.
+    if country == "SE":
+        # SE: kräv quarterly reports
+        return [(r["short_name"], r["name"])
+                for r in rows
+                if (r["n_q"] or 0) >= 5][:max_n]
+    else:
+        # Utländska: kräv bara att ISIN finns + att vi har KPI-data
+        ph2 = _ph()
+        result = []
+        for r in rows:
+            isin = r.get("isin") if isinstance(r, dict) else None
+            if not isin:
+                try: isin = r["isin"]
+                except (KeyError, IndexError): isin = None
+            if not isin:
+                continue
+            try:
+                kpi_count = _fetchone(db,
+                    f"SELECT COUNT(*) as n FROM borsdata_kpi_history "
+                    f"WHERE isin = {ph2} AND report_type = {ph2}",
+                    (isin, "year"))
+                kc = (dict(kpi_count).get("n") if kpi_count else 0) or 0
+                if kc >= 10:  # minst 10 KPI-rader
+                    result.append((r["short_name"], r["name"]))
+            except Exception:
+                pass
+            if len(result) >= max_n:
+                break
+        return result
 
 
 def find_isin_for_ticker(db, short_name):
