@@ -6188,6 +6188,56 @@ fortfarande existerar 2026 i Avanzas screener (>500M mcap). Akademisk
 forskning visar 2-4% överskattning av alpha pga survivorship. Sätt mental
 adjustment: våra +5% alpha-siffror är troligen +2-3% i verkligheten.
 
+══════════════════════════════════════════════════════════════
+DEL 6.46 — KOMBINATIONS-SCREENS + SEKTOR-INSIKTER (200 SE-bolag)
+══════════════════════════════════════════════════════════════
+
+**🥇 BÄSTA SIGNAL — Composite ≥80 + Magic Formula:**
+- Backtest: n=15, **+19.26% alpha**, Sharpe **+1.23**, **87% hit rate**
+- 12 unika tickers, sprids över sektorer
+- Detta är vår starkaste validerade signal — när två oberoende
+  metoder (Composite + Magic Formula) flaggar samma bolag
+
+När agenten ser bolag som flaggas av BÅDA: betona kraftigt:
+> "DUBBEL-SIGNAL: bolaget flaggas av Composite ≥80 (Quality+Value+Momentum)
+> OCH Magic Formula 30 (Greenblatt: hög ROIC × billigt EV/EBIT). Backtest
+> 2015-2024 visar +19.26% alpha med 87% hit rate och Sharpe 1.23 i denna
+> kombination — vår starkaste validerade kvant-signal."
+
+**🚨 SEKTOR-VARNING — Composite ≥80 i Finans/fastighet är FÄLLA:**
+- 47 av 63 Composite ≥80-obs ligger i Finans/fastighet
+- Alpha för dessa: -4.8% (UNDERPRESTERAR universum)
+- Anledning: preferensaktier (CORE PREF, VOLO PREF, NP3 PREF) har
+  stabil ROE → höga Q+V-ranks → kvalar Composite ≥80, men låg
+  total return
+
+Regel: när agenten ser Composite ≥80 i finans/fastighet (banker,
+preferensaktier, REITs):
+> "OBS: Composite ≥80-flaggan är opålitlig i finans/fastighet.
+> 47/63 obs av screenen ligger där och alphan är NEGATIV (-4.8%).
+> Bekräfta tesen via andra signaler innan position."
+
+**Sektor-alpha för Composite ≥80 (när screen aktiv):**
+| Sektor | C≥80 alpha | n | Användbart? |
+|---|---|---|---|
+| Sällanköpsvaror | **+54.9%** | 5 | ⭐⭐ |
+| Material | +39.4% | 5 | ⭐⭐ |
+| Energi | +39.0% | 2 | n litet |
+| Industri | +27.9% | 2 | n litet |
+| IT | +8.2% | 1 | n litet |
+| Hälsovård | -73.8% | 1 | brus |
+| **Finans/fastighet** | **-4.8%** | 47 | ❌ undvik |
+
+**🔥 SEKTOR-SLUTSATS:** Composite ≥80 utanför Finans/fastighet är
+mycket starkt (alpha 8-55%). Inom finans/fastighet är det fälla.
+
+**Multi-flag underperforms:**
+- 3+ screens samtidigt: alpha -0.16% (ingen edge)
+- 2+ screens: alpha -1.07%
+- Tolkning: bolag som flaggas av många screens är STABILA/dyra
+  bolag (Investor, Industrivärden) som redan är pris-in. Mer
+  signaler ≠ bättre — kvalitet > kvantitet i screen-kombinationer.
+
 
 ══════════════════════════════════════════════════════════════
 DEL 6.5 — KLASSIFICERINGSRAMVERK (grund-modell)
