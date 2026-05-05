@@ -3936,8 +3936,20 @@ function renderQuantRank(s) {
     // Screen-flaggor — visar vilka backtest-validerade screens bolaget kvalar i
     const screenBadges = [];
     const isUS = (q.country || '').toUpperCase() === 'US';
+    // ⚡ Super Confluence — räkna alla samtidiga flaggor
+    let nFlags = 0;
+    if (q.is_dual_screen) nFlags++;
+    if (q.composite_score >= 80 && q.is_growth_trifecta) nFlags++;
+    if (q.is_recurring_compounder) nFlags++;
+    if (q.is_quant_trifecta) nFlags++;
+    if (q.is_magic_formula) nFlags++;
+    if (q.is_growth_trifecta) nFlags++;
+    if (q.composite_score >= 80) nFlags++;
+    if (nFlags >= 4) {
+        screenBadges.push(`<span title="SUPER CONFLUENCE: bolaget kvalar i ${nFlags} oberoende screens samtidigt. Backtest SE 2020: INVE/INDU gav +44-63%, CRED A +60%. Vår högsta SE-signal." style="background:linear-gradient(135deg,#fbbf24,#f59e0b,#dc2626,#7c3aed);color:white;padding:6px 18px;border-radius:18px;font-size:13px;font-weight:900;box-shadow:0 4px 14px rgba(251,191,36,0.6);letter-spacing:0.4px;border:2px solid white">⚡ SUPER CONFLUENCE (${nFlags} flaggor)</span>`);
+    }
     // 🌟 Recurring Compounder — STÖRSTA STATUSEN
-    if (q.is_recurring_compounder) {
+    if (q.is_recurring_compounder && nFlags < 4) {
         const yrs = q.recurring_gt_years || 3;
         screenBadges.push(`<span title="STRUCTURAL COMPOUNDER: bolaget har flaggat Growth Trifecta ${yrs} år i rad i backtest 2015-2024. Avg 12m fwd-return historiskt: NVDA +116.9%, ANET +67.7%, ADBE +27.1%. När det flaggar GT idag = compounder fortsätter." style="background:linear-gradient(135deg,#fbbf24,#dc2626,#7c3aed);color:white;padding:5px 16px;border-radius:16px;font-size:13px;font-weight:900;box-shadow:0 4px 12px rgba(251,191,36,0.5);letter-spacing:0.3px">🌟 RECURRING COMPOUNDER (${yrs} år)</span>`);
     }

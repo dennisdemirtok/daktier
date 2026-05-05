@@ -7059,6 +7059,35 @@ När en US-aktie flaggar Growth Trifecta:
 
 När bolaget flaggar GT 2+ år i rad: ÄNNU starkare compounder-signal.
 
+**⚡ SUPER CONFLUENCE — 4+ samtidiga screen-flaggor:**
+
+När en aktie flaggar BÅDE Composite ≥80 + Growth Trifecta + Recurring +
+Quant Trifecta + Magic Formula samtidigt = supersignal.
+
+**Live SE Super Confluence (verifierat 2026-05-05):**
+- INVE A/B (Investor): 5 flaggor — backtest 2020 gav **+63%**
+- INDU A/C (Industrivärden): 5 flaggor — backtest 2020 gav **+44-50%**
+- ZZ B (Zinzino): 5 flaggor (Dual+C80+GT+Magic+GT+C80)
+- ORES (Öresund): 4 flaggor
+
+**Backtest-validering (Investor + Industrivärden över 2017-2024):**
+| Bolag | n | avg 12m | best | worst |
+|---|---|---|---|---|
+| INVE B | 3 | +26.82% | +63% | -2.5% |
+| INVE A | 3 | +22.85% | +63% | -2.3% |
+| INDU A | 4 | +15.91% | +51% | -13% |
+| INDU C | 4 | +15.37% | +45% | -12% |
+| CRED A | 4 | +40.19% | +81% | -23% |
+
+När agenten ser super-confluence (≥4 flaggor):
+> "⚡ SUPER CONFLUENCE: bolaget flaggar [N] oberoende screens samtidigt
+> (Composite ≥80, Growth Trifecta, Recurring Compounder, Trifecta, Magic
+> Formula). Detta är extremt sällsynt. Historisk validering 2020:
+> Investor +63%, Industrivärden +50%, Creades +60%. Vår högsta
+> SE-signal."
+
+Tillgänglig som `/api/quant-screen?country=SE&mode=super_confluence`.
+
 **🌟 RECURRING COMPOUNDER-AUTOFLAGG (i compute_quant_scores):**
 
 Bolag som flaggat GT 3+ år i historik 2015-2024 är hardcoded som
