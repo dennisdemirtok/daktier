@@ -4090,6 +4090,103 @@ def api_backtest_v2_quant_diagnostics():
         return jsonify({"error": str(e), "tb": traceback.format_exc()[:1500]}), 500
 
 
+@app.route("/api/backtest-v2/stock-history/<ticker>", methods=["GET"])
+def api_backtest_v2_stock_history(ticker):
+    """Historisk per-år-analys för EN aktie — case study.
+
+    Visar för varje år 2015-2024:
+    - composite, Q/V/M-scores vid årets början
+    - Vilka screens som flaggade
+    - Faktisk forward 12m-return
+
+    Användning: validera om agentens screens hade rekommenderat
+    rätt vid kritiska tidpunkter (bottom 2020 corona, AI-boom 2023, etc).
+    """
+    try:
+        from backtest_v2.runner import find_isin_for_ticker
+        from backtest_v2.quant_runner import (
+            get_kpi_at_date, get_kpi_history_at_date, TARGET_KPIS,
+            pct_rank, avg, classify_pabrai_dhandho, classify_spier_compounder,
+            classify_quality_momentum, classify_garp,
+            classify_earnings_acceleration, compute_earnings_stability_pct,
+            compute_piotroski_pit, get_price_momentum_12_1
+        )
+        from backtest_v2.pit_data import get_forward_return
+
+        db = get_db()
+        try:
+            isin = find_isin_for_ticker(db, ticker.upper())
+            if not isin:
+                return jsonify({"error": f"Ingen ISIN för {ticker}"}), 404
+
+            # Per år 2015-2024
+            results = []
+            for year in range(2015, 2025):
+                date_iso = f"{year}-07-15"
+
+                # Hämta KPI-värden vid datumet (PIT)
+                kpis = get_kpi_at_date(db, isin, TARGET_KPIS, year)
+                if not kpis:
+                    continue
+
+                # Forward 12m return
+                try:
+                    fwd_12m = get_forward_return(db, isin, date_iso, 12)
+                except Exception:
+                    fwd_12m = None
+
+                # Historisk-data för Pabrai/Spier
+                roe_hist = get_kpi_history_at_date(db, isin, 33, year, n_years=10)
+                eps_hist = get_kpi_history_at_date(db, isin, 97, year, n_years=10)
+                earnings_stab = compute_earnings_stability_pct(eps_hist) if eps_hist else None
+                fscore_pit = compute_piotroski_pit(db, isin, year)
+                mom_12_1 = get_price_momentum_12_1(db, isin, date_iso)
+
+                # Screens (utan percentile-rank — det kräver ett universum)
+                # Vi kan ändå klassa de absoluta:
+                is_pabrai = classify_pabrai_dhandho(kpis, earnings_stab)
+                is_spier = classify_spier_compounder(roe_hist)
+                is_quality_momentum = classify_quality_momentum(kpis, mom_12_1)
+                is_garp = classify_garp(kpis)
+
+                results.append({
+                    "year": year,
+                    "date": date_iso,
+                    "kpis": {
+                        "pe": kpis.get(2),
+                        "pb": kpis.get(4),
+                        "ev_ebit": kpis.get(10),
+                        "roe": kpis.get(33),
+                        "roa": kpis.get(34),
+                        "roic": kpis.get(37),
+                        "vinstmarginal": kpis.get(30),
+                        "rev_growth": kpis.get(94),
+                        "eps_growth": kpis.get(97),
+                    },
+                    "fscore_pit": fscore_pit,
+                    "earnings_stability_pct": round(earnings_stab, 1) if earnings_stab else None,
+                    "mom_12_1_pct": round(mom_12_1 * 100, 1) if mom_12_1 is not None else None,
+                    "screens": {
+                        "is_pabrai": is_pabrai,
+                        "is_spier_compounder": is_spier,
+                        "is_quality_momentum": is_quality_momentum,
+                        "is_garp": is_garp,
+                    },
+                    "fwd_12m_pct": round(fwd_12m * 100, 1) if fwd_12m is not None else None,
+                })
+
+            return jsonify({
+                "ticker": ticker.upper(),
+                "isin": isin,
+                "years": results,
+            })
+        finally:
+            db.close()
+    except Exception as e:
+        import traceback
+        return jsonify({"error": str(e), "tb": traceback.format_exc()[:1500]}), 500
+
+
 @app.route("/api/backtest-v2/run-quant", methods=["POST"])
 def api_backtest_v2_run_quant():
     """Kör Quant-Trifecta-backtest 2015-2024 (utan LLM, ren KPI-screening).
