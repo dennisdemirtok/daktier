@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Backtest-rapport — DAKTIER</title>
+<style>
+  * { box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; max-width: 1200px;
+         margin: 0 auto; padding: 24px; background: #fafafa; color: #1f2937; line-height: 1.5; }
+  h1 { font-size: 28px; margin-bottom: 8px; }
+  .lede { color: #6b7280; margin-bottom: 32px; font-size: 15px; }
+  h2 { font-size: 22px; margin-top: 36px; padding-bottom: 8px; border-bottom: 2px solid #e5e7eb; }
+  h3 { font-size: 16px; margin-top: 20px; color: #374151; }
+  table { border-collapse: collapse; width: 100%; margin-top: 12px; background: white;
+          border: 1px solid #e5e7eb; border-radius: 8px; overflow: hidden; }
+  th, td { padding: 10px 12px; text-align: left; font-size: 13px; }
+  th { background: #f9fafb; font-weight: 600; color: #374151; }
+  tr:nth-child(even) { background: #fafafa; }
+  td.num { text-align: right; font-variant-numeric: tabular-nums; }
+  .pos { color: #059669; font-weight: 600; }
+  .neg { color: #dc2626; font-weight: 600; }
+  .muted { color: #6b7280; }
+  .winner { background: linear-gradient(135deg, #fef3c7, #fde68a); }
+  .loser { background: #fee2e2; }
+  .note { background: #fff7ed; border-left: 4px solid #ea580c; padding: 12px 16px;
+          margin: 16px 0; border-radius: 4px; font-size: 14px; }
+  .insight { background: #ecfdf5; border-left: 4px solid #059669; padding: 12px 16px;
+             margin: 16px 0; border-radius: 4px; font-size: 14px; }
+  .warning { background: #fef2f2; border-left: 4px solid #dc2626; padding: 12px 16px;
+             margin: 16px 0; border-radius: 4px; font-size: 14px; }
+  code { background: #f3f4f6; padding: 1px 5px; border-radius: 3px; font-size: 12px; }
+  .top-link { display: inline-block; margin-bottom: 20px; color: #4f46e5; text-decoration: none; font-weight: 500; }
+  .top-link:hover { text-decoration: underline; }
+</style>
+</head>
+<body>
+
+<a href="/" class="top-link">← Tillbaka till dashboard</a>
+
+<h1>📊 Backtest-rapport</h1>
+<p class="lede">
+  Empiriskt validerade screens från 2015-2024 — exakt vad backtesten visar.
+  Senast uppdaterad: 2026-05-05. Universum: SE 198 unika tickers, US 167.
+</p>
+
+<div class="insight">
+  <strong>🎯 STÖRSTA UPPTÄCKTEN — Confluence-screens:</strong><br>
+  GT+MF Confluence (US): <span class="pos">+21.57%</span> alpha — 3.5× bättre än Growth Trifecta alone.<br>
+  C80+GT Confluence (SE): <span class="pos">+19.64%</span> alpha — högsta SE-alpha med n=29.
+</div>
+
+<h2>🇺🇸 US-marknaden 2015-2024 (167 tickers, 1547 obs)</h2>
+
+<table>
+  <thead>
+    <tr>
+      <th>Screen</th>
+      <th class="num">n</th>
+      <th class="num">Unika</th>
+      <th class="num">Alpha</th>
+      <th class="num">Sharpe</th>
+      <th class="num">Hit</th>
+      <th class="num">Early</th>
+      <th class="num">Late</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr class="winner">
+      <td><strong>🎯 GT + Magic Formula Confluence</strong></td>
+      <td class="num">11</td>
+      <td class="num">9</td>
+      <td class="num pos">+21.57%</td>
+      <td class="num">1.52</td>
+      <td class="num">82%</td>
+      <td class="num pos">+ej</td>
+      <td class="num pos">+ej</td>
+    </tr>
+    <tr class="winner">
+      <td><strong>🏆 Magic Formula 30</strong></td>
+      <td class="num">32</td>
+      <td class="num">20</td>
+      <td class="num pos">+10.08%</td>
+      <td class="num">0.60</td>
+      <td class="num">81%</td>
+      <td class="num pos">+21.4%</td>
+      <td class="num neg">-2.8%</td>
+    </tr>
+    <tr class="winner">
+      <td><strong>🚀 Growth Trifecta (Q+M ≥70)</strong></td>
+      <td class="num">125</td>
+      <td class="num">61</td>
+      <td class="num pos">+6.15%</td>
+      <td class="num">0.58</td>
+      <td class="num">74%</td>
+      <td class="num pos">+10.9%</td>
+      <td class="num pos">+2.7%</td>
+    </tr>
+    <tr>
+      <td>GARP + Composite ≥70</td>
+      <td class="num">96</td>
+      <td class="num">52</td>
+      <td class="num">+0.13%</td>
+      <td class="num">0.45</td>
+      <td class="num">72%</td>
+      <td class="num">-0.8%</td>
+      <td class="num">+0.7%</td>
+    </tr>
+    <tr>
+      <td>Quality Momentum</td>
+      <td class="num">285</td>
+      <td class="num">116</td>
+      <td class="num neg">-3.13%</td>
+      <td class="num">0.37</td>
+      <td class="num">62%</td>
+      <td class="num">-0.3%</td>
+      <td class="num">-5.0%</td>
+    </tr>
+    <tr>
+      <td>Spier 10y Compounder</td>
+      <td class="num">537</td>
+      <td class="num">77</td>
+      <td class="num neg">-4.43%</td>
+      <td class="num">0.45</td>
+      <td class="num">67%</td>
+      <td class="num">-2.9%</td>
+      <td class="num">-5.5%</td>
+    </tr>
+    <tr>
+      <td>GARP (Lynch)</td>
+      <td class="num">350</td>
+      <td class="num">121</td>
+      <td class="num neg">-4.12%</td>
+      <td class="num">0.38</td>
+      <td class="num">66%</td>
+      <td class="num">-7.4%</td>
+      <td class="num">-1.0%</td>
+    </tr>
+    <tr class="loser">
+      <td>Quant Trifecta (Q+V+M ≥70)</td>
+      <td class="num">14</td>
+      <td class="num">10</td>
+      <td class="num neg">-8.03%</td>
+      <td class="num">0.27</td>
+      <td class="num">57%</td>
+      <td class="num">+0.3%</td>
+      <td class="num neg">-11.4%</td>
+    </tr>
+    <tr class="loser">
+      <td>Piotroski Hi-F + Cheap</td>
+      <td class="num">205</td>
+      <td class="num">60</td>
+      <td class="num neg">-9.57%</td>
+      <td class="num">0.22</td>
+      <td class="num">60%</td>
+      <td class="num neg">-13.7%</td>
+      <td class="num">-5.3%</td>
+    </tr>
+    <tr class="loser">
+      <td>Composite ≥80 (FÄLLA i US!)</td>
+      <td class="num">45</td>
+      <td class="num">17</td>
+      <td class="num neg">-11.76%</td>
+      <td class="num">0.23</td>
+      <td class="num">64%</td>
+      <td class="num neg">-11.8%</td>
+      <td class="num neg">-11.7%</td>
+    </tr>
+  </tbody>
+</table>
+
+<div class="warning">
+  <strong>🚨 INVERS COMPOSITE-RELATION i US:</strong><br>
+  Composite ≥80: -11.76% alpha (FÄLLA) | Composite &lt;40: <span class="pos">+7.08%</span> alpha (vinnare!)<br>
+  Helt motsatt SE där hög composite vinner. Tolkning: i US är hög composite "pris-in",
+  låg composite + momentum = alfa-möjlighet (NVDA, MU, AVGO).
+</div>
+
+<h3>US-sektor-breakdown (vad driver alphan?)</h3>
+<table>
+  <thead>
+    <tr>
+      <th>Sektor</th>
+      <th class="num">n_obs</th>
+      <th class="num">Mean 12m</th>
+      <th class="num">Alpha</th>
+      <th class="num">Hit</th>
+      <th class="num">C≥80 alpha</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr class="winner">
+      <td><strong>🚀 Informationsteknik</strong></td>
+      <td class="num">322</td>
+      <td class="num pos">+28.00%</td>
+      <td class="num pos">+11.59%</td>
+      <td class="num">74%</td>
+      <td class="num">+0.8% (neutral)</td>
+    </tr>
+    <tr><td>Sällanköpsvaror</td><td class="num">169</td><td class="num">+20.45%</td><td class="num pos">+4.05%</td><td class="num">68%</td><td class="num neg">-30.7%</td></tr>
+    <tr><td>Finans &amp; Fastighet</td><td class="num">194</td><td class="num">+17.17%</td><td class="num">+0.77%</td><td class="num">73%</td><td class="num neg">-9.9%</td></tr>
+    <tr><td>Industri</td><td class="num">175</td><td class="num">+16.36%</td><td class="num">-0.04%</td><td class="num">66%</td><td class="num muted">—</td></tr>
+    <tr><td>Material</td><td class="num">57</td><td class="num">+13.43%</td><td class="num neg">-2.98%</td><td class="num">63%</td><td class="num muted">—</td></tr>
+    <tr><td>Hälsovård</td><td class="num">276</td><td class="num">+11.74%</td><td class="num neg">-4.66%</td><td class="num">62%</td><td class="num neg">-31.9%</td></tr>
+    <tr><td>Energi</td><td class="num">126</td><td class="num">+9.32%</td><td class="num neg">-7.09%</td><td class="num">60%</td><td class="num">-5.8%</td></tr>
+    <tr><td>Telekommunikation</td><td class="num">36</td><td class="num">+0.08%</td><td class="num neg">-16.33%</td><td class="num">42%</td><td class="num muted">—</td></tr>
+  </tbody>
+</table>
+
+<h2>🇸🇪 SE-marknaden 2015-2024 (198 tickers, 1823 obs)</h2>
+
+<table>
+  <thead>
+    <tr><th>Screen</th><th class="num">n</th><th class="num">Alpha</th><th class="num">Sharpe</th><th class="num">Hit</th></tr>
+  </thead>
+  <tbody>
+    <tr class="winner">
+      <td><strong>👑 Composite ≥80 + Growth Trifecta</strong></td>
+      <td class="num">29</td>
+      <td class="num pos">+19.64%</td>
+      <td class="num">~0.85</td>
+      <td class="num">76%</td>
+    </tr>
+    <tr class="winner">
+      <td><strong>🏆 Dual-Screen (C80 + Magic Formula)</strong></td>
+      <td class="num">17</td>
+      <td class="num pos">+18.35%</td>
+      <td class="num">1.23</td>
+      <td class="num">82%</td>
+    </tr>
+    <tr><td>Composite ≥80 alone</td><td class="num">63</td><td class="num pos">+8.31%</td><td class="num">0.68</td><td class="num">70%</td></tr>
+    <tr><td>Mid-tier (Composite ≥70)</td><td class="num">178</td><td class="num pos">+4.92%</td><td class="num">0.55</td><td class="num">68%</td></tr>
+  </tbody>
+</table>
+
+<div class="note">
+  <strong>📅 SE per-år för Composite ≥80:</strong><br>
+  Stark: 2017 (+39.7%, Embracer +283%), 2020 (+21.1% post-Covid), 2022 (+11.0%)<br>
+  Svag: 2018 (-6.7%), <strong>2021 (-34.0%)</strong> (VIMIAN -58%, CORE PREF -24%), 2024 (-8.6%)
+</div>
+
+<h2>📈 Confluence-screens — Detaljerad analys</h2>
+
+<h3>🎯 GT+MF Confluence (US): de 11 historiska träffarna</h3>
+<table>
+  <thead>
+    <tr><th>Ticker</th><th>Datum</th><th class="num">12m forward</th><th class="num">Composite</th></tr>
+  </thead>
+  <tbody>
+    <tr><td><strong>NVDA</strong></td><td>2016-07-15</td><td class="num pos">+213.00%</td><td class="num">70.1</td></tr>
+    <tr><td>LRCX</td><td>2019-07-15</td><td class="num pos">+78.06%</td><td class="num">75.4</td></tr>
+    <tr><td>AAPL</td><td>2016-07-15</td><td class="num pos">+50.88%</td><td class="num">79.2</td></tr>
+    <tr><td>REGN</td><td>2022-07-15</td><td class="num pos">+18.27%</td><td class="num">80.3</td></tr>
+    <tr><td>BIIB</td><td>2020-07-15</td><td class="num pos">+14.72%</td><td class="num">75.9</td></tr>
+    <tr><td>RIO</td><td>2022-07-15</td><td class="num pos">+14.09%</td><td class="num">85.9</td></tr>
+    <tr><td>MU</td><td>2019-07-15</td><td class="num pos">+13.76%</td><td class="num">84.4</td></tr>
+    <tr><td>LRCX</td><td>2018-07-15</td><td class="num pos">+10.49%</td><td class="num">75.8</td></tr>
+    <tr><td>LRCX</td><td>2017-07-15</td><td class="num pos">+9.21%</td><td class="num">72.0</td></tr>
+    <tr><td>EQNR</td><td>2023-07-15</td><td class="num neg">-2.01%</td><td class="num">88.7</td></tr>
+    <tr><td>GILD</td><td>2016-07-15</td><td class="num neg">-18.58%</td><td class="num">84.5</td></tr>
+  </tbody>
+</table>
+
+<h2>🚨 Anti-mönster för US — Citera ALDRIG som positiva signaler</h2>
+<ul>
+  <li><strong>Composite ≥80 alone</strong> i US: alpha <span class="neg">-11.76%</span> (premium-fälla, n=45)</li>
+  <li><strong>Quant Trifecta</strong>: alpha <span class="neg">-8.03%</span> (broken för US tech)</li>
+  <li><strong>Piotroski Hi-F + Cheap</strong>: alpha <span class="neg">-9.57%</span> (low-quality value-fälla)</li>
+  <li><strong>Multi-flag (3+)</strong>: alpha <span class="neg">-8.35%</span> (över-flaggade = pris-in)</li>
+</ul>
+
+<h2>📚 Metod</h2>
+<ul>
+  <li><strong>PIT-data:</strong> Alla KPI hämtade från Borsdata API med <code>period_year &lt; year</code>-filter (ingen look-ahead).</li>
+  <li><strong>Universum:</strong> top-N market cap per land per år (dynamisk).</li>
+  <li><strong>Forward return:</strong> close-price 12m efter screening-datum (15 juli varje år).</li>
+  <li><strong>Survivorship bias:</strong> ~2-4% överskattning, ej justerat. Robusthet kommer främst från sub-period-test.</li>
+  <li><strong>Sub-period:</strong> Early (2015-2019) vs late (2020-2024) för att fånga regim-bias.</li>
+</ul>
+
+<p class="muted" style="margin-top:40px; text-align: center;">
+  Backtest-data uppdateras vid större metodförändringar.<br>
+  Daglig live-tracker sparar dagens kandidater för IRL-validering 12 månader fram.
+</p>
+
+</body>
+</html>

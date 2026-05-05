@@ -257,6 +257,17 @@ def dashboard():
     return render_template("edge_dashboard.html")
 
 
+@app.route("/backtest-report")
+def backtest_report():
+    """Publik backtest-rapport — visar alla validerade screens transparent.
+
+    Användaren kan se exakt vilka screens vi har testat, alpha,
+    Sharpe, hit rate, sub-period stabilitet — och därmed bedöma
+    själv vilken signal de litar på.
+    """
+    return render_template("backtest_report.html")
+
+
 @app.route("/api/status")
 def api_status():
     db = get_db()
