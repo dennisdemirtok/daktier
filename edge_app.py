@@ -6391,65 +6391,72 @@ mycket starkt (alpha 8-55%). Inom finans/fastighet är det fälla.
 DEL 6.47 — MARKNADS-SPECIFIKA SCREENS (US vs SE)
 ══════════════════════════════════════════════════════════════
 
-**KRITISK INSIKT från US-backtest 2015-2024 (n=1058 obs, 112 unika tickers):**
+**KRITISK INSIKT från US-backtest 2015-2024 (n=1547 obs, 167 unika tickers):**
 
 Vår klassiska Quant Trifecta missade SYSTEMATISKT US tech-marknaden.
 Composite ≥80 underperformar och Quant Trifecta är direkt skadlig.
-Universum-snitt: +16.56%/år. Klassiska value-screens FAILAR i US.
+Universum-snitt: +16.41%/år. Klassiska value-screens FAILAR i US.
 
 **ROOT CAUSE:** Trifecta kräver Value≥70 (=billig). US tech har P/E
 25-115, V-score 16-50. De kvalar ALDRIG på V-axeln, oavsett hur stark
 Q och M är.
 
-**FULLSTÄNDIG SCREEN-RANKING US 2015-2024 (robust, n>30):**
+**FULLSTÄNDIG SCREEN-RANKING US 2015-2024 (167 tickers, 1547 obs):**
 
 | Screen | n | u | Alpha | Sharpe | Hit | Early | Late |
 |---|---|---|---|---|---|---|---|
-| 🏆 Magic Formula 30 | 35 | 18 | **+10.08%** | 0.62 | 74% | +14.3% | +5.0% |
-| 🚀 Growth Trifecta (Q+M ≥70) | 79 | 40 | **+8.93%** | 0.61 | 76% | +11.8% | +7.1% |
-| Quality Momentum | 207 | 85 | -1.36% | 0.42 | 62% | -0.6% | -1.8% |
-| GARP+Composite ≥70 | 61 | 33 | -2.85% | 0.45 | 70% | -10.1% | +2.2% |
-| Spier 10y Compounder | 395 | 56 | -4.00% | 0.47 | 68% | -3.9% | -4.0% |
-| GARP (Lynch) | 242 | 83 | -5.59% | 0.33 | 64% | -11.6% | +0.4% |
-| Piotroski Hi-F + Cheap | 143 | 45 | **-10.67%** | 0.18 | 60% | -15.5% | -5.3% |
-| Composite ≥80 | 25 | 10 | **-12.51%** | 0.21 | 64% | -14.7% | -11.0% |
-| Composite ≥80 + Magic | 6 | 4 | -17.78% | -0.07 | 50% | -26.0% | -9.5% |
-| Quant Trifecta | 10 | 7 | **-20.42%** | -0.24 | 50% | -21.5% | -20.2% |
+| 🏆 Magic Formula 30 | 32 | 20 | **+10.08%** | 0.60 | 81% | +21.4% | **-2.8% ⚠️** |
+| 🚀 Growth Trifecta (Q+M ≥70) | 117 | 62 | **+6.15%** | 0.58 | 74% | +10.9% | **+2.7% ✓** |
+| GARP + Composite ≥70 | 96 | 52 | +0.13% | 0.45 | 72% | -0.8% | +0.7% |
+| Quality Momentum | 285 | 116 | -3.13% | 0.37 | 62% | -0.3% | -5.0% |
+| Spier 10y Compounder | 537 | 77 | -4.43% | 0.45 | 67% | -2.9% | -5.5% |
+| GARP (Lynch) | 350 | 121 | -4.12% | 0.38 | 66% | -7.4% | -1.0% |
+| Quant Trifecta | 14 | 10 | **-8.03%** | 0.27 | 57% | +0.3% | -11.4% |
+| Multi-flag (3+) | 82 | 57 | -8.35% | 0.29 | 62% | -5.5% | -10.6% |
+| Piotroski Hi-F + Cheap | 205 | 60 | **-9.57%** | 0.22 | 60% | -13.7% | -5.3% |
+| Composite ≥80 | 45 | 17 | **-11.76%** | 0.23 | 64% | -11.8% | -11.7% |
 
-**INVERS COMPOSITE-RELATION i US:**
+**INVERS COMPOSITE-RELATION i US (KONFIRMERAT n=1547):**
 | Tier | n | mean 12m | alpha |
 |---|---|---|---|
-| Composite ≥80 | 25 | +4.04% | -12.51% (FÄLLA!) |
-| 60-80 | 243 | +16.50% | -0.06% |
-| 40-60 | 542 | +15.01% | -1.54% |
-| <40 | 248 | **+21.25%** | **+4.70%** (vinnare!) |
+| Composite ≥80 | 45 | +4.65% | **-11.76%** (FÄLLA!) |
+| 60-80 | 333 | +15.00% | -1.41% |
+| 40-60 | 790 | +14.27% | -2.13% |
+| <40 | 379 | **+23.49%** | **+7.08%** (vinnare!) |
 
 I US: hög composite = pris-in, låg composite + momentum = alfa.
 Motsatt SE där hög composite vinner.
 
-**ENDA TVÅ ROBUSTA US-SCREENS:**
-- 🏆 **Magic Formula 30** (+10.08% alpha, n=35, u=18, hit 74%)
-- 🚀 **Growth Trifecta (Q+M ≥70)** (+8.93% alpha, n=79, u=40, hit 76%)
+**ROBUSTA US-SCREENS:**
+- 🚀 **Growth Trifecta (Q+M ≥70)** (+6.15% alpha, n=117, u=62, hit 74%)
+  - **MEST ROBUST**: positiv alpha både early (+10.9%) OCH late (+2.7%)
+- 🏆 **Magic Formula 30** (+10.08% alpha, n=32, u=20, hit 81%)
+  - VARNING: Late-period 2020-2024 = **-2.8%** (alpha kommer från early)
+  - Sannolik orsak: MF favoriserar value/EV-EBIT-billiga, vilka underperformat
+    i ZIRP/post-COVID growth-period. Använd försiktigt 2024+.
 
-Båda har alpha både early-period (2015-2019) och late-period (2020-2024)
-— inget regime-bias.
+**Sub-period-analys (Growth Trifecta winner):**
+- 2015-2019 (early): +10.9% alpha (rate-friendly tech-rally)
+- 2020-2024 (late): +2.7% alpha (post-COVID + rate-höjningar)
+- Slutsats: Growth Trifecta fungerar i BÅDA regimer, MF bara i early.
 
 **Marknads-specifika rekommendationer:**
 
 | Marknad | Bästa screen | Alpha | Anledning |
 |---|---|---|---|
 | 🇸🇪 SE | Dual-Screen (Composite ≥80 + Magic Formula) | +19.26% | Värdedriven SE-marknad |
-| 🇺🇸 US | **Magic Formula 30** ELLER **Growth Trifecta (Q+M)** | +10.08% / +8.93% | Tech-driven US |
+| 🇺🇸 US | **Growth Trifecta (Q+M ≥70)** | +6.15% | Tech-driven, robust båda regimer |
 
 **När agenten ska citera Growth Trifecta:**
 
 För US-aktier som flaggar Growth Trifecta (Q≥70 + M≥70, oavsett V):
 > "🚀 Growth Trifecta-flagga: Quality 98 + Momentum 90. Backtest US
-> 2015-2024 (n=79, 40 unika tickers) visar +8.93% alpha med 76% hit
-> rate och Sharpe 0.61. Robust över både early (2015-2019, +11.8%)
-> och late (2020-2024, +7.1%) — ingen regim-bias. OBS: bolaget är
-> dyrt enligt klassisk värdering (V-score låg) men kvalitet+momentum-
-> stark. Akademiskt validerat (Asness 2013 'Quality Minus Junk')."
+> 2015-2024 (n=117, 62 unika tickers — robust statistik) visar +6.15%
+> alpha med 74% hit rate och Sharpe 0.58. Positiv alpha i BÅDA regimer:
+> early (2015-2019) +10.9% och late (2020-2024) +2.7% — fungerar både
+> i låg-rate-rally och post-COVID/höjda räntor. OBS: bolaget är dyrt
+> enligt klassisk värdering (V-score låg) men kvalitet+momentum-stark.
+> Akademiskt validerat (Asness 2013 'Quality Minus Junk')."
 
 **När INTE citera Growth Trifecta:**
 - För SE-aktier: använd Dual-Screen istället (mer validerat för SE)
@@ -6463,12 +6470,17 @@ För US-aktier som flaggar Growth Trifecta (Q≥70 + M≥70, oavsett V):
 - Båda behövs — fångar olika typer av investeringar
 
 **🚨 ANTI-MÖNSTER för US (citera ALDRIG dessa som positiva signaler):**
-- Composite ≥80 alone — alpha **-12.51%** (premium-fälla i US)
-- Quant Trifecta — alpha **-20.42%** (broken för US tech)
-- Piotroski Hi-F + Cheap — alpha **-10.67%** (low-quality value-fälla)
-- Earnings Acceleration — alpha **-20.07%** (mean reversion-fälla)
+- Composite ≥80 alone — alpha **-11.76%** (premium-fälla, n=45 robust)
+- Quant Trifecta — alpha **-8.03%** (broken för US tech, n=14)
+- Piotroski Hi-F + Cheap — alpha **-9.57%** (value-fälla, n=205 robust)
+- Multi-flag (3+) — alpha **-8.35%** (över-flaggade = pris-in, n=82)
 
 Om du ser dessa flaggor på en US-aktie: VARNING, inte rekommendation.
+
+**🟡 Magic Formula 30 — late-period varning:**
++10.08% total alpha drivs av 2015-2019 (+21.4%). Late period 2020-2024
+gav -2.8%. I 2024+-marknaden bör du citera FÖRSIKTIGT, helst tillsammans
+med Growth Trifecta-flagga.
 
 
 ══════════════════════════════════════════════════════════════
