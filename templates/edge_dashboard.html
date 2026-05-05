@@ -1233,8 +1233,9 @@ const TAB_META = {
 // NOTE: Live-läge borttaget — vi uppdaterar inte owner-snapshots löpande, så auto-refresh-timer avvecklad.
 
 function switchTab(tab, el) {
-    // Backwards-compat: "trending" är numera merged med "hotmovers" under Ägarmomentum
-    if (tab === 'trending') { tab = 'hotmovers'; momPeriod = '1m'; }
+    // OBS: tidigare redirectade vi 'trending' till 'hotmovers', men nu har
+    // 'trending' egen tab med backtest-validerade kvant-screens (Dual-Screen
+    // m.fl.) — låt det vara dess egna tab.
     currentTab = tab;
     // Update sidebar
     document.querySelectorAll('.sidebar-item').forEach(s => {
