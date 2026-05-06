@@ -4792,6 +4792,35 @@ def compute_quant_scores(db, country="SE", min_market_cap=500e6,
             and q_score >= 5  # ej totalt junk, men låg tröskel
         )
 
+    # ── 🔄 CYCLICAL-BOTTOM: cykliska aktier med kollapsad momentum ──
+    # Adresserar Micron/Boliden-mönstret: vi köper toppen, missar botten.
+    # Logic: Quality OK (cykliskt → ROE varierar men har historik), V god,
+    #        M kollapsat (<25). Mean-reversion-spel.
+    # Case: Micron 2024 (M=1), Boliden 2024 (M=8) — vi sa NoRec, missade rally.
+    for s in universe:
+        q_score = s.get("quality_score") or 0
+        v_score = s.get("value_score") or 0
+        m_score = s.get("momentum_score") or 0
+        roe = s.get("roe")
+        s["is_cyclical_bottom"] = (
+            m_score <= 25  # ultra-låg momentum (cykel-botten)
+            and v_score >= 50  # rimligt värderat
+            and q_score >= 30  # inte totalt junk
+            and roe is not None and roe > 0  # historiskt vinstgivande
+        )
+
+    # ── 💎 QUALITY-COMPOUNDER-LIGHT: stark Q + någon momentum, oavsett V ──
+    # Adresserar Thule-mönstret: Q≥70 men V mediocre → aldrig BUY i klassisk
+    # Case: Thule 2020 (Q=71, V=31) → +55% missade
+    for s in universe:
+        q_score = s.get("quality_score") or 0
+        m_score = s.get("momentum_score") or 0
+        s["is_quality_compounder_light"] = (
+            q_score >= 75
+            and m_score >= 50
+            and not s.get("is_growth_trifecta")  # undvik dubbel-flagga
+        )
+
     # ── 🚨 VALUATION-TRAP: hög Q+M men extremt dyr (PYPL/NFLX 2021-typ) ──
     # Adresserar blinda fläckar:
     # - PYPL 2021: Q=72, M=85, V=10 → -75% kraschen
@@ -4860,9 +4889,21 @@ def compute_quant_scores(db, country="SE", min_market_cap=500e6,
         # NY: SPECULATIVE för hyper-growth (NET/CRWD/DDOG/TSLA-typ)
         elif s.get("is_momentum_rocket") and not s.get("is_valuation_trap"):
             rec = "SPECULATIVE"
-            reason = ("Momentum-Rocket (M≥85) — hyper-growth-mönster. "
+            reason = ("Momentum-Rocket (M≥80) — hyper-growth-mönster. "
                        "Fångar NET 2020 +184%, CRWD 2020 +142%, AMD 2018 +108%, "
                        "TSLA 2019 +510%. OBS: HÖG VOLATILITET, små positioner.")
+        # NY: CYCLICAL-BOTTOM för Micron/Boliden-typ-fall
+        elif s.get("is_cyclical_bottom"):
+            rec = "BUY-LIGHT"
+            reason = ("Cyclical-Bottom (M kollapsat, V god, Q OK) — mean-reversion-spel. "
+                       "Cykliska aktier som Micron 2024 (M=1) eller Boliden 2024 (M=8) "
+                       "köps i botten. Kräver 12-24m horisont.")
+        # NY: QUALITY-COMPOUNDER-LIGHT — Thule-typ stabil quality
+        elif s.get("is_quality_compounder_light"):
+            rec = "BUY-LIGHT"
+            reason = ("Quality-Compounder-Light (Q≥75, M≥50) — stabil kvalitet med "
+                       "momentum men ej dyr nog för Growth Trifecta. Ex: Thule, "
+                       "INVE när V medel.")
         # AVOID-villkor (anti-mönster)
         elif s.get("is_valuation_trap"):
             rec = "AVOID"
