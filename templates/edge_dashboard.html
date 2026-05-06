@@ -3939,6 +3939,9 @@ function renderQuantRank(s) {
 
     // 🎯 BUY/HOLD/AVOID rekommendation (från backtest 2015-2024)
     const recBadges = [];
+    if (q.overheat_warning) {
+        recBadges.push(`<span title="${escapeHtml(q.overheat_warning)}" style="background:linear-gradient(135deg,#ea580c,#f97316);color:white;padding:5px 14px;border-radius:14px;font-size:12px;font-weight:700;box-shadow:0 2px 6px rgba(234,88,12,0.4)">🌡️ OVERHEAT</span>`);
+    }
     if (q.recommendation === 'BUY') {
         recBadges.push(`<span title="${escapeHtml(q.recommendation_reason || '')}" style="background:linear-gradient(135deg,#059669,#10b981);color:white;padding:5px 16px;border-radius:14px;font-size:13px;font-weight:800;box-shadow:0 2px 8px rgba(5,150,105,0.4)">✅ BUY</span>`);
     } else if (q.recommendation === 'BUY-LIGHT') {
@@ -4025,6 +4028,7 @@ function renderQuantRank(s) {
             <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center">${recBadge} ${trifectaBadge}</div>
         </div>
         ${q.recommendation_reason ? `<div style="font-size:12px;color:#374151;margin-top:6px;padding:8px 10px;background:rgba(255,255,255,0.7);border-radius:6px;border-left:3px solid ${q.recommendation === 'BUY' ? '#059669' : q.recommendation === 'AVOID' ? '#dc2626' : '#6b7280'}"><strong>${q.recommendation || ''}:</strong> ${escapeHtml(q.recommendation_reason)}</div>` : ''}
+        ${q.overheat_warning ? `<div style="font-size:12px;color:#9a3412;margin-top:6px;padding:8px 10px;background:#fff7ed;border-radius:6px;border-left:3px solid #ea580c"><strong>🌡️ Tajmnings-varning:</strong> ${escapeHtml(q.overheat_warning)}</div>` : ''}
         <div style="background:rgba(255,255,255,0.7);padding:10px;border-radius:8px;margin-top:8px">
             ${scoreBar('💰 Value (P/E + P/B + EV/EBIT + DY)', q.value_score)}
             ${scoreBar('🏰 Quality (ROE + ROIC + Marginal)', q.quality_score)}

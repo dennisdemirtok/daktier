@@ -4792,6 +4792,52 @@ def compute_quant_scores(db, country="SE", min_market_cap=500e6,
             and q_score >= 5  # ej totalt junk, men låg tröskel
         )
 
+    # ── 🌡️ MOMENTUM-OVERHEAT: parabolisk rally → mean-reversion-risk ──
+    # Användarens insikt: HACKSAW (+31% 1m, +51% 3m, RSI 71) flaggas BUY
+    # men är DYR att köpa NU även om fundamental är stark.
+    # Klassiska overheat-tecken:
+    #  - RSI14 > 70 (övertköpt)
+    #  - 1m > 20% (parabolisk månad)
+    #  - SMA20-distans > 10% (pris långt över glidande medel)
+    # Effekt: behåller BUY-flagga MEN lägger till "vänta på pullback"-varning
+    # Hämta tekniska indikatorer från stocks-tabellen
+    try:
+        tech_rows = _fetchall(db,
+            f"SELECT orderbook_id, rsi14, sma20, sma50, "
+            f"one_month_change_pct, three_months_change_pct "
+            f"FROM stocks WHERE orderbook_id IS NOT NULL")
+        tech_data = {}
+        for r in tech_rows:
+            rd = dict(r)
+            tech_data[rd.get("orderbook_id")] = {
+                "rsi14": rd.get("rsi14"),
+                "sma20_dist": rd.get("sma20"),  # decimal
+                "sma50_dist": rd.get("sma50"),
+                "1m": rd.get("one_month_change_pct"),
+                "3m": rd.get("three_months_change_pct"),
+            }
+    except Exception:
+        tech_data = {}
+
+    for s in universe:
+        ob_id = s.get("orderbook_id")
+        td = tech_data.get(ob_id, {})
+        rsi = td.get("rsi14") or 50
+        sma20 = td.get("sma20_dist") or 0
+        m1 = td.get("1m") or 0
+        m3 = td.get("3m") or 0
+        # Parabolisk: minst 2 av 3 villkor uppfylls
+        criteria = sum([
+            rsi > 70,
+            sma20 > 0.10,  # 10% över SMA20
+            m1 > 0.20,  # +20% senaste månad
+        ])
+        s["is_momentum_overheat"] = (criteria >= 2 and m3 > 0.30)
+        s["tech_rsi14"] = rsi
+        s["tech_1m_pct"] = round(m1 * 100, 1)
+        s["tech_3m_pct"] = round(m3 * 100, 1)
+        s["tech_sma20_dist_pct"] = round(sma20 * 100, 1)
+
     # ── 👥 OWNER-MOMENTUM: stark Avanza-ägartillväxt (retail flow) ──
     # Adresserar "missade SAAB"-problemet: KPI-data ser inte geopolitiska
     # katalysatorer, men retail-investerare reagerar snabbt och flödar in.
@@ -4986,6 +5032,18 @@ def compute_quant_scores(db, country="SE", min_market_cap=500e6,
         else:
             rec = None
             reason = None
+        # 🌡️ MOMENTUM-OVERHEAT-modifier: behåller rec men varnar för tajmning
+        # Tillämpas på BUY/BUY-LIGHT där fundamental är OK men priset rusat
+        if s.get("is_momentum_overheat") and rec in ("BUY", "BUY-LIGHT"):
+            s["overheat_warning"] = (
+                f"⚠️ MOMENTUM-OVERHEAT: RSI={s.get('tech_rsi14',50):.0f}, "
+                f"1m={s.get('tech_1m_pct',0):+.0f}%, 3m={s.get('tech_3m_pct',0):+.0f}%. "
+                "Aktien är parabolisk just nu. Vänta gärna på pullback "
+                "(RSI<50 eller -10% från topp) innan entry för bättre risk/reward."
+            )
+        else:
+            s["overheat_warning"] = None
+
         s["recommendation"] = rec
         s["recommendation_reason"] = reason
 
