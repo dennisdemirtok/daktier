@@ -7626,24 +7626,29 @@ Borsdata API har **HARDLIMIT på 10 års pris-historik**. Verifierat:
 **Antagande:** 15 bps per trade (10 bps round-trip + 5 bps spread).
 Cost = turnover × 15 × 2 bps per år.
 
-**KRITISK INSIKT FÖR AGENTEN:**
+**KRITISK INSIKT FÖR AGENTEN — REVIDERAD efter sub-period split:**
 
-1. **GT+MF Confluence (US) är INTE den säkra vinnaren punktestimat antyder.**
-   Med n=11 och bara 9 unika tickers ger cluster bootstrap CI [-7.3%, +65.5%].
-   Den kan lika gärna vara -7% som +66%. Citera ALDRIG +21.57% som
-   "vår starkaste US-signal" — det är p-hackat.
+1. **Dual-Screen SE är POST-COVID-SPECIFIK, inte broadly robust.**
+   - Early 2016-2019 (n=4): alpha -1.21%, CI [-32.3%, +29.9%] ⚠️ inkluderar 0
+   - Late 2020-2024 (n=13): alpha +24.37%, CI [+9.7%, +37.2%] ✅
+   - 76% av träffar är från 2020-2024 (INVE/INDU/CRED 2020-rally)
+   - Concentration-test: utan top-3-träffar → CI [-3.1%, +25.1%]
+   - **Ingen evidens för alpha pre-2020.** Sannolik regim-overfitting.
 
-2. **Dual-Screen SE (Composite ≥80 + Magic Formula) är vår starkaste signal.**
-   CI [+8.2%, +31.1%] är smal och helt positiv. Detta är den ENDA screen
-   där punktestimat är pålitlig.
+2. **GT+MF Confluence (US) är p-hackat.**
+   n=11, cluster CI [-7.3%, +65.5%]. Citera ALDRIG +21.57%.
 
-3. **Growth Trifecta US (n=125) är robust** men i lägre nivå än headline.
-   Cluster CI [+1.2%, +20.0%] — alpha existerar men är osäker storlek.
+3. **Growth Trifecta US (n=125) är vår mest broadly robusta signal.**
+   - Cluster CI [+1.2%, +20.0%]
+   - Net efter cost +1.02% CI lower
+   - 61 unika tickers över 9 år — bredare evidens
+   - Men: även GT är bara testad 2016-2024 (Borsdata 10y-limit)
 
 **Citat-regel:**
-- ALLTID rapportera CI tillsammans med punktestimat
-- Aldrig säg "+21.57%" utan att nämna [-7%, +66%] för GT+MF
-- Skilj robust (✅) från gränsfall (⚠️) i rekommendationer
+- Skilj punktestimat från CI ALLTID
+- Skilj broadly robust (GT US n=125, 61 unika) från regim-specifik (Dual-Screen SE)
+- Dual-Screen SE: säg "fungerade i 2020-2024-regimen, ingen evidens pre-2020"
+- ÄRLIGT: vi har bara 8 års data. Det är inte tillräckligt för "alpha-bevis"
 
 **📉 GROWTH TRIFECTA DRAWDOWN-DISTRIBUTION (n=125):**
 - Median: +18.27% (rejäl övervinst)
