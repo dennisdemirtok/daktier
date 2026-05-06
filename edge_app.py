@@ -7626,29 +7626,36 @@ Borsdata API har **HARDLIMIT på 10 års pris-historik**. Verifierat:
 **Antagande:** 15 bps per trade (10 bps round-trip + 5 bps spread).
 Cost = turnover × 15 × 2 bps per år.
 
-**KRITISK INSIKT FÖR AGENTEN — REVIDERAD efter sub-period split:**
+**KRITISK INSIKT — INGEN screen håller över BÅDA sub-perioder:**
 
-1. **Dual-Screen SE är POST-COVID-SPECIFIK, inte broadly robust.**
-   - Early 2016-2019 (n=4): alpha -1.21%, CI [-32.3%, +29.9%] ⚠️ inkluderar 0
-   - Late 2020-2024 (n=13): alpha +24.37%, CI [+9.7%, +37.2%] ✅
-   - 76% av träffar är från 2020-2024 (INVE/INDU/CRED 2020-rally)
-   - Concentration-test: utan top-3-träffar → CI [-3.1%, +25.1%]
-   - **Ingen evidens för alpha pre-2020.** Sannolik regim-overfitting.
+| Screen | Early 2016-2019 | Late 2020-2024 |
+|---|---|---|
+| Dual-Screen SE | -1.21% CI [-32%, +30%] ⚠️ | +24.37% CI [+9.7%, +37.2%] ✅ |
+| Growth Trifecta US | +16.38% CI [+5.7%, +28.5%] ✅ | +5.32% CI [-3.4%, +14.6%] ⚠️ |
 
-2. **GT+MF Confluence (US) är p-hackat.**
-   n=11, cluster CI [-7.3%, +65.5%]. Citera ALDRIG +21.57%.
+**Slutsats:** Båda våra "robusta" screens är regim-specifika, inverterat:
+- **Dual-Screen SE** fungerade när investmentbolag fick förmåner 2020-24
+  (post-COVID + rate-hike rallies). Pre-COVID inget alpha.
+- **GT US** fungerade när tech-momentum drev 2016-19 (pre-COVID, low rate).
+  Post-COVID dimmar alpha till nivå som inte är signifikant.
 
-3. **Growth Trifecta US (n=125) är vår mest broadly robusta signal.**
-   - Cluster CI [+1.2%, +20.0%]
-   - Net efter cost +1.02% CI lower
-   - 61 unika tickers över 9 år — bredare evidens
-   - Men: även GT är bara testad 2016-2024 (Borsdata 10y-limit)
+Detta är klassisk **regim-anpassning** där olika faktorer dominerar olika
+perioder. Vi vet INTE vilken som funkar nu (2024-2025) eller framåt.
 
-**Citat-regel:**
-- Skilj punktestimat från CI ALLTID
-- Skilj broadly robust (GT US n=125, 61 unika) från regim-specifik (Dual-Screen SE)
-- Dual-Screen SE: säg "fungerade i 2020-2024-regimen, ingen evidens pre-2020"
-- ÄRLIGT: vi har bara 8 års data. Det är inte tillräckligt för "alpha-bevis"
+**ÄRLIG KONSEKVENS för agenten:**
+
+1. Skilj alltid punktestimat från CI
+2. **Citera ALDRIG en screen som "robust" utan att kolla sub-period**
+3. För Dual-Screen SE: "fungerade i 2020-24-regimen, inget pre-2020"
+4. För GT US: "fungerade i 2016-19, dämpad i 2020-24"
+5. Regim är okänd → använd flera screens, inte en
+6. Borsdata 10y-limit gör äkta OOS pre-2016 omöjligt
+
+**REVIDERAD STRATEGI-REKOMMENDATION:**
+- Använd Dual-Screen SE OCH GT US tillsammans (regim-diversifiering)
+- Acceptera att alpha kan vara 0 framöver — det är empirisk realitet
+- Eller: använd inom-sample positiv data men förvänta sämre OOS-utfall
+- Live-tracker börjar samla framtida-OOS-data — vänta 12+ mån för riktig validering
 
 **📉 GROWTH TRIFECTA DRAWDOWN-DISTRIBUTION (n=125):**
 - Median: +18.27% (rejäl övervinst)
