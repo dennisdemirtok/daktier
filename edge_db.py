@@ -4792,21 +4792,31 @@ def compute_quant_scores(db, country="SE", min_market_cap=500e6,
         s["n_flags"] = n_flags
 
         # BUY-villkor (i prioritetsordning)
+        # OBS: 2026-05-06 reviderad — sub-period split visade regim-anpassning,
+        # inga screens är broadly robusta. Strikt BUY missade 5/6 NVDA-rallies.
         if n_flags >= 4:
             rec = "BUY"
-            reason = f"Super Confluence ({n_flags} flaggor) — INVE/INDU 2020 +44-63%"
+            reason = f"Super Confluence ({n_flags} flaggor) — fungerade 2020-24 (regim-specifik)"
         elif country == "US" and s.get("is_growth_trifecta") and s.get("is_magic_formula"):
             rec = "BUY"
-            reason = "GT+MF Confluence US (+21.57% alpha, 82% hit)"
+            reason = "GT+MF Confluence US — punktestimat +21.57% men CI [-7%, +66%] p-hackat"
         elif country == "SE" and composite >= 80 and s.get("is_growth_trifecta"):
             rec = "BUY"
-            reason = "C80+GT Confluence SE (+19.64% alpha, 76% hit)"
+            reason = "C80+GT Confluence SE — fungerade 2020-24 (regim-specifik)"
         elif s.get("is_recurring_compounder"):
             rec = "BUY"
-            reason = f"Recurring Compounder ({s.get('recurring_gt_years',0)} år) flaggar GT idag"
+            reason = f"Recurring Compounder ({s.get('recurring_gt_years',0)} år) — strukturell vinnare"
         elif country == "SE" and s.get("is_dual_screen"):
             rec = "BUY"
-            reason = "Dual-Screen SE (+18.35% alpha, 82% hit)"
+            reason = "Dual-Screen SE — fungerade 2020-24 endast (sub-period -1.21% early)"
+        # NY: BUY-LIGHT för GT-alone — fångar fler tech-rallies
+        # Case study: NVDA 5 GT-flaggor = +117% avg. ANET 6 = +68% avg.
+        elif s.get("is_growth_trifecta") and country == "US":
+            rec = "BUY-LIGHT"
+            reason = "GT alone US (Q+M ≥70) — fångar NVDA/ANET-rallies, högre risk, +6.15% alpha brutto"
+        elif s.get("is_growth_trifecta") and country == "SE":
+            rec = "BUY-LIGHT"
+            reason = "GT alone SE — fångar Investmentbolag/IT-rallies"
         # AVOID-villkor (anti-mönster)
         elif country == "US" and composite >= 80 and not s.get("is_growth_trifecta"):
             rec = "AVOID"

@@ -3941,6 +3941,8 @@ function renderQuantRank(s) {
     const recBadges = [];
     if (q.recommendation === 'BUY') {
         recBadges.push(`<span title="${escapeHtml(q.recommendation_reason || '')}" style="background:linear-gradient(135deg,#059669,#10b981);color:white;padding:5px 16px;border-radius:14px;font-size:13px;font-weight:800;box-shadow:0 2px 8px rgba(5,150,105,0.4)">✅ BUY</span>`);
+    } else if (q.recommendation === 'BUY-LIGHT') {
+        recBadges.push(`<span title="${escapeHtml(q.recommendation_reason || '')}" style="background:linear-gradient(135deg,#84cc16,#a3e635);color:white;padding:5px 14px;border-radius:14px;font-size:12px;font-weight:700">⚡ BUY-LIGHT</span>`);
     } else if (q.recommendation === 'AVOID') {
         recBadges.push(`<span title="${escapeHtml(q.recommendation_reason || '')}" style="background:linear-gradient(135deg,#dc2626,#ef4444);color:white;padding:5px 16px;border-radius:14px;font-size:13px;font-weight:800;box-shadow:0 2px 8px rgba(220,38,38,0.4)">🚫 AVOID</span>`);
     } else if (q.recommendation === 'HOLD') {
