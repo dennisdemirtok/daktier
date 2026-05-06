@@ -7599,6 +7599,19 @@ Om du ser dessa flaggor på en US-aktie: VARNING, inte rekommendation.
 gav -2.8%. I 2024+-marknaden bör du citera FÖRSIKTIGT, helst tillsammans
 med Growth Trifecta-flagga.
 
+**⚠️ KRITISK DATA-BEGRÄNSNING (upptäckt 2026-05-06):**
+
+Borsdata API har **HARDLIMIT på 10 års pris-historik**. Verifierat:
+- INVE A, JM, AAPL: alla får 2511-2518 rader = exakt 10 år (2016-2026)
+- Detta är abonnemangsbegränsning, inte tekniskt problem
+- KPI-data går 20 år tillbaka (2007-2026) — bara priser är begränsade
+
+**Konsekvens för validering:**
+- ❌ OOS pre-2016 är OMÖJLIGT med nuvarande datakälla
+- ✅ Sub-period-split (2016-2019 vs 2020-2024) är vårt enda OOS-substitut
+- ⚠️ Hela vår backtest 2015-2024 är ETT data-window
+- Vi kan inte säkert skilja "alpha funkar generellt" från "alpha funkar i 2016-2024-regimen"
+
 **🚨 ÄRLIG STATISTISK VALIDERING — bootstrap CI + cluster + transaktionskostnader:**
 
 | Screen | n | n_unique | Gross α | Cluster CI | Turnover | Net CI lower | Status |
