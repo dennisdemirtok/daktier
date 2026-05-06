@@ -6797,11 +6797,12 @@ async function loadTodaysSignals() {
     if (!wrap) return;
     try {
         const [seRes, usRes] = await Promise.all([
-            fetch('/api/quant-screen?country=SE&limit=300&mode=raw').then(r => r.json()),
+            fetch('/api/quant-screen?country=SE&limit=500&mode=raw').then(r => r.json()),
             fetch('/api/quant-screen?country=US&limit=300&mode=raw').then(r => r.json()),
         ]);
         const all = [...(seRes.results || []), ...(usRes.results || [])];
         const buys = all.filter(r => r.recommendation === 'BUY');
+        const buyLights = all.filter(r => r.recommendation === 'BUY-LIGHT');
         const avoids = all.filter(r => r.recommendation === 'AVOID');
 
         // Sort BUYs: super-confluence first, then by composite
@@ -6839,8 +6840,25 @@ async function loadTodaysSignals() {
             </div>`;
         }).join('') : '';
 
+        // BUY-LIGHT — fångar tech-rallies vi tidigare missade
+        buyLights.sort((a, b) => (b.composite_score || 0) - (a.composite_score || 0));
+        const buyLightHtml = buyLights.slice(0, 15).map(r => {
+            const tk = r.ticker || r.short_name || '?';
+            const flag = r.country === 'US' ? '🇺🇸' : '🇸🇪';
+            return `<div style="background:#f7fee7;padding:8px 12px;border-radius:8px;border-left:3px solid #84cc16;cursor:pointer;font-size:12px" onclick="openStockDrawer(${r.orderbook_id})">
+                <div style="font-weight:600">${flag} ${escapeHtml(tk)} <span style="color:#3f6212;font-weight:400">${escapeHtml((r.name || '').slice(0, 25))}</span></div>
+                <div style="font-size:10.5px;color:#3f6212;margin-top:2px">Q=${fmtScore(r.quality_score)} M=${fmtScore(r.momentum_score)} • GT-flagga (BUY-LIGHT, högre risk)</div>
+            </div>`;
+        }).join('');
+
         wrap.innerHTML = `
+            <div style="margin-bottom:8px;font-size:12px;color:#374151">
+                <strong style="color:#059669">✅ BUY:</strong> ${buys.length} hög-konviktion (3-4+ flaggor)
+                · <strong style="color:#84cc16">⚡ BUY-LIGHT:</strong> ${buyLights.length} GT-alone (fångar fler rallies, högre risk)
+                ${avoids.length ? ` · <strong style="color:#dc2626">🚫 AVOID:</strong> ${avoids.length}` : ''}
+            </div>
             <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:8px;margin-bottom:14px">${buyHtml}</div>
+            ${buyLights.length ? `<details style="margin-top:12px" open><summary style="cursor:pointer;font-weight:600;color:#65a30d;font-size:13px">⚡ ${buyLights.length} BUY-LIGHT-signaler (GT alone — fångar tech-rallies vi annars missar)</summary><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:6px;margin-top:8px">${buyLightHtml}</div></details>` : ''}
             ${avoidHtml ? `<details style="margin-top:12px"><summary style="cursor:pointer;font-weight:600;color:#dc2626;font-size:13px">🚫 ${avoids.length} AVOID-flaggor (klicka för att visa)</summary><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:6px;margin-top:8px">${avoidHtml}</div></details>` : ''}
         `;
     } catch (e) {
