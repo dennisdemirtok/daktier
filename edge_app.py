@@ -4282,6 +4282,177 @@ def api_backtest_v2_quant_diagnostics():
         return jsonify({"error": str(e), "tb": traceback.format_exc()[:1500]}), 500
 
 
+@app.route("/api/backtest-v2/case-study/<ticker>", methods=["GET"])
+def api_case_study(ticker):
+    """Per-år case study: vad skulle agenten ha sagt om denna aktie?
+
+    Query: ?country=US&start_year=2016&end_year=2024
+    Visar:
+    - Composite/Q/V/M scores per år (PIT)
+    - Vilka screens triggrade
+    - Recommendation (BUY/HOLD/AVOID) som agenten skulle gett
+    - Faktisk fwd 12m return
+    - Tajmnings-bedömning: KORREKT, FEL, NEUTRAL
+    """
+    country = request.args.get("country", "US").upper()
+    start_year = int(request.args.get("start_year", 2016))
+    end_year = int(request.args.get("end_year", 2024))
+    max_universe = int(request.args.get("max_universe", 200))
+
+    try:
+        from backtest_v2.quant_runner import run_quant_backtest
+        db = get_db()
+        try:
+            results = run_quant_backtest(db, start_year=start_year,
+                                          end_year=end_year, verbose=False,
+                                          use_dynamic_universe=True,
+                                          max_universe=max_universe,
+                                          country=country)
+
+            # Filtrera till bara denna ticker
+            ticker_obs = [r for r in results if r.get("ticker") == ticker.upper()]
+            if not ticker_obs:
+                return jsonify({
+                    "ticker": ticker.upper(),
+                    "error": f"Ingen data — finns ticker i universum {country}? "
+                             "Kanske utanför top-{max_universe} efter market cap.",
+                    "n_results_total": len(results),
+                }), 404
+
+            # För varje obs, beräkna recommendation + bedömning
+            timeline = []
+            for r in sorted(ticker_obs, key=lambda x: x["date"]):
+                composite = r.get("composite") or 0
+                q_score = r.get("q_score") or 0
+                m_score = r.get("m_score") or 0
+                v_score = r.get("v_score") or 0
+                fwd = r.get("fwd_12m")
+
+                # Räkna n_flags
+                n_flags = 0
+                if composite >= 80 and r.get("is_growth_trifecta"): n_flags += 1
+                if r.get("is_quant_trifecta"): n_flags += 1
+                if r.get("is_magic_formula"): n_flags += 1
+                if r.get("is_growth_trifecta"): n_flags += 1
+                if composite >= 80: n_flags += 1
+
+                # Recommendation-logik (samma som compute_quant_scores)
+                rec = None
+                reason = ""
+                if n_flags >= 4:
+                    rec = "BUY"
+                    reason = f"Super Confluence ({n_flags} flaggor)"
+                elif country == "US" and r.get("is_growth_trifecta") and r.get("is_magic_formula"):
+                    rec = "BUY"
+                    reason = "GT+MF Confluence US (n=11, CI [-7%, +66%] - p-hackat)"
+                elif country == "SE" and composite >= 80 and r.get("is_growth_trifecta"):
+                    rec = "BUY"
+                    reason = "C80+GT SE (post-COVID-only)"
+                elif country == "SE" and r.get("is_magic_formula") and composite >= 80:
+                    rec = "BUY"
+                    reason = "Dual-Screen SE (POST-COVID-ONLY)"
+                elif country == "US" and r.get("is_growth_trifecta"):
+                    rec = "HOLD"
+                    reason = "Growth Trifecta US (pre-COVID stark, late dämpad)"
+                elif country == "US" and composite >= 80 and not r.get("is_growth_trifecta"):
+                    rec = "AVOID"
+                    reason = "Composite ≥80 alone US: -11.76% alpha"
+                elif country == "US" and r.get("is_quant_trifecta"):
+                    rec = "AVOID"
+                    reason = "Quant Trifecta US: -8.03% alpha"
+                elif r.get("is_growth_trifecta") or r.get("is_magic_formula") or composite >= 70:
+                    rec = "HOLD"
+                    reason = "Single screen-flagga"
+
+                # Bedömning av tajmning
+                fwd_pct = round(fwd * 100, 1) if fwd is not None else None
+                if rec == "BUY" and fwd_pct is not None:
+                    if fwd_pct >= 5:
+                        verdict = "✅ KORREKT BUY"
+                    elif fwd_pct >= -5:
+                        verdict = "🟡 NEUTRAL (BUY men flat)"
+                    else:
+                        verdict = "❌ FEL BUY (fwd negativ)"
+                elif rec == "AVOID" and fwd_pct is not None:
+                    if fwd_pct < -5:
+                        verdict = "✅ KORREKT AVOID"
+                    elif fwd_pct < 5:
+                        verdict = "🟡 NEUTRAL (AVOID men flat)"
+                    else:
+                        verdict = "❌ FEL AVOID (fwd positiv)"
+                elif rec == "HOLD" and fwd_pct is not None:
+                    if -5 <= fwd_pct <= 15:
+                        verdict = "✅ KORREKT HOLD"
+                    elif fwd_pct > 15:
+                        verdict = "🟡 MISSAD UPPSIDA (HOLD men +15%+)"
+                    else:
+                        verdict = "🟡 MISSAD NEDSIDA (HOLD men <-5%)"
+                elif fwd_pct is not None:
+                    if fwd_pct > 15:
+                        verdict = "🟡 MISSADE BUY-CHANS (ingen rec)"
+                    elif fwd_pct < -10:
+                        verdict = "🟡 MISSADE AVOID (ingen rec)"
+                    else:
+                        verdict = "✅ KORREKT (ingen rec, neutral)"
+                else:
+                    verdict = "?"
+
+                timeline.append({
+                    "date": r["date"],
+                    "year": r["date"][:4],
+                    "composite": round(composite, 1),
+                    "q": round(q_score, 1),
+                    "v": round(v_score, 1),
+                    "m": round(m_score, 1),
+                    "n_flags": n_flags,
+                    "is_growth_trifecta": r.get("is_growth_trifecta"),
+                    "is_magic_formula": r.get("is_magic_formula"),
+                    "is_quant_trifecta": r.get("is_trifecta"),
+                    "is_dual_screen": (composite >= 80 and r.get("is_magic_formula")),
+                    "recommendation": rec,
+                    "reason": reason,
+                    "fwd_12m_pct": fwd_pct,
+                    "verdict": verdict,
+                })
+
+            # Sammanfattning
+            n_buy = sum(1 for t in timeline if t["recommendation"] == "BUY")
+            n_avoid = sum(1 for t in timeline if t["recommendation"] == "AVOID")
+            n_hold = sum(1 for t in timeline if t["recommendation"] == "HOLD")
+            n_correct = sum(1 for t in timeline if "KORREKT" in (t["verdict"] or ""))
+            n_wrong = sum(1 for t in timeline if "FEL" in (t["verdict"] or ""))
+            n_neutral = sum(1 for t in timeline if "NEUTRAL" in (t["verdict"] or "") or "MISSAD" in (t["verdict"] or ""))
+
+            # Alpha vs perfekt knowing future
+            buys_returns = [t["fwd_12m_pct"] for t in timeline
+                            if t["recommendation"] == "BUY" and t["fwd_12m_pct"] is not None]
+            avg_buy = sum(buys_returns) / len(buys_returns) if buys_returns else None
+
+            return jsonify({
+                "ticker": ticker.upper(),
+                "country": country,
+                "period": f"{start_year}-{end_year}",
+                "n_years_with_data": len(timeline),
+                "summary": {
+                    "n_buy": n_buy,
+                    "n_avoid": n_avoid,
+                    "n_hold": n_hold,
+                    "n_no_rec": len(timeline) - n_buy - n_avoid - n_hold,
+                    "buys_avg_fwd_12m": round(avg_buy, 1) if avg_buy is not None else None,
+                    "n_correct": n_correct,
+                    "n_wrong": n_wrong,
+                    "n_neutral_or_missed": n_neutral,
+                    "accuracy_pct": round(n_correct / max(1, len(timeline)) * 100, 1),
+                },
+                "timeline": timeline,
+            })
+        finally:
+            db.close()
+    except Exception as e:
+        import traceback
+        return jsonify({"error": str(e), "tb": traceback.format_exc()[:1500]}), 500
+
+
 @app.route("/api/backtest-v2/stock-history/<ticker>", methods=["GET"])
 def api_backtest_v2_stock_history(ticker):
     """Historisk per-år-analys för EN aktie — case study.
