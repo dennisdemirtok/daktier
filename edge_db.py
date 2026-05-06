@@ -4819,14 +4819,22 @@ def compute_quant_scores(db, country="SE", min_market_cap=500e6,
     for s in universe:
         ob_id = s.get("orderbook_id")
         od = owner_data.get(ob_id, {})
+        # Avanza har ägar-data för SE OCH internationella aktier som svenskar handlar i
+        # (NVDA, MSFT, META, TSLA, etc). Bekräftat: NVDA 98k, MSFT 75k, META 25k.
         s["is_owner_momentum"] = (
-            od.get("n", 0) >= 5000  # statistisk signifikans
-            and od.get("1y", 0) >= 0.10  # +10% ägare senaste år
+            od.get("n", 0) >= 3000  # min 3k ägare för signifikans
+            and od.get("1y", 0) >= 0.15  # +15% ägare senaste år (skärpt från 10%)
             and od.get("3m", 0) >= 0.03  # accelerande senaste 3m
-            and (s.get("country") or "").upper() == "SE"  # bara SE
+        )
+        # Också: BEAR-signal om ägare flyr starkt
+        s["is_owner_exodus"] = (
+            od.get("n", 0) >= 3000
+            and od.get("1y", 0) <= -0.10  # -10% ägare
+            and od.get("3m", 0) <= -0.03
         )
         s["owners_change_1y_pct"] = round(od.get("1y", 0) * 100, 1)
         s["owners_change_3m_pct"] = round(od.get("3m", 0) * 100, 1)
+        s["number_of_owners"] = od.get("n", 0)
 
     # ── 🔄 CYCLICAL-BOTTOM: cykliska aktier med kollapsad momentum ──
     # Adresserar Micron/Boliden-mönstret: vi köper toppen, missar botten.
@@ -4941,17 +4949,24 @@ def compute_quant_scores(db, country="SE", min_market_cap=500e6,
                        "momentum men ej dyr nog för Growth Trifecta. Ex: Thule, "
                        "INVE när V medel.")
         # NY: OWNER-MOMENTUM — Avanza-flow indikerar retail-katalysator
+        # Bekräftat fungerar för SE OCH US (Avanza har data för internationella).
         elif s.get("is_owner_momentum"):
             rec = "BUY-LIGHT"
             owners_1y = s.get("owners_change_1y_pct", 0)
-            reason = (f"Owner-Momentum SE (+{owners_1y:.0f}% ägare senaste år) — "
-                      "retail-flow signalerar katalysator. Hade fångat SAAB 2022 "
-                      "(Ukraina-rally) om data fanns. OBS: bara SE-aktier (Avanza).")
+            n_owners = s.get("number_of_owners", 0)
+            reason = (f"Owner-Momentum (+{owners_1y:.0f}% ägare senaste år, {n_owners:,} totalt) — "
+                      "retail-flow signalerar katalysator. Ex: META +34%, MSFT +32%, AMZN +27%.")
         # AVOID-villkor (anti-mönster)
         elif s.get("is_valuation_trap"):
             rec = "AVOID"
             reason = ("Valuation-Trap (Q+M höga, V ≤15) — PYPL 2021 -75%, NFLX 2021 -65%. "
                        "Hög sannolikhet för mean-reversion när momentum bryter.")
+        # NY: OWNER-EXODUS — retail flyr (TSLA -12.9% ägare)
+        elif s.get("is_owner_exodus"):
+            rec = "AVOID"
+            owners_1y = s.get("owners_change_1y_pct", 0)
+            reason = (f"Owner-Exodus ({owners_1y:+.0f}% ägare senaste år) — "
+                      "retail flyr aktien, ofta före kraftiga nedgångar. Ex: TSLA -12.9%.")
         elif country == "US" and composite >= 80 and not s.get("is_growth_trifecta"):
             rec = "AVOID"
             reason = "Composite ≥80 alone i US är fälla (-11.76% alpha)"
