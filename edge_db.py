@@ -4768,6 +4768,41 @@ def compute_quant_scores(db, country="SE", min_market_cap=500e6,
             and s.get("is_magic_formula") is True
         )
 
+    # ── 🚀 MOMENTUM-ROCKET: hyper-growth-screen (M ≥85, Q-krav lågt) ──
+    # Adresserar blinda fläckar från case studies:
+    # - NET 2020 (+184%), CRWD 2020 (+142%), DDOG 2020 (+18%)
+    # - AMD 2016 (+171%), AMD 2018 (+108%)
+    # - TSLA 2019 (+510%), TSLA 2020 (+108%)
+    # - META 2019 (+312% — efter att den varit nere)
+    # OBS: Hög volatilitet, kan kollapsa (TSLA 2018 -21%, AMD 2024 -11%)
+    # Speculative-tag: använd litet position-size + tight stop
+    for s in universe:
+        m_score = s.get("momentum_score") or 0
+        q_score = s.get("quality_score") or 0
+        rev_growth = s.get("rev_growth")  # KPI 94
+        # Krav: M ≥85 + någon revenue growth + inte direkt katastrof
+        s["is_momentum_rocket"] = (
+            m_score >= 85
+            and (rev_growth is not None and rev_growth > 0)
+            and q_score >= 5  # ej totalt junk, men låg tröskel
+        )
+
+    # ── 🚨 VALUATION-TRAP: hög Q+M men extremt dyr (PYPL/NFLX 2021-typ) ──
+    # Adresserar blinda fläckar:
+    # - PYPL 2021: Q=72, M=85, V=10 → -75% kraschen
+    # - NFLX 2021: Q=60, M=84, V=12 → -65%
+    # - SHOP 2021 (motsvarande pattern)
+    # Logic: stark Q+M men V <15 = nästan extremt dyr → mean-reversion
+    for s in universe:
+        q_score = s.get("quality_score") or 0
+        m_score = s.get("momentum_score") or 0
+        v_score = s.get("value_score") or 0
+        s["is_valuation_trap"] = (
+            q_score >= 60
+            and m_score >= 75
+            and v_score <= 15
+        )
+
     # ── 🎯 RECOMMENDATION: BUY / HOLD / AVOID per aktie ──
     # Baserat på 7-marknads-backtest 2015-2024.
     # BUY  = Super Confluence ELLER GT+MF (US) ELLER C80+GT (SE) ELLER Recurring
@@ -4817,7 +4852,17 @@ def compute_quant_scores(db, country="SE", min_market_cap=500e6,
         elif s.get("is_growth_trifecta") and country == "SE":
             rec = "BUY-LIGHT"
             reason = "GT alone SE — fångar Investmentbolag/IT-rallies"
+        # NY: SPECULATIVE för hyper-growth (NET/CRWD/DDOG/TSLA-typ)
+        elif s.get("is_momentum_rocket") and not s.get("is_valuation_trap"):
+            rec = "SPECULATIVE"
+            reason = ("Momentum-Rocket (M≥85) — hyper-growth-mönster. "
+                       "Fångar NET 2020 +184%, CRWD 2020 +142%, AMD 2018 +108%, "
+                       "TSLA 2019 +510%. OBS: HÖG VOLATILITET, små positioner.")
         # AVOID-villkor (anti-mönster)
+        elif s.get("is_valuation_trap"):
+            rec = "AVOID"
+            reason = ("Valuation-Trap (Q+M höga, V ≤15) — PYPL 2021 -75%, NFLX 2021 -65%. "
+                       "Hög sannolikhet för mean-reversion när momentum bryter.")
         elif country == "US" and composite >= 80 and not s.get("is_growth_trifecta"):
             rec = "AVOID"
             reason = "Composite ≥80 alone i US är fälla (-11.76% alpha)"
