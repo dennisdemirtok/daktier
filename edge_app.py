@@ -4094,6 +4094,85 @@ def api_borsdata_sync_prices():
     return jsonify({"status": "started", "max_per_run": max_per_run})
 
 
+@app.route("/api/borsdata/sync-prices-ticker", methods=["POST"])
+def api_borsdata_sync_prices_ticker():
+    """Synk pris-historik för EN specifik ticker. SYNKRON (returnerar resultat direkt).
+
+    Body: {ticker, from_date}
+    """
+    body = request.json if request.is_json else {}
+    ticker = body.get("ticker")
+    from_date = body.get("from_date", "2007-01-01")
+    if not ticker:
+        return jsonify({"error": "ticker krävs"}), 400
+
+    db = get_db()
+    try:
+        from edge_db import _ph as ph_fn, _fetchall, _fetchone, _upsert_sql
+        from borsdata_fetcher import fetch_stock_prices
+        ph = ph_fn()
+        # Hitta ins_id för ticker
+        rows = _fetchall(db,
+            f"SELECT isin, ins_id, is_global FROM borsdata_instrument_map "
+            f"WHERE ticker = {ph}", (ticker,))
+        if not rows:
+            return jsonify({"error": f"ticker '{ticker}' inte hittad"}), 404
+
+        results = []
+        for r in rows:
+            rd = dict(r)
+            isin = rd["isin"]
+            ins_id = rd["ins_id"]
+            is_global = bool(rd.get("is_global"))
+            try:
+                prices = fetch_stock_prices(ins_id, is_global=is_global, from_date=from_date)
+                # Räkna före och efter
+                before = _fetchone(db,
+                    f"SELECT COUNT(*) as n, MIN(date) as min_d, MAX(date) as max_d "
+                    f"FROM borsdata_prices WHERE isin = {ph}", (isin,))
+                before_d = dict(before) if before else {}
+
+                # Save
+                price_sql = _upsert_sql("borsdata_prices",
+                    ["isin", "date", "open", "high", "low", "close", "volume"],
+                    ["isin", "date"])
+                n_inserted = 0
+                for p in prices:
+                    date_str = (p.get("d") or "")[:10]
+                    if not date_str: continue
+                    try:
+                        db.execute(price_sql, (isin, date_str, p.get("o"), p.get("h"),
+                                                p.get("l"), p.get("c"), p.get("v")))
+                        n_inserted += 1
+                    except Exception as e:
+                        db.rollback()
+                db.commit()
+
+                after = _fetchone(db,
+                    f"SELECT COUNT(*) as n, MIN(date) as min_d, MAX(date) as max_d "
+                    f"FROM borsdata_prices WHERE isin = {ph}", (isin,))
+                after_d = dict(after) if after else {}
+
+                results.append({
+                    "isin": isin,
+                    "ins_id": ins_id,
+                    "is_global": is_global,
+                    "fetched_from_api": len(prices),
+                    "inserted": n_inserted,
+                    "before": before_d,
+                    "after": after_d,
+                })
+            except Exception as e:
+                results.append({"isin": isin, "ins_id": ins_id, "error": str(e)})
+
+        return jsonify({"ticker": ticker, "from_date": from_date, "results": results})
+    except Exception as e:
+        import traceback
+        return jsonify({"error": str(e), "tb": traceback.format_exc()[:1500]}), 500
+    finally:
+        db.close()
+
+
 @app.route("/api/borsdata/sync-kpis", methods=["POST"])
 def api_borsdata_sync_kpis():
     """Sync KPI-historik (top 15 KPIs default)."""
