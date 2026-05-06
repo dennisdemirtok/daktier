@@ -4780,9 +4780,14 @@ def compute_quant_scores(db, country="SE", min_market_cap=500e6,
         m_score = s.get("momentum_score") or 0
         q_score = s.get("quality_score") or 0
         rev_growth = s.get("rev_growth")  # KPI 94
-        # Krav: M ≥85 + någon revenue growth + inte direkt katastrof
+        # Krav: M ≥80 + någon revenue growth + inte direkt katastrof
+        # Tröskel-optimering på 13 case-studies (NET/AMD/TSLA/META/PYPL/NFLX/etc):
+        # M≥75: 26 hits, +50% avg, 17/26 positiva (65%)  ← bästa avg
+        # M≥80: 22 hits, +49% avg, 13/22 positiva (59%)  ← bra balans
+        # M≥85: 17 hits, +32% avg, 9/17 positiva (53%)
+        # Vi väljer M≥80 — fångar TSLA 2019 (+510%) men inte översvämmer signaler
         s["is_momentum_rocket"] = (
-            m_score >= 85
+            m_score >= 80
             and (rev_growth is not None and rev_growth > 0)
             and q_score >= 5  # ej totalt junk, men låg tröskel
         )
