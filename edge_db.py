@@ -4827,12 +4827,26 @@ def compute_quant_scores(db, country="SE", min_market_cap=500e6,
         m1 = td.get("1m") or 0
         m3 = td.get("3m") or 0
         # Parabolisk: minst 2 av 3 villkor uppfylls
-        criteria = sum([
+        criteria_hot = sum([
             rsi > 70,
             sma20 > 0.10,  # 10% över SMA20
             m1 > 0.20,  # +20% senaste månad
         ])
-        s["is_momentum_overheat"] = (criteria >= 2 and m3 > 0.30)
+        s["is_momentum_overheat"] = (criteria_hot >= 2 and m3 > 0.30)
+
+        # Oversold-Bounce: motsatsen — kraftig nedgång, kan vända upp
+        # Krav (minst 2 av 3): RSI<30, SMA20<-10%, 1m<-15% + Q OK
+        criteria_cold = sum([
+            rsi < 30,
+            sma20 < -0.10,
+            m1 < -0.15,
+        ])
+        q_score = s.get("quality_score") or 0
+        s["is_oversold_bounce"] = (
+            criteria_cold >= 2
+            and m3 < -0.20  # bestående nedgång
+            and q_score >= 40  # undvik junk som faller med rätt
+        )
         s["tech_rsi14"] = rsi
         s["tech_1m_pct"] = round(m1 * 100, 1)
         s["tech_3m_pct"] = round(m3 * 100, 1)
@@ -5043,6 +5057,24 @@ def compute_quant_scores(db, country="SE", min_market_cap=500e6,
             )
         else:
             s["overheat_warning"] = None
+
+        # ❄️ OVERSOLD-BOUNCE: motsatsen — kraftigt fall + Q OK = möjlig bounce
+        # Promote till BUY-LIGHT om HOLD/None men starka oversold-tecken
+        if s.get("is_oversold_bounce"):
+            s["oversold_warning"] = (
+                f"❄️ OVERSOLD-BOUNCE: RSI={s.get('tech_rsi14',50):.0f}, "
+                f"1m={s.get('tech_1m_pct',0):+.0f}%, 3m={s.get('tech_3m_pct',0):+.0f}%. "
+                "Aktien är översåld med OK fundamental — möjlig bounce-kandidat. "
+                "Vänta på vändpunkt (RSI>50 eller bryta SMA20) för bekräftelse."
+            )
+            # Promote: om ingen rec, lyft till BUY-LIGHT
+            if rec is None:
+                rec = "BUY-LIGHT"
+                reason = (f"Oversold-Bounce — kraftigt fall (1m {s.get('tech_1m_pct',0):+.0f}%, "
+                          f"RSI {s.get('tech_rsi14',50):.0f}) men Q={q_score:.0f} OK. "
+                          "Mean-reversion-spel. Riskabelt — sätt stop-loss.")
+        else:
+            s["oversold_warning"] = None
 
         s["recommendation"] = rec
         s["recommendation_reason"] = reason
