@@ -5161,8 +5161,10 @@ def _generate_macro_pulse():
     """
     import json as _json
     if not CLAUDE_API_KEY:
+        print("[macro pulse] CLAUDE_API_KEY saknas", file=sys.stderr)
         return None
     try:
+        print("[macro pulse] anropar Claude...", file=sys.stderr)
         prompt = """Du är makroanalytiker. Skriv en kort 'Macro Pulse' för dagen
 med fokus på vad som är relevant för svenska + amerikanska aktiemarknader.
 
@@ -5201,13 +5203,17 @@ INGA rubriker eller h1/h2. Bara den HTML-struktur jag specificerat."""
                       "Content-Type": "application/json"},
             json={"model": "claude-sonnet-4-20250514", "max_tokens": 1000,
                    "messages": [{"role": "user", "content": prompt}]},
-            timeout=60,
+            timeout=45,
         )
+        print(f"[macro pulse] status={resp.status_code}", file=sys.stderr)
         if resp.status_code == 200:
-            return resp.json().get("content", [{}])[0].get("text", "")
+            txt = resp.json().get("content", [{}])[0].get("text", "")
+            print(f"[macro pulse] got {len(txt)} chars", file=sys.stderr)
+            return txt
+        print(f"[macro pulse] fel: {resp.text[:200]}", file=sys.stderr)
         return None
     except Exception as e:
-        print(f"[macro pulse] {e}", file=sys.stderr)
+        print(f"[macro pulse] exception: {e}", file=sys.stderr)
         return None
 
 
@@ -5566,11 +5572,11 @@ def _build_daily_digest_html(db, base_url="https://daktier-production.up.railway
     owner_momentum = _dedupe_share_classes(owner_momentum)
 
     # ── Hämta extra data: earnings, insiders, rapporter, owner-movers, externa signaler ──
-    earnings_se = _get_upcoming_earnings(db, country_filter="SE", days_ahead=10, limit=6)
-    earnings_us = _get_upcoming_earnings(db, country_filter="US", days_ahead=10, limit=6)
+    earnings_se = _get_upcoming_earnings(db, country_filter="SE", days_ahead=14, limit=6)
+    earnings_us = _get_upcoming_earnings(db, country_filter="US", days_ahead=14, limit=6)
     insiders = _get_top_insider_buys(db, days_back=7, limit=6)
-    # Sänk filter för att fånga fler rapporter
-    recent_reports = _get_recent_reports_summary(db, days_back=21, limit=8)
+    # Sänk filter aggressivt — 45 dagar för att fånga senaste earnings-säsong
+    recent_reports = _get_recent_reports_summary(db, days_back=45, limit=8)
     owner_movers_1d = _get_top_owner_movers(db, period_days=1, limit=8)
     owner_movers_3d = _get_top_owner_movers(db, period_days=7, limit=8)
     external_signals = _fetch_external_signals()
