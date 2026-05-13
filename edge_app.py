@@ -4830,6 +4830,158 @@ def _get_upcoming_earnings(db, country_filter=None, days_ahead=10, limit=10):
         return []
 
 
+def _get_recent_reports_summary(db, days_back=14, limit=8):
+    """Hämta senaste publicerade kvartalsrapporter med trend-analys.
+
+    Per ticker: vad sa rapporten? (YoY revenue/EPS-tillväxt, kvalitetsbedömning).
+    """
+    try:
+        from edge_db import _ph as ph_fn, _fetchall
+        from datetime import datetime, timedelta
+        ph = ph_fn()
+        since = (datetime.now() - timedelta(days=days_back)).strftime("%Y-%m-%d")
+
+        # Hämta senaste kvartalsrapporter
+        rows = _fetchall(db, f"""
+            SELECT r.isin, r.period_year, r.period_q, r.report_end_date,
+                   r.revenues, r.net_profit, r.eps, r.free_cash_flow,
+                   m.ticker, m.is_global,
+                   s.name, s.country, s.last_price, s.pe_ratio,
+                   s.return_on_equity, s.one_month_change_pct, s.number_of_owners
+            FROM borsdata_reports r
+            JOIN borsdata_instrument_map m ON r.isin = m.isin
+            LEFT JOIN stocks s ON m.ticker = s.short_name
+            WHERE r.report_type = {ph}
+            AND r.report_end_date >= {ph}
+            AND r.revenues IS NOT NULL
+            AND s.number_of_owners IS NOT NULL
+            AND s.number_of_owners >= 1000
+            ORDER BY r.report_end_date DESC, s.number_of_owners DESC
+            LIMIT {ph}
+        """, ("quarter", since, limit * 3))
+
+        results = []
+        seen_isins = set()
+        for r in rows:
+            rd = dict(r)
+            if rd["isin"] in seen_isins: continue
+            seen_isins.add(rd["isin"])
+
+            # Hämta föregående kvartal för YoY-jämförelse (samma kvartal förra året)
+            prev_year = rd["period_year"] - 1
+            prev_rows = _fetchall(db, f"""
+                SELECT revenues, net_profit, eps
+                FROM borsdata_reports
+                WHERE isin = {ph} AND report_type = {ph}
+                AND period_year = {ph} AND period_q = {ph}
+            """, (rd["isin"], "quarter", prev_year, rd.get("period_q") or 1))
+
+            if prev_rows:
+                pr = dict(prev_rows[0])
+                rev_yoy = ((rd.get("revenues") or 0) / (pr.get("revenues") or 1) - 1) * 100 if pr.get("revenues") else None
+                eps_yoy = ((rd.get("eps") or 0) / (pr.get("eps") or 1) - 1) * 100 if pr.get("eps") and pr.get("eps") != 0 else None
+                profit_yoy = ((rd.get("net_profit") or 0) / (pr.get("net_profit") or 1) - 1) * 100 if pr.get("net_profit") and pr.get("net_profit") != 0 else None
+            else:
+                rev_yoy = eps_yoy = profit_yoy = None
+
+            # Bedöm rapport-kvalitet
+            quality = "neutral"
+            if rev_yoy is not None and eps_yoy is not None:
+                if rev_yoy > 10 and eps_yoy > 15: quality = "stark"
+                elif rev_yoy > 5 and eps_yoy > 0: quality = "solid"
+                elif rev_yoy < -5 or eps_yoy < -20: quality = "svag"
+
+            rd["rev_yoy_pct"] = round(rev_yoy, 1) if rev_yoy is not None else None
+            rd["eps_yoy_pct"] = round(eps_yoy, 1) if eps_yoy is not None else None
+            rd["profit_yoy_pct"] = round(profit_yoy, 1) if profit_yoy is not None else None
+            rd["report_quality"] = quality
+            results.append(rd)
+            if len(results) >= limit: break
+
+        return results
+    except Exception as e:
+        print(f"[reports summary] fel: {e}", file=sys.stderr)
+        return []
+
+
+def _get_top_owner_movers(db, country=None, period_days=1, min_owners=1000, limit=10):
+    """Hämta top ägar-rörelser senaste 1 eller 3 dagar.
+
+    Använder absolut förändring (owners_change_1d_abs / 1w_abs).
+    Returnerar både gainers och losers.
+    """
+    try:
+        from edge_db import _ph as ph_fn, _fetchall
+        ph = ph_fn()
+        # 1d använder owners_change_1d_abs, 3d-substitut är owners_change_1w (vi har inte 3d)
+        field = "owners_change_1d_abs" if period_days == 1 else "owners_change_1w_abs"
+        country_clause = f"AND country = {ph}" if country else ""
+        params = [min_owners]
+        if country: params.append(country)
+        params.append(limit)
+
+        rows = _fetchall(db, f"""
+            SELECT short_name, name, country, number_of_owners,
+                   owners_change_1d_abs, owners_change_1w_abs,
+                   owners_change_1m_abs, owners_change_1y_abs,
+                   last_price, one_month_change_pct
+            FROM stocks
+            WHERE number_of_owners >= {ph}
+            AND {field} IS NOT NULL
+            {country_clause}
+            ORDER BY {field} DESC
+            LIMIT {ph}
+        """, tuple(params))
+        return [dict(r) for r in rows]
+    except Exception as e:
+        print(f"[owner movers] fel: {e}", file=sys.stderr)
+        return []
+
+
+def _fetch_external_signals():
+    """Hämta senaste posts från Substack/Reddit-källor via RSS."""
+    import re as _re
+    sources = [
+        {"name": "Trade At Your Own Risk", "url": "https://tradeatyourownrisk.substack.com/feed",
+         "type": "substack"},
+        {"name": "MarketSense-AI", "url": "https://marketsense-ai.com/blog/feed/",
+         "type": "blog"},
+        {"name": "Icy_Agent_266 (Reddit)", "url": "https://www.reddit.com/user/Icy_Agent_266.rss",
+         "type": "reddit"},
+        # Lägg till fler trader-konton här
+    ]
+    results = []
+    for src in sources:
+        try:
+            resp = requests.get(src["url"], timeout=10,
+                                headers={"User-Agent": "Mozilla/5.0 Daktier-Bot"})
+            if resp.status_code != 200:
+                continue
+            body = resp.text
+            # Enkel RSS-parse: ta de senaste 3 items
+            items = _re.findall(r"<item>.*?</item>", body, _re.DOTALL)[:3] or \
+                    _re.findall(r"<entry>.*?</entry>", body, _re.DOTALL)[:3]
+            for item in items:
+                title_m = _re.search(r"<title[^>]*>(?:<!\[CDATA\[)?(.*?)(?:\]\]>)?</title>", item, _re.DOTALL)
+                link_m = _re.search(r"<link[^>]*?(?:href=\")?(https?://[^\"<]+)", item)
+                date_m = _re.search(r"<(?:pubDate|published|updated)[^>]*>(.*?)</", item)
+                if not title_m: continue
+                title = title_m.group(1).strip()[:100]
+                link = link_m.group(1).strip() if link_m else ""
+                date = (date_m.group(1) if date_m else "")[:10]
+                results.append({
+                    "source": src["name"],
+                    "source_type": src["type"],
+                    "title": title,
+                    "link": link,
+                    "date": date,
+                })
+        except Exception as e:
+            print(f"[external signals] {src['name']}: {e}", file=sys.stderr)
+            continue
+    return results
+
+
 def _get_top_insider_buys(db, days_back=7, limit=8):
     """Hämta de största insider-köpen senaste X dagar."""
     try:
@@ -4890,10 +5042,14 @@ def _build_daily_digest_html(db, base_url="https://daktier-production.up.railway
     buy_lights.sort(key=lambda s: -(s.get("composite_score") or 0))
     owner_momentum.sort(key=lambda s: -(s.get("owners_change_1y_pct") or 0))
 
-    # ── Hämta extra data: earnings, insiders, AI-summary ──
+    # ── Hämta extra data: earnings, insiders, rapporter, owner-movers, externa signaler ──
     earnings_se = _get_upcoming_earnings(db, country_filter="SE", days_ahead=10, limit=6)
     earnings_us = _get_upcoming_earnings(db, country_filter="US", days_ahead=10, limit=6)
     insiders = _get_top_insider_buys(db, days_back=7, limit=6)
+    recent_reports = _get_recent_reports_summary(db, days_back=14, limit=8)
+    owner_movers_1d = _get_top_owner_movers(db, period_days=1, limit=8)
+    owner_movers_3d = _get_top_owner_movers(db, period_days=7, limit=8)  # 1w som 3d-substitut
+    external_signals = _fetch_external_signals()
 
     # Genererad AI-summary — passa även earnings + insiders för rikare kontext
     ai_summary = _generate_ai_market_summary(
@@ -5003,6 +5159,68 @@ def _build_daily_digest_html(db, base_url="https://daktier-production.up.railway
     earnings_us_html = "".join([earnings_row(s) for s in earnings_us[:5]])
     insiders_html = "".join([insider_row(i) for i in insiders[:5]])
 
+    # NYT: Rapport-sammanfattning rader
+    def report_row(r):
+        tk = r.get("ticker") or "?"
+        flag = country_flag(r.get("country"))
+        name = (r.get("name") or "")[:22]
+        rev = r.get("rev_yoy_pct")
+        eps = r.get("eps_yoy_pct")
+        date = r.get("report_end_date") or ""
+        q = f"Q{r.get('period_q','')}/{str(r.get('period_year',''))[2:]}"
+        quality = r.get("report_quality") or "neutral"
+        q_color = {"stark":"#059669","solid":"#0891b2","neutral":"#6b7280","svag":"#dc2626"}.get(quality, "#6b7280")
+        q_emoji = {"stark":"🟢","solid":"🔵","neutral":"⚪","svag":"🔴"}.get(quality, "⚪")
+        pe = r.get("pe_ratio")
+        pe_str = f"P/E {pe:.0f}" if pe and pe > 0 else "P/E -"
+        rev_str = f"Rev {rev:+.0f}%" if rev is not None else "Rev -"
+        eps_str = f"EPS {eps:+.0f}%" if eps is not None else "EPS -"
+        return f"""<div style="padding:8px 12px;border-bottom:1px solid #f3f4f6">
+            <div style="display:flex;justify-content:space-between;align-items:center">
+                <div><strong>{flag} {tk}</strong> {q_emoji} <span style="color:#9ca3af;font-size:11px">{name} · {q}</span></div>
+                <div style="font-size:11px;color:{q_color};font-weight:700">{quality.upper()}</div>
+            </div>
+            <div style="font-size:11px;color:#4b5563;margin-top:2px;font-variant-numeric:tabular-nums">
+                {rev_str} · {eps_str} · {pe_str}
+            </div>
+        </div>"""
+
+    # NYT: Owner-rörelser per dag (absolut antal)
+    def owner_mover_row(s, period="1d"):
+        tk = s.get("short_name") or "?"
+        flag = country_flag(s.get("country"))
+        name = (s.get("name") or "")[:24]
+        n = s.get("number_of_owners") or 0
+        if period == "1d":
+            change = s.get("owners_change_1d_abs") or 0
+            label = "igår"
+        else:
+            change = s.get("owners_change_1w_abs") or 0
+            label = "7d"
+        color = "#059669" if change > 0 else "#dc2626"
+        return f"""<div style="padding:6px 12px;border-bottom:1px solid #f3f4f6;display:flex;justify-content:space-between;align-items:center">
+            <div><strong>{flag} {tk}</strong> <span style="color:#9ca3af;font-size:11px">{name}</span></div>
+            <div style="font-size:11px;color:{color};font-weight:700">{change:+,} ({label})</div>
+        </div>"""
+
+    # NYT: Externa signaler från RSS
+    def external_signal_row(sig):
+        src = sig.get("source", "?")
+        title = sig.get("title", "")[:80]
+        link = sig.get("link", "#")
+        date = sig.get("date", "")[:10]
+        emoji = "📊" if sig.get("source_type") == "substack" else \
+                "🤖" if sig.get("source_type") == "blog" else "🧵"
+        return f"""<div style="padding:8px 12px;border-bottom:1px solid #f3f4f6">
+            <div style="font-size:11px;color:#9ca3af;margin-bottom:2px">{emoji} {src} · {date}</div>
+            <a href="{link}" style="color:#1f2937;text-decoration:none;font-size:12px;font-weight:500">{title}</a>
+        </div>"""
+
+    reports_html = "".join([report_row(r) for r in recent_reports[:6]])
+    owner_1d_html = "".join([owner_mover_row(s, "1d") for s in owner_movers_1d[:5]])
+    owner_3d_html = "".join([owner_mover_row(s, "3d") for s in owner_movers_3d[:5]])
+    external_html = "".join([external_signal_row(s) for s in external_signals[:8]])
+
     # AI-summary med fallback om Claude inte tillgänglig
     ai_summary_html = ""
     if ai_summary:
@@ -5075,10 +5293,35 @@ body {{ font-family: -apple-system, BlinkMacSystemFont, "Inter", "Helvetica Neue
 </div>
 
 <div class="section">
-    <h2>👥 OWNER-FLOW — Avanza-retail-momentum</h2>
-    <div class="subtitle">Top 8 aktier med högst ägar-tillväxt senaste året (proprietär edge — finns inte i Bloomberg/Yahoo).</div>
+    <h2>👥 OWNER-FLOW — Avanza-retail-momentum (1 år)</h2>
+    <div class="subtitle">Top 8 aktier med högst ägar-tillväxt senaste året.</div>
     {owner_rows_html}
 </div>
+
+<div class="two-col">
+    <div class="section">
+        <h2>📈 GÅRDAGENS ÄGAR-RÖRELSER</h2>
+        <div class="subtitle">Top 5 ökare 1d (absolut antal ägare).</div>
+        {owner_1d_html or '<div style="color:#9ca3af;font-size:12px">Inga data</div>'}
+    </div>
+    <div class="section">
+        <h2>📊 SENASTE VECKAN (7 dagar)</h2>
+        <div class="subtitle">Top 5 ökare 7d — fångar trend.</div>
+        {owner_3d_html or '<div style="color:#9ca3af;font-size:12px">Inga data</div>'}
+    </div>
+</div>
+
+{f'''<div class="section">
+    <h2>📑 SENASTE RAPPORTERNA (14 dagar)</h2>
+    <div class="subtitle">YoY revenue/EPS-tillväxt + kvalitetsbedömning. 🟢 stark, 🔵 solid, ⚪ neutral, 🔴 svag.</div>
+    {reports_html}
+</div>''' if recent_reports else ''}
+
+{f'''<div class="section">
+    <h2>📰 EXTERNA SIGNALER — Substack/Reddit-bevakning</h2>
+    <div class="subtitle">Senaste posts från Trade At Your Own Risk, MarketSense-AI, Reddit-traders med bra track record.</div>
+    {external_html}
+</div>''' if external_signals else ''}
 
 {f'''<div class="section">
     <h2>📅 KOMMANDE RAPPORTER (10 dagar)</h2>
