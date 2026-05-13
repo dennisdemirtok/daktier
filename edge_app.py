@@ -4706,6 +4706,127 @@ RESEND_FROM = os.getenv("RESEND_FROM", "Daktier <onboarding@resend.dev>")
 RESEND_TO_DEFAULT = os.getenv("RESEND_TO", "dennis.demirtok@gmail.com")
 
 
+def _generate_ai_market_summary(stats, top_buys, top_overheat, top_oversold, owner_top):
+    """Använd Claude för att generera en kort executive summary om dagens marknad."""
+    if not CLAUDE_API_KEY:
+        return None
+    try:
+        # Bygg kontext för Claude
+        def fmt_stocks(stocks, fields):
+            return [{f: s.get(f) for f in fields} for s in stocks[:5]]
+
+        context = {
+            "stats": stats,
+            "top_buys": fmt_stocks(top_buys, ["ticker", "name", "recommendation_reason",
+                                                "composite_score", "quality_score", "momentum_score"]),
+            "top_overheat": fmt_stocks(top_overheat, ["ticker", "tech_rsi14", "tech_1m_pct", "tech_3m_pct"]),
+            "top_oversold": fmt_stocks(top_oversold, ["ticker", "tech_rsi14", "tech_1m_pct", "tech_3m_pct",
+                                                       "quality_score"]),
+            "top_owner_flow": fmt_stocks(owner_top, ["ticker", "owners_change_1y_pct",
+                                                      "number_of_owners"]),
+        }
+
+        prompt = f"""Du är en svensktalande finansanalytiker. Skriv en kort, läsbar executive summary
+för dagens trading-digest baserat på datan nedan. Max 5 korta paragrafer.
+
+REGLER:
+- Inga floskler eller marknadsföringsprat
+- Konkret: nämn specifika tickers + siffror
+- 1 paragraf om TOP BUY-träffar (vad är intressant idag?)
+- 1 paragraf om TAJMNING (vilka är overheat = vänta? vilka är oversold = möjlig bounce?)
+- 1 paragraf om OWNER-FLOW (vilka aktier ökar retail-intresse, vad signalerar det?)
+- 1 paragraf med VARNING om regim-anpassning (vi har bara 8 års data, sub-period split visar
+  att Dual-Screen SE bara fungerar post-COVID och GT US bara pre-COVID)
+- 1 paragraf med praktisk REKOMMENDATION (vad bör läsaren agera på just idag?)
+
+Skriv direkt utan rubriker, separera med <p></p>. Skriv på svenska.
+
+DATA:
+{json.dumps(context, ensure_ascii=False, indent=2)[:3500]}"""
+
+        resp = requests.post(
+            "https://api.anthropic.com/v1/messages",
+            headers={
+                "x-api-key": CLAUDE_API_KEY,
+                "anthropic-version": "2023-06-01",
+                "Content-Type": "application/json",
+            },
+            json={
+                "model": "claude-sonnet-4-5",
+                "max_tokens": 1200,
+                "messages": [{"role": "user", "content": prompt}],
+            },
+            timeout=60,
+        )
+        if resp.status_code == 200:
+            data = resp.json()
+            content = data.get("content", [{}])[0].get("text", "")
+            return content
+        return None
+    except Exception as e:
+        print(f"[AI summary] fel: {e}", file=sys.stderr)
+        return None
+
+
+def _get_upcoming_earnings(db, country_filter=None, days_ahead=10, limit=10):
+    """Hämta aktier med rapport-datum inom kommande X dagar."""
+    try:
+        from edge_db import _ph as ph_fn, _fetchall
+        from datetime import datetime, timedelta
+        ph = ph_fn()
+        today = datetime.now().strftime("%Y-%m-%d")
+        end_date = (datetime.now() + timedelta(days=days_ahead)).strftime("%Y-%m-%d")
+
+        country_clause = ""
+        params = [today, end_date]
+        if country_filter:
+            country_clause = f"AND country = {ph}"
+            params.append(country_filter)
+
+        rows = _fetchall(db, f"""
+            SELECT short_name, name, country, next_company_report, last_price,
+                   pe_ratio, return_on_equity, market_cap, number_of_owners,
+                   one_month_change_pct, three_months_change_pct
+            FROM stocks
+            WHERE next_company_report IS NOT NULL
+            AND next_company_report >= {ph}
+            AND next_company_report <= {ph}
+            {country_clause}
+            AND number_of_owners >= 1000
+            ORDER BY next_company_report ASC, market_cap DESC
+            LIMIT {limit * 3}
+        """, tuple(params))
+        return [dict(r) for r in rows][:limit]
+    except Exception as e:
+        print(f"[earnings] fel: {e}", file=sys.stderr)
+        return []
+
+
+def _get_top_insider_buys(db, days_back=7, limit=8):
+    """Hämta de största insider-köpen senaste X dagar."""
+    try:
+        from edge_db import _ph as ph_fn, _fetchall
+        from datetime import datetime, timedelta
+        ph = ph_fn()
+        since = (datetime.now() - timedelta(days=days_back)).strftime("%Y-%m-%d")
+
+        rows = _fetchall(db, f"""
+            SELECT issuer, person, role, transaction_type, instrument_name,
+                   transaction_date, volume, price, total_value, currency, isin
+            FROM insider_transactions
+            WHERE transaction_date >= {ph}
+            AND transaction_type IN ('Förvärv', 'Köp', 'Tilldelning')
+            AND total_value IS NOT NULL
+            AND total_value >= 100000
+            ORDER BY total_value DESC
+            LIMIT {ph}
+        """, (since, limit))
+        return [dict(r) for r in rows]
+    except Exception as e:
+        print(f"[insider] fel: {e}", file=sys.stderr)
+        return []
+
+
 def _build_daily_digest_html(db, base_url="https://daktier-production.up.railway.app"):
     """Bygg HTML för dagligt digest-mail med BUY/AVOID/OVERHEAT/OVERSOLD."""
     from edge_db import compute_quant_scores
@@ -4741,151 +4862,230 @@ def _build_daily_digest_html(db, base_url="https://daktier-production.up.railway
     buy_lights.sort(key=lambda s: -(s.get("composite_score") or 0))
     owner_momentum.sort(key=lambda s: -(s.get("owners_change_1y_pct") or 0))
 
-    def row(s, color="#059669"):
+    # ── Hämta extra data: earnings, insiders, AI-summary ──
+    earnings_se = _get_upcoming_earnings(db, country_filter="SE", days_ahead=10, limit=6)
+    earnings_us = _get_upcoming_earnings(db, country_filter="US", days_ahead=10, limit=6)
+    insiders = _get_top_insider_buys(db, days_back=7, limit=6)
+
+    # Genererad AI-summary
+    ai_summary = _generate_ai_market_summary(
+        {"n_buy": len(buys), "n_overheat": len(overheat), "n_oversold": len(oversold),
+         "n_owner_momentum": len(owner_momentum)},
+        buys, overheat, oversold, owner_momentum
+    )
+
+    # ── Helper-functions för formattering ──
+    def country_flag(c):
+        return {"US": "🇺🇸", "SE": "🇸🇪"}.get((c or "").upper(), "")
+
+    def top_pick_card(s, idx):
+        """Snygg "top pick"-card för en aktie."""
         tk = s.get("ticker") or s.get("short_name") or "?"
-        flag = "🇺🇸" if s.get("_country") == "US" else "🇸🇪"
+        flag = country_flag(s.get("_country") or s.get("country"))
         name = (s.get("name") or "")[:30]
         cs = s.get("composite_score") or 0
         q = s.get("quality_score") or 0
-        v = s.get("value_score") or 0
         m = s.get("momentum_score") or 0
+        v = s.get("value_score") or 0
         reason = s.get("recommendation_reason") or ""
-        overheat_tag = "🌡️" if s.get("is_momentum_overheat") else ""
-        oversold_tag = "❄️" if s.get("is_oversold_bounce") else ""
-        return f"""<tr>
-        <td style="padding:8px 10px;border-bottom:1px solid #e5e7eb">
-            <strong>{flag} {tk}</strong> {overheat_tag}{oversold_tag}
-            <div style="font-size:11px;color:#6b7280">{name}</div>
-        </td>
-        <td style="padding:8px 10px;text-align:right;border-bottom:1px solid #e5e7eb;font-variant-numeric:tabular-nums;font-size:12px">
-            C={cs:.0f}<br>Q/V/M={q:.0f}/{v:.0f}/{m:.0f}
-        </td>
-        <td style="padding:8px 10px;border-bottom:1px solid #e5e7eb;font-size:11px;color:#374151">{reason}</td>
-        </tr>"""
+        n_flags = s.get("n_flags") or 0
+        overheat = s.get("is_momentum_overheat")
+        warning_html = ""
+        if overheat:
+            rsi = s.get("tech_rsi14") or 0
+            m1 = s.get("tech_1m_pct") or 0
+            warning_html = f'<div style="background:#fff7ed;color:#9a3412;padding:6px 10px;border-radius:6px;margin-top:6px;font-size:11px;border-left:2px solid #ea580c">🌡️ <strong>Overheat:</strong> RSI {rsi:.0f}, 1m +{m1:.0f}%. Vänta på pullback för bättre entry.</div>'
 
-    overheat_rows = ""
-    for s in sorted(overheat, key=lambda x: -(x.get("tech_3m_pct") or 0))[:8]:
+        return f"""<div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:10px;padding:14px;margin-bottom:8px">
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px">
+                <div>
+                    <div style="font-weight:700;font-size:15px">{flag} {tk} <span style="color:#9ca3af;font-weight:400;font-size:12px">· {name}</span></div>
+                    <div style="font-size:12px;color:#4b5563;margin-top:3px">{reason}</div>
+                </div>
+                <div style="text-align:right;flex-shrink:0">
+                    <div style="display:inline-block;background:linear-gradient(135deg,#059669,#10b981);color:white;padding:3px 10px;border-radius:8px;font-size:11px;font-weight:700">#{idx} BUY · {n_flags} flaggor</div>
+                    <div style="font-size:11px;color:#6b7280;margin-top:4px;font-variant-numeric:tabular-nums">Q{q:.0f} V{v:.0f} M{m:.0f} · C{cs:.0f}</div>
+                </div>
+            </div>
+            {warning_html}
+        </div>"""
+
+    def small_row(s, color_class="green"):
         tk = s.get("ticker") or s.get("short_name") or "?"
-        flag = "🇺🇸" if s.get("_country") == "US" else "🇸🇪"
+        flag = country_flag(s.get("_country") or s.get("country"))
+        name = (s.get("name") or "")[:24]
         rsi = s.get("tech_rsi14") or 0
         m1 = s.get("tech_1m_pct") or 0
         m3 = s.get("tech_3m_pct") or 0
-        rec = s.get("recommendation") or "-"
-        overheat_rows += f"""<tr>
-        <td style="padding:6px 10px;border-bottom:1px solid #e5e7eb"><strong>{flag} {tk}</strong> <span style="color:#9ca3af;font-size:11px">({rec})</span></td>
-        <td style="padding:6px 10px;text-align:right;border-bottom:1px solid #e5e7eb;font-size:11px">RSI {rsi:.0f}</td>
-        <td style="padding:6px 10px;text-align:right;border-bottom:1px solid #e5e7eb;color:#dc2626;font-size:11px">1m {m1:+.0f}%</td>
-        <td style="padding:6px 10px;text-align:right;border-bottom:1px solid #e5e7eb;color:#dc2626;font-size:11px">3m {m3:+.0f}%</td>
-        </tr>"""
+        return f"""<div style="padding:8px 12px;border-bottom:1px solid #f3f4f6;display:flex;justify-content:space-between;align-items:center">
+            <div><strong>{flag} {tk}</strong> <span style="color:#9ca3af;font-size:11px">{name}</span></div>
+            <div style="font-size:11px;color:#6b7280;font-variant-numeric:tabular-nums">RSI {rsi:.0f} · 1m {m1:+.0f}% · 3m {m3:+.0f}%</div>
+        </div>"""
 
-    oversold_rows = ""
-    for s in sorted(oversold, key=lambda x: x.get("tech_3m_pct") or 0)[:6]:
+    def owner_row(s):
         tk = s.get("ticker") or s.get("short_name") or "?"
-        flag = "🇺🇸" if s.get("_country") == "US" else "🇸🇪"
-        rsi = s.get("tech_rsi14") or 0
-        m1 = s.get("tech_1m_pct") or 0
-        m3 = s.get("tech_3m_pct") or 0
-        q = s.get("quality_score") or 0
-        oversold_rows += f"""<tr>
-        <td style="padding:6px 10px;border-bottom:1px solid #e5e7eb"><strong>{flag} {tk}</strong></td>
-        <td style="padding:6px 10px;text-align:right;border-bottom:1px solid #e5e7eb;font-size:11px">RSI {rsi:.0f}</td>
-        <td style="padding:6px 10px;text-align:right;border-bottom:1px solid #e5e7eb;color:#0284c7;font-size:11px">1m {m1:+.0f}%</td>
-        <td style="padding:6px 10px;text-align:right;border-bottom:1px solid #e5e7eb;color:#0284c7;font-size:11px">Q={q:.0f}</td>
-        </tr>"""
-
-    owner_rows = ""
-    for s in owner_momentum[:8]:
-        tk = s.get("ticker") or s.get("short_name") or "?"
-        flag = "🇺🇸" if s.get("_country") == "US" else "🇸🇪"
+        flag = country_flag(s.get("_country") or s.get("country"))
+        name = (s.get("name") or "")[:22]
         n = s.get("number_of_owners") or 0
         ch = s.get("owners_change_1y_pct") or 0
-        owner_rows += f"""<tr>
-        <td style="padding:6px 10px;border-bottom:1px solid #e5e7eb"><strong>{flag} {tk}</strong></td>
-        <td style="padding:6px 10px;text-align:right;border-bottom:1px solid #e5e7eb;font-size:11px">{n:,} ägare</td>
-        <td style="padding:6px 10px;text-align:right;border-bottom:1px solid #e5e7eb;color:#059669;font-weight:600;font-size:11px">+{ch:.0f}%</td>
-        </tr>"""
+        bar_w = min(100, int(abs(ch) / 2))  # max 100% bar width vid 200%
+        color = "#059669" if ch > 0 else "#dc2626"
+        return f"""<div style="padding:8px 12px;border-bottom:1px solid #f3f4f6">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:3px">
+                <div><strong>{flag} {tk}</strong> <span style="color:#9ca3af;font-size:11px">{name}</span></div>
+                <div style="font-size:12px;color:{color};font-weight:700">+{ch:.0f}%</div>
+            </div>
+            <div style="background:#f3f4f6;height:4px;border-radius:2px;overflow:hidden">
+                <div style="background:{color};height:4px;width:{bar_w}%"></div>
+            </div>
+            <div style="font-size:10px;color:#9ca3af;margin-top:2px">{n:,} Avanza-ägare</div>
+        </div>"""
 
-    buy_rows = "".join([row(s) for s in buys[:10]])
-    light_rows = "".join([row(s) for s in buy_lights[:10]])
-    avoid_rows = "".join([row(s) for s in avoids[:5]])
+    def earnings_row(s):
+        tk = s.get("short_name") or "?"
+        flag = country_flag(s.get("country"))
+        name = (s.get("name") or "")[:24]
+        report_date = s.get("next_company_report") or ""
+        m1 = (s.get("one_month_change_pct") or 0) * 100
+        return f"""<div style="padding:6px 12px;border-bottom:1px solid #f3f4f6;display:flex;justify-content:space-between;font-size:12px">
+            <div><strong>{flag} {tk}</strong> <span style="color:#9ca3af;font-size:11px">{name}</span></div>
+            <div style="color:#374151;font-variant-numeric:tabular-nums">{report_date} · 1m {m1:+.0f}%</div>
+        </div>"""
+
+    def insider_row(ins):
+        ticker_or_issuer = (ins.get("issuer") or "")[:30]
+        person = (ins.get("person") or "")[:24]
+        amt = ins.get("total_value") or 0
+        currency = ins.get("currency") or "SEK"
+        date = ins.get("transaction_date") or ""
+        amt_str = f"{amt/1_000_000:.1f}M" if amt >= 1_000_000 else f"{amt/1_000:.0f}k"
+        return f"""<div style="padding:6px 12px;border-bottom:1px solid #f3f4f6;font-size:12px">
+            <div style="display:flex;justify-content:space-between"><strong>{ticker_or_issuer}</strong><span style="color:#059669;font-weight:700">{amt_str} {currency}</span></div>
+            <div style="font-size:10px;color:#9ca3af">{person} · {date}</div>
+        </div>"""
+
+    # Bygg sektioner ──
+    top_buys_cards = "".join([top_pick_card(s, i+1) for i, s in enumerate(buys[:5])])
+    overheat_rows_html = "".join([small_row(s) for s in sorted(overheat, key=lambda x: -(x.get("tech_3m_pct") or 0))[:5]])
+    oversold_rows_html = "".join([small_row(s) for s in sorted(oversold, key=lambda x: x.get("tech_3m_pct") or 0)[:5]])
+    owner_rows_html = "".join([owner_row(s) for s in owner_momentum[:8]])
+    earnings_se_html = "".join([earnings_row(s) for s in earnings_se[:5]])
+    earnings_us_html = "".join([earnings_row(s) for s in earnings_us[:5]])
+    insiders_html = "".join([insider_row(i) for i in insiders[:5]])
+
+    # AI-summary med fallback om Claude inte tillgänglig
+    ai_summary_html = ""
+    if ai_summary:
+        ai_summary_html = f"""<div style="background:linear-gradient(135deg,#f5f3ff,#ede9fe);border-radius:12px;padding:20px;margin-bottom:18px;border:1px solid #ddd6fe">
+            <h2 style="margin:0 0 10px 0;font-size:15px;color:#5b21b6">🤖 AI MARKNADSKOMMENTAR</h2>
+            <div style="font-size:13px;color:#374151;line-height:1.6">{ai_summary}</div>
+        </div>"""
 
     html = f"""<!DOCTYPE html>
 <html><head><meta charset="UTF-8">
 <style>
-body {{ font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif;
-    max-width: 720px; margin: 0 auto; padding: 24px; background: #fafafa; color: #1f2937; }}
-.header {{ background: linear-gradient(135deg, #0f766e, #14b8a6); color: white; padding: 24px;
-    border-radius: 12px; margin-bottom: 20px; }}
-.header h1 {{ margin: 0; font-size: 24px; }}
-.header p {{ margin: 4px 0 0 0; opacity: 0.9; font-size: 13px; }}
-.section {{ background: white; border-radius: 12px; padding: 18px 20px; margin-bottom: 16px;
-    border: 1px solid #e5e7eb; box-shadow: 0 1px 3px rgba(0,0,0,0.04); }}
-.section h2 {{ margin: 0 0 12px 0; font-size: 16px; display: flex; align-items: center; gap: 8px; }}
-.section h2 .badge {{ background: #e0f2fe; color: #0284c7; font-size: 11px; padding: 2px 8px;
-    border-radius: 10px; font-weight: 600; }}
-table {{ width: 100%; border-collapse: collapse; }}
-.cta {{ display: inline-block; background: #4f46e5; color: white; padding: 10px 20px;
-    border-radius: 8px; text-decoration: none; font-weight: 600; font-size: 13px; }}
-.footer {{ text-align: center; color: #9ca3af; font-size: 11px; margin-top: 24px; }}
-.muted {{ color: #6b7280; font-size: 12px; }}
-.disclosure {{ background: #fef3c7; border-left: 3px solid #f59e0b; padding: 10px 14px;
-    border-radius: 6px; font-size: 11px; color: #78350f; margin-top: 16px; }}
+body {{ font-family: -apple-system, BlinkMacSystemFont, "Inter", "Helvetica Neue", sans-serif;
+    max-width: 720px; margin: 0 auto; padding: 24px; background: #fafafa; color: #1f2937;
+    -webkit-font-smoothing: antialiased; }}
+.header {{ background: linear-gradient(135deg, #0f766e 0%, #06b6d4 50%, #0891b2 100%); color: white; padding: 28px 24px;
+    border-radius: 14px; margin-bottom: 16px; box-shadow: 0 4px 14px rgba(15,118,110,0.25); }}
+.header h1 {{ margin: 0; font-size: 26px; font-weight: 800; letter-spacing: -0.5px; }}
+.header .date {{ font-size: 13px; opacity: 0.9; margin-top: 2px; }}
+.header-stats {{ display: flex; gap: 18px; margin-top: 16px; flex-wrap: wrap; }}
+.stat {{ background: rgba(255,255,255,0.18); border-radius: 8px; padding: 8px 14px; backdrop-filter: blur(8px); }}
+.stat-label {{ font-size: 10px; text-transform: uppercase; letter-spacing: 1px; opacity: 0.85; }}
+.stat-value {{ font-size: 18px; font-weight: 700; margin-top: 1px; }}
+.section {{ background: white; border-radius: 12px; padding: 18px 20px; margin-bottom: 12px;
+    border: 1px solid #e5e7eb; box-shadow: 0 1px 2px rgba(0,0,0,0.04); }}
+.section h2 {{ margin: 0 0 6px 0; font-size: 15px; font-weight: 700; color: #111827; }}
+.section .subtitle {{ color: #6b7280; font-size: 11px; margin-bottom: 12px; }}
+.two-col {{ display: flex; gap: 12px; }}
+.two-col > div {{ flex: 1; }}
+.cta {{ display: inline-block; background: linear-gradient(135deg,#4f46e5,#7c3aed); color: white; padding: 11px 22px;
+    border-radius: 9px; text-decoration: none; font-weight: 600; font-size: 13px;
+    box-shadow: 0 4px 10px rgba(79,70,229,0.3); }}
+.disclosure {{ background: #fefce8; border-left: 3px solid #ca8a04; padding: 11px 15px;
+    border-radius: 6px; font-size: 11px; color: #713f12; margin-top: 14px; line-height: 1.5; }}
+.footer {{ text-align: center; color: #9ca3af; font-size: 11px; margin-top: 18px; }}
 </style>
 </head>
 <body>
+
 <div class="header">
-    <h1>📊 Daktier Daily — {today}</h1>
-    <p>Dagligt urval baserat på backtest-validerade screens + retail-flow</p>
+    <h1>📊 Daktier Daily</h1>
+    <div class="date">{today} · Aktiv signalering för dagen</div>
+    <div class="header-stats">
+        <div class="stat"><div class="stat-label">BUY</div><div class="stat-value">{len(buys)}</div></div>
+        <div class="stat"><div class="stat-label">Overheat</div><div class="stat-value">{len(overheat)}</div></div>
+        <div class="stat"><div class="stat-label">Oversold</div><div class="stat-value">{len(oversold)}</div></div>
+        <div class="stat"><div class="stat-label">Owner-flow</div><div class="stat-value">{len(owner_momentum)}</div></div>
+        <div class="stat"><div class="stat-label">Avoid</div><div class="stat-value">{len(avoids)}</div></div>
+    </div>
+</div>
+
+{ai_summary_html}
+
+<div class="section">
+    <h2>🎯 TOP 5 KÖPLÄGEN IDAG</h2>
+    <div class="subtitle">Sorterade efter signalstyrka (n_flags). Klicka för djupanalys i drawer.</div>
+    {top_buys_cards or '<div style="color:#9ca3af;padding:14px;text-align:center">Inga BUY-träffar idag.</div>'}
+</div>
+
+<div class="two-col">
+    <div class="section">
+        <h2>🌡️ OVERHEAT — Vänta på pullback</h2>
+        <div class="subtitle">Parabolisk RSI/momentum. Vänta tills RSI<50 eller -10% från topp.</div>
+        {overheat_rows_html or '<div style="color:#9ca3af;font-size:12px">Inga idag</div>'}
+    </div>
+    <div class="section">
+        <h2>❄️ OVERSOLD — Möjlig bounce</h2>
+        <div class="subtitle">Översålda med Q≥40. Mean-reversion-spel, sätt stop-loss.</div>
+        {oversold_rows_html or '<div style="color:#9ca3af;font-size:12px">Inga idag</div>'}
+    </div>
 </div>
 
 <div class="section">
-    <h2>✅ BUY-rekommendationer <span class="badge">{len(buys)} träffar</span></h2>
-    <p class="muted">Hög konviktion: Super Confluence, Recurring Compounder, Dual-Screen, C80+GT/GT+MF.</p>
-    <table>{buy_rows or '<tr><td style="padding:8px;color:#9ca3af">Inga BUY idag.</td></tr>'}</table>
+    <h2>👥 OWNER-FLOW — Avanza-retail-momentum</h2>
+    <div class="subtitle">Top 8 aktier med högst ägar-tillväxt senaste året (proprietär edge — finns inte i Bloomberg/Yahoo).</div>
+    {owner_rows_html}
 </div>
 
 {f'''<div class="section">
-    <h2>⚡ BUY-LIGHT <span class="badge">{len(buy_lights)} träffar</span></h2>
-    <p class="muted">GT alone, Cyclical-Bottom, Quality-Compounder-Light, Owner-Momentum.</p>
-    <table>{light_rows}</table>
-</div>''' if buy_lights else ''}
+    <h2>📅 KOMMANDE RAPPORTER (10 dagar)</h2>
+    <div class="subtitle">Aktier som rapporterar — bevaka för momentum-shift eller surprise.</div>
+    <div class="two-col">
+        <div>
+            <div style="font-size:11px;color:#9ca3af;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;padding:0 12px 6px 12px">🇸🇪 Sverige</div>
+            {earnings_se_html or '<div style="color:#9ca3af;font-size:12px;padding:0 12px">Inga rapporter inom 10 dagar</div>'}
+        </div>
+        <div>
+            <div style="font-size:11px;color:#9ca3af;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;padding:0 12px 6px 12px">🇺🇸 USA</div>
+            {earnings_us_html or '<div style="color:#9ca3af;font-size:12px;padding:0 12px">Inga rapporter inom 10 dagar</div>'}
+        </div>
+    </div>
+</div>''' if (earnings_se or earnings_us) else ''}
 
 {f'''<div class="section">
-    <h2>🌡️ OVERHEAT — Vänta på pullback <span class="badge">{len(overheat)} aktier</span></h2>
-    <p class="muted">Parabolisk uppgång — bättre risk/reward efter -10% pullback eller RSI<50.</p>
-    <table>{overheat_rows}</table>
-</div>''' if overheat else ''}
+    <h2>💼 INSIDER-KÖP SENASTE VECKAN (SE)</h2>
+    <div class="subtitle">Finansinspektionen — chefer/styrelse som köpt egen aktie.</div>
+    {insiders_html}
+</div>''' if insiders else ''}
 
-{f'''<div class="section">
-    <h2>❄️ OVERSOLD — Möjlig bounce <span class="badge">{len(oversold)} aktier</span></h2>
-    <p class="muted">Översålda med OK fundamental — mean-reversion-spel. Sätt stop-loss.</p>
-    <table>{oversold_rows}</table>
-</div>''' if oversold else ''}
-
-{f'''<div class="section">
-    <h2>👥 Owner-Momentum — Top retail-flow <span class="badge">{len(owner_momentum)} aktier</span></h2>
-    <p class="muted">Avanza-ägare ökar starkt — retail-signaler om katalysator.</p>
-    <table>{owner_rows}</table>
-</div>''' if owner_momentum else ''}
-
-{f'''<div class="section">
-    <h2>🚫 AVOID-flaggor <span class="badge">{len(avoids)}</span></h2>
-    <table>{avoid_rows}</table>
-</div>''' if avoids else ''}
-
-<div style="text-align:center;margin-top:20px">
+<div style="text-align:center;margin-top:18px">
     <a href="{base_url}/" class="cta">Öppna Dashboard →</a>
+    <a href="{base_url}/backtest-report" style="color:#6b7280;font-size:12px;margin-left:16px;text-decoration:none">📊 Backtest-rapport</a>
+    <a href="{base_url}/live-tracker" style="color:#6b7280;font-size:12px;margin-left:8px;text-decoration:none">📅 Live Tracker</a>
 </div>
 
 <div class="disclosure">
-    <strong>⚠️ Statistisk ärlighet:</strong> Sub-period split (2016-19 vs 2020-24) visade
-    regim-anpassning. Ingen screen är broadly robust över båda perioderna. Bootstrap CI är
-    ofta breda (PEPSI Confluence US CI [-7%, +66%]). Använd flera tier samtidigt och
-    förvänta inte att backtest-alpha exakt återupprepas framåt.
+    <strong>⚠️ Statistisk ärlighet:</strong> Sub-period split (2016-19 vs 2020-24) visar regim-anpassning.
+    Dual-Screen SE funkar post-COVID, GT US pre-COVID — ingen screen är broadly robust över båda perioderna.
+    Bootstrap-CI är ofta breda (GT+MF US CI [-7%, +66%]). Använd flera tier samtidigt och förvänta inte
+    att backtest-alpha exakt återupprepas framåt. Borsdata API har 10y pris-limit → äkta OOS pre-2016 omöjligt.
 </div>
 
 <div class="footer">
-    Daktier — automatiskt mail från live-systemet · <a href="{base_url}/backtest-report" style="color:#9ca3af">Backtest-rapport</a> · <a href="{base_url}/live-tracker" style="color:#9ca3af">Live Tracker</a>
+    Daktier — automatiskt mail från live-systemet
 </div>
 
 </body></html>"""
