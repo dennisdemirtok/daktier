@@ -4709,6 +4709,7 @@ RESEND_TO_DEFAULT = os.getenv("RESEND_TO", "dennis.demirtok@gmail.com")
 def _generate_ai_market_summary(stats, top_buys, top_overheat, top_oversold, owner_top,
                                   earnings=None, insiders=None):
     """Använd Claude för att generera en kort executive summary om dagens marknad."""
+    import json as _json  # lokal import för att undvika namn-kollision
     if not CLAUDE_API_KEY:
         return "<p><em>AI-summary inte tillgänglig — ANTHROPIC_API_KEY saknas.</em></p>"
     try:
@@ -4767,7 +4768,7 @@ Skriv som ren HTML med <p>-taggar. INGA rubriker (h1/h2/h3). Använd <strong> f�
 viktiga tickers eller siffror.
 
 DATA FÖR IDAG:
-{json.dumps(context, ensure_ascii=False, indent=2)[:5000]}"""
+{_json.dumps(context, ensure_ascii=False, indent=2)[:5000]}"""
 
         resp = requests.post(
             "https://api.anthropic.com/v1/messages",
