@@ -4928,6 +4928,185 @@ def _get_upcoming_earnings(db, country_filter=None, days_ahead=10, limit=10):
         return []
 
 
+def _generate_earnings_ai_summary(reports):
+    """Använd Claude för att skriva Stock Analysis-stil bullet-points för dagens rapporter."""
+    import json as _json
+    if not CLAUDE_API_KEY or not reports:
+        return None
+    try:
+        context = [{
+            "ticker": r.get("ticker"),
+            "name": r.get("name"),
+            "country": r.get("country"),
+            "period": f"Q{r.get('period_q')}/{r.get('period_year')}",
+            "rev_yoy_pct": r.get("rev_yoy_pct"),
+            "eps_yoy_pct": r.get("eps_yoy_pct"),
+            "profit_yoy_pct": r.get("profit_yoy_pct"),
+            "revenues_meur": round((r.get("revenues") or 0) / 1_000_000, 1),
+            "eps": r.get("eps"),
+            "pe": r.get("pe_ratio"),
+            "roe": r.get("return_on_equity"),
+            "1m_price_change": (r.get("one_month_change_pct") or 0) * 100,
+            "report_quality": r.get("report_quality"),
+        } for r in reports[:6]]
+
+        prompt = f"""Du är finansjournalist i Stock Analysis-stil. För varje bolag nedan, skriv en
+2-3 raders bullet på svenska i exakt detta format:
+
+<p><strong>BOLAGSNAMN ({{TICKER}}):</strong> Reported Q[X]/[YR] revenue [X]% YoY to [Y] MEUR,
+[beat/missed expectations] som [reason]. Adjusted [profit/EPS] [trend]. Aktien har rört [X]% senaste månaden.</p>
+
+REGLER:
+- Konkret med siffror — inga floskler
+- Nämn YoY-procent + absolut tal
+- Bedöm: stark/svag/blandad
+- Notera price-action senaste månaden om relevant
+- Skriv på svenska
+- Max 3 rader per bolag
+- Använd <p>-taggar, INGA rubriker
+
+DATA:
+{_json.dumps(context, ensure_ascii=False, indent=2)[:3000]}"""
+
+        resp = requests.post(
+            "https://api.anthropic.com/v1/messages",
+            headers={"x-api-key": CLAUDE_API_KEY, "anthropic-version": "2023-06-01",
+                      "Content-Type": "application/json"},
+            json={"model": "claude-sonnet-4-20250514", "max_tokens": 1500,
+                   "messages": [{"role": "user", "content": prompt}]},
+            timeout=60,
+        )
+        if resp.status_code == 200:
+            return resp.json().get("content", [{}])[0].get("text", "")
+        return None
+    except Exception as e:
+        print(f"[earnings AI] {e}", file=sys.stderr)
+        return None
+
+
+def _generate_external_signals_summary(signals):
+    """AI-summera vad externa traders/källor sagt — innehåll, inte bara titlar."""
+    import json as _json
+    if not CLAUDE_API_KEY or not signals:
+        return None
+    try:
+        # Filtrera bort SeekingAlpha (för många, för generiska)
+        focused = [s for s in signals if "Seeking" not in s.get("source", "")][:8]
+        if not focused: return None
+
+        context = [{
+            "source": s.get("source"),
+            "title": s.get("title"),
+            "date": s.get("date"),
+        } for s in focused]
+
+        prompt = f"""Analysera dessa rubriker från trader-källor och skriv en SUMMERAD analys
+på svenska som extraherar:
+1. Vilka tickers/sektorer som nämns flera gånger
+2. Vad är dagens "tema" hos dessa traders?
+3. Om någon källa har en specifik aktie-tes — sammanfatta den
+
+OUTPUT-FORMAT:
+<p>Skriv 3-4 paragrafer, max 8 rader totalt. Använd <strong> för tickers.
+Inga rubriker. Konkret, inga floskler.</p>
+
+DATA:
+{_json.dumps(context, ensure_ascii=False, indent=2)[:2000]}"""
+
+        resp = requests.post(
+            "https://api.anthropic.com/v1/messages",
+            headers={"x-api-key": CLAUDE_API_KEY, "anthropic-version": "2023-06-01",
+                      "Content-Type": "application/json"},
+            json={"model": "claude-sonnet-4-20250514", "max_tokens": 800,
+                   "messages": [{"role": "user", "content": prompt}]},
+            timeout=60,
+        )
+        if resp.status_code == 200:
+            return resp.json().get("content", [{}])[0].get("text", "")
+        return None
+    except Exception as e:
+        print(f"[external AI] {e}", file=sys.stderr)
+        return None
+
+
+def _generate_market_recap(top_movers_us, top_movers_se, owner_movers, external_signals):
+    """Stock Analysis-stil "Market Recap" — konkreta dagens händelser med tickers + %."""
+    import json as _json
+    if not CLAUDE_API_KEY:
+        return None
+    try:
+        context = {
+            "us_top_movers": [{"ticker": s.get("short_name"), "name": s.get("name"),
+                                "1d": (s.get("one_day_change_pct") or 0) * 100,
+                                "1m": (s.get("one_month_change_pct") or 0) * 100}
+                               for s in (top_movers_us or [])[:6]],
+            "se_top_movers": [{"ticker": s.get("short_name"), "name": s.get("name"),
+                                "1d": (s.get("one_day_change_pct") or 0) * 100,
+                                "1m": (s.get("one_month_change_pct") or 0) * 100}
+                               for s in (top_movers_se or [])[:5]],
+            "owner_movers_1d": [{"ticker": s.get("short_name"),
+                                  "owners_1d": s.get("owners_change_1d_abs")}
+                                 for s in (owner_movers or [])[:5]],
+            "external_headlines": [{"source": s.get("source"), "title": s.get("title")}
+                                    for s in (external_signals or [])[:6]],
+        }
+
+        prompt = f"""Skriv en kort "Market Recap" för dagen i Stock Analysis-stil. På svenska.
+
+FORMAT (exakt detta — Stock Analysis-stil):
+<p><strong>Marknadsrekap:</strong> Skriv 1-2 meningar om dagens stora rörelser. Nämn de mest
+intressanta tickerna och deras procent-rörelse.</p>
+
+<p><strong>[Aktie 1] ([TICKER]):</strong> 1-2 meningar om dagens viktiga händelse — varför rörde
+aktien sig? Använd <strong>fetstilad ticker</strong> + specifik %. Källa: [om relevant].</p>
+
+(Upprepa för 3-4 mest intressanta aktier baserat på datan)
+
+REGLER:
+- Konkret med tickers + %, inga floskler
+- Källa-citat om relevant (Källa: CNBC, Reuters, etc.)
+- Använd EJ rubriker (h1/h2)
+- Max 5-6 paragrafer totalt
+
+DATA:
+{_json.dumps(context, ensure_ascii=False, indent=2)[:3000]}"""
+
+        resp = requests.post(
+            "https://api.anthropic.com/v1/messages",
+            headers={"x-api-key": CLAUDE_API_KEY, "anthropic-version": "2023-06-01",
+                      "Content-Type": "application/json"},
+            json={"model": "claude-sonnet-4-20250514", "max_tokens": 1200,
+                   "messages": [{"role": "user", "content": prompt}]},
+            timeout=60,
+        )
+        if resp.status_code == 200:
+            return resp.json().get("content", [{}])[0].get("text", "")
+        return None
+    except Exception as e:
+        print(f"[market recap] {e}", file=sys.stderr)
+        return None
+
+
+def _get_top_movers_today(db, country, limit=6):
+    """Top dagens-rörare (1d) för market recap."""
+    try:
+        from edge_db import _ph as ph_fn, _fetchall
+        ph = ph_fn()
+        rows = _fetchall(db, f"""
+            SELECT short_name, name, country, last_price,
+                   one_day_change_pct, one_month_change_pct, number_of_owners
+            FROM stocks
+            WHERE country = {ph}
+            AND number_of_owners >= 5000
+            AND one_day_change_pct IS NOT NULL
+            ORDER BY ABS(one_day_change_pct) DESC
+            LIMIT {ph}
+        """, (country, limit))
+        return [dict(r) for r in rows]
+    except Exception:
+        return []
+
+
 def _get_recent_reports_summary(db, days_back=14, limit=8):
     """Hämta senaste publicerade kvartalsrapporter med trend-analys.
 
@@ -5095,25 +5274,43 @@ def _fetch_external_signals(max_per_source=3):
 
 
 def _get_top_insider_buys(db, days_back=7, limit=8):
-    """Hämta de största insider-köpen senaste X dagar."""
+    """Hämta största insider-köp per bolag (deduplicated, summerar köpvolym)."""
     try:
         from edge_db import _ph as ph_fn, _fetchall
         from datetime import datetime, timedelta
         ph = ph_fn()
         since = (datetime.now() - timedelta(days=days_back)).strftime("%Y-%m-%d")
 
+        # Aggregera per (issuer, person) — summerar samma persons köp i samma bolag
         rows = _fetchall(db, f"""
-            SELECT issuer, person, role, transaction_type, instrument_name,
-                   transaction_date, volume, price, total_value, currency, isin
+            SELECT issuer,
+                   MAX(person) as person,
+                   MAX(role) as role,
+                   SUM(total_value) as total_value,
+                   MAX(currency) as currency,
+                   MAX(transaction_date) as transaction_date,
+                   COUNT(*) as n_transactions,
+                   MAX(isin) as isin
             FROM insider_transactions
             WHERE transaction_date >= {ph}
             AND transaction_type IN ('Förvärv', 'Köp', 'Tilldelning')
             AND total_value IS NOT NULL
             AND total_value >= 100000
+            GROUP BY issuer, person
             ORDER BY total_value DESC
             LIMIT {ph}
-        """, (since, limit))
-        return [dict(r) for r in rows]
+        """, (since, limit * 2))
+        # Vidare-dedupera till en per issuer (ta största insider per bolag)
+        seen_issuers = set()
+        out = []
+        for r in rows:
+            rd = dict(r)
+            iss = rd.get("issuer")
+            if iss in seen_issuers: continue
+            seen_issuers.add(iss)
+            out.append(rd)
+            if len(out) >= limit: break
+        return out
     except Exception as e:
         print(f"[insider] fel: {e}", file=sys.stderr)
         return []
@@ -5154,14 +5351,55 @@ def _build_daily_digest_html(db, base_url="https://daktier-production.up.railway
     buy_lights.sort(key=lambda s: -(s.get("composite_score") or 0))
     owner_momentum.sort(key=lambda s: -(s.get("owners_change_1y_pct") or 0))
 
+    # ── Dedupa A/B-aktier (Investor A/B, Industrivärden A/C, Tele2 A/B, etc.) ──
+    # Heuristik: två tickers med samma "namn-stam" (första 12 chars av name) = samma bolag
+    def _dedupe_share_classes(stocks):
+        seen = {}
+        out = []
+        for s in stocks:
+            base_name = (s.get("name") or "").lower().strip()
+            # Strippa " A", " B", " C", " D" + Pref-varianter
+            for suffix in [" a", " b", " c", " d", " ser. a", " ser. b", " ser. c",
+                            " inc class a", " inc class b", " inc class c"]:
+                if base_name.endswith(suffix):
+                    base_name = base_name[:-len(suffix)]
+                    break
+            base_name = base_name.strip()[:25]  # första 25 chars som identifier
+            if base_name in seen:
+                # Behåll den med högst composite + flaggor
+                existing = seen[base_name]
+                if (s.get("n_flags") or 0) > (existing.get("n_flags") or 0) or \
+                   ((s.get("n_flags") or 0) == (existing.get("n_flags") or 0)
+                    and (s.get("composite_score") or 0) > (existing.get("composite_score") or 0)):
+                    # Ersätt
+                    seen[base_name] = s
+                    out = [x if x is not existing else s for x in out]
+            else:
+                seen[base_name] = s
+                out.append(s)
+        return out
+
+    buys = _dedupe_share_classes(buys)
+    buy_lights = _dedupe_share_classes(buy_lights)
+    owner_momentum = _dedupe_share_classes(owner_momentum)
+
     # ── Hämta extra data: earnings, insiders, rapporter, owner-movers, externa signaler ──
     earnings_se = _get_upcoming_earnings(db, country_filter="SE", days_ahead=10, limit=6)
     earnings_us = _get_upcoming_earnings(db, country_filter="US", days_ahead=10, limit=6)
     insiders = _get_top_insider_buys(db, days_back=7, limit=6)
-    recent_reports = _get_recent_reports_summary(db, days_back=14, limit=8)
+    # Sänk filter för att fånga fler rapporter
+    recent_reports = _get_recent_reports_summary(db, days_back=21, limit=8)
     owner_movers_1d = _get_top_owner_movers(db, period_days=1, limit=8)
-    owner_movers_3d = _get_top_owner_movers(db, period_days=7, limit=8)  # 1w som 3d-substitut
+    owner_movers_3d = _get_top_owner_movers(db, period_days=7, limit=8)
     external_signals = _fetch_external_signals()
+
+    # NYA: AI-genererade sektioner — earnings highlights + market recap + ext summary
+    top_us_movers = _get_top_movers_today(db, "US", limit=6)
+    top_se_movers = _get_top_movers_today(db, "SE", limit=6)
+    market_recap_html = _generate_market_recap(top_us_movers, top_se_movers,
+                                                  owner_movers_1d, external_signals)
+    earnings_summary_html = _generate_earnings_ai_summary(recent_reports) if recent_reports else None
+    external_summary_html = _generate_external_signals_summary(external_signals)
 
     # Genererad AI-summary — passa även earnings + insiders för rikare kontext
     ai_summary = _generate_ai_market_summary(
@@ -5383,11 +5621,27 @@ body {{ font-family: -apple-system, BlinkMacSystemFont, "Inter", "Helvetica Neue
     </div>
 </div>
 
+{f'''<div style="background:linear-gradient(135deg,#1e3a8a 0%,#0f766e 100%);color:white;border-radius:14px;padding:24px;margin-bottom:14px;box-shadow:0 4px 14px rgba(15,118,110,0.2)">
+    <div style="font-size:11px;text-transform:uppercase;letter-spacing:2px;opacity:0.7;font-weight:600">📡 Market Recap · {today}</div>
+    <div style="margin-top:10px;font-size:13px;line-height:1.7;color:#e5e7eb">{market_recap_html}</div>
+</div>''' if market_recap_html else ''}
+
 {ai_summary_html}
 
 <div class="section">
     <h2>🎯 TOP 5 KÖPLÄGEN IDAG</h2>
-    <div class="subtitle">Sorterade efter signalstyrka (n_flags). Klicka för djupanalys i drawer.</div>
+    <div class="subtitle">Sorterade efter signalstyrka. Aktier från samma bolag (Investor A/B etc) deduperade.</div>
+    <details style="margin-bottom:10px;background:#f8fafc;padding:8px 12px;border-radius:6px;font-size:11px;color:#475569">
+        <summary style="cursor:pointer;font-weight:600">ℹ️ Vilka kriterier?</summary>
+        <ul style="margin:6px 0 0 16px;padding:0;font-size:11px;line-height:1.5">
+            <li><strong>Super Confluence</strong>: 4+ flaggor samtidigt (C≥80 + GT + Recurring etc) — INVE/INDU 2020 gav +44-63%</li>
+            <li><strong>GT+MF Confluence (US)</strong>: Growth Trifecta + Magic Formula → backtest +21.57% alpha</li>
+            <li><strong>C80+GT (SE)</strong>: Composite ≥80 + Q+M ≥70 → +19.64% alpha (n=29)</li>
+            <li><strong>Recurring Compounder</strong>: Flaggat GT 3+ år i rad (NVDA, ANET, INVE A m.fl.)</li>
+            <li><strong>Dual-Screen (SE)</strong>: C≥80 + Magic Formula → +18.35% alpha (men post-COVID-driven)</li>
+            <li><strong>🌡️ Overheat-flagga</strong>: RSI>70 + 1m>20% → vänta på pullback för bättre entry</li>
+        </ul>
+    </details>
     {top_buys_cards or '<div style="color:#9ca3af;padding:14px;text-align:center">Inga BUY-träffar idag.</div>'}
 </div>
 
@@ -5424,16 +5678,32 @@ body {{ font-family: -apple-system, BlinkMacSystemFont, "Inter", "Helvetica Neue
 </div>
 
 {f'''<div class="section">
-    <h2>📑 SENASTE RAPPORTERNA (14 dagar)</h2>
-    <div class="subtitle">YoY revenue/EPS-tillväxt + kvalitetsbedömning. 🟢 stark, 🔵 solid, ⚪ neutral, 🔴 svag.</div>
+    <h2>📑 EARNINGS HIGHLIGHTS — Senaste rapporter</h2>
+    <div class="subtitle">Stock Analysis-stil bullet points. YoY-trend + price-action.</div>
+    <div style="font-size:13px;line-height:1.6;color:#374151">{earnings_summary_html}</div>
+    <details style="margin-top:12px;background:#f8fafc;padding:8px 12px;border-radius:6px;font-size:11px;color:#475569">
+        <summary style="cursor:pointer;font-weight:600">📊 Visa rådata-tabell ({len(recent_reports)} rapporter)</summary>
+        <div style="margin-top:6px">{reports_html}</div>
+    </details>
+</div>''' if earnings_summary_html and recent_reports else (f'''<div class="section">
+    <h2>📑 SENASTE RAPPORTERNA</h2>
+    <div class="subtitle">YoY trend per bolag. 🟢 stark, 🔵 solid, ⚪ neutral, 🔴 svag.</div>
     {reports_html}
-</div>''' if recent_reports else ''}
+</div>''' if recent_reports else '')}
 
 {f'''<div class="section">
-    <h2>📰 EXTERNA SIGNALER — Substack/Reddit-bevakning</h2>
-    <div class="subtitle">Senaste posts från Trade At Your Own Risk, MarketSense-AI, Reddit-traders med bra track record.</div>
+    <h2>📰 TRADER-TEMA & EXTERNA SIGNALER</h2>
+    <div class="subtitle">AI-summering av vad Substack/Reddit-traders fokuserar på just nu.</div>
+    <div style="font-size:13px;line-height:1.7;color:#374151">{external_summary_html}</div>
+    <details style="margin-top:12px;background:#f8fafc;padding:8px 12px;border-radius:6px;font-size:11px;color:#475569">
+        <summary style="cursor:pointer;font-weight:600">📰 Alla rubriker ({len(external_signals)} poster)</summary>
+        <div style="margin-top:6px">{external_html}</div>
+    </details>
+</div>''' if external_summary_html else (f'''<div class="section">
+    <h2>📰 EXTERNA SIGNALER</h2>
+    <div class="subtitle">Senaste posts från Substack/Reddit/SeekingAlpha.</div>
     {external_html}
-</div>''' if external_signals else ''}
+</div>''' if external_signals else '')}
 
 {f'''<div class="section">
     <h2>📅 KOMMANDE RAPPORTER (10 dagar)</h2>
