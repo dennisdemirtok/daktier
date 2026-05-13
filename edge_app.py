@@ -4706,10 +4706,11 @@ RESEND_FROM = os.getenv("RESEND_FROM", "Daktier <onboarding@resend.dev>")
 RESEND_TO_DEFAULT = os.getenv("RESEND_TO", "dennis.demirtok@gmail.com")
 
 
-def _generate_ai_market_summary(stats, top_buys, top_overheat, top_oversold, owner_top):
+def _generate_ai_market_summary(stats, top_buys, top_overheat, top_oversold, owner_top,
+                                  earnings=None, insiders=None):
     """Använd Claude för att generera en kort executive summary om dagens marknad."""
     if not CLAUDE_API_KEY:
-        return None
+        return "<p><em>AI-summary inte tillgänglig — ANTHROPIC_API_KEY saknas.</em></p>"
     try:
         # Bygg kontext för Claude
         def fmt_stocks(stocks, fields):
@@ -4718,31 +4719,55 @@ def _generate_ai_market_summary(stats, top_buys, top_overheat, top_oversold, own
         context = {
             "stats": stats,
             "top_buys": fmt_stocks(top_buys, ["ticker", "name", "recommendation_reason",
-                                                "composite_score", "quality_score", "momentum_score"]),
-            "top_overheat": fmt_stocks(top_overheat, ["ticker", "tech_rsi14", "tech_1m_pct", "tech_3m_pct"]),
-            "top_oversold": fmt_stocks(top_oversold, ["ticker", "tech_rsi14", "tech_1m_pct", "tech_3m_pct",
-                                                       "quality_score"]),
+                                                "composite_score", "quality_score", "momentum_score",
+                                                "value_score", "n_flags",
+                                                "is_momentum_overheat", "tech_rsi14"]),
+            "top_overheat": fmt_stocks(top_overheat, ["ticker", "tech_rsi14", "tech_1m_pct",
+                                                       "tech_3m_pct", "recommendation"]),
+            "top_oversold": fmt_stocks(top_oversold, ["ticker", "tech_rsi14", "tech_1m_pct",
+                                                       "tech_3m_pct", "quality_score"]),
             "top_owner_flow": fmt_stocks(owner_top, ["ticker", "owners_change_1y_pct",
-                                                      "number_of_owners"]),
+                                                      "number_of_owners", "name",
+                                                      "recommendation"]),
+            "upcoming_earnings": [{"ticker": e.get("short_name"), "name": e.get("name"),
+                                    "date": e.get("next_company_report"),
+                                    "country": e.get("country")} for e in (earnings or [])[:6]],
+            "top_insider_buys": [{"issuer": i.get("issuer"), "person": i.get("person"),
+                                   "amount_msek": round((i.get("total_value") or 0)/1_000_000, 2),
+                                   "date": i.get("transaction_date")}
+                                  for i in (insiders or [])[:5]],
         }
 
-        prompt = f"""Du är en svensktalande finansanalytiker. Skriv en kort, läsbar executive summary
-för dagens trading-digest baserat på datan nedan. Max 5 korta paragrafer.
+        prompt = f"""Du är en svensktalande finansanalytiker som skriver en daglig rapport till en
+sofistikerad investerare. Skriv en marknadskommentar för dagen baserat på datan nedan.
 
-REGLER:
-- Inga floskler eller marknadsföringsprat
-- Konkret: nämn specifika tickers + siffror
-- 1 paragraf om TOP BUY-träffar (vad är intressant idag?)
-- 1 paragraf om TAJMNING (vilka är overheat = vänta? vilka är oversold = möjlig bounce?)
-- 1 paragraf om OWNER-FLOW (vilka aktier ökar retail-intresse, vad signalerar det?)
-- 1 paragraf med VARNING om regim-anpassning (vi har bara 8 års data, sub-period split visar
-  att Dual-Screen SE bara fungerar post-COVID och GT US bara pre-COVID)
-- 1 paragraf med praktisk REKOMMENDATION (vad bör läsaren agera på just idag?)
+STIL:
+- Skriv som en mänsklig analytiker, inte robot
+- Var konkret med tickers + siffror — inga floskler
+- Mix av observation, hypotes, och praktisk rekommendation
+- 5-7 paragrafer (kort men substantiell)
+- Skriv på SVENSKA
 
-Skriv direkt utan rubriker, separera med <p></p>. Skriv på svenska.
+STRUKTUR (cirka, anpassa efter datan):
+1. **Dagens viktigaste tema** — vad är intressant idag? (1 paragraf)
+2. **Top BUY-träffar djupanalys** — pekar du på en eller två specifika med stark logik (2 paragrafer)
+3. **Tajmnings-läget** — vilka aktier är overheat (vänta) vs oversold (bounce-möjlighet)? (1 paragraf)
+4. **Owner-flow-mönster** — vad säger Avanza-retail-strömmen? Är det signaler om
+   katalysator (rapport, sektor-rally)? (1 paragraf)
+5. **Kommande rapporter + insider-aktivitet** — vad bör bevakas? (1 paragraf)
+6. **Praktisk rekommendation för idag** — vad bör läsaren göra/avstå från? (1 paragraf kort)
 
-DATA:
-{json.dumps(context, ensure_ascii=False, indent=2)[:3500]}"""
+INKLUDERA (om relevant):
+- Regim-disclosure: nämn att Dual-Screen SE bara fungerade 2020-24 och GT US bara 2016-19
+- Tajmnings-varning: BUY ≠ köp NU. Overheat = vänta på pullback.
+- Owner-flow är vår proprietära edge (Avanza-data, finns inte i Bloomberg/Yahoo)
+
+OUTPUT-FORMAT:
+Skriv som ren HTML med <p>-taggar. INGA rubriker (h1/h2/h3). Använd <strong> för att fetstila
+viktiga tickers eller siffror.
+
+DATA FÖR IDAG:
+{json.dumps(context, ensure_ascii=False, indent=2)[:5000]}"""
 
         resp = requests.post(
             "https://api.anthropic.com/v1/messages",
@@ -4752,7 +4777,7 @@ DATA:
                 "Content-Type": "application/json",
             },
             json={
-                "model": "claude-sonnet-4-5",
+                "model": "claude-sonnet-4-20250514",
                 "max_tokens": 1200,
                 "messages": [{"role": "user", "content": prompt}],
             },
@@ -4867,11 +4892,13 @@ def _build_daily_digest_html(db, base_url="https://daktier-production.up.railway
     earnings_us = _get_upcoming_earnings(db, country_filter="US", days_ahead=10, limit=6)
     insiders = _get_top_insider_buys(db, days_back=7, limit=6)
 
-    # Genererad AI-summary
+    # Genererad AI-summary — passa även earnings + insiders för rikare kontext
     ai_summary = _generate_ai_market_summary(
         {"n_buy": len(buys), "n_overheat": len(overheat), "n_oversold": len(oversold),
-         "n_owner_momentum": len(owner_momentum)},
-        buys, overheat, oversold, owner_momentum
+         "n_owner_momentum": len(owner_momentum), "n_avoid": len(avoids)},
+        buys, overheat, oversold, owner_momentum,
+        earnings=(earnings_se or []) + (earnings_us or []),
+        insiders=insiders,
     )
 
     # ── Helper-functions för formattering ──
