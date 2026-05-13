@@ -4698,9 +4698,10 @@ def api_portfolio_recommend():
 
 
 # ── 📧 RESEND email-integration: dagligt digest ───────────────
-# OBS: API-key hårdkodad här för deploy. Bör flyttas till env-var
-# senare via os.getenv("RESEND_API_KEY", DEFAULT).
-RESEND_API_KEY = os.getenv("RESEND_API_KEY", "re_3gKkvEw5_3CzDFwAXC7PPz4pv7cQ4jLF1")
+# Sätt RESEND_API_KEY som env-var i Railway:
+# Railway dashboard → service → Variables → + New Variable
+# RESEND_API_KEY=re_xxxxxxxxxxxxxxxx
+RESEND_API_KEY = os.getenv("RESEND_API_KEY", "")
 RESEND_FROM = os.getenv("RESEND_FROM", "Daktier <onboarding@resend.dev>")
 RESEND_TO_DEFAULT = os.getenv("RESEND_TO", "dennis.demirtok@gmail.com")
 
@@ -4901,6 +4902,8 @@ table {{ width: 100%; border-collapse: collapse; }}
 
 def _send_email_via_resend(to_email, subject, html_body):
     """Skicka mail via Resend API. Returnerar (success, response)."""
+    if not RESEND_API_KEY:
+        return False, {"error": "RESEND_API_KEY env-var saknas — sätt i Railway dashboard"}
     try:
         resp = requests.post(
             "https://api.resend.com/emails",
