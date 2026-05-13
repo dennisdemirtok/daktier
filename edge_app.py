@@ -4697,6 +4697,272 @@ def api_portfolio_recommend():
         db.close()
 
 
+# ── 📧 RESEND email-integration: dagligt digest ───────────────
+# OBS: API-key hårdkodad här för deploy. Bör flyttas till env-var
+# senare via os.getenv("RESEND_API_KEY", DEFAULT).
+RESEND_API_KEY = os.getenv("RESEND_API_KEY", "re_3gKkvEw5_3CzDFwAXC7PPz4pv7cQ4jLF1")
+RESEND_FROM = os.getenv("RESEND_FROM", "Daktier <onboarding@resend.dev>")
+RESEND_TO_DEFAULT = os.getenv("RESEND_TO", "dennis.demirtok@gmail.com")
+
+
+def _build_daily_digest_html(db, base_url="https://daktier-production.up.railway.app"):
+    """Bygg HTML för dagligt digest-mail med BUY/AVOID/OVERHEAT/OVERSOLD."""
+    from edge_db import compute_quant_scores
+    from datetime import datetime
+
+    today = datetime.now().strftime("%Y-%m-%d")
+
+    buys, buy_lights, speculative, avoids = [], [], [], []
+    overheat, oversold = [], []
+    owner_momentum = []
+
+    for country in ["SE", "US"]:
+        try:
+            data = compute_quant_scores(db, country=country, max_universe=300)
+        except Exception:
+            continue
+        for s in data:
+            rec = s.get("recommendation")
+            s["_country"] = country
+            if rec == "BUY": buys.append(s)
+            elif rec == "BUY-LIGHT": buy_lights.append(s)
+            elif rec == "SPECULATIVE": speculative.append(s)
+            elif rec == "AVOID": avoids.append(s)
+            if s.get("is_momentum_overheat") and rec in ("BUY", "BUY-LIGHT", "SPECULATIVE"):
+                overheat.append(s)
+            if s.get("is_oversold_bounce"):
+                oversold.append(s)
+            if s.get("is_owner_momentum"):
+                owner_momentum.append(s)
+
+    # Sortera
+    buys.sort(key=lambda s: -(s.get("n_flags") or 0))
+    buy_lights.sort(key=lambda s: -(s.get("composite_score") or 0))
+    owner_momentum.sort(key=lambda s: -(s.get("owners_change_1y_pct") or 0))
+
+    def row(s, color="#059669"):
+        tk = s.get("ticker") or s.get("short_name") or "?"
+        flag = "🇺🇸" if s.get("_country") == "US" else "🇸🇪"
+        name = (s.get("name") or "")[:30]
+        cs = s.get("composite_score") or 0
+        q = s.get("quality_score") or 0
+        v = s.get("value_score") or 0
+        m = s.get("momentum_score") or 0
+        reason = s.get("recommendation_reason") or ""
+        overheat_tag = "🌡️" if s.get("is_momentum_overheat") else ""
+        oversold_tag = "❄️" if s.get("is_oversold_bounce") else ""
+        return f"""<tr>
+        <td style="padding:8px 10px;border-bottom:1px solid #e5e7eb">
+            <strong>{flag} {tk}</strong> {overheat_tag}{oversold_tag}
+            <div style="font-size:11px;color:#6b7280">{name}</div>
+        </td>
+        <td style="padding:8px 10px;text-align:right;border-bottom:1px solid #e5e7eb;font-variant-numeric:tabular-nums;font-size:12px">
+            C={cs:.0f}<br>Q/V/M={q:.0f}/{v:.0f}/{m:.0f}
+        </td>
+        <td style="padding:8px 10px;border-bottom:1px solid #e5e7eb;font-size:11px;color:#374151">{reason}</td>
+        </tr>"""
+
+    overheat_rows = ""
+    for s in sorted(overheat, key=lambda x: -(x.get("tech_3m_pct") or 0))[:8]:
+        tk = s.get("ticker") or s.get("short_name") or "?"
+        flag = "🇺🇸" if s.get("_country") == "US" else "🇸🇪"
+        rsi = s.get("tech_rsi14") or 0
+        m1 = s.get("tech_1m_pct") or 0
+        m3 = s.get("tech_3m_pct") or 0
+        rec = s.get("recommendation") or "-"
+        overheat_rows += f"""<tr>
+        <td style="padding:6px 10px;border-bottom:1px solid #e5e7eb"><strong>{flag} {tk}</strong> <span style="color:#9ca3af;font-size:11px">({rec})</span></td>
+        <td style="padding:6px 10px;text-align:right;border-bottom:1px solid #e5e7eb;font-size:11px">RSI {rsi:.0f}</td>
+        <td style="padding:6px 10px;text-align:right;border-bottom:1px solid #e5e7eb;color:#dc2626;font-size:11px">1m {m1:+.0f}%</td>
+        <td style="padding:6px 10px;text-align:right;border-bottom:1px solid #e5e7eb;color:#dc2626;font-size:11px">3m {m3:+.0f}%</td>
+        </tr>"""
+
+    oversold_rows = ""
+    for s in sorted(oversold, key=lambda x: x.get("tech_3m_pct") or 0)[:6]:
+        tk = s.get("ticker") or s.get("short_name") or "?"
+        flag = "🇺🇸" if s.get("_country") == "US" else "🇸🇪"
+        rsi = s.get("tech_rsi14") or 0
+        m1 = s.get("tech_1m_pct") or 0
+        m3 = s.get("tech_3m_pct") or 0
+        q = s.get("quality_score") or 0
+        oversold_rows += f"""<tr>
+        <td style="padding:6px 10px;border-bottom:1px solid #e5e7eb"><strong>{flag} {tk}</strong></td>
+        <td style="padding:6px 10px;text-align:right;border-bottom:1px solid #e5e7eb;font-size:11px">RSI {rsi:.0f}</td>
+        <td style="padding:6px 10px;text-align:right;border-bottom:1px solid #e5e7eb;color:#0284c7;font-size:11px">1m {m1:+.0f}%</td>
+        <td style="padding:6px 10px;text-align:right;border-bottom:1px solid #e5e7eb;color:#0284c7;font-size:11px">Q={q:.0f}</td>
+        </tr>"""
+
+    owner_rows = ""
+    for s in owner_momentum[:8]:
+        tk = s.get("ticker") or s.get("short_name") or "?"
+        flag = "🇺🇸" if s.get("_country") == "US" else "🇸🇪"
+        n = s.get("number_of_owners") or 0
+        ch = s.get("owners_change_1y_pct") or 0
+        owner_rows += f"""<tr>
+        <td style="padding:6px 10px;border-bottom:1px solid #e5e7eb"><strong>{flag} {tk}</strong></td>
+        <td style="padding:6px 10px;text-align:right;border-bottom:1px solid #e5e7eb;font-size:11px">{n:,} ägare</td>
+        <td style="padding:6px 10px;text-align:right;border-bottom:1px solid #e5e7eb;color:#059669;font-weight:600;font-size:11px">+{ch:.0f}%</td>
+        </tr>"""
+
+    buy_rows = "".join([row(s) for s in buys[:10]])
+    light_rows = "".join([row(s) for s in buy_lights[:10]])
+    avoid_rows = "".join([row(s) for s in avoids[:5]])
+
+    html = f"""<!DOCTYPE html>
+<html><head><meta charset="UTF-8">
+<style>
+body {{ font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif;
+    max-width: 720px; margin: 0 auto; padding: 24px; background: #fafafa; color: #1f2937; }}
+.header {{ background: linear-gradient(135deg, #0f766e, #14b8a6); color: white; padding: 24px;
+    border-radius: 12px; margin-bottom: 20px; }}
+.header h1 {{ margin: 0; font-size: 24px; }}
+.header p {{ margin: 4px 0 0 0; opacity: 0.9; font-size: 13px; }}
+.section {{ background: white; border-radius: 12px; padding: 18px 20px; margin-bottom: 16px;
+    border: 1px solid #e5e7eb; box-shadow: 0 1px 3px rgba(0,0,0,0.04); }}
+.section h2 {{ margin: 0 0 12px 0; font-size: 16px; display: flex; align-items: center; gap: 8px; }}
+.section h2 .badge {{ background: #e0f2fe; color: #0284c7; font-size: 11px; padding: 2px 8px;
+    border-radius: 10px; font-weight: 600; }}
+table {{ width: 100%; border-collapse: collapse; }}
+.cta {{ display: inline-block; background: #4f46e5; color: white; padding: 10px 20px;
+    border-radius: 8px; text-decoration: none; font-weight: 600; font-size: 13px; }}
+.footer {{ text-align: center; color: #9ca3af; font-size: 11px; margin-top: 24px; }}
+.muted {{ color: #6b7280; font-size: 12px; }}
+.disclosure {{ background: #fef3c7; border-left: 3px solid #f59e0b; padding: 10px 14px;
+    border-radius: 6px; font-size: 11px; color: #78350f; margin-top: 16px; }}
+</style>
+</head>
+<body>
+<div class="header">
+    <h1>📊 Daktier Daily — {today}</h1>
+    <p>Dagligt urval baserat på backtest-validerade screens + retail-flow</p>
+</div>
+
+<div class="section">
+    <h2>✅ BUY-rekommendationer <span class="badge">{len(buys)} träffar</span></h2>
+    <p class="muted">Hög konviktion: Super Confluence, Recurring Compounder, Dual-Screen, C80+GT/GT+MF.</p>
+    <table>{buy_rows or '<tr><td style="padding:8px;color:#9ca3af">Inga BUY idag.</td></tr>'}</table>
+</div>
+
+{f'''<div class="section">
+    <h2>⚡ BUY-LIGHT <span class="badge">{len(buy_lights)} träffar</span></h2>
+    <p class="muted">GT alone, Cyclical-Bottom, Quality-Compounder-Light, Owner-Momentum.</p>
+    <table>{light_rows}</table>
+</div>''' if buy_lights else ''}
+
+{f'''<div class="section">
+    <h2>🌡️ OVERHEAT — Vänta på pullback <span class="badge">{len(overheat)} aktier</span></h2>
+    <p class="muted">Parabolisk uppgång — bättre risk/reward efter -10% pullback eller RSI<50.</p>
+    <table>{overheat_rows}</table>
+</div>''' if overheat else ''}
+
+{f'''<div class="section">
+    <h2>❄️ OVERSOLD — Möjlig bounce <span class="badge">{len(oversold)} aktier</span></h2>
+    <p class="muted">Översålda med OK fundamental — mean-reversion-spel. Sätt stop-loss.</p>
+    <table>{oversold_rows}</table>
+</div>''' if oversold else ''}
+
+{f'''<div class="section">
+    <h2>👥 Owner-Momentum — Top retail-flow <span class="badge">{len(owner_momentum)} aktier</span></h2>
+    <p class="muted">Avanza-ägare ökar starkt — retail-signaler om katalysator.</p>
+    <table>{owner_rows}</table>
+</div>''' if owner_momentum else ''}
+
+{f'''<div class="section">
+    <h2>🚫 AVOID-flaggor <span class="badge">{len(avoids)}</span></h2>
+    <table>{avoid_rows}</table>
+</div>''' if avoids else ''}
+
+<div style="text-align:center;margin-top:20px">
+    <a href="{base_url}/" class="cta">Öppna Dashboard →</a>
+</div>
+
+<div class="disclosure">
+    <strong>⚠️ Statistisk ärlighet:</strong> Sub-period split (2016-19 vs 2020-24) visade
+    regim-anpassning. Ingen screen är broadly robust över båda perioderna. Bootstrap CI är
+    ofta breda (PEPSI Confluence US CI [-7%, +66%]). Använd flera tier samtidigt och
+    förvänta inte att backtest-alpha exakt återupprepas framåt.
+</div>
+
+<div class="footer">
+    Daktier — automatiskt mail från live-systemet · <a href="{base_url}/backtest-report" style="color:#9ca3af">Backtest-rapport</a> · <a href="{base_url}/live-tracker" style="color:#9ca3af">Live Tracker</a>
+</div>
+
+</body></html>"""
+    return html, {
+        "n_buy": len(buys),
+        "n_buy_light": len(buy_lights),
+        "n_speculative": len(speculative),
+        "n_avoid": len(avoids),
+        "n_overheat": len(overheat),
+        "n_oversold": len(oversold),
+        "n_owner_momentum": len(owner_momentum),
+    }
+
+
+def _send_email_via_resend(to_email, subject, html_body):
+    """Skicka mail via Resend API. Returnerar (success, response)."""
+    try:
+        resp = requests.post(
+            "https://api.resend.com/emails",
+            headers={
+                "Authorization": f"Bearer {RESEND_API_KEY}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "from": RESEND_FROM,
+                "to": to_email if isinstance(to_email, list) else [to_email],
+                "subject": subject,
+                "html": html_body,
+            },
+            timeout=30,
+        )
+        ok = resp.status_code in (200, 201, 202)
+        return ok, resp.json() if resp.text else {"status": resp.status_code}
+    except Exception as e:
+        return False, {"error": str(e)}
+
+
+@app.route("/api/email/daily-digest", methods=["POST"])
+def api_email_daily_digest():
+    """Generera + skicka dagligt digest-mail. Body: {to: 'email@example.com'} (optional)."""
+    body = request.json if request.is_json else {}
+    to_email = body.get("to") or RESEND_TO_DEFAULT
+    dry_run = body.get("dry_run", False)  # om True, returnera HTML utan att skicka
+
+    db = get_db()
+    try:
+        html, stats = _build_daily_digest_html(db)
+        if dry_run:
+            return jsonify({"dry_run": True, "stats": stats, "html_length": len(html)})
+
+        from datetime import datetime
+        subject = f"📊 Daktier Daily — {datetime.now().strftime('%Y-%m-%d')} ({stats['n_buy']} BUY · {stats['n_overheat']} OVERHEAT · {stats['n_oversold']} OVERSOLD)"
+        ok, resp = _send_email_via_resend(to_email, subject, html)
+        return jsonify({
+            "sent": ok,
+            "to": to_email,
+            "subject": subject,
+            "stats": stats,
+            "resend_response": resp,
+        })
+    except Exception as e:
+        import traceback
+        return jsonify({"error": str(e), "tb": traceback.format_exc()[:1500]}), 500
+    finally:
+        db.close()
+
+
+@app.route("/api/email/preview")
+def api_email_preview():
+    """Preview HTML i webbläsare utan att skicka."""
+    db = get_db()
+    try:
+        html, _ = _build_daily_digest_html(db)
+        return html, 200, {"Content-Type": "text/html; charset=utf-8"}
+    finally:
+        db.close()
+
+
 @app.route("/api/live-tracker/snapshot", methods=["POST"])
 def api_live_tracker_snapshot():
     """Spara dagens screen-träffar för senare 12m-uppföljning.
@@ -9642,6 +9908,27 @@ def _startup():
         scheduler.add_job(scheduled_screen_snapshot, 'cron',
                           day_of_week='mon-fri', hour=17, minute=0,
                           id='screen_snapshot_daily')
+
+        # 📧 Dagligt mail-digest (vardagar 17:30 — efter snapshot)
+        def scheduled_daily_email():
+            try:
+                print(f"[AUTO] Daily email start {datetime.now().strftime('%H:%M')}")
+                dbe = get_db()
+                try:
+                    html, stats = _build_daily_digest_html(dbe)
+                    from datetime import datetime as dtm
+                    subject = f"📊 Daktier Daily — {dtm.now().strftime('%Y-%m-%d')} ({stats['n_buy']} BUY · {stats['n_overheat']} OVERHEAT)"
+                    ok, resp = _send_email_via_resend(RESEND_TO_DEFAULT, subject, html)
+                    print(f"[AUTO] Daily email: ok={ok}, stats={stats}")
+                finally:
+                    dbe.close()
+            except Exception as e:
+                import traceback
+                print(f"[AUTO] Daily email fel: {e}\n{traceback.format_exc()[:500]}")
+
+        scheduler.add_job(scheduled_daily_email, 'cron',
+                          day_of_week='mon-fri', hour=17, minute=30,
+                          id='daily_email_digest')
 
         # Uppdatera fwd-returns på söndagar — utvärderar gamla snapshots
         def scheduled_update_fwd_returns():
