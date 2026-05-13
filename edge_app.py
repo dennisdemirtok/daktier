@@ -288,9 +288,56 @@ def external_signals_page():
 
 @app.route("/api/external-signals")
 def api_external_signals():
-    """Returnerar senaste posts från Reddit/Substack-källor."""
+    """Returnerar senaste posts från Reddit/Substack-källor + extracted tickers."""
+    import re as _re
     try:
         signals = _fetch_external_signals(max_per_source=5)
+
+        # Extrahera tickers från titlarna (uppercase 2-5 bokstäver)
+        ticker_pattern = _re.compile(r"\b([A-Z]{2,5})\b")
+        common_words = {"ATH", "AI", "IPO", "ETF", "USA", "CEO", "CFO", "FED", "EU", "CPI", "GDP",
+                         "YOY", "QOQ", "EPS", "ROE", "PE", "PB", "EV", "FCF", "MOM", "DD", "TLDR",
+                         "TLD", "MIT", "JFC", "SEK", "USD", "EUR", "AM", "PM", "ED", "GO", "NEW",
+                         "WSB", "DJT", "POTUS", "AND", "FOR", "WITH", "THE", "ALL", "WHEN", "NOW",
+                         "ABOUT", "ETH", "BTC", "NFL", "NYC", "DC"}
+        # Hämta vilka tickers som finns i vår DB
+        from edge_db import _ph as ph_fn, _fetchall
+        ph = ph_fn()
+        all_tickers = {}
+        try:
+            rows = _fetchall(db := get_db(),
+                f"SELECT short_name, name, country, last_price, pe_ratio, "
+                f"one_month_change_pct, three_months_change_pct, number_of_owners "
+                f"FROM stocks WHERE short_name IS NOT NULL AND number_of_owners > 500")
+            for r in rows:
+                rd = dict(r)
+                t = rd.get("short_name")
+                if t: all_tickers[t.upper()] = rd
+        finally:
+            try: db.close()
+            except: pass
+
+        # Per post: extrahera tickers som finns i DB
+        for s in signals:
+            title = s.get("title", "")
+            found = ticker_pattern.findall(title)
+            ticker_data = []
+            for t in found:
+                if t in common_words: continue
+                if t in all_tickers:
+                    info = all_tickers[t]
+                    ticker_data.append({
+                        "ticker": t,
+                        "name": info.get("name"),
+                        "country": info.get("country"),
+                        "price": info.get("last_price"),
+                        "pe": info.get("pe_ratio"),
+                        "1m": (info.get("one_month_change_pct") or 0) * 100,
+                        "3m": (info.get("three_months_change_pct") or 0) * 100,
+                        "owners": info.get("number_of_owners"),
+                    })
+            s["tickers"] = ticker_data[:5]  # max 5 per post
+
         # Gruppera per källa
         by_source = {}
         for s in signals:
@@ -300,6 +347,85 @@ def api_external_signals():
             "by_source": by_source,
             "fetched_at": datetime.now().isoformat(),
         })
+    except Exception as e:
+        import traceback
+        return jsonify({"error": str(e), "tb": traceback.format_exc()[:500]}), 500
+
+
+@app.route("/api/stock/<ticker>/rsi-history")
+def api_stock_rsi_history(ticker):
+    """Returnerar 90-dagars pris-historik + beräknad RSI för sparkline.
+
+    Räknar RSI(14) lokalt över historiska close-priser från borsdata_prices.
+    """
+    try:
+        from edge_db import _ph as ph_fn, _fetchall
+        from datetime import datetime, timedelta
+        ph = ph_fn()
+        days = int(request.args.get("days", 90))
+        since = (datetime.now() - timedelta(days=days + 30)).strftime("%Y-%m-%d")
+
+        db = get_db()
+        try:
+            # Hämta ISIN via short_name
+            row = _fetchall(db,
+                f"SELECT s.short_name, s.name, m.isin FROM stocks s "
+                f"JOIN borsdata_instrument_map m ON s.short_name = m.ticker "
+                f"WHERE s.short_name = {ph} LIMIT 1", (ticker.upper(),))
+            if not row:
+                return jsonify({"error": f"ticker {ticker} inte hittad"}), 404
+            isin = dict(row[0]).get("isin")
+
+            # Hämta close-priser
+            prices = _fetchall(db,
+                f"SELECT date, close FROM borsdata_prices "
+                f"WHERE isin = {ph} AND date >= {ph} AND close IS NOT NULL "
+                f"ORDER BY date ASC", (isin, since))
+            if len(prices) < 20:
+                return jsonify({"ticker": ticker, "rsi": [], "error": "för lite data"})
+
+            close = [dict(p)["close"] for p in prices]
+            dates = [dict(p)["date"] for p in prices]
+
+            # Beräkna RSI(14)
+            period = 14
+            gains, losses = [], []
+            for i in range(1, len(close)):
+                diff = close[i] - close[i-1]
+                gains.append(max(0, diff))
+                losses.append(max(0, -diff))
+
+            rsi_values = []
+            # Initial avg gain/loss = simple average över första 14
+            if len(gains) >= period:
+                avg_gain = sum(gains[:period]) / period
+                avg_loss = sum(losses[:period]) / period
+                for i in range(period, len(gains)):
+                    avg_gain = (avg_gain * (period - 1) + gains[i]) / period
+                    avg_loss = (avg_loss * (period - 1) + losses[i]) / period
+                    if avg_loss == 0:
+                        rsi_values.append(100)
+                    else:
+                        rs = avg_gain / avg_loss
+                        rsi_values.append(100 - (100 / (1 + rs)))
+
+            # Trim till senaste days värden
+            keep = days
+            rsi_values = rsi_values[-keep:] if len(rsi_values) > keep else rsi_values
+            close_trimmed = close[-len(rsi_values):]
+            dates_trimmed = dates[-len(rsi_values):]
+
+            return jsonify({
+                "ticker": ticker.upper(),
+                "isin": isin,
+                "n_points": len(rsi_values),
+                "dates": dates_trimmed,
+                "close": close_trimmed,
+                "rsi": [round(v, 1) for v in rsi_values],
+                "current_rsi": round(rsi_values[-1], 1) if rsi_values else None,
+            })
+        finally:
+            db.close()
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -5029,6 +5155,62 @@ DATA:
         return None
 
 
+def _generate_macro_pulse():
+    """Generera 'Macro Pulse'-block för mail-headern via Claude.
+    Inspirerat av MarketSense-AI veckorapport: 4 indikatorer + regional snapshot.
+    """
+    import json as _json
+    if not CLAUDE_API_KEY:
+        return None
+    try:
+        prompt = """Du är makroanalytiker. Skriv en kort 'Macro Pulse' för dagen
+med fokus på vad som är relevant för svenska + amerikanska aktiemarknader.
+
+OUTPUT-FORMAT (HTML, exakt detta):
+<div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px;font-size:11px">
+  <div style="background:rgba(255,255,255,0.12);padding:8px 10px;border-radius:6px">
+    <div style="font-size:9px;opacity:0.7;text-transform:uppercase;letter-spacing:1px">[Indikator 1]</div>
+    <div style="font-size:14px;font-weight:700;margin-top:2px">[Värde + förändring]</div>
+    <div style="font-size:10px;opacity:0.8;margin-top:1px">[1 rad kontext]</div>
+  </div>
+  ... (4 totalt)
+</div>
+<p style="margin-top:10px;font-size:11px;opacity:0.85;line-height:1.5">
+  [2 rader om dagens tema/policy/risk]
+</p>
+
+VÄLJ 4 av följande indikatorer baserat på vad som är aktuellt just nu:
+- US CPI senaste värdet
+- US arbetslöshet
+- Fed Funds Rate + Fed-bias
+- ECB Refi Rate + bias
+- USD/SEK växelkurs senaste rörelse
+- Riksbankens ränta
+- US 10y treasury yield
+- Brent oljepris
+
+Använd RIMLIGA AKTUELLA VÄRDEN för nuvarande perioden (2026 Q2).
+Var EJ för specifik om exakta siffror — fokusera på TREND och TEMA.
+
+Skriv på svenska men behåll engelska metric-namn där relevant (CPI, FFR etc).
+INGA rubriker eller h1/h2. Bara den HTML-struktur jag specificerat."""
+
+        resp = requests.post(
+            "https://api.anthropic.com/v1/messages",
+            headers={"x-api-key": CLAUDE_API_KEY, "anthropic-version": "2023-06-01",
+                      "Content-Type": "application/json"},
+            json={"model": "claude-sonnet-4-20250514", "max_tokens": 1000,
+                   "messages": [{"role": "user", "content": prompt}]},
+            timeout=60,
+        )
+        if resp.status_code == 200:
+            return resp.json().get("content", [{}])[0].get("text", "")
+        return None
+    except Exception as e:
+        print(f"[macro pulse] {e}", file=sys.stderr)
+        return None
+
+
 def _generate_market_recap(top_movers_us, top_movers_se, owner_movers, external_signals):
     """Stock Analysis-stil "Market Recap" — konkreta dagens händelser med tickers + %."""
     import json as _json
@@ -5400,6 +5582,7 @@ def _build_daily_digest_html(db, base_url="https://daktier-production.up.railway
                                                   owner_movers_1d, external_signals)
     earnings_summary_html = _generate_earnings_ai_summary(recent_reports) if recent_reports else None
     external_summary_html = _generate_external_signals_summary(external_signals)
+    macro_pulse_html = _generate_macro_pulse()
 
     # Genererad AI-summary — passa även earnings + insiders för rikare kontext
     ai_summary = _generate_ai_market_summary(
@@ -5619,6 +5802,7 @@ body {{ font-family: -apple-system, BlinkMacSystemFont, "Inter", "Helvetica Neue
         <div class="stat"><div class="stat-label">Owner-flow</div><div class="stat-value">{len(owner_momentum)}</div></div>
         <div class="stat"><div class="stat-label">Avoid</div><div class="stat-value">{len(avoids)}</div></div>
     </div>
+    {f'<div style="margin-top:18px;padding-top:14px;border-top:1px solid rgba(255,255,255,0.15)"><div style="font-size:10px;text-transform:uppercase;letter-spacing:2px;opacity:0.7;font-weight:600;margin-bottom:8px">🌍 MACRO PULSE</div>{macro_pulse_html}</div>' if macro_pulse_html else ''}
 </div>
 
 {f'''<div style="background:linear-gradient(135deg,#1e3a8a 0%,#0f766e 100%);color:white;border-radius:14px;padding:24px;margin-bottom:14px;box-shadow:0 4px 14px rgba(15,118,110,0.2)">
@@ -10863,7 +11047,8 @@ def _startup():
         scheduler.add_job(scheduled_borsdata_prices, 'cron', hour=4, minute=0,
                           id='borsdata_prices_daily')
 
-        # Veckovis Börsdata-rapportsync (söndagar 04:30) — kvartalsrapporter uppdateras sällan
+        # Veckovis Börsdata-rapportsync (söndagar 04:30) — full
+        # PLUS daglig snabb-sync 05:30 under earnings-säsong för senaste rapporterna.
         def scheduled_borsdata_reports():
             try:
                 from edge_db import sync_borsdata_reports
@@ -10876,6 +11061,25 @@ def _startup():
                     dbr.close()
             except Exception as e:
                 print(f"[AUTO] Börsdata-rapportsync fel: {e}")
+
+        # Daglig snabb-sync för senaste rapporter — bara bolag med rapport-datum <14d
+        def scheduled_daily_reports_sync():
+            try:
+                from edge_db import sync_borsdata_reports
+                print(f"[AUTO] Daglig rapport-sync (fresh) start")
+                dbr = get_db()
+                try:
+                    # max_age_days=2 = bara hämta för bolag som senast synkades >2d sen
+                    res = sync_borsdata_reports(dbr, max_age_days=2, limit=200)
+                    print(f"[AUTO] Daglig rapport-sync klar: {res}")
+                finally:
+                    dbr.close()
+            except Exception as e:
+                print(f"[AUTO] Daglig rapport-sync fel: {e}")
+
+        scheduler.add_job(scheduled_daily_reports_sync, 'cron',
+                          day_of_week='mon-fri', hour=5, minute=30,
+                          id='daily_reports_quick_sync')
 
         # day_of_week=6 = söndag (apscheduler: 0=mon, 6=sun)
         scheduler.add_job(scheduled_borsdata_reports, 'cron', day_of_week='sun',

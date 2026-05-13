@@ -6,45 +6,59 @@
 <title>Externa signaler — DAKTIER</title>
 <style>
   * { box-sizing: border-box; }
-  body { font-family: -apple-system, BlinkMacSystemFont, "Inter", sans-serif; max-width: 1000px;
+  body { font-family: -apple-system, BlinkMacSystemFont, "Inter", sans-serif; max-width: 1100px;
          margin: 0 auto; padding: 24px; background: #fafafa; color: #1f2937; line-height: 1.55; }
   h1 { font-size: 28px; margin-bottom: 8px; }
   .lede { color: #6b7280; margin-bottom: 24px; font-size: 14px; }
   .source-card { background: white; border: 1px solid #e5e7eb; border-radius: 10px;
                   padding: 18px 20px; margin-bottom: 14px; }
-  .source-card h2 { margin: 0 0 4px 0; font-size: 17px; display: flex; align-items: center; gap: 8px; }
+  .source-card h2 { margin: 0 0 8px 0; font-size: 17px; display: flex; align-items: center; gap: 8px; }
   .source-tag { font-size: 11px; background: #e0f2fe; color: #0284c7; padding: 2px 8px;
                  border-radius: 8px; font-weight: 600; }
-  .post-item { padding: 10px 0; border-bottom: 1px solid #f3f4f6; }
+  .post-item { padding: 12px 0; border-bottom: 1px solid #f3f4f6; }
   .post-item:last-child { border-bottom: 0; }
   .post-date { font-size: 11px; color: #9ca3af; margin-bottom: 3px; }
-  .post-title { font-size: 14px; color: #1f2937; text-decoration: none; font-weight: 500; }
+  .post-title { font-size: 14px; color: #1f2937; text-decoration: none; font-weight: 600; display: block; }
   .post-title:hover { color: #0284c7; }
+  .ticker-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .ticker-chip { background: #f3f4f6; border-radius: 8px; padding: 6px 10px; font-size: 11px; cursor: pointer;
+                  display: inline-flex; align-items: center; gap: 4px; transition: all 0.15s; }
+  .ticker-chip:hover { background: #e0f2fe; transform: translateY(-1px); }
+  .ticker-chip strong { color: #111827; font-size: 12px; }
+  .ticker-chip .change { font-variant-numeric: tabular-nums; }
+  .pos { color: #059669; }
+  .neg { color: #dc2626; }
   .top-link { display: inline-block; margin-bottom: 16px; color: #4f46e5; text-decoration: none; font-weight: 500; }
   .refresh-btn { background: #4f46e5; color: white; border: none; padding: 8px 16px;
                   border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 600; }
   .info { background: #ecfdf5; border-left: 3px solid #059669; padding: 12px 16px;
            border-radius: 4px; margin: 16px 0; font-size: 13px; }
   .loading { text-align: center; padding: 40px; color: #6b7280; }
+  .stats-bar { display: flex; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; }
+  .stat-pill { background: white; border: 1px solid #e5e7eb; border-radius: 8px; padding: 10px 14px;
+                font-size: 13px; }
+  .stat-pill strong { color: #0284c7; font-size: 16px; }
 </style>
 </head>
 <body>
 
 <a href="/" class="top-link">← Tillbaka till dashboard</a>
 
-<h1>📰 Externa signaler</h1>
+<h1>📰 Externa signaler · Reddit/Substack-tracker</h1>
 <p class="lede">
-  Senaste posts från utvalda traders och analyser. Substack, Reddit-konton med bra
-  track record, plus SeekingAlpha market news. Uppdateras varje gång du laddar sidan.
+  Senaste posts från utvalda traders. Tickers som nämns extraheras automatiskt + visar
+  snabb data (1m/3m kurs, P/E, ägare).
 </p>
 
 <div class="info">
-  <strong>🎯 Varför detta?</strong> Vissa Reddit-traders (t.ex. Icy_Agent_266) har varit
-  väldigt tidiga med rätta aktier (Sandisk, optics-sektorn 2026). Att spåra dem är
-  proprietär signal som inte syns i Bloomberg/Yahoo.
+  <strong>🎯 Vad denna sida ger:</strong> Vissa Reddit-traders har varit tidiga på rätt aktier
+  (Icy_Agent_266 → Sandisk, optics-sektorn 2026). Att se vad de nämner + dagsfärsk
+  bolagsdata är proprietär signal som inte finns i Bloomberg/Yahoo.
 </div>
 
 <button class="refresh-btn" onclick="loadSignals()">🔄 Ladda om</button>
+
+<div id="stats" class="stats-bar"></div>
 
 <div id="signals">
   <div class="loading">Laddar externa signaler...</div>
@@ -53,7 +67,9 @@
 <script>
 async function loadSignals() {
   const el = document.getElementById('signals');
-  el.innerHTML = '<div class="loading">⏳ Hämtar från Substack/Reddit/SeekingAlpha...</div>';
+  const statsEl = document.getElementById('stats');
+  el.innerHTML = '<div class="loading">⏳ Hämtar från Substack/Reddit/SeekingAlpha + extraherar tickers...</div>';
+  statsEl.innerHTML = '';
   try {
     const r = await fetch('/api/external-signals');
     const d = await r.json();
@@ -67,6 +83,26 @@ async function loadSignals() {
       el.innerHTML = '<div class="loading">Inga signaler tillgängliga just nu.</div>';
       return;
     }
+
+    // Räkna tickers totalt
+    let totalTickers = 0;
+    let allTickers = {};
+    for (const src of keys) {
+      for (const p of sources[src]) {
+        for (const t of (p.tickers || [])) {
+          totalTickers++;
+          allTickers[t.ticker] = (allTickers[t.ticker] || 0) + 1;
+        }
+      }
+    }
+    const topMentioned = Object.entries(allTickers).sort((a,b) => b[1] - a[1]).slice(0, 5);
+
+    statsEl.innerHTML = `
+      <div class="stat-pill"><strong>${d.n_total}</strong> posts</div>
+      <div class="stat-pill"><strong>${Object.keys(allTickers).length}</strong> unika tickers nämnda</div>
+      ${topMentioned.length ? `<div class="stat-pill">🔥 Mest nämnda: ${topMentioned.map(([t,n]) => `<strong>${t}</strong> (${n}x)`).join(', ')}</div>` : ''}
+    `;
+
     let html = '';
     for (const src of keys) {
       const posts = sources[src];
@@ -76,9 +112,20 @@ async function loadSignals() {
       html += `<div class="source-card">
         <h2>${emoji} ${escapeHtml(src)} <span class="source-tag">${posts.length} posts</span></h2>`;
       for (const p of posts) {
+        const tickersHtml = (p.tickers || []).map(t => {
+          const flag = t.country === 'US' ? '🇺🇸' : (t.country === 'SE' ? '🇸🇪' : '');
+          const m1Color = t['1m'] >= 0 ? 'pos' : 'neg';
+          return `<span class="ticker-chip" onclick="openTicker('${t.ticker}')" title="${escapeHtml(t.name || '')}">
+            ${flag} <strong>${t.ticker}</strong>
+            <span class="${m1Color}">1m: ${t['1m'] >= 0 ? '+' : ''}${(t['1m']||0).toFixed(0)}%</span>
+            <span style="color:#9ca3af">· P/E ${t.pe ? t.pe.toFixed(0) : '-'}</span>
+            <span style="color:#9ca3af">· ${((t.owners||0)/1000).toFixed(0)}k ägare</span>
+          </span>`;
+        }).join('');
         html += `<div class="post-item">
           <div class="post-date">${escapeHtml(p.date || '')}</div>
           <a href="${escapeHtml(p.link || '#')}" target="_blank" rel="noopener" class="post-title">${escapeHtml(p.title || '')}</a>
+          ${tickersHtml ? `<div class="ticker-chips">${tickersHtml}</div>` : ''}
         </div>`;
       }
       html += `</div>`;
@@ -87,6 +134,11 @@ async function loadSignals() {
   } catch (e) {
     el.innerHTML = `<div style="color:#dc2626">Fel: ${e.message}</div>`;
   }
+}
+
+function openTicker(ticker) {
+  // Öppna ticker i daktier dashboard
+  window.location.href = `/?q=${encodeURIComponent(ticker)}`;
 }
 
 function escapeHtml(s) {

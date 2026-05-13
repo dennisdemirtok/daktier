@@ -4050,7 +4050,58 @@ function renderQuantRank(s) {
             Ovanför: rank vs hela universumet. Sektor-rank: rank inom samma bransch
             (mer rättvist — banker, tech, REIT har olika multipel-nivåer).
         </div>
+        <div id="rsi-sparkline-${q.orderbook_id || ''}" style="margin-top:10px"></div>
     </div>`;
+}
+
+// ── RSI-sparkline ───────────────────────────────────────────
+async function loadRsiSparkline(ticker, containerId) {
+    const el = document.getElementById(containerId);
+    if (!el || !ticker) return;
+    try {
+        const r = await fetch(`/api/stock/${encodeURIComponent(ticker)}/rsi-history?days=90`);
+        const d = await r.json();
+        if (d.error || !d.rsi || !d.rsi.length) {
+            el.innerHTML = '';
+            return;
+        }
+        // Bygg SVG-sparkline
+        const W = 280, H = 60;
+        const minR = 0, maxR = 100;
+        const points = d.rsi.map((v, i) => {
+            const x = (i / (d.rsi.length - 1)) * W;
+            const y = H - ((v - minR) / (maxR - minR)) * H;
+            return `${x.toFixed(1)},${y.toFixed(1)}`;
+        }).join(' ');
+        const currentRsi = d.current_rsi || 50;
+        const rsiColor = currentRsi >= 70 ? '#ea580c' : currentRsi <= 30 ? '#0284c7' : '#059669';
+        const rsiLabel = currentRsi >= 70 ? 'Övertköpt' : currentRsi <= 30 ? 'Översålt' : 'Neutral';
+        // Overheat-zoner (RSI 70+)
+        const overheatY = H - (70/100)*H;
+        const oversoldY = H - (30/100)*H;
+
+        el.innerHTML = `<div style="background:rgba(255,255,255,0.7);padding:10px;border-radius:8px">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+                <div style="font-size:11px;color:#374151;font-weight:600">📊 RSI(14) · 90 dagar</div>
+                <div style="font-size:13px;font-weight:700;color:${rsiColor}">${currentRsi.toFixed(1)} <span style="font-weight:400;font-size:10px">(${rsiLabel})</span></div>
+            </div>
+            <svg width="100%" height="${H}" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" style="display:block">
+                <rect x="0" y="0" width="${W}" height="${overheatY}" fill="#fef3c7" opacity="0.3"/>
+                <rect x="0" y="${oversoldY}" width="${W}" height="${H - oversoldY}" fill="#dbeafe" opacity="0.3"/>
+                <line x1="0" y1="${overheatY}" x2="${W}" y2="${overheatY}" stroke="#ea580c" stroke-width="1" stroke-dasharray="2,3" opacity="0.5"/>
+                <line x1="0" y1="${oversoldY}" x2="${W}" y2="${oversoldY}" stroke="#0284c7" stroke-width="1" stroke-dasharray="2,3" opacity="0.5"/>
+                <polyline points="${points}" fill="none" stroke="${rsiColor}" stroke-width="2"/>
+            </svg>
+            <div style="display:flex;justify-content:space-between;font-size:9px;color:#9ca3af;margin-top:2px">
+                <span>${d.dates[0] || ''}</span>
+                <span style="color:#ea580c">70 = overheat</span>
+                <span style="color:#0284c7">30 = oversold</span>
+                <span>idag</span>
+            </div>
+        </div>`;
+    } catch (e) {
+        console.error('RSI sparkline:', e);
+    }
 }
 
 
@@ -5043,6 +5094,15 @@ function openDrawer(s) {
     document.getElementById('stockDrawer').classList.add('open');
     document.getElementById('drawerOverlay').classList.add('open');
     document.body.style.overflow = 'hidden';
+
+    // Ladda RSI-sparkline asynkront (om container finns)
+    if (s.orderbook_id) {
+        const sparkContainer = `rsi-sparkline-${s.orderbook_id}`;
+        const tk = s.ticker || s.short_name;
+        if (tk) {
+            setTimeout(() => loadRsiSparkline(tk, sparkContainer), 100);
+        }
+    }
     // Hydrera lazy-renderade chart-element (pris-graf med köpzon)
     setTimeout(_hydratePendingBuyZoneCharts, 50);
 }
@@ -5990,11 +6050,16 @@ function renderAgentTurn(h, idx) {
         // BLOCK-MODE: retry pågår just nu (förra försöket blockerades, agent regenererar)
         if (h.validation_retry && !text) {
             const list = h.validation_retry.violations.map(v => `<li><strong>${v.rule}:</strong> "${escapeHtml(v.sample)}"</li>`).join('');
-            footer += `<div style="background:#fef3c7;color:#92400e;border-radius:8px;padding:8px 12px;margin-top:8px;font-size:11px;border-left:3px solid #f59e0b">
-                <strong>⚠ ${h.validation_retry.message}</strong>
-                <ul style="margin:4px 0 0 16px;padding:0">${list}</ul>
-                <div style="margin-top:4px;font-size:10px;font-style:italic">Agent skriver om analysen utan dessa regelbrott...</div>
-            </div>`;
+            footer += `<div style="background:#fef3c7;color:#92400e;border-radius:8px;padding:10px 14px;margin-top:8px;font-size:12px;border-left:4px solid #f59e0b">
+                <div style="display:flex;align-items:center;gap:8px;font-weight:600">
+                    <span class="spinner" style="display:inline-block;width:12px;height:12px;border:2px solid #f59e0b;border-top-color:transparent;border-radius:50%;animation:spin 0.6s linear infinite"></span>
+                    🔄 Regenererar svar (försök ${(h.validation_retry.count || 0) + 1})
+                </div>
+                <div style="margin-top:6px;font-size:11px">Förra svaret blockerades pga ${h.validation_retry.violations.length} regelbrott:</div>
+                <ul style="margin:4px 0 0 16px;padding:0;font-size:11px">${list}</ul>
+                <div style="margin-top:6px;font-size:10px;font-style:italic;opacity:0.85">Det här är INTE en bug — agenten validerar sin egen output och skriver om om regler bryts.</div>
+            </div>
+            <style>@keyframes spin { to { transform: rotate(360deg); } }</style>`;
         }
         // BLOCK-MODE: retry också misslyckades — output blockerad permanent
         if (h.validation_blocked) {
@@ -6214,9 +6279,11 @@ function handleAgentSSE(ev, turn) {
             turn.v22_violations = ev.violations || [];
             break;
         case 'validation_failed':
-            // BLOCK-MODE: agent retry:ar nu. Rensa förra outputen och visa banner.
-            turn.content = ''; // wipa första försöket
-            turn.tools = (turn.tools || []).filter(t => t.status === 'done' || t.status === 'error'); // behåll tool-historik
+            // BLOCK-MODE: agent retry:ar nu. Behåll FÖRRA outputen som "tidigare försök"
+            // istället för att wipa — användaren ser då tydligt att retry sker.
+            turn.previous_attempt = turn.content; // spara förra outputen
+            turn.content = '';
+            turn.tools = (turn.tools || []).filter(t => t.status === 'done' || t.status === 'error');
             turn.validation_retry = {
                 violations: ev.violations || [],
                 count: ev.count || 0,
@@ -6881,6 +6948,57 @@ async function loadTodaysSignals() {
 }
 function fmtScore(v) { return v == null ? '—' : v.toFixed(0); }
 
+// ── 📊 Forward P/E + PEG-tabell ──
+async function loadForwardPeTable() {
+    const wrap = document.getElementById('forwardPeContent');
+    if (!wrap) return;
+    try {
+        const r = await fetch('/api/dashboard/forward-pe-table');
+        const data = await r.json();
+        if (data.error) { wrap.innerHTML = `<div style="color:#dc2626">Fel: ${data.error}</div>`; return; }
+        const stocks = (data.stocks || []).filter(s => s.peg || s.fwd_pe);
+        if (!stocks.length) { wrap.innerHTML = '<div style="color:#9ca3af;padding:12px">Ingen data.</div>'; return; }
+
+        const rows = stocks.slice(0, 20).map(s => {
+            const flag = s.country === 'US' ? '🇺🇸' : (s.country === 'SE' ? '🇸🇪' : '');
+            const peg = s.peg;
+            const pegColor = peg == null ? '#9ca3af' : peg < 1 ? '#059669' : peg < 2 ? '#0891b2' : peg < 3 ? '#f59e0b' : '#dc2626';
+            const pegLabel = peg == null ? 'n/a' : peg < 1 ? 'undervärderat' : peg < 2 ? 'OK' : peg < 3 ? 'dyrt' : 'mycket dyrt';
+            const rec = s.recommendation || '-';
+            const recColor = rec === 'BUY' ? '#059669' : rec === 'BUY-LIGHT' ? '#84cc16' : '#6b7280';
+            return `<tr style="border-bottom:1px solid #f3f4f6;cursor:pointer" onclick="openStockDrawer(null, '${s.ticker}')">
+                <td style="padding:8px 10px"><strong>${flag} ${escapeHtml(s.ticker)}</strong> <span style="color:#9ca3af;font-size:11px">${escapeHtml((s.name||'').slice(0,22))}</span></td>
+                <td style="padding:8px 10px;text-align:right;font-variant-numeric:tabular-nums">${s.pe == null ? '—' : s.pe.toFixed(1)}</td>
+                <td style="padding:8px 10px;text-align:right;font-variant-numeric:tabular-nums;color:#4f46e5">${s.fwd_pe == null ? '—' : s.fwd_pe.toFixed(1)}</td>
+                <td style="padding:8px 10px;text-align:right;font-variant-numeric:tabular-nums;color:${pegColor};font-weight:600">${peg == null ? '—' : peg.toFixed(2)} <span style="font-size:10px;font-weight:400">(${pegLabel})</span></td>
+                <td style="padding:8px 10px;text-align:right;font-variant-numeric:tabular-nums;color:${s.rev_yoy_pct == null ? '#9ca3af' : s.rev_yoy_pct > 0 ? '#059669' : '#dc2626'}">${s.rev_yoy_pct == null ? '—' : (s.rev_yoy_pct > 0 ? '+' : '') + s.rev_yoy_pct.toFixed(0) + '%'}</td>
+                <td style="padding:8px 10px;text-align:right;font-variant-numeric:tabular-nums;color:${s.eps_yoy_pct == null ? '#9ca3af' : s.eps_yoy_pct > 0 ? '#059669' : '#dc2626'}">${s.eps_yoy_pct == null ? '—' : (s.eps_yoy_pct > 0 ? '+' : '') + s.eps_yoy_pct.toFixed(0) + '%'}</td>
+                <td style="padding:8px 10px;text-align:right"><span style="background:${recColor};color:white;padding:2px 6px;border-radius:4px;font-size:10px;font-weight:600">${rec}</span></td>
+            </tr>`;
+        }).join('');
+
+        wrap.innerHTML = `
+            <div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:13px">
+                <thead><tr style="background:#f9fafb;text-align:left;font-size:11px;color:#6b7280;text-transform:uppercase;letter-spacing:0.5px">
+                    <th style="padding:10px">Ticker</th>
+                    <th style="padding:10px;text-align:right">P/E</th>
+                    <th style="padding:10px;text-align:right">Fwd P/E</th>
+                    <th style="padding:10px;text-align:right">PEG</th>
+                    <th style="padding:10px;text-align:right">Rev YoY</th>
+                    <th style="padding:10px;text-align:right">EPS YoY</th>
+                    <th style="padding:10px;text-align:right">Rec</th>
+                </tr></thead>
+                <tbody>${rows}</tbody>
+            </table></div>
+            <div style="font-size:11px;color:#9ca3af;margin-top:8px">
+                <strong>PEG = P/E ÷ EPS-growth.</strong> Lägre = bättre. &lt;1 = undervärderat tillväxtbolag,
+                1-2 = rimligt, &gt;3 = mycket dyrt vs sin tillväxt.
+            </div>`;
+    } catch (e) {
+        wrap.innerHTML = `<div style="color:#dc2626">Fel: ${e.message}</div>`;
+    }
+}
+
 // Country-aware default-screen baserat på backtest 2015-2024
 const COUNTRY_BEST_SCREEN = {
     'SE': { mode: 'c80_gt_confluence', label: '👑 C80+GT (SE bäst, +19.64%)' },
@@ -7336,6 +7454,10 @@ async function renderDashboard() {
                 <h3 class="dash-heading">🎯 Dagens BUY/AVOID-signaler <span class="dash-sub">empiriskt validerat från backtest 2015-2024</span></h3>
                 <div id="todaysSignalsContent" style="margin-top:8px"><div class="loading-wrap" style="padding:24px">Laddar dagens rekommendationer…</div></div>
             </div>
+            <div class="dash-section" id="forwardPeWrap">
+                <h3 class="dash-heading">📊 Forward P/E + PEG-tabell <span class="dash-sub">aktier på BUY/BUY-LIGHT, sorterade efter PEG (lägre = bättre)</span></h3>
+                <div id="forwardPeContent" style="margin-top:8px"><div class="loading-wrap" style="padding:24px">Laddar...</div></div>
+            </div>
             <div class="dash-section" id="quantScreensWrap">
                 <h3 class="dash-heading">🏆 Backtest-validerade screens <span class="dash-sub">+19.64% alpha för C80+GT Confluence (SE)</span></h3>
                 <div id="quantScreensContent" style="margin-top:8px"></div>
@@ -7473,6 +7595,9 @@ function renderDashboardContent(d) {
 
     // ── 🎯 Dagens BUY/AVOID-signaler (empiriskt validerade) ──
     loadTodaysSignals();
+
+    // ── 📊 Forward P/E + PEG-tabell ──
+    loadForwardPeTable();
 
     // ── 🏆 Backtest-validerade quant-screens ──
     loadQuantScreens();
