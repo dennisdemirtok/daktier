@@ -358,6 +358,62 @@
       "positions_value": 0.0,
       "return_pct": -0.6,
       "num_positions": 0
+    },
+    {
+      "date": "2026-04-16",
+      "total_value": 99395.0,
+      "cash": 99395.0,
+      "positions_value": 0.0,
+      "return_pct": -0.6,
+      "num_positions": 0
+    },
+    {
+      "date": "2026-04-17",
+      "total_value": 99395.0,
+      "cash": 99395.0,
+      "positions_value": 0.0,
+      "return_pct": -0.6,
+      "num_positions": 0
+    },
+    {
+      "date": "2026-04-20",
+      "total_value": 99395.0,
+      "cash": 99395.0,
+      "positions_value": 0.0,
+      "return_pct": -0.6,
+      "num_positions": 0
+    },
+    {
+      "date": "2026-04-21",
+      "total_value": 99395.0,
+      "cash": 99395.0,
+      "positions_value": 0.0,
+      "return_pct": -0.6,
+      "num_positions": 0
+    },
+    {
+      "date": "2026-04-22",
+      "total_value": 99395.0,
+      "cash": 99395.0,
+      "positions_value": 0.0,
+      "return_pct": -0.6,
+      "num_positions": 0
+    },
+    {
+      "date": "2026-04-23",
+      "total_value": 99395.0,
+      "cash": 99395.0,
+      "positions_value": 0.0,
+      "return_pct": -0.6,
+      "num_positions": 0
+    },
+    {
+      "date": "2026-04-24",
+      "total_value": 99395.0,
+      "cash": 99395.0,
+      "positions_value": 0.0,
+      "return_pct": -0.6,
+      "num_positions": 0
     }
   ],
   "created_at": "2026-02-18T08:22:46.494648"

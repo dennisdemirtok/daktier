@@ -1,17 +1,12 @@
 {
   "ATT.ST": {
-    "highest_price": 109.69999694824219,
+    "highest_price": 110.9000015258789,
     "activated": true,
     "activation_price": 105.8400032043457
   },
   "USB": {
-    "highest_price": 56.64500045776367,
+    "highest_price": 57.849998474121094,
     "activated": true,
     "activation_price": 56.54249839782715
-  },
-  "CLA-B.ST": {
-    "highest_price": 54.70000076293945,
-    "activated": true,
-    "activation_price": 53.76000080108643
   }
 }

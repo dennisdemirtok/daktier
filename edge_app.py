@@ -280,6 +280,104 @@ def portfolio_builder_page():
     return render_template("portfolio_builder.html")
 
 
+@app.route("/external-signals")
+def external_signals_page():
+    """Externa signaler — Reddit/Substack/SeekingAlpha-spårning."""
+    return render_template("external_signals.html")
+
+
+@app.route("/api/external-signals")
+def api_external_signals():
+    """Returnerar senaste posts från Reddit/Substack-källor."""
+    try:
+        signals = _fetch_external_signals(max_per_source=5)
+        # Gruppera per källa
+        by_source = {}
+        for s in signals:
+            by_source.setdefault(s["source"], []).append(s)
+        return jsonify({
+            "n_total": len(signals),
+            "by_source": by_source,
+            "fetched_at": datetime.now().isoformat(),
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/dashboard/forward-pe-table")
+def api_forward_pe_table():
+    """Tabell över top BUY/BUY-LIGHT med Forward P/E + senaste rapport."""
+    try:
+        from edge_db import compute_quant_scores, _ph as ph_fn, _fetchall
+        ph = ph_fn()
+        db = get_db()
+        try:
+            us = compute_quant_scores(db, country="US", max_universe=300)
+            se = compute_quant_scores(db, country="SE", max_universe=300)
+            all_stocks = us + se
+            # Filter actionable
+            actionable = [s for s in all_stocks
+                          if s.get("recommendation") in ("BUY", "BUY-LIGHT")]
+            # Hämta senaste rapport per isin för att beräkna trend
+            results = []
+            for s in actionable[:50]:
+                isin = s.get("isin")
+                if not isin: continue
+                # Senaste 2 kvartal för YoY
+                rows = _fetchall(db, f"""
+                    SELECT period_year, period_q, report_end_date, revenues, net_profit, eps
+                    FROM borsdata_reports
+                    WHERE isin = {ph} AND report_type = {ph}
+                    AND revenues IS NOT NULL
+                    ORDER BY period_year DESC, period_q DESC
+                    LIMIT 5
+                """, (isin, "quarter"))
+                if not rows: continue
+                latest = dict(rows[0])
+                prev_year_match = next((dict(r) for r in rows if dict(r).get("period_year") == latest.get("period_year") - 1
+                                          and dict(r).get("period_q") == latest.get("period_q")), None)
+                rev_yoy = None
+                eps_yoy = None
+                if prev_year_match and prev_year_match.get("revenues") and prev_year_match.get("revenues") > 0:
+                    rev_yoy = (latest.get("revenues", 0) / prev_year_match.get("revenues") - 1) * 100
+                if prev_year_match and prev_year_match.get("eps") and prev_year_match.get("eps") != 0:
+                    eps_yoy = (latest.get("eps", 0) / prev_year_match.get("eps") - 1) * 100
+
+                pe = s.get("pe_ratio")
+                # Forward P/E estimat: pe * (1 - eps_growth/100) som proxy
+                fwd_pe = None
+                if pe and pe > 0 and eps_yoy is not None and eps_yoy > -50:
+                    fwd_pe = pe / (1 + eps_yoy / 100) if eps_yoy > -100 else None
+                # PEG: P/E / eps_growth (om growth > 0)
+                peg = None
+                if pe and pe > 0 and eps_yoy is not None and eps_yoy > 0:
+                    peg = pe / eps_yoy
+
+                results.append({
+                    "ticker": s.get("ticker") or s.get("short_name"),
+                    "name": s.get("name"),
+                    "country": s.get("country"),
+                    "recommendation": s.get("recommendation"),
+                    "composite_score": s.get("composite_score"),
+                    "pe": round(pe, 1) if pe else None,
+                    "fwd_pe": round(fwd_pe, 1) if fwd_pe else None,
+                    "peg": round(peg, 2) if peg else None,
+                    "rev_yoy_pct": round(rev_yoy, 1) if rev_yoy is not None else None,
+                    "eps_yoy_pct": round(eps_yoy, 1) if eps_yoy is not None else None,
+                    "latest_report": latest.get("report_end_date"),
+                    "owners_change_1y_pct": s.get("owners_change_1y_pct"),
+                    "tech_rsi14": s.get("tech_rsi14"),
+                })
+            # Sortera efter PEG asc (lägre = bättre)
+            results.sort(key=lambda r: r.get("peg") if r.get("peg") is not None else 99)
+            return jsonify({"n": len(results), "stocks": results})
+        finally:
+            db.close()
+    except Exception as e:
+        import traceback
+        return jsonify({"error": str(e), "tb": traceback.format_exc()[:500]}), 500
+
+
 @app.route("/api/status")
 def api_status():
     db = get_db()
@@ -4938,35 +5036,47 @@ def _get_top_owner_movers(db, country=None, period_days=1, min_owners=1000, limi
         return []
 
 
-def _fetch_external_signals():
-    """Hämta senaste posts från Substack/Reddit-källor via RSS."""
+def _fetch_external_signals(max_per_source=3):
+    """Hämta senaste posts från Substack/Reddit/SeekingAlpha-källor via RSS."""
     import re as _re
     sources = [
+        # Substack-traders
         {"name": "Trade At Your Own Risk", "url": "https://tradeatyourownrisk.substack.com/feed",
          "type": "substack"},
+        # AI-analys-blogg
         {"name": "MarketSense-AI", "url": "https://marketsense-ai.com/blog/feed/",
          "type": "blog"},
-        {"name": "Icy_Agent_266 (Reddit)", "url": "https://www.reddit.com/user/Icy_Agent_266.rss",
-         "type": "reddit"},
-        # Lägg till fler trader-konton här
+        # Reddit traders med bra track record
+        {"name": "Icy_Agent_266 (Reddit · memory/optics)",
+         "url": "https://www.reddit.com/user/Icy_Agent_266/submitted.rss", "type": "reddit"},
+        {"name": "r/stocks Top",
+         "url": "https://www.reddit.com/r/stocks/top/.rss?t=day", "type": "reddit"},
+        {"name": "r/SecurityAnalysis Top",
+         "url": "https://www.reddit.com/r/SecurityAnalysis/top/.rss?t=week", "type": "reddit"},
+        # SeekingAlpha market-news (allmänt)
+        {"name": "SeekingAlpha Market News",
+         "url": "https://seekingalpha.com/market_currents.xml", "type": "seekingalpha"},
     ]
     results = []
     for src in sources:
         try:
-            resp = requests.get(src["url"], timeout=10,
-                                headers={"User-Agent": "Mozilla/5.0 Daktier-Bot"})
+            resp = requests.get(src["url"], timeout=8,
+                                headers={"User-Agent": "Mozilla/5.0 (compatible; Daktier-Bot/1.0)"})
             if resp.status_code != 200:
+                print(f"[external] {src['name']}: HTTP {resp.status_code}", file=sys.stderr)
                 continue
             body = resp.text
-            # Enkel RSS-parse: ta de senaste 3 items
-            items = _re.findall(r"<item>.*?</item>", body, _re.DOTALL)[:3] or \
-                    _re.findall(r"<entry>.*?</entry>", body, _re.DOTALL)[:3]
+            items = _re.findall(r"<item>.*?</item>", body, _re.DOTALL)[:max_per_source] or \
+                    _re.findall(r"<entry>.*?</entry>", body, _re.DOTALL)[:max_per_source]
+            count_added = 0
             for item in items:
                 title_m = _re.search(r"<title[^>]*>(?:<!\[CDATA\[)?(.*?)(?:\]\]>)?</title>", item, _re.DOTALL)
-                link_m = _re.search(r"<link[^>]*?(?:href=\")?(https?://[^\"<]+)", item)
-                date_m = _re.search(r"<(?:pubDate|published|updated)[^>]*>(.*?)</", item)
+                link_m = _re.search(r"<link[^>]*?(?:href=\")?(https?://[^\"<>]+)", item)
+                date_m = _re.search(r"<(?:pubDate|published|updated|dc:date)[^>]*>(.*?)</", item)
                 if not title_m: continue
-                title = title_m.group(1).strip()[:100]
+                title = _re.sub(r"<[^>]+>", "", title_m.group(1)).strip()[:120]
+                # Hoppa över helt tomma titlar (kan hända med /comments-feeds)
+                if not title or len(title) < 5: continue
                 link = link_m.group(1).strip() if link_m else ""
                 date = (date_m.group(1) if date_m else "")[:10]
                 results.append({
@@ -4976,6 +5086,8 @@ def _fetch_external_signals():
                     "link": link,
                     "date": date,
                 })
+                count_added += 1
+                if count_added >= max_per_source: break
         except Exception as e:
             print(f"[external signals] {src['name']}: {e}", file=sys.stderr)
             continue

@@ -2,19 +2,8 @@
   "id": "large",
   "name": "Stor Portf\u00f6lj",
   "initial_cash": 10000000,
-  "cash": 9607618.545625892,
-  "positions": {
-    "CLA-B.ST": {
-      "shares": 3896,
-      "avg_price": 51.20000076293945,
-      "current_price": 51.20000076293945,
-      "currency": "SEK",
-      "market": "SE",
-      "name": "Cloetta AB ser. B",
-      "entry_date": "2026-03-03 09:24",
-      "fx_rate_at_entry": 1.0
-    }
-  },
+  "cash": 9797119.983247962,
+  "positions": {},
   "trade_history": [
     {
       "date": "2026-02-27 11:40",
@@ -338,6 +327,19 @@
       "pnl_pct": -1.96,
       "pnl_local": -3912.29,
       "reason": "RSI 49 | MACD bullish (0.60) | Ovanf\u00f6r EMA200 | earnings: +0.40"
+    },
+    {
+      "date": "2026-04-22 09:09",
+      "ticker": "CLA-B.ST",
+      "name": "Cloetta AB ser. B",
+      "action": "S\u00c4LJ",
+      "shares": 3896,
+      "price": 48.64,
+      "currency": "SEK",
+      "proceeds_sek": 189501.0,
+      "pnl_pct": -5.0,
+      "pnl_local": -9973.77,
+      "reason": "Trailing Stop (48.64 < 49.23 | Topp: 54.70 | Vinst: -5.0%)"
     }
   ],
   "daily_values": [
@@ -668,6 +670,62 @@
       "positions_value": 203371.0,
       "return_pct": -1.89,
       "num_positions": 1
+    },
+    {
+      "date": "2026-04-16",
+      "total_value": 9810405.0,
+      "cash": 9607619.0,
+      "positions_value": 202787.0,
+      "return_pct": -1.9,
+      "num_positions": 1
+    },
+    {
+      "date": "2026-04-17",
+      "total_value": 9807094.0,
+      "cash": 9607619.0,
+      "positions_value": 199475.0,
+      "return_pct": -1.93,
+      "num_positions": 1
+    },
+    {
+      "date": "2026-04-20",
+      "total_value": 9806509.0,
+      "cash": 9607619.0,
+      "positions_value": 198891.0,
+      "return_pct": -1.93,
+      "num_positions": 1
+    },
+    {
+      "date": "2026-04-21",
+      "total_value": 9804951.0,
+      "cash": 9607619.0,
+      "positions_value": 197332.0,
+      "return_pct": -1.95,
+      "num_positions": 1
+    },
+    {
+      "date": "2026-04-22",
+      "total_value": 9797120.0,
+      "cash": 9797120.0,
+      "positions_value": 0.0,
+      "return_pct": -2.03,
+      "num_positions": 0
+    },
+    {
+      "date": "2026-04-23",
+      "total_value": 9797120.0,
+      "cash": 9797120.0,
+      "positions_value": 0.0,
+      "return_pct": -2.03,
+      "num_positions": 0
+    },
+    {
+      "date": "2026-04-24",
+      "total_value": 9797120.0,
+      "cash": 9797120.0,
+      "positions_value": 0.0,
+      "return_pct": -2.03,
+      "num_positions": 0
     }
   ],
   "created_at": "2026-02-18T08:22:46.494764"
