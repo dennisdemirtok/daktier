@@ -4778,19 +4778,21 @@ DATA FÖR IDAG:
             },
             json={
                 "model": "claude-sonnet-4-20250514",
-                "max_tokens": 1200,
+                "max_tokens": 1500,
                 "messages": [{"role": "user", "content": prompt}],
             },
-            timeout=60,
+            timeout=90,
         )
         if resp.status_code == 200:
             data = resp.json()
             content = data.get("content", [{}])[0].get("text", "")
-            return content
-        return None
+            if content:
+                return content
+            return f"<p><em>Claude returnerade tomt svar.</em></p>"
+        return f"<p><em>Claude API-fel ({resp.status_code}): {resp.text[:200]}</em></p>"
     except Exception as e:
-        print(f"[AI summary] fel: {e}", file=sys.stderr)
-        return None
+        import traceback
+        return f"<p><em>AI summary fel: {type(e).__name__}: {str(e)[:200]}</em></p>"
 
 
 def _get_upcoming_earnings(db, country_filter=None, days_ahead=10, limit=10):
