@@ -11641,6 +11641,27 @@ def api_toplists(strategy):
     try:
         rows = _fetchall(db, full_q)
         results = [dict(r) for r in rows] if rows else []
+    except Exception as primary_err:
+        # Fallback: kanske dashboard_safe-kolumnen saknas. Försök utan filter.
+        print(f"[toplists] primary query failed: {primary_err}", file=sys.stderr)
+        try:
+            # Bygg om utan dashboard_safe-filter (om migrationen inte hunnit)
+            fallback_base = base_q.replace(safe_filter, "")
+            fallback_q = fallback_base + where_extra + " " + suffix_order
+            rows = _fetchall(db, fallback_q)
+            results = [dict(r) for r in rows] if rows else []
+            # Sätt en flagga att resultatet är icke-validerat
+            for r in results:
+                if "dashboard_safe" not in r:
+                    r["dashboard_safe"] = False
+                if "data_freshness" not in r:
+                    r["data_freshness"] = "stale"
+        except Exception as fallback_err:
+            print(f"[toplists] fallback also failed: {fallback_err}", file=sys.stderr)
+            return jsonify({"error": str(fallback_err), "strategy": strategy,
+                            "results": [], "count": 0,
+                            "warning": "Migration pending — kör batch-analys först"}), 200
+    try:
 
         # Super Confluence: filtrera fram bolag med ≥3 av 4 flaggor TRUE
         if strategy == "super_confluence":
@@ -11790,97 +11811,172 @@ def api_price_cache_status():
 
 @app.route("/api/dashboard/kpi-row")
 def api_dashboard_kpi_row():
-    """Hero KPI-row: dagens signaler + portföljstatus aggregerat över
-    dashboard_safe-godkända bolag.
+    """Hero KPI-row: dagens signaler aggregerat över dashboard_safe-bolag.
 
-    Returnerar: BUY, BUY-LIGHT, AVOID, Super Confluence, Rapport idag,
-    Stop-Thesis.
+    Returnerar ALLTID giltig JSON med safe defaults — om någon kolumn saknas
+    eller migrationen inte hunnit köra, returneras 0-counts istället för 500.
     """
-    from edge_db import _fetchone, _fetchall, _ph
-    db = get_db()
-    ph = _ph()
+    from edge_db import _fetchone
 
-    # Räkna senaste analys per ticker (DISTINCT ON i PG, subquery i SQLite)
-    if _is_postgres():
-        with_clause = """
-            WITH latest AS (
-                SELECT DISTINCT ON (ticker)
-                    ticker, swing_signal, quality_signal, value_signal,
-                    edge_action, edge_score,
-                    is_trifecta, is_growth_trifecta, is_recurring_compounder,
-                    is_cyclical_bottom, stop_thesis_triggered,
-                    dashboard_safe, awaiting_report, report_date
-                FROM batch_analyses
-                WHERE json_parse_ok = TRUE AND dashboard_safe = TRUE
-                ORDER BY ticker, analyzed_at DESC
-            )
-        """
-    else:
-        with_clause = """
-            WITH latest AS (
-                SELECT ticker, swing_signal, quality_signal, value_signal,
-                       edge_action, edge_score,
-                       is_trifecta, is_growth_trifecta, is_recurring_compounder,
-                       is_cyclical_bottom, stop_thesis_triggered,
-                       dashboard_safe, awaiting_report, report_date
-                FROM batch_analyses ba1
-                WHERE json_parse_ok = 1 AND dashboard_safe = 1
-                  AND analyzed_at = (
-                      SELECT MAX(analyzed_at) FROM batch_analyses ba2
-                      WHERE ba2.ticker = ba1.ticker)
-            )
-        """
+    # Defaults — returneras vid alla typer av fel
+    safe_default = {
+        "buy_count": 0, "buy_light_count": 0, "avoid_count": 0,
+        "edge_entry_count": 0, "super_confluence_count": 0,
+        "stop_thesis_count": 0, "awaiting_report_count": 0,
+        "reports_today_count": 0, "total_validated": 0,
+        "warning": None,
+    }
+
     try:
-        # BUY/BUY_LIGHT/AVOID-counts: räknar tickers där ngn av 3 linserna är BUY
-        kpi = _fetchone(db, with_clause + """
-            SELECT
-                SUM(CASE WHEN swing_signal IN ('BUY','STRONG_BUY')
-                       OR quality_signal IN ('BUY','STRONG_BUY')
-                       OR value_signal IN ('BUY','STRONG_BUY') THEN 1 ELSE 0 END) AS buy_cnt,
-                SUM(CASE WHEN (swing_signal = 'BUY_LIGHT'
-                            OR quality_signal = 'BUY_LIGHT'
-                            OR value_signal = 'BUY_LIGHT')
-                          AND swing_signal NOT IN ('BUY','STRONG_BUY')
-                          AND quality_signal NOT IN ('BUY','STRONG_BUY')
-                          AND value_signal NOT IN ('BUY','STRONG_BUY')
-                        THEN 1 ELSE 0 END) AS buy_light_cnt,
-                SUM(CASE WHEN swing_signal IN ('AVOID','EXIT')
-                          AND quality_signal IN ('AVOID','EXIT')
-                          AND value_signal IN ('AVOID','EXIT')
-                        THEN 1 ELSE 0 END) AS avoid_cnt,
-                SUM(CASE WHEN edge_action = 'ENTRY' THEN 1 ELSE 0 END) AS edge_entry_cnt,
-                SUM(CASE WHEN (CASE WHEN is_trifecta THEN 1 ELSE 0 END
-                              + CASE WHEN is_growth_trifecta THEN 1 ELSE 0 END
-                              + CASE WHEN is_recurring_compounder THEN 1 ELSE 0 END
-                              + CASE WHEN is_cyclical_bottom THEN 1 ELSE 0 END) >= 3
-                        THEN 1 ELSE 0 END) AS super_confluence_cnt,
-                SUM(CASE WHEN stop_thesis_triggered THEN 1 ELSE 0 END) AS stop_thesis_cnt,
-                SUM(CASE WHEN awaiting_report THEN 1 ELSE 0 END) AS awaiting_report_cnt,
-                COUNT(*) AS total_validated
-            FROM latest
-        """)
-        # Räkna bolag som rapporterar idag (även icke-validerade)
-        if _is_postgres():
-            today_reports = _fetchone(db,
+        db = get_db()
+    except Exception as e:
+        safe_default["warning"] = f"DB unavailable: {e}"
+        return jsonify(safe_default)
+
+    def _i(v):
+        try: return int(v) if v is not None else 0
+        except Exception: return 0
+
+    # Hjälpare för att köra subqueries defensivt
+    def _safe_count(sql, params=None):
+        try:
+            row = _fetchone(db, sql, params)
+            if row is None: return 0
+            d = dict(row)
+            # Plocka första värdet — vi använder enkla COUNT/SUM-frågor
+            for v in d.values():
+                return _i(v)
+            return 0
+        except Exception as e:
+            print(f"[kpi-row] {sql[:60]}... → {e}", file=sys.stderr)
+            return None  # signalerar "kolumn saknas"
+
+    is_pg = _is_postgres()
+    bool_filter = "= TRUE" if is_pg else "= 1"
+
+    # Bas-WHERE för validerade rader. Om dashboard_safe saknas, fallback till
+    # bara json_parse_ok-filter (utan validering — bättre än 500).
+    safe_filter_try = (f"WHERE json_parse_ok {bool_filter} AND dashboard_safe {bool_filter}")
+    safe_filter_fallback = f"WHERE json_parse_ok {bool_filter}"
+
+    def _kpi_query(where_clause):
+        # Senaste analys per ticker (PG: DISTINCT ON, SQLite: subquery)
+        if is_pg:
+            inner = (f"SELECT DISTINCT ON (ticker) * FROM batch_analyses "
+                     f"{where_clause} ORDER BY ticker, analyzed_at DESC")
+        else:
+            inner = (f"SELECT * FROM batch_analyses ba1 "
+                     f"{where_clause} AND analyzed_at = "
+                     f"(SELECT MAX(analyzed_at) FROM batch_analyses ba2 "
+                     f"  WHERE ba2.ticker = ba1.ticker)")
+        return inner
+
+    # Test om dashboard_safe-kolumnen finns och funkar
+    result = _safe_count(f"SELECT COUNT(*) AS n FROM ({_kpi_query(safe_filter_try)}) t")
+    if result is None:
+        # Migration ej körd än → fallback utan dashboard_safe-filter
+        used_filter = safe_filter_fallback
+        warning = "Migrationen för dashboard_safe har inte körts än. Visar utan filter."
+    else:
+        used_filter = safe_filter_try
+        warning = None
+
+    inner_q = _kpi_query(used_filter)
+
+    # Total validerade
+    total = _safe_count(f"SELECT COUNT(*) AS n FROM ({inner_q}) t") or 0
+
+    # Räkne-helper för specifika villkor på senaste-analys-tabellen
+    def _cnt(extra_where):
+        n = _safe_count(f"SELECT COUNT(*) AS n FROM ({inner_q}) t WHERE {extra_where}")
+        return n if n is not None else 0
+
+    # Räkna varje KPI separat — robust mot enskilda kolumn-problem
+    buy_count = _cnt("swing_signal IN ('BUY','STRONG_BUY') "
+                     "OR quality_signal IN ('BUY','STRONG_BUY') "
+                     "OR value_signal IN ('BUY','STRONG_BUY')")
+    buy_light_count = _cnt("(swing_signal = 'BUY_LIGHT' "
+                            "OR quality_signal = 'BUY_LIGHT' "
+                            "OR value_signal = 'BUY_LIGHT') "
+                            "AND (swing_signal NOT IN ('BUY','STRONG_BUY') "
+                            "  OR swing_signal IS NULL) "
+                            "AND (quality_signal NOT IN ('BUY','STRONG_BUY') "
+                            "  OR quality_signal IS NULL) "
+                            "AND (value_signal NOT IN ('BUY','STRONG_BUY') "
+                            "  OR value_signal IS NULL)")
+    avoid_count = _cnt("swing_signal IN ('AVOID','EXIT') "
+                       "AND quality_signal IN ('AVOID','EXIT') "
+                       "AND value_signal IN ('AVOID','EXIT')")
+    edge_entry_count = _cnt("edge_action = 'ENTRY'")
+    stop_thesis_count = _cnt(f"stop_thesis_triggered {bool_filter}")
+    awaiting_report_count = _cnt(f"awaiting_report {bool_filter}")
+
+    # Super Confluence: räkna boolean-flaggor manuellt
+    if is_pg:
+        sc_q = (f"SELECT COUNT(*) AS n FROM ({inner_q}) t "
+                "WHERE (CASE WHEN is_trifecta THEN 1 ELSE 0 END "
+                "+ CASE WHEN is_growth_trifecta THEN 1 ELSE 0 END "
+                "+ CASE WHEN is_recurring_compounder THEN 1 ELSE 0 END "
+                "+ CASE WHEN is_cyclical_bottom THEN 1 ELSE 0 END) >= 3")
+    else:
+        sc_q = (f"SELECT COUNT(*) AS n FROM ({inner_q}) t "
+                "WHERE (COALESCE(is_trifecta,0) + COALESCE(is_growth_trifecta,0) "
+                "+ COALESCE(is_recurring_compounder,0) + COALESCE(is_cyclical_bottom,0)) >= 3")
+    super_confluence_count = _safe_count(sc_q) or 0
+
+    # Reports today (egen tabell)
+    try:
+        if is_pg:
+            tr = _fetchone(db,
                 "SELECT COUNT(*) AS n FROM report_calendar "
                 "WHERE report_date = CURRENT_DATE")
         else:
-            today_reports = _fetchone(db,
+            tr = _fetchone(db,
                 "SELECT COUNT(*) AS n FROM report_calendar "
                 "WHERE report_date = date('now')")
-        result = dict(kpi) if kpi else {}
-        # Konvertera Decimal/None till int för JSON
-        def _i(v): return int(v) if v is not None else 0
+        reports_today_count = _i(dict(tr).get("n")) if tr else 0
+    except Exception:
+        reports_today_count = 0
+
+    return jsonify({
+        "buy_count": buy_count,
+        "buy_light_count": buy_light_count,
+        "avoid_count": avoid_count,
+        "edge_entry_count": edge_entry_count,
+        "super_confluence_count": super_confluence_count,
+        "stop_thesis_count": stop_thesis_count,
+        "awaiting_report_count": awaiting_report_count,
+        "reports_today_count": reports_today_count,
+        "total_validated": total,
+        "warning": warning,
+    })
+
+
+@app.route("/api/diagnostics/columns")
+def api_diagnostics_columns():
+    """Kollar att v3-kolumner finns i batch_analyses. För felsökning."""
+    from edge_db import _fetchall
+    db = get_db()
+    expected = ["dashboard_safe", "data_freshness", "edge_score", "edge_action",
+                "price_at_analysis", "stop_thesis_triggered", "awaiting_report",
+                "report_date", "post_report_thesis_change",
+                "reverse_dcf_baseline_source", "value_score_method"]
+    try:
+        if _is_postgres():
+            rows = _fetchall(db,
+                "SELECT column_name FROM information_schema.columns "
+                "WHERE table_name = 'batch_analyses'")
+            cols = {dict(r)["column_name"] for r in rows} if rows else set()
+        else:
+            rows = _fetchall(db, "PRAGMA table_info(batch_analyses)")
+            cols = {dict(r)["name"] for r in rows} if rows else set()
+        missing = [c for c in expected if c not in cols]
         return jsonify({
-            "buy_count": _i(result.get("buy_cnt")),
-            "buy_light_count": _i(result.get("buy_light_cnt")),
-            "avoid_count": _i(result.get("avoid_cnt")),
-            "edge_entry_count": _i(result.get("edge_entry_cnt")),
-            "super_confluence_count": _i(result.get("super_confluence_cnt")),
-            "stop_thesis_count": _i(result.get("stop_thesis_cnt")),
-            "awaiting_report_count": _i(result.get("awaiting_report_cnt")),
-            "reports_today_count": _i(dict(today_reports).get("n")) if today_reports else 0,
-            "total_validated": _i(result.get("total_validated")),
+            "table_exists": bool(cols),
+            "total_columns": len(cols),
+            "expected_v3_columns_present": [c for c in expected if c in cols],
+            "missing_v3_columns": missing,
+            "all_columns": sorted(cols),
         })
     except Exception as e:
         import traceback; traceback.print_exc()
