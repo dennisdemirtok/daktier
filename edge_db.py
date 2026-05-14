@@ -563,6 +563,28 @@ def _create_tables(db):
                 price_updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 source TEXT DEFAULT 'borsdata'
             );
+
+            -- v3: Rapport-kalender för pre/post-report-analys-trigger
+            CREATE TABLE IF NOT EXISTS report_calendar (
+                ticker TEXT NOT NULL,
+                report_date DATE NOT NULL,
+                report_type TEXT,                 -- Q1/Q2/Q3/Q4/FY/CMD
+                report_time TEXT,                 -- pre_market/during_market/post_market
+                expected_release_at TIMESTAMP,
+                released_at TIMESTAMP,
+                status TEXT DEFAULT 'upcoming',   -- upcoming/released/analyzed/failed
+                pre_report_analysis_id BIGINT,
+                post_report_analysis_id BIGINT,
+                price_at_report_announcement NUMERIC(12,4),
+                price_30min_post_release NUMERIC(12,4),
+                price_change_pct_immediate NUMERIC(6,2),
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (ticker, report_date)
+            );
+            CREATE INDEX IF NOT EXISTS idx_report_status ON report_calendar(status);
+            CREATE INDEX IF NOT EXISTS idx_report_date_status
+                ON report_calendar(report_date, status);
             CREATE INDEX IF NOT EXISTS idx_price_cache_updated
                 ON price_cache(price_updated_at DESC);
             CREATE INDEX IF NOT EXISTS idx_batch_edge_action
@@ -1077,6 +1099,26 @@ def _create_tables(db):
             CREATE INDEX IF NOT EXISTS idx_price_cache_updated
                 ON price_cache(price_updated_at DESC);
 
+            -- v3: Rapport-kalender (SQLite)
+            CREATE TABLE IF NOT EXISTS report_calendar (
+                ticker TEXT NOT NULL,
+                report_date TEXT NOT NULL,
+                report_type TEXT,
+                report_time TEXT,
+                expected_release_at TEXT,
+                released_at TEXT,
+                status TEXT DEFAULT 'upcoming',
+                pre_report_analysis_id INTEGER,
+                post_report_analysis_id INTEGER,
+                price_at_report_announcement REAL,
+                price_30min_post_release REAL,
+                price_change_pct_immediate REAL,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (ticker, report_date)
+            );
+            CREATE INDEX IF NOT EXISTS idx_report_status_sqlite ON report_calendar(status);
+
             -- Live screen-tracker (SQLite): snapshot för 12m-uppföljning
             CREATE TABLE IF NOT EXISTS screen_snapshots (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1147,11 +1189,13 @@ def _create_tables(db):
 
 
 def _ensure_batch_analyses_columns(db):
-    """Idempotent migration: lägg till v3.2-kolumner i batch_analyses.
+    """Idempotent migration: lägg till v3.2/v3-kolumner i batch_analyses.
 
-    Edge Signal, live-pris-tracking, value-score-method, stop_thesis_triggered.
+    v3.2: Edge Signal + live-pris + value-score-method + stop_thesis.
+    v3:   dashboard_safe + data_freshness + agent_validated_at + report-triggers.
     """
     new_cols_pg = [
+        # v3.2-kolumner
         ("price_at_analysis", "NUMERIC(12,4)"),
         ("price_currency", "TEXT"),
         ("edge_score", "NUMERIC(5,2)"),
@@ -1161,6 +1205,16 @@ def _ensure_batch_analyses_columns(db):
         ("value_score_note", "TEXT"),
         ("stop_thesis_triggered", "BOOLEAN DEFAULT FALSE"),
         ("reverse_dcf_baseline_source", "TEXT"),
+        # v3 dashboard-validering
+        ("dashboard_safe", "BOOLEAN DEFAULT FALSE"),
+        ("dashboard_safe_reason", "TEXT"),
+        ("dashboard_primary_concern", "TEXT"),
+        ("agent_validated_at", "TIMESTAMP"),
+        ("data_freshness", "TEXT"),  # fresh/aging/stale/awaiting_report
+        ("trigger_subtype", "TEXT"),  # manual/dashboard_validation/pre_report/post_report
+        ("awaiting_report", "BOOLEAN DEFAULT FALSE"),
+        ("report_date", "DATE"),
+        ("post_report_thesis_change", "TEXT"),  # thesis_confirmed/strengthened/weakened/invalidated
     ]
     new_cols_sqlite = [
         ("price_at_analysis", "REAL"),
@@ -1172,6 +1226,15 @@ def _ensure_batch_analyses_columns(db):
         ("value_score_note", "TEXT"),
         ("stop_thesis_triggered", "INTEGER DEFAULT 0"),
         ("reverse_dcf_baseline_source", "TEXT"),
+        ("dashboard_safe", "INTEGER DEFAULT 0"),
+        ("dashboard_safe_reason", "TEXT"),
+        ("dashboard_primary_concern", "TEXT"),
+        ("agent_validated_at", "TEXT"),
+        ("data_freshness", "TEXT"),
+        ("trigger_subtype", "TEXT"),
+        ("awaiting_report", "INTEGER DEFAULT 0"),
+        ("report_date", "TEXT"),
+        ("post_report_thesis_change", "TEXT"),
     ]
     cols = new_cols_pg if _use_postgres() else new_cols_sqlite
     for col_name, col_type in cols:
@@ -1179,7 +1242,20 @@ def _ensure_batch_analyses_columns(db):
             db.execute(f"ALTER TABLE batch_analyses ADD COLUMN {col_name} {col_type}")
             db.commit()
         except Exception:
-            # Kolumnen finns redan — ignorera
+            try: db.rollback()
+            except Exception: pass
+    # Index för dashboard-filtrering
+    for idx_sql in [
+        "CREATE INDEX IF NOT EXISTS idx_batch_dashboard_safe ON batch_analyses(dashboard_safe) WHERE dashboard_safe = TRUE" if _use_postgres()
+        else "CREATE INDEX IF NOT EXISTS idx_batch_dashboard_safe ON batch_analyses(dashboard_safe)",
+        "CREATE INDEX IF NOT EXISTS idx_batch_data_freshness ON batch_analyses(data_freshness)",
+        "CREATE INDEX IF NOT EXISTS idx_batch_report_date ON batch_analyses(report_date) WHERE report_date IS NOT NULL" if _use_postgres()
+        else "CREATE INDEX IF NOT EXISTS idx_batch_report_date ON batch_analyses(report_date)",
+    ]:
+        try:
+            db.execute(idx_sql)
+            db.commit()
+        except Exception:
             try: db.rollback()
             except Exception: pass
 

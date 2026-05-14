@@ -6,9 +6,44 @@
 <title>DAKTIER Topplistor — Multi-strategy</title>
 <style>
   * { box-sizing: border-box; }
+  :root {
+    /* v3 Signal-färgsystem — konsekvent över alla topplistor och dashboards */
+    --signal-strong-buy: #059669;   /* emerald-600 — Trifecta, Super Confluence */
+    --signal-buy: #22c55e;          /* green-500 — BUY på primär lins */
+    --signal-buy-light: #a3e635;    /* lime-400 — BUY_LIGHT, Growth Trifecta */
+    --signal-hold: #eab308;         /* yellow-500 — HOLD, WATCHLIST, WAIT */
+    --signal-avoid: #ef4444;        /* red-500 — AVOID, EXIT */
+    --signal-strong-avoid: #b91c1c; /* red-700 — Stop-Thesis triggrad */
+    --freshness-fresh: #059669;
+    --freshness-aging: #eab308;
+    --freshness-stale: #6b7280;
+    --freshness-awaiting: #3b82f6;  /* blue — väntar rapport */
+  }
   body { font-family: -apple-system, BlinkMacSystemFont, "Inter", sans-serif;
          max-width: 1400px; margin: 0 auto; padding: 24px;
          background: #fafafa; color: #1f2937; line-height: 1.5; }
+  /* v3 freshness-badges */
+  .fresh-badge {
+    display: inline-flex; align-items: center; gap: 3px;
+    padding: 1px 6px; border-radius: 6px; font-size: 9.5px; font-weight: 700;
+    text-transform: uppercase; letter-spacing: 0.3px;
+  }
+  .fresh-badge.fresh { background: rgba(5,150,105,0.12); color: var(--freshness-fresh); }
+  .fresh-badge.aging { background: rgba(234,179,8,0.12); color: var(--freshness-aging); }
+  .fresh-badge.stale { background: rgba(107,114,128,0.12); color: var(--freshness-stale); }
+  .fresh-badge.awaiting { background: rgba(59,130,246,0.12); color: var(--freshness-awaiting); }
+  .unsafe-row { background: rgba(255,243,224,0.5) !important; }
+  .unsafe-row td:first-child::before { content: '⚠️ '; }
+  /* Tooltip-system */
+  [data-tooltip] { position: relative; cursor: help; border-bottom: 1px dotted #9ca3af; }
+  [data-tooltip]:hover::after {
+    content: attr(data-tooltip);
+    position: absolute; bottom: 125%; left: 50%; transform: translateX(-50%);
+    background: #1f2937; color: white; padding: 6px 10px; border-radius: 6px;
+    font-size: 11.5px; font-weight: 500; white-space: pre-line; min-width: 200px;
+    max-width: 320px; z-index: 100; line-height: 1.4;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+  }
   h1 { font-size: 26px; margin: 0 0 4px; }
   .lede { color: #6b7280; margin-bottom: 18px; font-size: 13px; }
   .top-link { display: inline-block; margin-bottom: 12px; color: #4f46e5;
@@ -105,11 +140,14 @@
       Klicka en rad för full analys i drawer.
     </p>
   </div>
-  <div style="display:flex;gap:8px">
+  <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+    <label style="display:inline-flex;align-items:center;gap:5px;font-size:11.5px;color:#6b7280;cursor:pointer" data-tooltip="Som default visas endast bolag agenten har validerat med dashboard_safe=TRUE.\nKryssa i för att se ALLA analyser (även de som agenten flaggat).">
+      <input type="checkbox" id="includeUnvalidated" onchange="loadStrategy(_currentStrategy)"> Visa även icke-validerade
+    </label>
     <button onclick="openBatchModal()" style="background:linear-gradient(135deg,#1d4ed8,#3b82f6);color:white;border:none;padding:10px 18px;border-radius:8px;cursor:pointer;font-weight:600;font-family:inherit;font-size:13px">
       🚀 Kör ny batch-analys
     </button>
-    <button onclick="loadStats(); loadStrategy(_currentStrategy);" style="background:white;border:1px solid #e5e7eb;padding:10px 14px;border-radius:8px;cursor:pointer;font-weight:600;font-family:inherit;font-size:13px">
+    <button onclick="loadKpiRow(); loadStats(); loadStrategy(_currentStrategy);" style="background:white;border:1px solid #e5e7eb;padding:10px 14px;border-radius:8px;cursor:pointer;font-weight:600;font-family:inherit;font-size:13px">
       🔄 Uppdatera
     </button>
   </div>
@@ -150,6 +188,9 @@
 </div>
 
 <div id="stats" class="stats-bar"></div>
+
+<!-- v3 Hero KPI-row: sammanfattning av dagens marknadsläge -->
+<div id="kpiRow" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px;margin-bottom:18px"></div>
 
 <!-- Progress-banner (visas under batch-körning) -->
 <div id="progressBanner" style="display:none;background:linear-gradient(135deg,#dbeafe,#bfdbfe);border-left:4px solid #1e40af;padding:12px 16px;border-radius:8px;margin-bottom:16px;font-size:13px">
@@ -364,6 +405,30 @@ async function checkRunningBatch() {
   } catch (e) {}
 }
 
+async function loadKpiRow() {
+  try {
+    const r = await fetch('/api/dashboard/kpi-row');
+    const d = await r.json();
+    if (d.error) return;
+    const el = document.getElementById('kpiRow');
+    const kpis = [
+      {label:'BUY',              v: d.buy_count,             c:'var(--signal-buy)',           tip:'Bolag där minst en lins säger BUY/STRONG_BUY (agent-validerade)'},
+      {label:'BUY-LIGHT',        v: d.buy_light_count,       c:'var(--signal-buy-light)',     tip:'Bolag med BUY_LIGHT-signal (Growth Trifecta, mindre position)'},
+      {label:'AVOID',            v: d.avoid_count,           c:'var(--signal-avoid)',         tip:'Bolag där alla 3 linser säger AVOID/EXIT'},
+      {label:'🎯 Edge Entry',    v: d.edge_entry_count,      c:'var(--signal-strong-buy)',    tip:'Edge Action = ENTRY (Edge ≥70). Hero-listan.'},
+      {label:'⭐ Super Confluence', v: d.super_confluence_count, c:'var(--signal-strong-buy)',  tip:'≥3 av 4 flaggor TRUE samtidigt. Backtest +63%.'},
+      {label:'📊 Rapport idag',  v: d.reports_today_count,   c:'var(--freshness-awaiting)',   tip:'Bolag i report_calendar med dagens datum'},
+      {label:'⏳ Väntar rapport',v: d.awaiting_report_count, c:'var(--freshness-awaiting)',   tip:'Bolag med rapport inom 7 dagar'},
+      {label:'🛑 Stop-Thesis',   v: d.stop_thesis_count,     c:'var(--signal-strong-avoid)',  tip:'Bolag där stop-thesis-flaggor är utlösta'},
+    ];
+    el.innerHTML = kpis.map(k =>
+      `<div data-tooltip="${escapeHtml(k.tip)}" style="background:white;border:1px solid #e5e7eb;border-left:3px solid ${k.c};border-radius:8px;padding:10px 12px;cursor:help">
+         <div style="font-size:10.5px;color:#6b7280;font-weight:600;text-transform:uppercase;letter-spacing:0.3px">${k.label}</div>
+         <div style="font-size:22px;font-weight:800;color:${k.c};margin-top:2px">${k.v}</div>
+       </div>`).join('');
+  } catch (e) { console.warn('kpi-row error', e); }
+}
+
 async function loadStats() {
   try {
     const r = await fetch('/api/batch/status');
@@ -404,6 +469,24 @@ function renderEdge(score, action) {
   const emoji = s >= 70 ? '🟢' : s >= 50 ? '🟡' : s >= 30 ? '⚪' : '🔴';
   return `<span style="color:${color};font-weight:700">${emoji} ${s.toFixed(0)}</span>` +
     (action ? `<div style="font-size:9.5px;color:#6b7280;font-weight:500">${action}</div>` : '');
+}
+
+function renderFreshness(r) {
+  const f = r.data_freshness;
+  if (!f) return '';
+  const map = {
+    fresh:     { emoji: '⭐', label: 'fresh',    cls: 'fresh',
+                 tip: 'Analys <7 dagar — fräsch data' },
+    aging:     { emoji: '✓',  label: 'aging',    cls: 'aging',
+                 tip: 'Analys 7–30 dagar — fungerar men kontrollera om ny rapport finns' },
+    stale:     { emoji: '🕒', label: 'stale',    cls: 'stale',
+                 tip: 'Analys >30 dagar — REKOMMENDERAS RE-ANALYS' },
+    awaiting_report: { emoji: '⏳', label: 'väntar rapport', cls: 'awaiting',
+                       tip: 'Bolaget rapporterar inom 7 dagar — vänta innan stor position' },
+  };
+  const m = map[f];
+  if (!m) return '';
+  return `<span class="fresh-badge ${m.cls}" data-tooltip="${m.tip}">${m.emoji} ${m.label}</span>`;
 }
 
 function renderLivePrice(r) {
@@ -448,7 +531,9 @@ async function loadStrategy(key) {
   const el = document.getElementById('results');
   el.innerHTML = '<div class="loading">⏳ Laddar ' + key + '...</div>';
   try {
-    const r = await fetch('/api/toplists/' + encodeURIComponent(key));
+    const includeUnval = document.getElementById('includeUnvalidated')?.checked;
+    const qs = includeUnval ? '?include_unvalidated=1' : '';
+    const r = await fetch('/api/toplists/' + encodeURIComponent(key) + qs);
     const d = await r.json();
     if (d.error) {
       el.innerHTML = `<div style="color:#dc2626;padding:20px">Fel: ${d.error}</div>`;
@@ -462,11 +547,16 @@ async function loadStrategy(key) {
       </div>`;
       return;
     }
-    const rows = d.results.map(r => `
-      <tr onclick="openDrawer('${escapeJs(r.ticker)}')">
+    const rows = d.results.map(r => {
+      const rowCls = r.dashboard_safe ? '' : 'unsafe-row';
+      const concern = r.dashboard_primary_concern
+        ? `<div style="font-size:10px;color:#b91c1c;font-style:italic" title="${escapeHtml(r.dashboard_safe_reason || '')}">⚠ ${escapeHtml(r.dashboard_primary_concern)}</div>` : '';
+      return `
+      <tr class="${rowCls}" onclick="openDrawer('${escapeJs(r.ticker)}')">
         <td>
           <div class="ticker">${escapeHtml(r.ticker)} ${flagBadges(r)}</div>
           <div style="font-size:10.5px;color:#9ca3af">${escapeHtml(r.short_name || '')}</div>
+          ${concern}
         </td>
         <td>${renderEdge(r.edge_score, r.edge_action)}</td>
         <td><span class="classification">${escapeHtml(r.classification || '—')}</span>
@@ -479,15 +569,18 @@ async function loadStrategy(key) {
         <td>${scoreCell(r.momentum_score)}</td>
         <td><strong>${scoreCell(r.composite_score)}</strong></td>
         <td>${renderLivePrice(r)}</td>
-        <td style="font-size:10.5px;color:#6b7280">${(r.analyzed_at || '').slice(0,10)}${r.analysis_age_hours != null ? `<div style="font-size:9.5px;color:#9ca3af">${r.analysis_age_hours}h sen</div>` : ''}</td>
+        <td>${renderFreshness(r)}<div style="font-size:10px;color:#9ca3af;margin-top:3px">${(r.analyzed_at || '').slice(0,10)}</div></td>
       </tr>
-    `).join('');
+    `;}).join('');
     el.innerHTML = `<table>
       <thead><tr>
-        <th>Ticker</th><th>Edge</th><th>Klassificering</th>
-        <th>Swing</th><th>Quality</th><th>Value</th>
+        <th>Ticker</th><th data-tooltip="Edge Signal — användarens beprövade strategi.\nENTRY ≥70, HOLD 50-69, WAIT 30-49, EXIT <30.\nBacktest: +43% på 76 dagar.">Edge</th>
+        <th>Klassificering</th>
+        <th data-tooltip="Swing (4-12v) · Lynch/Fisher + Kahneman.\nOwner momentum + teknisk trend.\nStop: EXIT_DECEL.">Swing</th>
+        <th data-tooltip="Quality (≥12m) · Buffett + Lynch stalwart.\nTrifecta V+Q+M.\nStop: stop_thesis-triggers.">Quality</th>
+        <th data-tooltip="Value (≥24m) · Graham + Christensen.\nReverse DCF + katalysator obligatorisk.\nStop: katalysator-failure eller 24m utan re-rating.">Value</th>
         <th>V</th><th>Q</th><th>M</th><th>Comp</th>
-        <th>Live pris</th><th>Datum</th>
+        <th>Live pris</th><th data-tooltip="Freshness badge:\n⭐ fresh = <7 dagar\n✓ aging = 7-30 dagar\n🕒 stale = >30 dagar (re-analys)\n⏳ awaiting_report = rapport inom 7d">Freshness</th>
       </tr></thead>
       <tbody>${rows}</tbody>
     </table>
@@ -565,6 +658,7 @@ function renderMarkdown(md) {
 document.addEventListener('keydown', e => { if (e.key === 'Escape') closeDrawer(); });
 
 renderTabs();
+loadKpiRow();
 loadStats();
 loadStrategy(_currentStrategy);
 checkRunningBatch();

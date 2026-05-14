@@ -9704,6 +9704,31 @@ Edge är **hero-signalen** för kortsiktig action. Visa den prominent i
 dashboard som EGEN kolumn, separat från Swing/Quality/Value (som är
 strategi-specifik långsiktig allokering).
 
+**Steg 2b — Rapport-kontext (när trigger_subtype = pre_report eller post_report)**
+
+**Pre-report (kvällen innan rapport)**: Analysera bolaget enligt vanlig
+FAS 1-process, men lägg till sektion med rubrik **🕐 RAPPORT-VÄNTAN**:
+- Förväntat release: datum + tid
+- Konsensus-förväntningar (från web_search): Revenue, EPS, Guidance-utsikt
+- Pre-report-tes: din bedömning INNAN rapporten
+- Triggers att bevaka: vilka metrics validerar bull-/bear-case + guidance-revisions-trigger
+
+I JSON: `"awaiting_report": true, "report_date": "...", "trigger_subtype": "pre_report"`
+
+**Post-report (omedelbart efter release)**: Kör om FAS 1-analys med ny
+data. Lägg till sektion överst med rubrik **📊 RAPPORT-RESPONS**:
+- Release-tid + pre-pris + post-pris (30 min) + omedelbar reaktion %
+- Rapport vs Konsensus: Revenue/EPS/Guidance = BEAT/MISS/INLINE
+- Pre-tes vs Post-tes: vad sa pre-report? Vad säger nu? Strukturell skiftning eller bekräftelse?
+- Nytt råd: konkret förändring av strategi-matris-bedömningar
+
+I JSON:
+```
+"post_report_thesis_change": "thesis_confirmed" | "thesis_strengthened" |
+                              "thesis_weakened" | "thesis_invalidated",
+"trigger_subtype": "post_report"
+```
+
 **Steg 3 — Värderingsregler per linstyp**
 
 **3a — Fast growers + disruptors**: Forward-estimat, INTE trailing.
@@ -10155,6 +10180,14 @@ returneras i TVÅ delar.
   "value_score_method": "ev_revenue_alternative",
   "value_score_note": "Negativt EBIT → använder EV/Revenue mot SaaS-peers",
   "stop_thesis_triggered": false,
+  "dashboard_validation": {
+    "dashboard_safe": true,
+    "dashboard_safe_reason": "Multi-lens-konsensus stödjer screen-score",
+    "primary_concern": null,
+    "data_freshness": "fresh"
+  },
+  "awaiting_report": false,
+  "report_date": null,
   "key_metrics": {
     "price": 74.4,
     "currency": "SEK",
@@ -10200,6 +10233,49 @@ returneras i TVÅ delar.
 **Primary_lens-värden**:
 `graham_buffett` · `buffett_lynch` · `lynch_fisher` · `lynch` ·
 `graham_lynch` · `graham` · `christensen_thiel` · `kahneman`
+
+────────────────────────────────────────────────────────────
+STEG 8a — DASHBOARD SAFETY-VALIDERING (KRITISK)
+────────────────────────────────────────────────────────────
+
+**Kärn-princip**: Allt på dashboarden måste ha en agent-bekräftad multi-lens-
+bedömning bakom sig. Kvantitativa screens (Graham, Lynch PEG, Magic Formula)
+är INPUT till agenten — INTE färdiga signaler.
+
+I batch-mode (alla körningar med `trigger_type=batch`), utvärdera vid slutet
+av FAS 1-analysen om bolaget är säkert att visa på publik dashboard-topplista.
+Returnera i JSON:
+
+```
+"dashboard_validation": {
+  "dashboard_safe": true,
+  "dashboard_safe_reason": "Multi-lens-konsensus stödjer screen-score, ingen kontradiktion",
+  "primary_concern": null,
+  "data_freshness": "fresh"
+}
+```
+
+**Sätt `dashboard_safe = FALSE` när**:
+- Två eller fler linser säger AVOID trots hög screen-score (model-screen-felsignal)
+- Stop-thesis-trigger aktiverad
+- Data är >30 dagar gammal utan rapport-uppdatering
+- Cyclical-peak utan strukturell mix-shift-justering (klassisk peak-fälla)
+- Reverse DCF gap >20pp utan motiverbar sekulär tematik
+- Edge_score < 30 OCH composite_score < 40 (multi-modal nedgång)
+
+**Sätt `data_freshness`**:
+- `fresh` — Analys <7 dagar, post-senaste rapport
+- `aging` — Analys 7–30 dagar, ingen ny rapport sedan
+- `stale` — Analys >30 dagar (REKOMMENDERAS RE-ANALYS)
+- `awaiting_report` — Bolag rapporterar inom 7 dagar (vänta innan stor position)
+
+**`primary_concern`**: Om `dashboard_safe = false`, ange specifik anledning
+i en mening (max 120 tecken). Ex: *"Cyclical-peak utan strukturell mix-shift —
+P/E 11 är fälla, earnings rullar över"*.
+
+Detta är skillnaden mellan en screener och en investerings-AI. Var hård i
+bedömningen — false positives förstör trovärdighet, false negatives kostar
+användaren mindre.
 
 ══════════════════════════════════════════════════════════════
 DEL 7 — SVARSPRINCIPER
@@ -11101,6 +11177,12 @@ def _analyze_single_ticker_for_batch(ticker, run_id):
             flags = parsed_json.get("flags", {}) or {}
             rdcf = parsed_json.get("reverse_dcf", {}) or {}
             edge = parsed_json.get("edge_signal", {}) or {}
+            dash_val = parsed_json.get("dashboard_validation", {}) or {}
+            # v3: dashboard-validering — default till FALSE om agenten inte uttalade sig
+            dashboard_safe = bool(dash_val.get("dashboard_safe", False))
+            dashboard_safe_reason = dash_val.get("dashboard_safe_reason")
+            dashboard_primary_concern = dash_val.get("primary_concern")
+            data_freshness = dash_val.get("data_freshness") or "fresh"  # analys-stund = fresh
             cols = [
                 ticker, short_name, country, "manual",
                 parsed_json.get("classification"),
@@ -11144,6 +11226,14 @@ def _analyze_single_ticker_for_batch(ticker, run_id):
                 parsed_json.get("value_score_note"),
                 bool(parsed_json.get("stop_thesis_triggered", False)),
                 rdcf.get("baseline_source"),
+                # v3 dashboard-validering
+                dashboard_safe,
+                dashboard_safe_reason,
+                dashboard_primary_concern,
+                data_freshness,
+                bool(parsed_json.get("awaiting_report", False)),
+                parsed_json.get("report_date"),
+                parsed_json.get("post_report_thesis_change"),
             ]
         else:
             cols = [ticker, short_name, country, "manual",
@@ -11158,7 +11248,10 @@ def _analyze_single_ticker_for_batch(ticker, run_id):
                     hash_, False, "JSON-parsing failed",
                     # v3.2-kolumner
                     price_at_analysis, price_currency,
-                    None, None, None, None, None, False, None]
+                    None, None, None, None, None, False, None,
+                    # v3 dashboard-validering — failad parsing = inte säker
+                    False, "JSON-parsing failed — kan inte validera", None,
+                    "stale", False, None, None]
         cols_sql = ("ticker, short_name, country, trigger_type, "
                     "classification, primary_lens, swing_signal, quality_signal, "
                     "value_signal, swing_motivation, quality_motivation, value_motivation, "
@@ -11171,7 +11264,9 @@ def _analyze_single_ticker_for_batch(ticker, run_id):
                     "fundamentals_hash, json_parse_ok, error_message, "
                     "price_at_analysis, price_currency, edge_score, edge_action, "
                     "edge_components, value_score_method, value_score_note, "
-                    "stop_thesis_triggered, reverse_dcf_baseline_source")
+                    "stop_thesis_triggered, reverse_dcf_baseline_source, "
+                    "dashboard_safe, dashboard_safe_reason, dashboard_primary_concern, "
+                    "data_freshness, awaiting_report, report_date, post_report_thesis_change")
         placeholders = ", ".join([ph] * len(cols))
         db.execute(f"INSERT INTO batch_analyses ({cols_sql}) VALUES ({placeholders})",
                    tuple(cols))
@@ -11325,7 +11420,11 @@ def api_batch_status():
         "FROM batch_runs ORDER BY id DESC LIMIT 1")
     # Total i batch_analyses
     total = _fetchone(db, "SELECT COUNT(*) AS n, AVG(cost_usd) AS avg_cost, "
-                          "SUM(cost_usd) AS total_cost, AVG(cached_tokens) AS avg_cached "
+                          "SUM(cost_usd) AS total_cost, AVG(cached_tokens) AS avg_cached, "
+                          "SUM(CASE WHEN dashboard_safe " +
+                          ("THEN 1 ELSE 0 END) AS dashboard_safe_count "
+                          if _is_postgres() else
+                          "= 1 THEN 1 ELSE 0 END) AS dashboard_safe_count ") +
                           "FROM batch_analyses")
     # Distribution per klassificering
     dist_rows = _fetchall(db,
@@ -11411,7 +11510,7 @@ def _enrich_with_live_prices(results):
                 r["price_delta_pct"] = None
         else:
             r["price_delta_pct"] = None
-        # Analys-ålder i timmar
+        # Analys-ålder i timmar + dynamisk data_freshness-beräkning
         try:
             from datetime import datetime
             ts = r.get("analyzed_at")
@@ -11422,7 +11521,19 @@ def _enrich_with_live_prices(results):
                 else:
                     dt = ts
                 age_s = (datetime.utcnow() - dt).total_seconds()
-                r["analysis_age_hours"] = round(age_s / 3600, 1)
+                age_hours = round(age_s / 3600, 1)
+                r["analysis_age_hours"] = age_hours
+                age_days = age_s / 86400.0
+                # Dynamisk freshness — overrida sparat värde med ålder
+                # om sparat värde inte är 'awaiting_report' (det är inte ålder-baserat)
+                stored = r.get("data_freshness")
+                if stored != "awaiting_report":
+                    if age_days < 7:
+                        r["data_freshness"] = "fresh"
+                    elif age_days < 30:
+                        r["data_freshness"] = "aging"
+                    else:
+                        r["data_freshness"] = "stale"
             else:
                 r["analysis_age_hours"] = None
         except Exception:
@@ -11450,6 +11561,9 @@ def api_toplists(strategy):
     from edge_db import _fetchall, _ph
     db = get_db()
 
+    # Query-param: ?include_unvalidated=1 för att se ALLA bolag (admin/debug)
+    include_unvalidated = request.args.get("include_unvalidated") == "1"
+
     base_cols = ("ticker, short_name, country, analyzed_at, classification, "
                  "primary_lens, swing_signal, quality_signal, value_signal, "
                  "swing_motivation, quality_motivation, value_motivation, "
@@ -11460,15 +11574,21 @@ def api_toplists(strategy):
                  "reverse_dcf_gap, reverse_dcf_confidence, "
                  "price_at_analysis, price_currency, edge_score, edge_action, "
                  "value_score_method, stop_thesis_triggered, "
-                 "reverse_dcf_baseline_source")
+                 "reverse_dcf_baseline_source, dashboard_safe, "
+                 "dashboard_safe_reason, dashboard_primary_concern, "
+                 "data_freshness, awaiting_report, report_date, "
+                 "post_report_thesis_change")
+
+    safe_filter = "" if include_unvalidated else (
+        " AND dashboard_safe = TRUE" if _is_postgres() else " AND dashboard_safe = 1")
 
     if _is_postgres():
         base_q = (f"SELECT DISTINCT ON (ticker) {base_cols} FROM batch_analyses "
-                  "WHERE json_parse_ok = TRUE ")
+                  f"WHERE json_parse_ok = TRUE {safe_filter} ")
         suffix_order = "ORDER BY ticker, analyzed_at DESC"
     else:
         base_q = (f"SELECT {base_cols} FROM batch_analyses ba1 "
-                  "WHERE json_parse_ok = 1 AND analyzed_at = "
+                  f"WHERE json_parse_ok = 1 {safe_filter} AND analyzed_at = "
                   "(SELECT MAX(analyzed_at) FROM batch_analyses ba2 "
                   " WHERE ba2.ticker = ba1.ticker) ")
         suffix_order = ""
@@ -11666,6 +11786,105 @@ def api_price_cache_status():
         "last_tick_unix": _LAST_PRICE_UPDATE_AT[0],
         "interval_sec": PRICE_UPDATE_INTERVAL_SEC,
     })
+
+
+@app.route("/api/dashboard/kpi-row")
+def api_dashboard_kpi_row():
+    """Hero KPI-row: dagens signaler + portföljstatus aggregerat över
+    dashboard_safe-godkända bolag.
+
+    Returnerar: BUY, BUY-LIGHT, AVOID, Super Confluence, Rapport idag,
+    Stop-Thesis.
+    """
+    from edge_db import _fetchone, _fetchall, _ph
+    db = get_db()
+    ph = _ph()
+
+    # Räkna senaste analys per ticker (DISTINCT ON i PG, subquery i SQLite)
+    if _is_postgres():
+        with_clause = """
+            WITH latest AS (
+                SELECT DISTINCT ON (ticker)
+                    ticker, swing_signal, quality_signal, value_signal,
+                    edge_action, edge_score,
+                    is_trifecta, is_growth_trifecta, is_recurring_compounder,
+                    is_cyclical_bottom, stop_thesis_triggered,
+                    dashboard_safe, awaiting_report, report_date
+                FROM batch_analyses
+                WHERE json_parse_ok = TRUE AND dashboard_safe = TRUE
+                ORDER BY ticker, analyzed_at DESC
+            )
+        """
+    else:
+        with_clause = """
+            WITH latest AS (
+                SELECT ticker, swing_signal, quality_signal, value_signal,
+                       edge_action, edge_score,
+                       is_trifecta, is_growth_trifecta, is_recurring_compounder,
+                       is_cyclical_bottom, stop_thesis_triggered,
+                       dashboard_safe, awaiting_report, report_date
+                FROM batch_analyses ba1
+                WHERE json_parse_ok = 1 AND dashboard_safe = 1
+                  AND analyzed_at = (
+                      SELECT MAX(analyzed_at) FROM batch_analyses ba2
+                      WHERE ba2.ticker = ba1.ticker)
+            )
+        """
+    try:
+        # BUY/BUY_LIGHT/AVOID-counts: räknar tickers där ngn av 3 linserna är BUY
+        kpi = _fetchone(db, with_clause + """
+            SELECT
+                SUM(CASE WHEN swing_signal IN ('BUY','STRONG_BUY')
+                       OR quality_signal IN ('BUY','STRONG_BUY')
+                       OR value_signal IN ('BUY','STRONG_BUY') THEN 1 ELSE 0 END) AS buy_cnt,
+                SUM(CASE WHEN (swing_signal = 'BUY_LIGHT'
+                            OR quality_signal = 'BUY_LIGHT'
+                            OR value_signal = 'BUY_LIGHT')
+                          AND swing_signal NOT IN ('BUY','STRONG_BUY')
+                          AND quality_signal NOT IN ('BUY','STRONG_BUY')
+                          AND value_signal NOT IN ('BUY','STRONG_BUY')
+                        THEN 1 ELSE 0 END) AS buy_light_cnt,
+                SUM(CASE WHEN swing_signal IN ('AVOID','EXIT')
+                          AND quality_signal IN ('AVOID','EXIT')
+                          AND value_signal IN ('AVOID','EXIT')
+                        THEN 1 ELSE 0 END) AS avoid_cnt,
+                SUM(CASE WHEN edge_action = 'ENTRY' THEN 1 ELSE 0 END) AS edge_entry_cnt,
+                SUM(CASE WHEN (CASE WHEN is_trifecta THEN 1 ELSE 0 END
+                              + CASE WHEN is_growth_trifecta THEN 1 ELSE 0 END
+                              + CASE WHEN is_recurring_compounder THEN 1 ELSE 0 END
+                              + CASE WHEN is_cyclical_bottom THEN 1 ELSE 0 END) >= 3
+                        THEN 1 ELSE 0 END) AS super_confluence_cnt,
+                SUM(CASE WHEN stop_thesis_triggered THEN 1 ELSE 0 END) AS stop_thesis_cnt,
+                SUM(CASE WHEN awaiting_report THEN 1 ELSE 0 END) AS awaiting_report_cnt,
+                COUNT(*) AS total_validated
+            FROM latest
+        """)
+        # Räkna bolag som rapporterar idag (även icke-validerade)
+        if _is_postgres():
+            today_reports = _fetchone(db,
+                "SELECT COUNT(*) AS n FROM report_calendar "
+                "WHERE report_date = CURRENT_DATE")
+        else:
+            today_reports = _fetchone(db,
+                "SELECT COUNT(*) AS n FROM report_calendar "
+                "WHERE report_date = date('now')")
+        result = dict(kpi) if kpi else {}
+        # Konvertera Decimal/None till int för JSON
+        def _i(v): return int(v) if v is not None else 0
+        return jsonify({
+            "buy_count": _i(result.get("buy_cnt")),
+            "buy_light_count": _i(result.get("buy_light_cnt")),
+            "avoid_count": _i(result.get("avoid_cnt")),
+            "edge_entry_count": _i(result.get("edge_entry_cnt")),
+            "super_confluence_count": _i(result.get("super_confluence_cnt")),
+            "stop_thesis_count": _i(result.get("stop_thesis_cnt")),
+            "awaiting_report_count": _i(result.get("awaiting_report_cnt")),
+            "reports_today_count": _i(dict(today_reports).get("n")) if today_reports else 0,
+            "total_validated": _i(result.get("total_validated")),
+        })
+    except Exception as e:
+        import traceback; traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
 
 
 @app.route("/api/analysis/<ticker>")
