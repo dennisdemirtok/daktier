@@ -553,6 +553,23 @@ def _create_tables(db):
                 error_summary TEXT
             );
 
+            -- Live-pris-cache: uppdateras var 15:e min under börsöppet
+            -- (kolumn-tillägg till batch_analyses körs i _ensure_batch_analyses_columns)
+            CREATE TABLE IF NOT EXISTS price_cache (
+                ticker TEXT PRIMARY KEY,
+                short_name TEXT,
+                live_price NUMERIC(12,4),
+                currency TEXT,
+                price_updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                source TEXT DEFAULT 'borsdata'
+            );
+            CREATE INDEX IF NOT EXISTS idx_price_cache_updated
+                ON price_cache(price_updated_at DESC);
+            CREATE INDEX IF NOT EXISTS idx_batch_edge_action
+                ON batch_analyses(edge_action) WHERE edge_action IS NOT NULL;
+            CREATE INDEX IF NOT EXISTS idx_batch_stop_thesis
+                ON batch_analyses(stop_thesis_triggered) WHERE stop_thesis_triggered = TRUE;
+
             -- Live screen-tracker: spara snapshot av screen-träffar för
             -- senare 12m-uppföljning. Validering live att backtest
             -- speglar verkligheten.
@@ -1048,6 +1065,18 @@ def _create_tables(db):
                 error_summary TEXT
             );
 
+            -- Live-pris-cache (SQLite)
+            CREATE TABLE IF NOT EXISTS price_cache (
+                ticker TEXT PRIMARY KEY,
+                short_name TEXT,
+                live_price REAL,
+                currency TEXT,
+                price_updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                source TEXT DEFAULT 'borsdata'
+            );
+            CREATE INDEX IF NOT EXISTS idx_price_cache_updated
+                ON price_cache(price_updated_at DESC);
+
             -- Live screen-tracker (SQLite): snapshot för 12m-uppföljning
             CREATE TABLE IF NOT EXISTS screen_snapshots (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1114,6 +1143,45 @@ def _create_tables(db):
         except Exception as e:
             print(f"[migration] yahoo_ticker idx: {e}")
         _ensure_smart_score_columns(db)
+        _ensure_batch_analyses_columns(db)
+
+
+def _ensure_batch_analyses_columns(db):
+    """Idempotent migration: lägg till v3.2-kolumner i batch_analyses.
+
+    Edge Signal, live-pris-tracking, value-score-method, stop_thesis_triggered.
+    """
+    new_cols_pg = [
+        ("price_at_analysis", "NUMERIC(12,4)"),
+        ("price_currency", "TEXT"),
+        ("edge_score", "NUMERIC(5,2)"),
+        ("edge_action", "TEXT"),
+        ("edge_components", "JSONB"),
+        ("value_score_method", "TEXT"),
+        ("value_score_note", "TEXT"),
+        ("stop_thesis_triggered", "BOOLEAN DEFAULT FALSE"),
+        ("reverse_dcf_baseline_source", "TEXT"),
+    ]
+    new_cols_sqlite = [
+        ("price_at_analysis", "REAL"),
+        ("price_currency", "TEXT"),
+        ("edge_score", "REAL"),
+        ("edge_action", "TEXT"),
+        ("edge_components", "TEXT"),
+        ("value_score_method", "TEXT"),
+        ("value_score_note", "TEXT"),
+        ("stop_thesis_triggered", "INTEGER DEFAULT 0"),
+        ("reverse_dcf_baseline_source", "TEXT"),
+    ]
+    cols = new_cols_pg if _use_postgres() else new_cols_sqlite
+    for col_name, col_type in cols:
+        try:
+            db.execute(f"ALTER TABLE batch_analyses ADD COLUMN {col_name} {col_type}")
+            db.commit()
+        except Exception:
+            # Kolumnen finns redan — ignorera
+            try: db.rollback()
+            except Exception: pass
 
 
 def _ensure_borsdata_columns(db):

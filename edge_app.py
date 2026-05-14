@@ -9667,10 +9667,71 @@ Detta är analysens kärna. **Ingen sizing i FAS 1.** Skarp matris-bedömning
 - **💎 Value**: Graham + Christensen. Reverse DCF + katalysator OBLIGATORISK.
   Stop: katalysator-failure eller 24m utan re-rating.
 
+**Steg 2a-bis — Edge Signal-integration (oberoende parallell signal)**
+
+Edge Signal är användarens beprövade kortsiktiga strategi (+43% på 76 dagar
+i backtest) — ska visas SEPARAT från Swing/Quality/Value-matrisen, INTE
+gömmas inuti Momentum-axeln.
+
+Edge Score (0–100) beräknas från:
+1. **Owner momentum** (Avanza-ägare 1m/3m/12m-förändring)
+2. **Teknisk trend** (pris vs SMA50/SMA200, RSI, MACD)
+3. **Insider-flow** när tillgänglig
+
+Returneras separat i JSON:
+```
+"edge_signal": {
+  "score": 71,
+  "action": "ENTRY",
+  "components": {
+    "owner_momentum": 85,
+    "technical_trend": 68,
+    "insider_flow": null
+  },
+  "horizon": "4-12 weeks",
+  "stop": "EXIT_DECEL när owner_momentum < 0 i 2 veckor ELLER pris bryter SMA50"
+}
+```
+
+**Edge Action-värden**:
+- `ENTRY` (Edge ≥ 70): Stark entry-signal
+- `HOLD` (Edge 50–69): Behåll position
+- `WAIT` (Edge 30–49): Vänta på bekräftelse
+- `EXIT` (Edge < 30): Exit-signal
+- `EXIT_DECEL`: Special-trigger när owner-momentum vänder negativt
+
+Edge är **hero-signalen** för kortsiktig action. Visa den prominent i
+dashboard som EGEN kolumn, separat från Swing/Quality/Value (som är
+strategi-specifik långsiktig allokering).
+
 **Steg 3 — Värderingsregler per linstyp**
 
 **3a — Fast growers + disruptors**: Forward-estimat, INTE trailing.
 Trailing P/E meningslöst vid revenue-ramp >50% YoY.
+
+**3a-bis — Alternativ Value-mätning för negativ EBIT / pre-profitability**:
+
+När traditionella Value-mått (P/E, EV/EBIT) inte kan beräknas (negativ EBIT,
+negativt FCF, pre-revenue), använd alternativ Value-mätning:
+
+| Bolagstyp | Alternativ Value-mätning |
+|---|---|
+| Pre-profitability SaaS / disruptor | EV/Revenue, EV/ARR, FCF-yield när positivt, Rule of 40 (revenue_growth + FCF_margin) |
+| Turnaround | Forward EV/EBIT på guidance, Margin trajectory-score |
+| Heavy capex investerings-fas | EV/EBITDA, FCF-yield när capex normaliserar |
+| Asset play | NAV per share, P/Tangible Book Value |
+
+Ange i JSON med flagga:
+```
+"value_score": 35,
+"value_score_method": "ev_revenue_alternative",
+"value_score_note": "Negativt EBIT → använder EV/Revenue mot SaaS-peers"
+```
+
+**FÖRBJUDET**: Returnera `null` eller utelämna `value_score`. Om INTE EN
+ENDA alternativ mätning kan tillämpas → returnera `value_score: 0` med
+`value_score_note: "Ej beräkningsbar — pre-revenue eller asset play utan
+NAV-data"` och flagga för manuell granskning.
 
 **3b — Reverse DCF-baseline** (hybrid Börsdata + web_search):
 
@@ -9687,6 +9748,40 @@ Källprioritet:
 Ange alltid: vald baseline, källa, confidence (high/medium/low).
 
 FÖRBJUDET: "6% mature semiconductor" som default på bolag som rampar 50%+.
+
+**3b-bis — OBLIGATORISK regel för disruptors + fast_growers med sekulär tematik**:
+
+När bolag är klassificerat som `fast_grower` eller `disruptor` OCH har
+sekulär tematik (AI-infrastruktur, EV-transition, cloud-migration,
+semiconductor-supercykel, GLP-1-medicines, defense-rearmament), MÅSTE
+Reverse DCF-baseline härledas från:
+
+1. **Konsensus 5y CAGR via web_search**: Sök
+   `"{ticker} 5 year revenue growth analyst consensus"`
+2. **Sektor-TAM-tillväxt**: Sök `"{sektor} TAM CAGR 2026-2030"`
+3. **Bolagets eget guidance**: IR-presentationer, kvartalsrapporter
+
+Använd det HÖGSTA av dessa tre (inom rimlighetens gräns), INTE historiskt
+genomsnitt.
+
+**FÖRBJUDEN baseline för dessa bolag**:
+- "Mature semiconductor 3–6%"
+- "Post-supercykel normalisering 5–8%"
+- Historisk 5y CAGR från Börsdata om den inkluderar förlustår eller
+  pre-trend-period
+
+Ange explicit i JSON:
+```
+"reverse_dcf": {
+  "baseline_growth_pct": 22,
+  "baseline_source": "konsensus Yahoo Finance + bekräftad mot IDC AI-infra TAM 30% CAGR",
+  "baseline_confidence": "medium"
+}
+```
+
+**Konsekvens**: NVDA/AVGO/ARM/MU på AI-supercykel ska INTE landa i
+Value 🔴 AVOID pga 6%-baseline — använd 20–30% från sektor-konsensus och
+låt Value-bedömningen reflektera det.
 
 **3c — Cyklisk-invertering är OBLIGATORISK**:
 
@@ -10046,9 +10141,20 @@ returneras i TVÅ delar.
   "reverse_dcf": {
     "implied_growth_pct": 3.9,
     "baseline_growth_pct": 5.5,
+    "baseline_source": "Börsdata historisk 5y CAGR",
     "gap_pp": -1.6,
     "confidence": "medium"
   },
+  "edge_signal": {
+    "score": 71,
+    "action": "ENTRY",
+    "components": {"owner_momentum": 85, "technical_trend": 68, "insider_flow": null},
+    "horizon": "4-12 weeks",
+    "stop": "EXIT_DECEL när owner_momentum < 0 i 2v"
+  },
+  "value_score_method": "ev_revenue_alternative",
+  "value_score_note": "Negativt EBIT → använder EV/Revenue mot SaaS-peers",
+  "stop_thesis_triggered": false,
   "key_metrics": {
     "price": 74.4,
     "currency": "SEK",
@@ -10835,9 +10941,11 @@ def _agent_get_top_stocks(db, criterion="composite", limit=10, country=""):
 # ══════════════════════════════════════════════════════════════
 
 BATCH_MODEL = "claude-sonnet-4-20250514"  # ej Opus — för dyrt på batch
-BATCH_COST_BUDGET_USD = 5.0
+BATCH_COST_BUDGET_USD = 10.0  # v3.2: höjt från 5 för 30+ bolag
 BATCH_SIZE = 3
 BATCH_DELAY_BETWEEN_BATCHES = 3.0
+PRICE_UPDATE_INTERVAL_SEC = 900  # 15 minuter
+PRICE_DELTA_RECENT_DAYS = 30      # uppdatera priser för analyser nyare än detta
 
 # Sonnet 4 prissättning (USD per million tokens)
 SONNET_PRICE_INPUT = 3.0
@@ -10986,9 +11094,13 @@ def _analyze_single_ticker_for_batch(ticker, run_id):
     try:
         ph = _ph()
         country = stock_data.get("country")
+        # v3.2: pris vid analystidpunkt från Börsdata-data
+        price_at_analysis = stock_data.get("last_price") or stock_data.get("price")
+        price_currency = stock_data.get("currency") or ("SEK" if country == "SE" else "USD")
         if parsed_json:
             flags = parsed_json.get("flags", {}) or {}
             rdcf = parsed_json.get("reverse_dcf", {}) or {}
+            edge = parsed_json.get("edge_signal", {}) or {}
             cols = [
                 ticker, short_name, country, "manual",
                 parsed_json.get("classification"),
@@ -11022,6 +11134,16 @@ def _analyze_single_ticker_for_batch(ticker, run_id):
                 hash_,
                 json_ok,
                 None,
+                # v3.2-kolumner
+                price_at_analysis,
+                price_currency,
+                edge.get("score"),
+                edge.get("action"),
+                _json.dumps(edge.get("components") or {}, default=str) if edge else None,
+                parsed_json.get("value_score_method"),
+                parsed_json.get("value_score_note"),
+                bool(parsed_json.get("stop_thesis_triggered", False)),
+                rdcf.get("baseline_source"),
             ]
         else:
             cols = [ticker, short_name, country, "manual",
@@ -11033,7 +11155,10 @@ def _analyze_single_ticker_for_batch(ticker, run_id):
                     usage.get("cache_read_input_tokens", 0),
                     usage.get("input_tokens", 0),
                     usage.get("output_tokens", 0),
-                    hash_, False, "JSON-parsing failed"]
+                    hash_, False, "JSON-parsing failed",
+                    # v3.2-kolumner
+                    price_at_analysis, price_currency,
+                    None, None, None, None, None, False, None]
         cols_sql = ("ticker, short_name, country, trigger_type, "
                     "classification, primary_lens, swing_signal, quality_signal, "
                     "value_signal, swing_motivation, quality_motivation, value_motivation, "
@@ -11043,7 +11168,10 @@ def _analyze_single_ticker_for_batch(ticker, run_id):
                     "reverse_dcf_implied_growth, reverse_dcf_baseline, reverse_dcf_gap, "
                     "reverse_dcf_confidence, full_analysis_markdown, full_analysis_json, "
                     "cost_usd, cached_tokens, input_tokens, output_tokens, "
-                    "fundamentals_hash, json_parse_ok, error_message")
+                    "fundamentals_hash, json_parse_ok, error_message, "
+                    "price_at_analysis, price_currency, edge_score, edge_action, "
+                    "edge_components, value_score_method, value_score_note, "
+                    "stop_thesis_triggered, reverse_dcf_baseline_source")
         placeholders = ", ".join([ph] * len(cols))
         db.execute(f"INSERT INTO batch_analyses ({cols_sql}) VALUES ({placeholders})",
                    tuple(cols))
@@ -11247,13 +11375,81 @@ def api_batch_status():
     })
 
 
+def _enrich_with_live_prices(results):
+    """Berika toplists-resultat med live-pris + delta från price_cache."""
+    from edge_db import _fetchall, _ph
+    if not results: return results
+    db = get_db()
+    ph = _ph()
+    tickers = [r.get("ticker") for r in results if r.get("ticker")]
+    if not tickers: return results
+    placeholders = ",".join([ph] * len(tickers))
+    try:
+        rows = _fetchall(db,
+            f"SELECT ticker, live_price, currency, price_updated_at "
+            f"FROM price_cache WHERE ticker IN ({placeholders})", tuple(tickers))
+        by_t = {dict(r)["ticker"]: dict(r) for r in rows} if rows else {}
+    except Exception:
+        by_t = {}
+    for r in results:
+        pc = by_t.get(r.get("ticker"))
+        if pc:
+            r["live_price"] = float(pc.get("live_price")) if pc.get("live_price") is not None else None
+            r["live_price_currency"] = pc.get("currency")
+            r["price_updated_at"] = str(pc.get("price_updated_at") or "")
+        else:
+            r["live_price"] = None
+            r["live_price_currency"] = None
+            r["price_updated_at"] = None
+        # Delta
+        pa = r.get("price_at_analysis")
+        lp = r.get("live_price")
+        if pa and lp and float(pa) > 0:
+            try:
+                r["price_delta_pct"] = (float(lp) - float(pa)) / float(pa) * 100
+            except Exception:
+                r["price_delta_pct"] = None
+        else:
+            r["price_delta_pct"] = None
+        # Analys-ålder i timmar
+        try:
+            from datetime import datetime
+            ts = r.get("analyzed_at")
+            if ts:
+                if isinstance(ts, str):
+                    ts_str = ts.replace("T", " ").split(".")[0]
+                    dt = datetime.fromisoformat(ts_str.replace("Z", ""))
+                else:
+                    dt = ts
+                age_s = (datetime.utcnow() - dt).total_seconds()
+                r["analysis_age_hours"] = round(age_s / 3600, 1)
+            else:
+                r["analysis_age_hours"] = None
+        except Exception:
+            r["analysis_age_hours"] = None
+    return results
+
+
 @app.route("/api/toplists/<strategy>")
 def api_toplists(strategy):
-    """Topplista per strategi. Returnerar senaste analys per ticker."""
+    """Topplista per strategi. Returnerar senaste analys per ticker.
+
+    Strategier:
+      edge_entry            — Edge action = ENTRY, sort: edge_score DESC
+      super_confluence      — ≥3 flaggor TRUE samtidigt, sort: composite_score DESC
+      trifecta              — alla V+Q+M ≥70
+      growth_trifecta       — Q+M ≥70 (utan V)
+      cyclical_bottom       — V ≥60 + M ≤40 + cykel trough/trough_to_mid
+      swing_buy             — Swing 🟢 + momentum ≥60
+      quality_buy           — Quality 🟢
+      value_buy             — Value 🟢
+      recurring_compounder  — 3+ år Growth Trifecta i backtest
+      stop_thesis_triggered — stop-thesis-flaggor utlösta
+      all                   — komplett lista
+    """
     from edge_db import _fetchall, _ph
     db = get_db()
 
-    # Bygg query — använd window function för "senaste per ticker"
     base_cols = ("ticker, short_name, country, analyzed_at, classification, "
                  "primary_lens, swing_signal, quality_signal, value_signal, "
                  "swing_motivation, quality_motivation, value_motivation, "
@@ -11261,7 +11457,10 @@ def api_toplists(strategy):
                  "composite_score, is_trifecta, is_growth_trifecta, "
                  "is_recurring_compounder, is_cyclical_bottom, cycle_position, "
                  "reverse_dcf_implied_growth, reverse_dcf_baseline, "
-                 "reverse_dcf_gap, reverse_dcf_confidence")
+                 "reverse_dcf_gap, reverse_dcf_confidence, "
+                 "price_at_analysis, price_currency, edge_score, edge_action, "
+                 "value_score_method, stop_thesis_triggered, "
+                 "reverse_dcf_baseline_source")
 
     if _is_postgres():
         base_q = (f"SELECT DISTINCT ON (ticker) {base_cols} FROM batch_analyses "
@@ -11274,7 +11473,15 @@ def api_toplists(strategy):
                   " WHERE ba2.ticker = ba1.ticker) ")
         suffix_order = ""
 
+    # Super Confluence-räknare: counts TRUE flaggor (≥3 av 4)
+    # Vi gör den i Python efter SELECT eftersom CASE WHEN-summering är klumpigt.
     filters = {
+        "edge_entry": (
+            "AND edge_action = 'ENTRY'",
+            "edge_score DESC NULLS LAST"),
+        "super_confluence": (
+            "",  # ingen WHERE — filtreras i Python efteråt
+            "composite_score DESC NULLS LAST"),
         "trifecta": (
             "AND is_trifecta = TRUE",
             "composite_score DESC NULLS LAST"),
@@ -11296,6 +11503,9 @@ def api_toplists(strategy):
         "recurring_compounder": (
             "AND is_recurring_compounder = TRUE",
             "quality_score DESC NULLS LAST"),
+        "stop_thesis_triggered": (
+            "AND stop_thesis_triggered = TRUE",
+            "composite_score DESC NULLS LAST"),
         "all": ("", "composite_score DESC NULLS LAST"),
     }
     if strategy not in filters:
@@ -11303,7 +11513,6 @@ def api_toplists(strategy):
                         "available": list(filters.keys())}), 400
 
     where_extra, final_sort = filters[strategy]
-    # SQLite stöder inte "NULLS LAST" på samma sätt — strip det
     if not _is_postgres():
         final_sort = final_sort.replace(" NULLS LAST", "")
         where_extra = where_extra.replace("= TRUE", "= 1").replace("= FALSE", "= 0")
@@ -11311,17 +11520,152 @@ def api_toplists(strategy):
     full_q = base_q + where_extra + " " + suffix_order
     try:
         rows = _fetchall(db, full_q)
-        # Sortera i Python eftersom DISTINCT ON kräver primär sort på ticker
         results = [dict(r) for r in rows] if rows else []
-        # Re-sort enligt strategi
+
+        # Super Confluence: filtrera fram bolag med ≥3 av 4 flaggor TRUE
+        if strategy == "super_confluence":
+            def n_flags(r):
+                return sum([1 if r.get(k) else 0 for k in
+                            ("is_trifecta", "is_growth_trifecta",
+                             "is_recurring_compounder", "is_cyclical_bottom")])
+            results = [r for r in results if n_flags(r) >= 3]
+
         sort_col, _, direction = final_sort.partition(" ")
         reverse = direction.startswith("DESC")
         results.sort(key=lambda r: (r.get(sort_col) or 0), reverse=reverse)
+
+        # Berika med live-pris + delta
+        cap = 10 if strategy == "super_confluence" else 20
+        top = results[:cap]
+        top = _enrich_with_live_prices(top)
+
         return jsonify({"strategy": strategy, "count": len(results),
-                        "results": results[:20]})
+                        "results": top})
     except Exception as e:
         import traceback; traceback.print_exc()
         return jsonify({"error": str(e), "strategy": strategy}), 500
+
+
+# ── Price-update-worker (var 15:e min under börsöppet) ────────────
+
+_LAST_PRICE_UPDATE_AT = [0.0]  # mutable så det kan ändras inifrån worker
+
+def _is_market_hours_se():
+    """Stockholm öppet 09:00–17:30 vardagar."""
+    from datetime import datetime
+    try:
+        import zoneinfo
+        now = datetime.now(zoneinfo.ZoneInfo("Europe/Stockholm"))
+    except Exception:
+        now = datetime.utcnow()
+    if now.weekday() >= 5: return False  # helg
+    h = now.hour + now.minute / 60.0
+    return 9.0 <= h <= 17.5
+
+
+def _is_market_hours_us():
+    """NY öppet 9:30–16:00 EST (≈15:30–22:00 CET vintertid, 14:30–21:00 CET sommartid)."""
+    from datetime import datetime
+    try:
+        import zoneinfo
+        now = datetime.now(zoneinfo.ZoneInfo("America/New_York"))
+    except Exception:
+        now = datetime.utcnow()
+    if now.weekday() >= 5: return False
+    h = now.hour + now.minute / 60.0
+    return 9.5 <= h <= 16.0
+
+
+def _price_update_tick():
+    """En körning av price-update — uppdaterar live_price för alla nyligen analyserade tickers."""
+    from edge_db import _fetchall, _ph
+    if not (_is_market_hours_se() or _is_market_hours_us()):
+        return {"skipped": "outside market hours"}
+
+    db = get_db()
+    ph = _ph()
+    # Hitta unika tickers från senaste 30 dagars analyser
+    if _is_postgres():
+        rows = _fetchall(db,
+            f"SELECT DISTINCT ticker, short_name, country "
+            f"FROM batch_analyses "
+            f"WHERE analyzed_at > NOW() - INTERVAL '{PRICE_DELTA_RECENT_DAYS} days'")
+    else:
+        rows = _fetchall(db,
+            f"SELECT DISTINCT ticker, short_name, country FROM batch_analyses "
+            f"WHERE analyzed_at > datetime('now', '-{PRICE_DELTA_RECENT_DAYS} days')")
+
+    tickers = [dict(r) for r in rows] if rows else []
+    updated = 0
+    failed = 0
+    for t in tickers:
+        ticker = t.get("ticker")
+        short_name = t.get("short_name") or ticker
+        try:
+            stock = _agent_search_stocks(db, query=short_name, limit=1)
+            if not stock: continue
+            stock_data = _agent_get_full_stock(db, stock[0].get("short_name") or ticker)
+            if not stock_data: continue
+            price = stock_data.get("last_price") or stock_data.get("price")
+            curr = stock_data.get("currency") or ("SEK" if t.get("country") == "SE" else "USD")
+            if price is None: continue
+            # UPSERT
+            if _is_postgres():
+                db.execute(
+                    f"INSERT INTO price_cache (ticker, short_name, live_price, currency, "
+                    f"price_updated_at, source) VALUES ({ph}, {ph}, {ph}, {ph}, "
+                    f"CURRENT_TIMESTAMP, 'borsdata') "
+                    f"ON CONFLICT (ticker) DO UPDATE SET live_price = EXCLUDED.live_price, "
+                    f"currency = EXCLUDED.currency, "
+                    f"price_updated_at = CURRENT_TIMESTAMP, "
+                    f"short_name = EXCLUDED.short_name",
+                    (ticker, short_name, float(price), curr))
+            else:
+                db.execute(
+                    f"INSERT OR REPLACE INTO price_cache "
+                    f"(ticker, short_name, live_price, currency, price_updated_at, source) "
+                    f"VALUES ({ph}, {ph}, {ph}, {ph}, CURRENT_TIMESTAMP, 'borsdata')",
+                    (ticker, short_name, float(price), curr))
+            db.commit()
+            updated += 1
+        except Exception as e:
+            failed += 1
+            print(f"[price-update] {ticker} failed: {e}", file=sys.stderr)
+    return {"updated": updated, "failed": failed, "tickers": len(tickers)}
+
+
+def _price_update_loop():
+    """Bakgrundstråd som tickar var 15:e min."""
+    import time
+    while True:
+        try:
+            _price_update_tick()
+            _LAST_PRICE_UPDATE_AT[0] = time.time()
+        except Exception as e:
+            print(f"[price-update loop] {e}", file=sys.stderr)
+        time.sleep(PRICE_UPDATE_INTERVAL_SEC)
+
+
+@app.route("/api/price-cache/update", methods=["POST"])
+def api_price_cache_update():
+    """Manuell trigger av price-update (för admin/debugging)."""
+    result = _price_update_tick()
+    return jsonify(result)
+
+
+@app.route("/api/price-cache/status")
+def api_price_cache_status():
+    """Visa price_cache-status."""
+    from edge_db import _fetchone, _fetchall
+    db = get_db()
+    n = _fetchone(db, "SELECT COUNT(*) AS n, MAX(price_updated_at) AS last_update FROM price_cache")
+    return jsonify({
+        "rows": dict(n) if n else None,
+        "se_market_open": _is_market_hours_se(),
+        "us_market_open": _is_market_hours_us(),
+        "last_tick_unix": _LAST_PRICE_UPDATE_AT[0],
+        "interval_sec": PRICE_UPDATE_INTERVAL_SEC,
+    })
 
 
 @app.route("/api/analysis/<ticker>")
@@ -12751,6 +13095,9 @@ except Exception:
 if _is_startup_winner:
     threading.Thread(target=_run_startup_in_background, daemon=True).start()
     print("[STARTUP] Bakgrundstråd för _startup() initierad", flush=True)
+    # v3.2: Price-update-loop var 15:e min för live-pris i toplists
+    threading.Thread(target=_price_update_loop, daemon=True).start()
+    print("[STARTUP] Price-update-loop initierad (var 15 min)", flush=True)
 else:
     print("[STARTUP] Skippas (annan worker kör startup)", flush=True)
 

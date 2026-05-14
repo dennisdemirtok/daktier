@@ -182,17 +182,20 @@
 
 <script>
 const STRATEGIES = [
+  { key: 'edge_entry',           emoji: '🎯', label: 'Edge Entry',           desc: 'Edge ≥70 [HERO]' },
+  { key: 'super_confluence',     emoji: '⭐', label: 'Super Confluence',     desc: '≥3 flaggor' },
+  { key: 'recurring_compounder', emoji: '💫', label: 'Recurring Compounder', desc: '3+ år GT' },
   { key: 'trifecta',             emoji: '🏆', label: 'Trifecta',             desc: 'Alla V+Q+M ≥70' },
   { key: 'growth_trifecta',      emoji: '🚀', label: 'Growth Trifecta',      desc: 'Q+M ≥70' },
   { key: 'cyclical_bottom',      emoji: '💎', label: 'Cyclical Bottom',      desc: 'V ≥60 + M ≤40' },
-  { key: 'swing_buy',            emoji: '🎯', label: 'Swing BUY',            desc: 'Swing 🟢 + M ≥60' },
-  { key: 'quality_buy',          emoji: '🏰', label: 'Quality BUY',          desc: 'Quality 🟢' },
   { key: 'value_buy',            emoji: '💰', label: 'Value BUY',            desc: 'Value 🟢' },
-  { key: 'recurring_compounder', emoji: '🌟', label: 'Recurring Compounder', desc: '3+ år GT' },
+  { key: 'quality_buy',          emoji: '🏰', label: 'Quality BUY',          desc: 'Quality 🟢' },
+  { key: 'swing_buy',            emoji: '🎯', label: 'Swing BUY',            desc: 'Swing 🟢 + M ≥60' },
+  { key: 'stop_thesis_triggered',emoji: '🛑', label: 'Stop-Thesis',          desc: 'Triggers utlösta' },
   { key: 'all',                  emoji: '📋', label: 'Alla analyser',        desc: 'Komplett lista' },
 ];
 
-let _currentStrategy = 'trifecta';
+let _currentStrategy = 'edge_entry';  // hero = default
 
 function renderTabs() {
   const tabs = document.getElementById('tabs');
@@ -394,6 +397,37 @@ function renderSignal(sig) {
   return `<span style="color:#6b7280">${sig}</span>`;
 }
 
+function renderEdge(score, action) {
+  if (score == null && !action) return '<span style="color:#9ca3af">—</span>';
+  const s = Number(score || 0);
+  const color = s >= 70 ? '#059669' : s >= 50 ? '#d97706' : s >= 30 ? '#9ca3af' : '#dc2626';
+  const emoji = s >= 70 ? '🟢' : s >= 50 ? '🟡' : s >= 30 ? '⚪' : '🔴';
+  return `<span style="color:${color};font-weight:700">${emoji} ${s.toFixed(0)}</span>` +
+    (action ? `<div style="font-size:9.5px;color:#6b7280;font-weight:500">${action}</div>` : '');
+}
+
+function renderLivePrice(r) {
+  const lp = r.live_price;
+  const pa = r.price_at_analysis;
+  const dp = r.price_delta_pct;
+  const curr = r.live_price_currency || r.price_currency || '';
+  if (lp == null) {
+    if (pa != null) {
+      return `<span style="color:#9ca3af;font-size:11px">${Number(pa).toFixed(2)} ${curr}</span>` +
+        `<div style="font-size:10px;color:#9ca3af">analys-pris</div>`;
+    }
+    return '<span style="color:#9ca3af">—</span>';
+  }
+  let badge = '', color = '#0f172a', deltaText = '';
+  if (dp != null) {
+    const abs = Math.abs(dp);
+    if (abs > 10) { badge = '⚠️'; color = '#dc2626'; }
+    else if (abs > 5) { badge = '•'; color = '#d97706'; }
+    deltaText = `<div style="font-size:10px;color:${color}">${badge} ${dp >= 0 ? '+' : ''}${dp.toFixed(1)}% sedan analys</div>`;
+  }
+  return `<div style="font-weight:600;font-size:12px">${Number(lp).toFixed(2)} ${curr}</div>${deltaText}`;
+}
+
 function scoreCell(v) {
   if (v == null) return '<span style="color:#9ca3af">—</span>';
   const n = Number(v);
@@ -434,6 +468,7 @@ async function loadStrategy(key) {
           <div class="ticker">${escapeHtml(r.ticker)} ${flagBadges(r)}</div>
           <div style="font-size:10.5px;color:#9ca3af">${escapeHtml(r.short_name || '')}</div>
         </td>
+        <td>${renderEdge(r.edge_score, r.edge_action)}</td>
         <td><span class="classification">${escapeHtml(r.classification || '—')}</span>
             ${r.cycle_position && r.cycle_position !== 'NA' ? `<div style="font-size:10px;color:#9ca3af">${r.cycle_position}</div>` : ''}</td>
         <td>${renderSignal(r.swing_signal)}</td>
@@ -443,19 +478,21 @@ async function loadStrategy(key) {
         <td>${scoreCell(r.quality_score)}</td>
         <td>${scoreCell(r.momentum_score)}</td>
         <td><strong>${scoreCell(r.composite_score)}</strong></td>
-        <td style="font-size:10.5px;color:#6b7280">${(r.analyzed_at || '').slice(0,10)}</td>
+        <td>${renderLivePrice(r)}</td>
+        <td style="font-size:10.5px;color:#6b7280">${(r.analyzed_at || '').slice(0,10)}${r.analysis_age_hours != null ? `<div style="font-size:9.5px;color:#9ca3af">${r.analysis_age_hours}h sen</div>` : ''}</td>
       </tr>
     `).join('');
     el.innerHTML = `<table>
       <thead><tr>
-        <th>Ticker</th><th>Klassificering</th>
+        <th>Ticker</th><th>Edge</th><th>Klassificering</th>
         <th>Swing</th><th>Quality</th><th>Value</th>
-        <th>V</th><th>Q</th><th>M</th><th>Comp</th><th>Datum</th>
+        <th>V</th><th>Q</th><th>M</th><th>Comp</th>
+        <th>Live pris</th><th>Datum</th>
       </tr></thead>
       <tbody>${rows}</tbody>
     </table>
     <div style="margin-top:10px;font-size:11.5px;color:#9ca3af">
-      ${d.count} bolag matchar · sorterade efter relevant score
+      ${d.count} bolag matchar · sorterade efter relevant score · Edge är hero-signalen (4–12v horisont)
     </div>`;
   } catch (e) {
     el.innerHTML = `<div style="color:#dc2626;padding:20px">Network error: ${e.message}</div>`;
