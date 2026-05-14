@@ -97,13 +97,73 @@
 
 <a href="/" class="top-link">← Tillbaka till dashboard</a>
 
-<h1>🏆 DAKTIER Topplistor</h1>
-<p class="lede">
-  Pre-computed agent-analyser (DEL 6.99 v3.1) sorterade per strategi.
-  Klicka en rad för full analys i drawer.
-</p>
+<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap">
+  <div>
+    <h1>🏆 DAKTIER Topplistor</h1>
+    <p class="lede">
+      Pre-computed agent-analyser (DEL 6.99 v3.1) sorterade per strategi.
+      Klicka en rad för full analys i drawer.
+    </p>
+  </div>
+  <div style="display:flex;gap:8px">
+    <button onclick="openBatchModal()" style="background:linear-gradient(135deg,#1d4ed8,#3b82f6);color:white;border:none;padding:10px 18px;border-radius:8px;cursor:pointer;font-weight:600;font-family:inherit;font-size:13px">
+      🚀 Kör ny batch-analys
+    </button>
+    <button onclick="loadStats(); loadStrategy(_currentStrategy);" style="background:white;border:1px solid #e5e7eb;padding:10px 14px;border-radius:8px;cursor:pointer;font-weight:600;font-family:inherit;font-size:13px">
+      🔄 Uppdatera
+    </button>
+  </div>
+</div>
+
+<!-- Batch-runner modal -->
+<div id="batchBackdrop" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:200" onclick="if(event.target===this)closeBatchModal()">
+  <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);background:white;border-radius:14px;padding:24px 28px;width:580px;max-width:92vw;max-height:92vh;overflow-y:auto;box-shadow:0 12px 48px rgba(0,0,0,0.2)">
+    <h2 style="margin:0 0 6px;font-size:20px">🚀 Kör batch-analys</h2>
+    <p style="color:#6b7280;font-size:12.5px;margin:0 0 14px">
+      Agenten analyserar varje ticker enligt DEL 6.99 v3.1 FAS 1 och sparar
+      strukturerad JSON + markdown i DB:n. Bakgrundsworker — du kan stänga sidan.
+    </p>
+
+    <div style="background:#f8fafc;border-radius:8px;padding:10px 14px;margin-bottom:14px;font-size:12px;color:#475569">
+      <strong>Budget:</strong> $5.00 hård stopp · <strong>Modell:</strong> claude-sonnet-4 ·
+      <strong>Tid:</strong> ~30–60s/ticker · <strong>Max:</strong> 50 tickers/batch
+    </div>
+
+    <label style="display:block;font-weight:600;font-size:12.5px;margin-bottom:5px">
+      Tickers (en per rad eller komma-separerade)
+    </label>
+    <textarea id="batchTickers" rows="8" style="width:100%;border:1px solid #e5e7eb;border-radius:8px;padding:10px 12px;font-family:ui-monospace,Menlo,monospace;font-size:12.5px;resize:vertical" placeholder="HEXPOL B&#10;SECTRA B&#10;EVO&#10;VOLVO B&#10;BOLIDEN"></textarea>
+
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;font-size:11px">
+      <button onclick="fillPreset('test15')" style="background:#eff6ff;color:#1e40af;border:1px solid #dbeafe;padding:5px 10px;border-radius:6px;cursor:pointer;font-family:inherit">📋 Test-15 (mix)</button>
+      <button onclick="fillPreset('se_top')" style="background:#eff6ff;color:#1e40af;border:1px solid #dbeafe;padding:5px 10px;border-radius:6px;cursor:pointer;font-family:inherit">🇸🇪 SE topp</button>
+      <button onclick="fillPreset('us_ai')" style="background:#eff6ff;color:#1e40af;border:1px solid #dbeafe;padding:5px 10px;border-radius:6px;cursor:pointer;font-family:inherit">🇺🇸 US AI-infrastruktur</button>
+    </div>
+
+    <div id="batchStatus" style="margin-top:14px;display:none;background:#fef3c7;color:#92400e;border-left:4px solid #f59e0b;padding:10px 14px;border-radius:6px;font-size:12px"></div>
+
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:18px">
+      <button onclick="closeBatchModal()" style="background:white;border:1px solid #e5e7eb;padding:9px 16px;border-radius:8px;cursor:pointer;font-family:inherit;font-size:13px">Avbryt</button>
+      <button id="startBatchBtn" onclick="startBatch()" style="background:linear-gradient(135deg,#059669,#10b981);color:white;border:none;padding:9px 18px;border-radius:8px;cursor:pointer;font-weight:600;font-family:inherit;font-size:13px">Starta batch →</button>
+    </div>
+  </div>
+</div>
 
 <div id="stats" class="stats-bar"></div>
+
+<!-- Progress-banner (visas under batch-körning) -->
+<div id="progressBanner" style="display:none;background:linear-gradient(135deg,#dbeafe,#bfdbfe);border-left:4px solid #1e40af;padding:12px 16px;border-radius:8px;margin-bottom:16px;font-size:13px">
+  <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
+    <div>
+      <strong id="progressTitle">⏳ Batch-analys pågår...</strong>
+      <div id="progressMeta" style="font-size:11.5px;color:#4b5563;margin-top:3px"></div>
+    </div>
+    <div style="font-size:11px;color:#6b7280" id="progressTimer"></div>
+  </div>
+  <div style="margin-top:8px;background:rgba(255,255,255,0.6);border-radius:4px;height:6px;overflow:hidden">
+    <div id="progressBar" style="background:linear-gradient(90deg,#1d4ed8,#3b82f6);height:100%;width:0%;transition:width 0.3s"></div>
+  </div>
+</div>
 
 <div class="tabs" id="tabs"></div>
 
@@ -147,6 +207,158 @@ function selectStrategy(key) {
   _currentStrategy = key;
   renderTabs();
   loadStrategy(key);
+}
+
+// ── Batch-runner ────────────────────────────────────────
+const PRESETS = {
+  test15: ['HEXPOL B','SECTRA B','EVO','VOLVO B','BOLIDEN',
+           'ATCO A','HEXA B','INVE B',
+           'MU','MRVL','AVGO','NVDA','ALAB',
+           'INTC','PLTR'],
+  se_top: ['INVE B','ATCO A','HEXA B','EVO','SAND','ASSA B','ABB','SEB A',
+           'HM B','VOLVO B','SAAB B','TEL2 B','BOLIDEN','SKF B','ALFA'],
+  us_ai:  ['NVDA','AVGO','MU','MRVL','ALAB','TSM','AMD','META','GOOGL',
+           'MSFT','ORCL','AMZN','PLTR','SMCI','ARM'],
+};
+
+function openBatchModal() {
+  document.getElementById('batchBackdrop').style.display = 'block';
+  document.getElementById('batchStatus').style.display = 'none';
+}
+function closeBatchModal() {
+  document.getElementById('batchBackdrop').style.display = 'none';
+}
+function fillPreset(key) {
+  document.getElementById('batchTickers').value = (PRESETS[key] || []).join('\n');
+}
+function parseTickers(raw) {
+  return raw.split(/[\n,;]+/).map(s => s.trim()).filter(Boolean);
+}
+
+async function startBatch() {
+  const raw = document.getElementById('batchTickers').value;
+  const tickers = parseTickers(raw);
+  const statusEl = document.getElementById('batchStatus');
+  if (tickers.length === 0) {
+    statusEl.style.display = 'block';
+    statusEl.style.background = '#fee2e2';
+    statusEl.style.color = '#7f1d1d';
+    statusEl.style.borderLeftColor = '#dc2626';
+    statusEl.innerHTML = 'Inga tickers angivna. Skriv minst en.';
+    return;
+  }
+  if (tickers.length > 50) {
+    statusEl.style.display = 'block';
+    statusEl.style.background = '#fee2e2';
+    statusEl.style.color = '#7f1d1d';
+    statusEl.style.borderLeftColor = '#dc2626';
+    statusEl.innerHTML = `För många tickers (${tickers.length}). Max 50 per batch.`;
+    return;
+  }
+  const btn = document.getElementById('startBatchBtn');
+  btn.disabled = true;
+  btn.textContent = 'Startar...';
+  try {
+    const r = await fetch('/api/batch/run', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({tickers}),
+    });
+    const d = await r.json();
+    if (!r.ok) {
+      statusEl.style.display = 'block';
+      statusEl.style.background = '#fee2e2';
+      statusEl.style.color = '#7f1d1d';
+      statusEl.style.borderLeftColor = '#dc2626';
+      statusEl.innerHTML = `Fel: ${d.error || 'okänt'}` +
+        (d.run_id ? ` (run_id ${d.run_id} körs redan)` : '');
+      btn.disabled = false;
+      btn.textContent = 'Starta batch →';
+      return;
+    }
+    closeBatchModal();
+    // Starta progress-polling
+    startProgressPolling(d.run_id, tickers.length);
+  } catch (e) {
+    statusEl.style.display = 'block';
+    statusEl.style.background = '#fee2e2';
+    statusEl.style.color = '#7f1d1d';
+    statusEl.style.borderLeftColor = '#dc2626';
+    statusEl.innerHTML = 'Network error: ' + e.message;
+    btn.disabled = false;
+    btn.textContent = 'Starta batch →';
+  }
+}
+
+let _progressPoll = null;
+let _progressStarted = null;
+
+function startProgressPolling(runId, total) {
+  const banner = document.getElementById('progressBanner');
+  banner.style.display = 'block';
+  _progressStarted = Date.now();
+  pollProgress(runId, total);
+  if (_progressPoll) clearInterval(_progressPoll);
+  _progressPoll = setInterval(() => pollProgress(runId, total), 5000);
+}
+
+async function pollProgress(runId, total) {
+  try {
+    const r = await fetch('/api/batch/status');
+    const d = await r.json();
+    const lr = d.latest_run || {};
+    const completed = lr.tickers_completed || 0;
+    const failed = lr.tickers_failed || 0;
+    const cost = lr.total_cost_usd || 0;
+    const done = completed + failed;
+    const pct = total > 0 ? Math.min(100, (done / total) * 100) : 0;
+
+    document.getElementById('progressBar').style.width = pct + '%';
+    const elapsed = Math.floor((Date.now() - _progressStarted) / 1000);
+    const mm = Math.floor(elapsed / 60);
+    const ss = String(elapsed % 60).padStart(2, '0');
+    document.getElementById('progressTimer').textContent = `${mm}:${ss}`;
+
+    const status = lr.status || 'running';
+    document.getElementById('progressTitle').textContent =
+      status === 'completed' ? '✅ Batch klar' :
+      status === 'budget_exceeded' ? '⚠️ Budget överskriden — stoppad' :
+      status === 'failed' ? '❌ Batch misslyckades' :
+      '⏳ Batch-analys pågår...';
+    document.getElementById('progressMeta').innerHTML =
+      `${done}/${total} klara · ${completed} ok · ${failed} fel · $${cost.toFixed(4)} spenderat`;
+
+    // Refresha topplistor periodiskt så användaren ser progress där också
+    if (done > 0 && done % 3 === 0) {
+      loadStrategy(_currentStrategy);
+      loadStats();
+    }
+
+    if (!d.running && status !== 'running') {
+      clearInterval(_progressPoll);
+      _progressPoll = null;
+      loadStrategy(_currentStrategy);
+      loadStats();
+      // Dölj banner efter 30 sek
+      setTimeout(() => {
+        document.getElementById('progressBanner').style.display = 'none';
+      }, 30000);
+    }
+  } catch (e) {
+    console.warn('poll error', e);
+  }
+}
+
+// Vid sidladdning — om en batch redan kör, börja polla
+async function checkRunningBatch() {
+  try {
+    const r = await fetch('/api/batch/status');
+    const d = await r.json();
+    if (d.running && d.latest_run) {
+      const lr = d.latest_run;
+      startProgressPolling(lr.id, lr.tickers_requested || 1);
+    }
+  } catch (e) {}
 }
 
 async function loadStats() {
@@ -318,6 +530,7 @@ document.addEventListener('keydown', e => { if (e.key === 'Escape') closeDrawer(
 renderTabs();
 loadStats();
 loadStrategy(_currentStrategy);
+checkRunningBatch();
 </script>
 
 </body>
