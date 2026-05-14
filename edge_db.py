@@ -587,10 +587,10 @@ def _create_tables(db):
                 ON report_calendar(report_date, status);
             CREATE INDEX IF NOT EXISTS idx_price_cache_updated
                 ON price_cache(price_updated_at DESC);
-            CREATE INDEX IF NOT EXISTS idx_batch_edge_action
-                ON batch_analyses(edge_action) WHERE edge_action IS NOT NULL;
-            CREATE INDEX IF NOT EXISTS idx_batch_stop_thesis
-                ON batch_analyses(stop_thesis_triggered) WHERE stop_thesis_triggered = TRUE;
+            -- OBS: idx_batch_edge_action + idx_batch_stop_thesis hanteras i
+            -- _ensure_batch_analyses_columns eftersom kolumnerna inte finns i
+            -- ursprungliga CREATE TABLE. Att lägga dem här aborterar hela
+            -- transaktionen i PG (column does not exist).
 
             -- Live screen-tracker: spara snapshot av screen-träffar för
             -- senare 12m-uppföljning. Validering live att backtest
@@ -1276,14 +1276,25 @@ def _ensure_batch_analyses_columns(db):
             except Exception: pass
     print(f"[migration] batch_analyses columns: +{added} added, "
           f"{skipped} already existed, {failed} failed", file=_sys.stderr)
-    # Index för dashboard-filtrering
-    for idx_sql in [
-        "CREATE INDEX IF NOT EXISTS idx_batch_dashboard_safe ON batch_analyses(dashboard_safe) WHERE dashboard_safe = TRUE" if _use_postgres()
-        else "CREATE INDEX IF NOT EXISTS idx_batch_dashboard_safe ON batch_analyses(dashboard_safe)",
-        "CREATE INDEX IF NOT EXISTS idx_batch_data_freshness ON batch_analyses(data_freshness)",
-        "CREATE INDEX IF NOT EXISTS idx_batch_report_date ON batch_analyses(report_date) WHERE report_date IS NOT NULL" if _use_postgres()
-        else "CREATE INDEX IF NOT EXISTS idx_batch_report_date ON batch_analyses(report_date)",
-    ]:
+    # Index för dashboard-filtrering + edge/stop_thesis (kolumnerna har just
+    # lagts till ovan — så det är säkert att skapa indexen här).
+    if _use_postgres():
+        idx_sqls = [
+            "CREATE INDEX IF NOT EXISTS idx_batch_dashboard_safe ON batch_analyses(dashboard_safe) WHERE dashboard_safe = TRUE",
+            "CREATE INDEX IF NOT EXISTS idx_batch_data_freshness ON batch_analyses(data_freshness)",
+            "CREATE INDEX IF NOT EXISTS idx_batch_report_date ON batch_analyses(report_date) WHERE report_date IS NOT NULL",
+            "CREATE INDEX IF NOT EXISTS idx_batch_edge_action ON batch_analyses(edge_action) WHERE edge_action IS NOT NULL",
+            "CREATE INDEX IF NOT EXISTS idx_batch_stop_thesis ON batch_analyses(stop_thesis_triggered) WHERE stop_thesis_triggered = TRUE",
+        ]
+    else:
+        idx_sqls = [
+            "CREATE INDEX IF NOT EXISTS idx_batch_dashboard_safe ON batch_analyses(dashboard_safe)",
+            "CREATE INDEX IF NOT EXISTS idx_batch_data_freshness ON batch_analyses(data_freshness)",
+            "CREATE INDEX IF NOT EXISTS idx_batch_report_date ON batch_analyses(report_date)",
+            "CREATE INDEX IF NOT EXISTS idx_batch_edge_action ON batch_analyses(edge_action)",
+            "CREATE INDEX IF NOT EXISTS idx_batch_stop_thesis ON batch_analyses(stop_thesis_triggered)",
+        ]
+    for idx_sql in idx_sqls:
         try:
             db.execute(idx_sql)
             db.commit()
