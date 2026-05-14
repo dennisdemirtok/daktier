@@ -6050,6 +6050,11 @@ function renderAgentTurn(h, idx) {
         // BLOCK-MODE: retry pågår just nu (förra försöket blockerades, agent regenererar)
         if (h.validation_retry && !text) {
             const list = h.validation_retry.violations.map(v => `<li><strong>${v.rule}:</strong> "${escapeHtml(v.sample)}"</li>`).join('');
+            const previousAttemptHtml = h.previous_attempt ? `
+                <details style="margin-top:10px;background:rgba(0,0,0,0.04);padding:8px 12px;border-radius:6px">
+                    <summary style="cursor:pointer;font-weight:600;font-size:11px">📋 Visa förra blockerade svaret (${h.previous_attempt.length} tecken)</summary>
+                    <div style="margin-top:8px;font-size:11px;line-height:1.5;white-space:pre-wrap;color:#6b7280;font-style:italic">${escapeHtml(h.previous_attempt.slice(0, 2000))}${h.previous_attempt.length > 2000 ? '\n\n[...trunkerat]' : ''}</div>
+                </details>` : '';
             footer += `<div style="background:#fef3c7;color:#92400e;border-radius:8px;padding:10px 14px;margin-top:8px;font-size:12px;border-left:4px solid #f59e0b">
                 <div style="display:flex;align-items:center;gap:8px;font-weight:600">
                     <span class="spinner" style="display:inline-block;width:12px;height:12px;border:2px solid #f59e0b;border-top-color:transparent;border-radius:50%;animation:spin 0.6s linear infinite"></span>
@@ -6057,7 +6062,8 @@ function renderAgentTurn(h, idx) {
                 </div>
                 <div style="margin-top:6px;font-size:11px">Förra svaret blockerades pga ${h.validation_retry.violations.length} regelbrott:</div>
                 <ul style="margin:4px 0 0 16px;padding:0;font-size:11px">${list}</ul>
-                <div style="margin-top:6px;font-size:10px;font-style:italic;opacity:0.85">Det här är INTE en bug — agenten validerar sin egen output och skriver om om regler bryts.</div>
+                <div style="margin-top:6px;font-size:10px;font-style:italic;opacity:0.85">Agenten skriver om utan dessa regelbrott. Du kan slå av strict validation i settings om du föredrar att se det första svaret.</div>
+                ${previousAttemptHtml}
             </div>
             <style>@keyframes spin { to { transform: rotate(360deg); } }</style>`;
         }

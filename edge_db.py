@@ -475,6 +475,18 @@ def _create_tables(db):
                 PRIMARY KEY (isin, kpi_id, report_type, period_year, period_q)
             );
 
+            -- Agent-minne: spara learnings/preferenser så agenten "kommer ihåg"
+            CREATE TABLE IF NOT EXISTS agent_memory (
+                id SERIAL PRIMARY KEY,
+                user_id TEXT DEFAULT 'default',
+                category TEXT,  -- 'preference', 'note', 'watchlist', 'rule'
+                key TEXT,
+                value TEXT,
+                created_at TEXT,
+                updated_at TEXT,
+                UNIQUE(user_id, category, key)
+            );
+
             -- Live screen-tracker: spara snapshot av screen-träffar för
             -- senare 12m-uppföljning. Validering live att backtest
             -- speglar verkligheten.
@@ -898,6 +910,18 @@ def _create_tables(db):
                 period_q INTEGER,
                 value REAL,
                 PRIMARY KEY (isin, kpi_id, report_type, period_year, period_q)
+            );
+
+            -- Agent-minne SQLite-version
+            CREATE TABLE IF NOT EXISTS agent_memory (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id TEXT DEFAULT 'default',
+                category TEXT,
+                key TEXT,
+                value TEXT,
+                created_at TEXT,
+                updated_at TEXT,
+                UNIQUE(user_id, category, key)
             );
 
             -- Live screen-tracker (SQLite): snapshot för 12m-uppföljning

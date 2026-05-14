@@ -286,6 +286,61 @@ def external_signals_page():
     return render_template("external_signals.html")
 
 
+@app.route("/api/agent/memory", methods=["GET", "POST", "DELETE"])
+def api_agent_memory():
+    """Agent-minne: spara/hämta/radera notes så agenten 'lär sig'.
+
+    GET: returnerar alla notes (med ?category=preference|note|watchlist|rule)
+    POST: {category, key, value} — spara/uppdatera note
+    DELETE: ?id=N eller ?key=X — radera
+    """
+    from edge_db import _ph as ph_fn, _fetchall, _fetchone, _upsert_sql
+    from datetime import datetime
+    ph = ph_fn()
+    db = get_db()
+    user_id = request.args.get("user_id", "default")
+    try:
+        if request.method == "GET":
+            cat = request.args.get("category")
+            if cat:
+                rows = _fetchall(db,
+                    f"SELECT * FROM agent_memory WHERE user_id={ph} AND category={ph} "
+                    f"ORDER BY updated_at DESC", (user_id, cat))
+            else:
+                rows = _fetchall(db,
+                    f"SELECT * FROM agent_memory WHERE user_id={ph} "
+                    f"ORDER BY updated_at DESC LIMIT 100", (user_id,))
+            return jsonify({"notes": [dict(r) for r in rows]})
+
+        elif request.method == "POST":
+            body = request.json or {}
+            cat = body.get("category", "note")
+            key = body.get("key", "general")
+            value = body.get("value", "")
+            now = datetime.now().isoformat()
+            ins_sql = _upsert_sql("agent_memory",
+                ["user_id", "category", "key", "value", "created_at", "updated_at"],
+                ["user_id", "category", "key"])
+            db.execute(ins_sql, (user_id, cat, key, value, now, now))
+            db.commit()
+            return jsonify({"ok": True, "category": cat, "key": key})
+
+        elif request.method == "DELETE":
+            note_id = request.args.get("id")
+            key = request.args.get("key")
+            if note_id:
+                db.execute(f"DELETE FROM agent_memory WHERE id={ph}", (note_id,))
+            elif key:
+                db.execute(f"DELETE FROM agent_memory WHERE user_id={ph} AND key={ph}",
+                            (user_id, key))
+            db.commit()
+            return jsonify({"ok": True})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    finally:
+        db.close()
+
+
 @app.route("/api/external-signals")
 def api_external_signals():
     """Returnerar senaste posts från Reddit/Substack-källor + extracted tickers."""
@@ -9544,6 +9599,30 @@ def _build_agent_context(db, max_per_list=20):
     except Exception as e:
         print(f"[agent ctx] BUY/AVOID-error: {e}", file=sys.stderr)
 
+    # ── NYTT: Agent-minne — användarens preferenser, notes, watchlist ──
+    try:
+        from edge_db import _fetchall, _ph as ph_fn2
+        ph2 = ph_fn2()
+        memory_rows = _fetchall(db,
+            f"SELECT category, key, value FROM agent_memory WHERE user_id={ph2} "
+            f"ORDER BY category, updated_at DESC LIMIT 50", ("default",))
+        if memory_rows:
+            by_cat = {}
+            for r in memory_rows:
+                rd = dict(r)
+                by_cat.setdefault(rd["category"], []).append(rd)
+            mem_lines = []
+            for cat in ["preference", "rule", "watchlist", "note"]:
+                items = by_cat.get(cat, [])
+                if not items: continue
+                mem_lines.append(f"  [{cat.upper()}]:")
+                for it in items[:10]:
+                    mem_lines.append(f"    • {it['key']}: {it['value'][:200]}")
+            if mem_lines:
+                parts.append("🧠 AGENT-MINNE (användarens sparade preferenser & notes):\n" + "\n".join(mem_lines))
+    except Exception as e:
+        print(f"[agent ctx] memory-error: {e}", file=sys.stderr)
+
     return "\n\n".join(parts)
 
 
@@ -9660,26 +9739,96 @@ def _agent_get_full_stock(db, query):
         "risk_axis": (sc.get("v2_axes") or {}).get("risk"),
     }
     keep = {
+        # ── Grunddata ──
         "name", "short_name", "ticker", "country", "currency", "orderbook_id",
-        "last_price", "market_cap", "number_of_owners",
+        "last_price", "market_cap", "number_of_owners", "sector",
+        # ── Värdering ──
         "pe_ratio", "price_book_ratio", "ev_ebit_ratio", "ps_ratio",
-        "direct_yield", "dividend_per_share", "return_on_equity",
-        "return_on_assets", "return_on_capital_employed",
+        "direct_yield", "dividend_per_share",
+        # ── Lönsamhet ──
+        "return_on_equity", "return_on_assets", "return_on_capital_employed",
+        # ── Skuldsättning ──
         "debt_to_equity_ratio", "net_debt_ebitda_ratio",
+        # ── Kassaflöde + resultat ──
         "operating_cash_flow", "net_profit", "sales", "eps",
-        "rsi14", "volatility", "sma200",
+        "total_assets", "total_liabilities", "equity_per_share",
+        # ── Teknisk ──
+        "rsi14", "volatility", "sma20", "sma50", "sma200",
+        "bollinger_distance_upper", "bollinger_distance_lower", "macd_value",
+        "macd_signal", "macd_histogram", "rsi_trend_3d", "rsi_trend_5d",
+        # ── Ägar-flöde (alla perioder) ──
         "owners_change_1d", "owners_change_1w", "owners_change_1m",
         "owners_change_3m", "owners_change_ytd", "owners_change_1y",
-        "one_month_change_pct", "ytd_change_pct", "six_months_change_pct",
+        "owners_change_1d_abs", "owners_change_1w_abs", "owners_change_1m_abs",
+        "owners_change_1y_abs",
+        # ── Pris-utveckling ──
+        "one_day_change_pct", "one_week_change_pct", "one_month_change_pct",
+        "three_months_change_pct", "six_months_change_pct", "ytd_change_pct",
+        "one_year_change_pct", "three_years_change_pct", "five_years_change_pct",
+        # ── Edge/Smart scores ──
         "edge_score", "edge_action", "edge_signal",
         "smart_score", "smart_score_yesterday",
+        # ── Book-modeller ──
         "book_composite", "book_models_available", "book_model_scores",
         "composite_warning", "value_trap_warning",
+        # ── Övrigt ──
         "discovery_score", "maturity_score",
         "insider_buys", "insider_sells", "insider_cluster_buy",
+        "next_company_report",  # Kommande rapport-datum
+        "short_selling_ratio", "beta",
+        "collateral_value",  # marginsäkerhetsvärde
     }
     out = {k: d.get(k) for k in keep if k in d}
     out["v2"] = v2
+
+    # ── NYTT: Kvant-screen-data (Q/V/M, recommendation, overheat etc) ──
+    # Hämta från _QUANT_CACHE eller beräkna direkt
+    try:
+        from edge_db import compute_quant_scores
+        country = d.get("country", "SE")
+        cache_key = f"{country}|500000000"
+        global _QUANT_CACHE
+        now = _time.time()
+        if (_QUANT_CACHE.get("country") == cache_key
+                and (now - _QUANT_CACHE.get("ts", 0)) < _QUANT_CACHE_TTL
+                and _QUANT_CACHE.get("data")):
+            all_data = _QUANT_CACHE["data"]
+        else:
+            all_data = compute_quant_scores(db, country=country, max_universe=300)
+            _QUANT_CACHE.update({"data": all_data, "ts": now, "country": cache_key})
+
+        target = next((s for s in all_data if str(s.get("orderbook_id")) == str(d.get("orderbook_id"))), None)
+        if target:
+            out["quant"] = {
+                "quality_score": target.get("quality_score"),
+                "value_score": target.get("value_score"),
+                "momentum_score": target.get("momentum_score"),
+                "composite_score": target.get("composite_score"),
+                "sector_quality_rank": target.get("sector_quality_rank"),
+                "sector_value_rank": target.get("sector_value_rank"),
+                "sector_momentum_rank": target.get("sector_momentum_rank"),
+                "is_growth_trifecta": target.get("is_growth_trifecta"),
+                "is_quant_trifecta": target.get("is_quant_trifecta"),
+                "is_magic_formula": target.get("is_magic_formula"),
+                "is_dual_screen": target.get("is_dual_screen"),
+                "is_recurring_compounder": target.get("is_recurring_compounder"),
+                "recurring_gt_years": target.get("recurring_gt_years"),
+                "is_momentum_overheat": target.get("is_momentum_overheat"),
+                "is_oversold_bounce": target.get("is_oversold_bounce"),
+                "is_owner_momentum": target.get("is_owner_momentum"),
+                "is_owner_exodus": target.get("is_owner_exodus"),
+                "is_valuation_trap": target.get("is_valuation_trap"),
+                "is_momentum_rocket": target.get("is_momentum_rocket"),
+                "is_cyclical_bottom": target.get("is_cyclical_bottom"),
+                "is_quality_compounder_light": target.get("is_quality_compounder_light"),
+                "n_flags": target.get("n_flags"),
+                "recommendation": target.get("recommendation"),
+                "recommendation_reason": target.get("recommendation_reason"),
+                "overheat_warning": target.get("overheat_warning"),
+                "oversold_warning": target.get("oversold_warning"),
+            }
+    except Exception as e:
+        out["quant_error"] = str(e)[:200]
 
     # ── v3: Börsdata-data för djupanalys (riktig FCF/EBIT/skuld + 10 års reports) ──
     try:
