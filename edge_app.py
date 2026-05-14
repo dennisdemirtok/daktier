@@ -10010,6 +10010,91 @@ Om du säger 0.5% starter eller >single-ticker-cap total — då är systemet
 trasigt. **Säg AVOID**, eller välj en primär lins, eller flagga
 ticker-pris-problemet.
 
+────────────────────────────────────────────────────────────
+BATCH-MODE OUTPUT-FORMAT
+────────────────────────────────────────────────────────────
+
+När användarens meddelande innehåller `trigger_type=batch` ska FAS 1-analysen
+returneras i TVÅ delar.
+
+**Del 1 — JSON-block FÖRST, mellan markörer**:
+
+```
+---JSON-START---
+{
+  "ticker": "HEXPOL B",
+  "classification": "stalwart",
+  "primary_lens": "buffett_lynch",
+  "swing_signal": "AVOID",
+  "quality_signal": "HOLD",
+  "value_signal": "BUY_LIGHT",
+  "swing_motivation": "Momentum kollapsat, ingen catalyst nära",
+  "quality_motivation": "Compounder-kvalitet men marginaler under tryck",
+  "value_motivation": "Cyclical-bottom-setup, P/E 13.9 mot historisk peak 18+",
+  "value_score": 64.3,
+  "quality_score": 64.4,
+  "momentum_score": 32.7,
+  "risk_score": 85.6,
+  "composite_score": 61.75,
+  "flags": {
+    "is_trifecta": false,
+    "is_growth_trifecta": false,
+    "is_recurring_compounder": false,
+    "is_cyclical_bottom": true
+  },
+  "cycle_position": "trough_to_mid",
+  "reverse_dcf": {
+    "implied_growth_pct": 3.9,
+    "baseline_growth_pct": 5.5,
+    "gap_pp": -1.6,
+    "confidence": "medium"
+  },
+  "key_metrics": {
+    "price": 74.4,
+    "currency": "SEK",
+    "pe_trailing": 13.9,
+    "pe_forward": null,
+    "fcf_yield": 6.0,
+    "roe_ttm": 12.4
+  },
+  "catalysts": [
+    {"type": "report", "date": "2026-07-20", "description": "Q2-rapport"},
+    {"type": "price", "level": 65, "description": "Vid -13% blir P/E 12"}
+  ]
+}
+---JSON-END---
+```
+
+**Del 2 — Markdown-analys EFTER JSON-blocket** (vanlig FAS 1-output enligt Steg 7).
+
+**Regler för JSON-blocket**:
+- MÅSTE komma först, mellan `---JSON-START---` och `---JSON-END---`
+- MÅSTE vara giltig JSON som parsas av `JSON.parse()`
+- Använd `null` för okänd data, inte text eller utelämnat fält
+- `composite_score` = viktat snitt: V×0.25 + Q×0.30 + M×0.25 + Risk×0.20
+
+**Flagg-definitioner** (för konsistens):
+- `is_trifecta`: value_score ≥ 70 OCH quality_score ≥ 70 OCH momentum_score ≥ 70
+- `is_growth_trifecta`: quality_score ≥ 70 OCH momentum_score ≥ 70 (oavsett value)
+- `is_recurring_compounder`: bolaget har flaggat Growth Trifecta minst 3 år i backtest 2015–2024
+- `is_cyclical_bottom`: value_score ≥ 60 OCH momentum_score ≤ 40 OCH cycle_position ∈ ("trough", "trough_to_mid")
+
+**Signal-vokabulär** (använd ENDAST dessa i swing_signal/quality_signal/value_signal):
+`STRONG_BUY` · `BUY` · `BUY_LIGHT` · `HOLD` · `WATCHLIST` · `WAIT` ·
+`TAKE_PROFIT` · `AVOID` · `EXIT`
+
+**Cycle position-värden**:
+`"trough" | "trough_to_mid" | "mid" | "mid_to_peak" | "peak" | "NA"`
+(NA om icke-cyklisk)
+
+**Klassificering-värden** (matchar Steg 1):
+`slow_grower` · `stalwart` · `fast_grower` · `cyclical` · `turnaround` ·
+`asset_play` · `disruptor` · `behavioral_mispricing`
+
+**Primary_lens-värden**:
+`graham_buffett` · `buffett_lynch` · `lynch_fisher` · `lynch` ·
+`graham_lynch` · `graham` · `christensen_thiel` · `kahneman`
+
 ══════════════════════════════════════════════════════════════
 DEL 7 — SVARSPRINCIPER
 ══════════════════════════════════════════════════════════════
@@ -10741,6 +10826,533 @@ def _agent_get_top_stocks(db, criterion="composite", limit=10, country=""):
             "number_of_owners": d.get("number_of_owners"),
         })
     return {"criterion": criterion, "country": country or "all", "stocks": out}
+
+
+# ══════════════════════════════════════════════════════════════
+# BATCH ANALYSIS PIPELINE (DEL 6.99 v3.1)
+# Kör DAKTIER-analys på en lista bolag, sparar strukturerad output
+# i batch_analyses-tabellen för dashboard-topplistor.
+# ══════════════════════════════════════════════════════════════
+
+BATCH_MODEL = "claude-sonnet-4-20250514"  # ej Opus — för dyrt på batch
+BATCH_COST_BUDGET_USD = 5.0
+BATCH_SIZE = 3
+BATCH_DELAY_BETWEEN_BATCHES = 3.0
+
+# Sonnet 4 prissättning (USD per million tokens)
+SONNET_PRICE_INPUT = 3.0
+SONNET_PRICE_OUTPUT = 15.0
+SONNET_PRICE_CACHE_READ = 0.30
+SONNET_PRICE_CACHE_WRITE = 3.75
+
+_BATCH_STATE = {"running": False, "run_id": None}
+_BATCH_LOCK = threading.Lock()
+
+
+def _calc_sonnet_cost(usage):
+    """Beräkna USD-kostnad från Anthropic usage-objekt."""
+    inp = (usage.get("input_tokens") or 0) / 1_000_000
+    out = (usage.get("output_tokens") or 0) / 1_000_000
+    cache_r = (usage.get("cache_read_input_tokens") or 0) / 1_000_000
+    cache_w = (usage.get("cache_creation_input_tokens") or 0) / 1_000_000
+    return (inp * SONNET_PRICE_INPUT + out * SONNET_PRICE_OUTPUT
+            + cache_r * SONNET_PRICE_CACHE_READ + cache_w * SONNET_PRICE_CACHE_WRITE)
+
+
+def _stable_fundamentals_hash(stock_data):
+    """Hash av stabil grunddata för cache-invalidering.
+
+    Inkluderar fundamentals som ändras vid kvartalsrapport.
+    Exkluderar pris/RSI som ändras varje dag.
+    """
+    import hashlib, json as _json
+    keys = ["pe_trailing", "pe_forward", "fcf_yield", "roe", "roic",
+            "debt_to_equity", "revenue_growth_5y", "eps_growth_5y",
+            "net_profit_margin", "book_value_per_share", "last_q_eps",
+            "last_q_revenue"]
+    pick = {k: stock_data.get(k) for k in keys if k in stock_data}
+    canon = _json.dumps(pick, sort_keys=True, default=str)
+    return hashlib.sha256(canon.encode()).hexdigest()[:16]
+
+
+def _build_batch_user_message(ticker, stock_data):
+    """Bygg user-meddelande för batch-mode-analys."""
+    import json as _json
+    hash_ = _stable_fundamentals_hash(stock_data)
+    short_name = stock_data.get("short_name") or ticker
+    # Truncate context för att hålla payload rimlig
+    safe_data = {k: v for k, v in stock_data.items()
+                 if k not in ("kpi_history", "quarterly_full")}
+    ctx_str = _json.dumps(safe_data, ensure_ascii=False, default=str)[:8000]
+    return (
+        f"trigger_type=batch\n"
+        f"active_strategy=🔭 Alla tre parallellt\n"
+        f"portfolio_size=100000 SEK\n"
+        f"target_positions=10\n\n"
+        f"Analysera **{short_name}** ({ticker}) enligt DEL 6.99 v3.1 FAS 1.\n"
+        f"Returnera JSON-block FÖRST mellan ---JSON-START--- och ---JSON-END---, "
+        f"sedan markdown-analysen.\n\n"
+        f"Stable hash: {hash_}\n\n"
+        f"Context (Börsdata-data från DB):\n{ctx_str}"
+    )
+
+
+def _parse_batch_output(full_text):
+    """Extrahera JSON-block + markdown från batch-mode-svar."""
+    import json as _json, re
+    json_match = re.search(r"---JSON-START---\s*(.*?)\s*---JSON-END---",
+                           full_text, re.DOTALL)
+    parsed_json = None
+    json_ok = False
+    if json_match:
+        json_str = json_match.group(1).strip()
+        # Strip markdown ```json``` om Claude wrappade det
+        json_str = re.sub(r"^```(?:json)?\s*", "", json_str)
+        json_str = re.sub(r"\s*```$", "", json_str)
+        try:
+            parsed_json = _json.loads(json_str)
+            json_ok = True
+        except Exception as e:
+            print(f"[batch] JSON parse error: {e}", file=sys.stderr)
+    # Markdown = allt efter ---JSON-END--- (eller hela svaret om ingen JSON)
+    if json_match:
+        markdown = full_text[json_match.end():].strip()
+    else:
+        markdown = full_text.strip()
+    return parsed_json, markdown, json_ok
+
+
+def _analyze_single_ticker_for_batch(ticker, run_id):
+    """Kör DAKTIER FAS 1 på en ticker och spara i batch_analyses."""
+    import httpx, json as _json
+    from edge_db import _ph
+
+    if not CLAUDE_API_KEY:
+        return {"ticker": ticker, "ok": False, "error": "no API key", "cost": 0}
+
+    db = get_db()
+    # Hämta stock-data via befintlig sökning (samma som agenten använder)
+    stock_results = _agent_search_stocks(db, query=ticker, limit=1)
+    if not stock_results:
+        return {"ticker": ticker, "ok": False, "error": "not found in DB", "cost": 0}
+    short_name = stock_results[0].get("short_name") or ticker
+    stock_data = _agent_get_full_stock(db, short_name)
+    if not stock_data:
+        return {"ticker": ticker, "ok": False, "error": "no data", "cost": 0}
+
+    user_msg = _build_batch_user_message(ticker, stock_data)
+    hash_ = _stable_fundamentals_hash(stock_data)
+
+    # Skicka till Anthropic (NON-streaming för enklare parsing)
+    headers = {
+        "x-api-key": CLAUDE_API_KEY,
+        "anthropic-version": "2023-06-01",
+        "anthropic-beta": "extended-cache-ttl-2025-04-11",
+        "content-type": "application/json",
+    }
+    # Använd hela DAKTIER-prompten som static system (cachad)
+    payload = {
+        "model": BATCH_MODEL,
+        "max_tokens": 6000,
+        "system": [
+            {"type": "text", "text": _AGENT_KNOWLEDGE_BASE,
+             "cache_control": {"type": "ephemeral"}},
+        ],
+        "messages": [{"role": "user", "content": user_msg}],
+    }
+    try:
+        with httpx.Client(timeout=180.0) as client:
+            r = client.post("https://api.anthropic.com/v1/messages",
+                            headers=headers, json=payload)
+            if r.status_code != 200:
+                return {"ticker": ticker, "ok": False,
+                        "error": f"HTTP {r.status_code}: {r.text[:200]}", "cost": 0}
+            resp_json = r.json()
+    except Exception as e:
+        return {"ticker": ticker, "ok": False, "error": str(e), "cost": 0}
+
+    usage = resp_json.get("usage", {})
+    cost = _calc_sonnet_cost(usage)
+
+    # Extrahera text från content
+    full_text = ""
+    for blk in resp_json.get("content", []):
+        if blk.get("type") == "text":
+            full_text += blk.get("text", "")
+
+    parsed_json, markdown, json_ok = _parse_batch_output(full_text)
+
+    # Spara i batch_analyses (även om JSON failade — för felsökning)
+    try:
+        ph = _ph()
+        country = stock_data.get("country")
+        if parsed_json:
+            flags = parsed_json.get("flags", {}) or {}
+            rdcf = parsed_json.get("reverse_dcf", {}) or {}
+            cols = [
+                ticker, short_name, country, "manual",
+                parsed_json.get("classification"),
+                parsed_json.get("primary_lens"),
+                parsed_json.get("swing_signal"),
+                parsed_json.get("quality_signal"),
+                parsed_json.get("value_signal"),
+                parsed_json.get("swing_motivation"),
+                parsed_json.get("quality_motivation"),
+                parsed_json.get("value_motivation"),
+                parsed_json.get("value_score"),
+                parsed_json.get("quality_score"),
+                parsed_json.get("momentum_score"),
+                parsed_json.get("risk_score"),
+                parsed_json.get("composite_score"),
+                bool(flags.get("is_trifecta")),
+                bool(flags.get("is_growth_trifecta")),
+                bool(flags.get("is_recurring_compounder")),
+                bool(flags.get("is_cyclical_bottom")),
+                parsed_json.get("cycle_position"),
+                rdcf.get("implied_growth_pct"),
+                rdcf.get("baseline_growth_pct"),
+                rdcf.get("gap_pp"),
+                rdcf.get("confidence"),
+                markdown,
+                _json.dumps(parsed_json, ensure_ascii=False, default=str),
+                cost,
+                usage.get("cache_read_input_tokens", 0),
+                usage.get("input_tokens", 0),
+                usage.get("output_tokens", 0),
+                hash_,
+                json_ok,
+                None,
+            ]
+        else:
+            cols = [ticker, short_name, country, "manual",
+                    None, None, None, None, None, None, None, None,
+                    None, None, None, None, None,
+                    False, False, False, False, None,
+                    None, None, None, None,
+                    markdown, None, cost,
+                    usage.get("cache_read_input_tokens", 0),
+                    usage.get("input_tokens", 0),
+                    usage.get("output_tokens", 0),
+                    hash_, False, "JSON-parsing failed"]
+        cols_sql = ("ticker, short_name, country, trigger_type, "
+                    "classification, primary_lens, swing_signal, quality_signal, "
+                    "value_signal, swing_motivation, quality_motivation, value_motivation, "
+                    "value_score, quality_score, momentum_score, risk_score, "
+                    "composite_score, is_trifecta, is_growth_trifecta, "
+                    "is_recurring_compounder, is_cyclical_bottom, cycle_position, "
+                    "reverse_dcf_implied_growth, reverse_dcf_baseline, reverse_dcf_gap, "
+                    "reverse_dcf_confidence, full_analysis_markdown, full_analysis_json, "
+                    "cost_usd, cached_tokens, input_tokens, output_tokens, "
+                    "fundamentals_hash, json_parse_ok, error_message")
+        placeholders = ", ".join([ph] * len(cols))
+        db.execute(f"INSERT INTO batch_analyses ({cols_sql}) VALUES ({placeholders})",
+                   tuple(cols))
+        db.commit()
+    except Exception as e:
+        import traceback; traceback.print_exc()
+        return {"ticker": ticker, "ok": False, "error": f"db insert: {e}", "cost": cost}
+
+    return {"ticker": ticker, "ok": json_ok, "cost": cost,
+            "cached_tokens": usage.get("cache_read_input_tokens", 0)}
+
+
+def _run_batch_worker(tickers, run_id):
+    """Kör batch i bakgrundstråd. Stoppa vid budget eller alla klara."""
+    import time
+    from edge_db import _ph
+
+    db = get_db()
+    ph = _ph()
+    total_cost = 0.0
+    completed = 0
+    failed = 0
+    total_cached = 0
+    total_input = 0
+    errors = []
+
+    print(f"[batch] Starting run {run_id} with {len(tickers)} tickers", file=sys.stderr)
+
+    # Sekventiell körning (säkrare för rate limit + cache-träffar)
+    for ticker in tickers:
+        if total_cost >= BATCH_COST_BUDGET_USD:
+            print(f"[batch] Budget exceeded (${total_cost:.2f}), stopping",
+                  file=sys.stderr)
+            break
+        try:
+            result = _analyze_single_ticker_for_batch(ticker, run_id)
+            total_cost += result.get("cost", 0)
+            total_cached += result.get("cached_tokens", 0)
+            if result.get("ok"):
+                completed += 1
+            else:
+                failed += 1
+                errors.append(f"{ticker}: {result.get('error', 'unknown')}")
+            # Uppdatera batch_runs-status efter varje ticker
+            try:
+                db.execute(
+                    f"UPDATE batch_runs SET tickers_completed={ph}, "
+                    f"tickers_failed={ph}, total_cost_usd={ph} WHERE id={ph}",
+                    (completed, failed, total_cost, run_id))
+                db.commit()
+            except Exception:
+                pass
+            time.sleep(BATCH_DELAY_BETWEEN_BATCHES)
+        except Exception as e:
+            failed += 1
+            errors.append(f"{ticker}: {e}")
+            print(f"[batch] {ticker} failed: {e}", file=sys.stderr)
+
+    # Mark run as completed
+    status = "completed"
+    if total_cost >= BATCH_COST_BUDGET_USD:
+        status = "budget_exceeded"
+    err_summary = ("\n".join(errors[:20]))[:2000] if errors else None
+    try:
+        db.execute(
+            f"UPDATE batch_runs SET status={ph}, completed_at=CURRENT_TIMESTAMP, "
+            f"tickers_completed={ph}, tickers_failed={ph}, "
+            f"total_cost_usd={ph}, error_summary={ph} WHERE id={ph}",
+            (status, completed, failed, total_cost, err_summary, run_id))
+        db.commit()
+    except Exception as e:
+        print(f"[batch] final update failed: {e}", file=sys.stderr)
+
+    with _BATCH_LOCK:
+        _BATCH_STATE["running"] = False
+        _BATCH_STATE["run_id"] = None
+
+    print(f"[batch] Run {run_id} done: {completed} ok, {failed} failed, "
+          f"${total_cost:.4f}", file=sys.stderr)
+
+
+@app.route("/api/batch/run", methods=["POST"])
+def api_batch_run():
+    """Trigga batch-analys på en lista bolag.
+
+    Body: {"tickers": ["HEXPOL B", "MU", "NVDA", ...]}
+    Returnerar omedelbart med run_id; worker körs i bakgrundstråd.
+    """
+    from edge_db import _ph
+
+    with _BATCH_LOCK:
+        if _BATCH_STATE.get("running"):
+            return jsonify({"error": "batch already running",
+                            "run_id": _BATCH_STATE.get("run_id")}), 409
+
+    data = request.get_json(silent=True) or {}
+    tickers = data.get("tickers") or []
+    if not tickers or not isinstance(tickers, list):
+        return jsonify({"error": "tickers required (array of strings)"}), 400
+    if len(tickers) > 50:
+        return jsonify({"error": "max 50 tickers per batch"}), 400
+
+    db = get_db()
+    ph = _ph()
+    run_id = None
+    try:
+        if _is_postgres():
+            cur = db.cursor()
+            cur.execute(f"INSERT INTO batch_runs (tickers_requested, status) "
+                        f"VALUES ({ph}, 'running') RETURNING id",
+                        (len(tickers),))
+            row = cur.fetchone()
+            run_id = row[0] if row else None
+            db.commit()
+            cur.close()
+        else:
+            cur = db.cursor()
+            cur.execute(f"INSERT INTO batch_runs (tickers_requested, status) "
+                        f"VALUES ({ph}, 'running')", (len(tickers),))
+            run_id = cur.lastrowid
+            db.commit()
+            cur.close()
+    except Exception as e:
+        return jsonify({"error": f"db insert failed: {e}"}), 500
+    if run_id is None:
+        return jsonify({"error": "could not create run_id"}), 500
+
+    with _BATCH_LOCK:
+        _BATCH_STATE["running"] = True
+        _BATCH_STATE["run_id"] = run_id
+
+    t = threading.Thread(target=_run_batch_worker, args=(tickers, run_id),
+                         daemon=True)
+    t.start()
+    return jsonify({"run_id": run_id, "tickers": len(tickers),
+                    "status": "started",
+                    "budget_usd": BATCH_COST_BUDGET_USD,
+                    "model": BATCH_MODEL}), 202
+
+
+@app.route("/api/batch/status")
+def api_batch_status():
+    """Status för pågående/senaste batch + topplista-statistik."""
+    from edge_db import _fetchone, _fetchall, _ph
+    db = get_db()
+    ph = _ph()
+    # Senaste run
+    latest_run = _fetchone(db,
+        "SELECT id, started_at, completed_at, status, tickers_requested, "
+        "tickers_completed, tickers_failed, total_cost_usd, error_summary "
+        "FROM batch_runs ORDER BY id DESC LIMIT 1")
+    # Total i batch_analyses
+    total = _fetchone(db, "SELECT COUNT(*) AS n, AVG(cost_usd) AS avg_cost, "
+                          "SUM(cost_usd) AS total_cost, AVG(cached_tokens) AS avg_cached "
+                          "FROM batch_analyses")
+    # Distribution per klassificering
+    dist_rows = _fetchall(db,
+        "SELECT classification, COUNT(*) AS n FROM batch_analyses "
+        "WHERE classification IS NOT NULL GROUP BY classification "
+        "ORDER BY n DESC")
+    # Flagg-distribution (senaste analys per ticker)
+    flags_row = _fetchone(db, """
+        WITH latest AS (
+            SELECT DISTINCT ON (ticker) ticker, is_trifecta, is_growth_trifecta,
+                                          is_cyclical_bottom, is_recurring_compounder
+            FROM batch_analyses
+            ORDER BY ticker, analyzed_at DESC
+        )
+        SELECT
+            SUM(CASE WHEN is_trifecta THEN 1 ELSE 0 END) AS trifecta,
+            SUM(CASE WHEN is_growth_trifecta THEN 1 ELSE 0 END) AS gt,
+            SUM(CASE WHEN is_cyclical_bottom THEN 1 ELSE 0 END) AS cyc_bot,
+            SUM(CASE WHEN is_recurring_compounder THEN 1 ELSE 0 END) AS rc
+        FROM latest
+    """) if _is_postgres() else None
+    if flags_row is None:
+        # SQLite fallback (DISTINCT ON inte stödd)
+        flags_row = _fetchone(db, """
+            SELECT
+                SUM(CASE WHEN is_trifecta=1 THEN 1 ELSE 0 END) AS trifecta,
+                SUM(CASE WHEN is_growth_trifecta=1 THEN 1 ELSE 0 END) AS gt,
+                SUM(CASE WHEN is_cyclical_bottom=1 THEN 1 ELSE 0 END) AS cyc_bot,
+                SUM(CASE WHEN is_recurring_compounder=1 THEN 1 ELSE 0 END) AS rc
+            FROM batch_analyses
+        """)
+
+    def _row_to_dict(r):
+        if r is None: return None
+        try: return dict(r)
+        except Exception: return r
+
+    return jsonify({
+        "running": _BATCH_STATE.get("running", False),
+        "current_run_id": _BATCH_STATE.get("run_id"),
+        "latest_run": _row_to_dict(latest_run),
+        "totals": _row_to_dict(total),
+        "classification_distribution": [_row_to_dict(r) for r in dist_rows] if dist_rows else [],
+        "flag_distribution": _row_to_dict(flags_row),
+        "budget_per_run_usd": BATCH_COST_BUDGET_USD,
+        "model": BATCH_MODEL,
+    })
+
+
+@app.route("/api/toplists/<strategy>")
+def api_toplists(strategy):
+    """Topplista per strategi. Returnerar senaste analys per ticker."""
+    from edge_db import _fetchall, _ph
+    db = get_db()
+
+    # Bygg query — använd window function för "senaste per ticker"
+    base_cols = ("ticker, short_name, country, analyzed_at, classification, "
+                 "primary_lens, swing_signal, quality_signal, value_signal, "
+                 "swing_motivation, quality_motivation, value_motivation, "
+                 "value_score, quality_score, momentum_score, risk_score, "
+                 "composite_score, is_trifecta, is_growth_trifecta, "
+                 "is_recurring_compounder, is_cyclical_bottom, cycle_position, "
+                 "reverse_dcf_implied_growth, reverse_dcf_baseline, "
+                 "reverse_dcf_gap, reverse_dcf_confidence")
+
+    if _is_postgres():
+        base_q = (f"SELECT DISTINCT ON (ticker) {base_cols} FROM batch_analyses "
+                  "WHERE json_parse_ok = TRUE ")
+        suffix_order = "ORDER BY ticker, analyzed_at DESC"
+    else:
+        base_q = (f"SELECT {base_cols} FROM batch_analyses ba1 "
+                  "WHERE json_parse_ok = 1 AND analyzed_at = "
+                  "(SELECT MAX(analyzed_at) FROM batch_analyses ba2 "
+                  " WHERE ba2.ticker = ba1.ticker) ")
+        suffix_order = ""
+
+    filters = {
+        "trifecta": (
+            "AND is_trifecta = TRUE",
+            "composite_score DESC NULLS LAST"),
+        "growth_trifecta": (
+            "AND is_growth_trifecta = TRUE AND is_trifecta = FALSE",
+            "momentum_score DESC NULLS LAST"),
+        "cyclical_bottom": (
+            "AND is_cyclical_bottom = TRUE",
+            "value_score DESC NULLS LAST"),
+        "swing_buy": (
+            "AND swing_signal IN ('BUY', 'STRONG_BUY') AND momentum_score >= 60",
+            "momentum_score DESC NULLS LAST"),
+        "quality_buy": (
+            "AND quality_signal IN ('BUY', 'BUY_LIGHT', 'STRONG_BUY')",
+            "quality_score DESC NULLS LAST"),
+        "value_buy": (
+            "AND value_signal IN ('BUY', 'BUY_LIGHT', 'STRONG_BUY')",
+            "value_score DESC NULLS LAST"),
+        "recurring_compounder": (
+            "AND is_recurring_compounder = TRUE",
+            "quality_score DESC NULLS LAST"),
+        "all": ("", "composite_score DESC NULLS LAST"),
+    }
+    if strategy not in filters:
+        return jsonify({"error": f"unknown strategy: {strategy}",
+                        "available": list(filters.keys())}), 400
+
+    where_extra, final_sort = filters[strategy]
+    # SQLite stöder inte "NULLS LAST" på samma sätt — strip det
+    if not _is_postgres():
+        final_sort = final_sort.replace(" NULLS LAST", "")
+        where_extra = where_extra.replace("= TRUE", "= 1").replace("= FALSE", "= 0")
+
+    full_q = base_q + where_extra + " " + suffix_order
+    try:
+        rows = _fetchall(db, full_q)
+        # Sortera i Python eftersom DISTINCT ON kräver primär sort på ticker
+        results = [dict(r) for r in rows] if rows else []
+        # Re-sort enligt strategi
+        sort_col, _, direction = final_sort.partition(" ")
+        reverse = direction.startswith("DESC")
+        results.sort(key=lambda r: (r.get(sort_col) or 0), reverse=reverse)
+        return jsonify({"strategy": strategy, "count": len(results),
+                        "results": results[:20]})
+    except Exception as e:
+        import traceback; traceback.print_exc()
+        return jsonify({"error": str(e), "strategy": strategy}), 500
+
+
+@app.route("/api/analysis/<ticker>")
+def api_analysis_single(ticker):
+    """Senaste batch-analys för en ticker (för on-click i dashboard)."""
+    from edge_db import _fetchone, _ph
+    db = get_db()
+    ph = _ph()
+    row = _fetchone(db,
+        f"SELECT * FROM batch_analyses WHERE ticker = {ph} "
+        f"ORDER BY analyzed_at DESC LIMIT 1", (ticker,))
+    if not row:
+        # Försök med uppercase
+        row = _fetchone(db,
+            f"SELECT * FROM batch_analyses WHERE UPPER(ticker) = {ph} "
+            f"ORDER BY analyzed_at DESC LIMIT 1", (ticker.upper(),))
+    if not row:
+        return jsonify({"error": "no analysis found"}), 404
+    return jsonify(dict(row))
+
+
+def _is_postgres():
+    """Helper — kollar om aktiv DB är PostgreSQL."""
+    import os
+    return bool(os.environ.get("DATABASE_URL"))
+
+
+@app.route("/toplists")
+def toplists_page():
+    """Topplistor-sida (frontend för batch_analyses)."""
+    return render_template("toplists.html")
 
 
 @app.route("/api/agent/chat", methods=["POST"])

@@ -487,6 +487,72 @@ def _create_tables(db):
                 UNIQUE(user_id, category, key)
             );
 
+            -- DEL 6.99 v3.1 batch-analyser: agent-genererade FAS 1-rapporter
+            -- med strukturerad JSON-output (filterbara för topplistor).
+            CREATE TABLE IF NOT EXISTS batch_analyses (
+                id SERIAL PRIMARY KEY,
+                ticker TEXT NOT NULL,
+                short_name TEXT,
+                country TEXT,
+                analyzed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                trigger_type TEXT DEFAULT 'manual',
+                classification TEXT,
+                primary_lens TEXT,
+                swing_signal TEXT,
+                quality_signal TEXT,
+                value_signal TEXT,
+                swing_motivation TEXT,
+                quality_motivation TEXT,
+                value_motivation TEXT,
+                value_score NUMERIC(5,2),
+                quality_score NUMERIC(5,2),
+                momentum_score NUMERIC(5,2),
+                risk_score NUMERIC(5,2),
+                composite_score NUMERIC(5,2),
+                is_trifecta BOOLEAN DEFAULT FALSE,
+                is_growth_trifecta BOOLEAN DEFAULT FALSE,
+                is_recurring_compounder BOOLEAN DEFAULT FALSE,
+                is_cyclical_bottom BOOLEAN DEFAULT FALSE,
+                cycle_position TEXT,
+                reverse_dcf_implied_growth NUMERIC(5,2),
+                reverse_dcf_baseline NUMERIC(5,2),
+                reverse_dcf_gap NUMERIC(5,2),
+                reverse_dcf_confidence TEXT,
+                full_analysis_markdown TEXT,
+                full_analysis_json JSONB,
+                cost_usd NUMERIC(8,4),
+                cached_tokens INTEGER DEFAULT 0,
+                input_tokens INTEGER DEFAULT 0,
+                output_tokens INTEGER DEFAULT 0,
+                fundamentals_hash TEXT,
+                json_parse_ok BOOLEAN DEFAULT TRUE,
+                error_message TEXT
+            );
+            CREATE INDEX IF NOT EXISTS idx_batch_ticker_date
+                ON batch_analyses(ticker, analyzed_at DESC);
+            CREATE INDEX IF NOT EXISTS idx_batch_trifecta
+                ON batch_analyses(is_trifecta) WHERE is_trifecta = TRUE;
+            CREATE INDEX IF NOT EXISTS idx_batch_growth_trifecta
+                ON batch_analyses(is_growth_trifecta) WHERE is_growth_trifecta = TRUE;
+            CREATE INDEX IF NOT EXISTS idx_batch_cyclical_bottom
+                ON batch_analyses(is_cyclical_bottom) WHERE is_cyclical_bottom = TRUE;
+            CREATE INDEX IF NOT EXISTS idx_batch_composite
+                ON batch_analyses(composite_score DESC);
+
+            -- Status-tracker per batch-körning
+            CREATE TABLE IF NOT EXISTS batch_runs (
+                id SERIAL PRIMARY KEY,
+                started_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                completed_at TIMESTAMP,
+                status TEXT DEFAULT 'running',  -- running/completed/failed/budget_exceeded
+                tickers_requested INTEGER,
+                tickers_completed INTEGER DEFAULT 0,
+                tickers_failed INTEGER DEFAULT 0,
+                total_cost_usd NUMERIC(8,4) DEFAULT 0,
+                cache_hit_rate NUMERIC(5,2),
+                error_summary TEXT
+            );
+
             -- Live screen-tracker: spara snapshot av screen-träffar för
             -- senare 12m-uppföljning. Validering live att backtest
             -- speglar verkligheten.
@@ -922,6 +988,64 @@ def _create_tables(db):
                 created_at TEXT,
                 updated_at TEXT,
                 UNIQUE(user_id, category, key)
+            );
+
+            -- DEL 6.99 v3.1 batch-analyser (SQLite-version)
+            CREATE TABLE IF NOT EXISTS batch_analyses (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                ticker TEXT NOT NULL,
+                short_name TEXT,
+                country TEXT,
+                analyzed_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                trigger_type TEXT DEFAULT 'manual',
+                classification TEXT,
+                primary_lens TEXT,
+                swing_signal TEXT,
+                quality_signal TEXT,
+                value_signal TEXT,
+                swing_motivation TEXT,
+                quality_motivation TEXT,
+                value_motivation TEXT,
+                value_score REAL,
+                quality_score REAL,
+                momentum_score REAL,
+                risk_score REAL,
+                composite_score REAL,
+                is_trifecta INTEGER DEFAULT 0,
+                is_growth_trifecta INTEGER DEFAULT 0,
+                is_recurring_compounder INTEGER DEFAULT 0,
+                is_cyclical_bottom INTEGER DEFAULT 0,
+                cycle_position TEXT,
+                reverse_dcf_implied_growth REAL,
+                reverse_dcf_baseline REAL,
+                reverse_dcf_gap REAL,
+                reverse_dcf_confidence TEXT,
+                full_analysis_markdown TEXT,
+                full_analysis_json TEXT,
+                cost_usd REAL,
+                cached_tokens INTEGER DEFAULT 0,
+                input_tokens INTEGER DEFAULT 0,
+                output_tokens INTEGER DEFAULT 0,
+                fundamentals_hash TEXT,
+                json_parse_ok INTEGER DEFAULT 1,
+                error_message TEXT
+            );
+            CREATE INDEX IF NOT EXISTS idx_batch_ticker_date
+                ON batch_analyses(ticker, analyzed_at DESC);
+            CREATE INDEX IF NOT EXISTS idx_batch_composite
+                ON batch_analyses(composite_score DESC);
+
+            CREATE TABLE IF NOT EXISTS batch_runs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                started_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                completed_at TEXT,
+                status TEXT DEFAULT 'running',
+                tickers_requested INTEGER,
+                tickers_completed INTEGER DEFAULT 0,
+                tickers_failed INTEGER DEFAULT 0,
+                total_cost_usd REAL DEFAULT 0,
+                cache_hit_rate REAL,
+                error_summary TEXT
             );
 
             -- Live screen-tracker (SQLite): snapshot för 12m-uppföljning
