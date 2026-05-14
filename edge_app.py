@@ -606,24 +606,55 @@ def _fetch_shiller_cape_live():
 
 
 def _fetch_buffett_indicator_live():
-    """Skrapa multpl.com för Buffett Indicator (market cap / GDP)."""
+    """Hämta Buffett Indicator från flera källor (gurufocus, longtermtrends, currentmarketvaluation)."""
     import re as _re
+    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Daktier-Bot/1.0"}
+
+    # Källa 1: currentmarketvaluation.com — har clear JSON-data
     try:
-        resp = requests.get("https://www.multpl.com/buffett-indicator",
-                             timeout=10,
-                             headers={"User-Agent": "Mozilla/5.0 Daktier-Bot"})
-        if resp.status_code != 200:
-            return None
-        m = _re.search(r"Buffett Indicator[^\d]*([\d]+\.?[\d]*)\s*%", resp.text)
-        if m:
-            return float(m.group(1))
-        m = _re.search(r'id="current"[^>]*>\s*([\d.]+)', resp.text)
-        if m:
-            return float(m.group(1))
-        return None
+        resp = requests.get("https://www.currentmarketvaluation.com/models/buffett-indicator.php",
+                             timeout=10, headers=headers)
+        if resp.status_code == 200:
+            # Format: "Buffett Indicator: 196.7%" eller "<strong>196.7%</strong>"
+            m = _re.search(r"Buffett.{0,30}Indicator.{0,80}?([\d]{2,3}\.?[\d]*)\s*%", resp.text)
+            if m:
+                v = float(m.group(1))
+                if 50 < v < 400:
+                    return v
+            # Alternativ: leta efter aktuellt värde i meta-tagg
+            m = _re.search(r'content="[^"]*?([\d]{2,3}\.[\d]+)%[^"]*?"', resp.text)
+            if m:
+                v = float(m.group(1))
+                if 50 < v < 400: return v
     except Exception as e:
-        print(f"[Buffett scrape] {e}", file=sys.stderr)
-        return None
+        print(f"[Buffett currentmarket] {e}", file=sys.stderr)
+
+    # Källa 2: gurufocus.com — Total-Market-Index
+    try:
+        resp = requests.get("https://www.gurufocus.com/stock-market-valuations.php",
+                             timeout=10, headers=headers)
+        if resp.status_code == 200:
+            # Format: "Total Market Index is at 196.7%"
+            m = _re.search(r"(?:Total Market|TMC|Wilshire).{0,80}?([\d]{2,3}\.?[\d]*)\s*%", resp.text)
+            if m:
+                v = float(m.group(1))
+                if 50 < v < 400: return v
+    except Exception as e:
+        print(f"[Buffett gurufocus] {e}", file=sys.stderr)
+
+    # Källa 3: longtermtrends.net (kan kräva JS men har ibland inline-data)
+    try:
+        resp = requests.get("https://www.longtermtrends.net/market-cap-to-gdp-the-buffett-indicator/",
+                             timeout=10, headers=headers)
+        if resp.status_code == 200:
+            m = _re.search(r"Buffett.{0,200}?(\d{2,3}\.\d+)\s*%", resp.text)
+            if m:
+                v = float(m.group(1))
+                if 50 < v < 400: return v
+    except Exception as e:
+        print(f"[Buffett longterm] {e}", file=sys.stderr)
+
+    return None
 
 
 def _fetch_macro_indicators():
@@ -913,21 +944,21 @@ def api_dashboard():
     except Exception:
         sig_row = None
 
-    # Build top SE/US movers today from DB (small query)
+    # Build top SE/US DAGENS movers (1d change, inte YTD)
     top_se_gainer = top_se_loser = top_us_gainer = None
     try:
-        se_stocks, _ = search_stocks(db, country="SE", sort="price_ytd", order="desc", limit=1, offset=0, min_owners=1000)
+        se_stocks, _ = search_stocks(db, country="SE", sort="price_1d", order="desc", limit=1, offset=0, min_owners=2000)
         if se_stocks:
             s = se_stocks[0]
-            top_se_gainer = {"name": s.get("name"), "change": (s.get("ytd_change_pct") or 0) / 100.0}
-        se_losers, _ = search_stocks(db, country="SE", sort="price_ytd", order="asc", limit=1, offset=0, min_owners=1000)
+            top_se_gainer = {"name": s.get("name"), "change": (s.get("one_day_change_pct") or 0)}
+        se_losers, _ = search_stocks(db, country="SE", sort="price_1d", order="asc", limit=1, offset=0, min_owners=2000)
         if se_losers:
             s = se_losers[0]
-            top_se_loser = {"name": s.get("name"), "change": (s.get("ytd_change_pct") or 0) / 100.0}
-        us_stocks, _ = search_stocks(db, country="US", sort="price_ytd", order="desc", limit=1, offset=0, min_owners=500)
+            top_se_loser = {"name": s.get("name"), "change": (s.get("one_day_change_pct") or 0)}
+        us_stocks, _ = search_stocks(db, country="US", sort="price_1d", order="desc", limit=1, offset=0, min_owners=1000)
         if us_stocks:
             s = us_stocks[0]
-            top_us_gainer = {"name": s.get("name"), "change": (s.get("ytd_change_pct") or 0) / 100.0}
+            top_us_gainer = {"name": s.get("name"), "change": (s.get("one_day_change_pct") or 0)}
     except Exception as e:
         print(f"[dashboard] today section failed: {e}", file=sys.stderr)
 

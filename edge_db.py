@@ -2212,6 +2212,9 @@ def search_stocks(db, query="", country="", sort="owners", order="desc",
         "roe": "return_on_equity",
         "roce": "return_on_capital_employed",
         "price_ytd": "ytd_change_pct",
+        "price_1d": "one_day_change_pct",
+        "price_1w": "one_week_change_pct",
+        "price_1m": "one_month_change_pct",
     }
     sort_col = sort_map.get(sort, "number_of_owners")
     order_dir = "ASC" if order == "asc" else "DESC"
