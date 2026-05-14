@@ -48,6 +48,34 @@ from edge_db import (
 
 app = Flask(__name__)
 
+
+# ── Global error handler: alla /api/*-fel returnerar JSON ──────
+# Förhindrar 'Unexpected token <'-fel i frontend när Flask annars
+# skulle returnera HTML-error-page. Behåll HTML för icke-API-routes.
+@app.errorhandler(500)
+@app.errorhandler(Exception)
+def _json_error_handler(e):
+    from flask import request
+    import traceback
+    if request.path.startswith("/api/"):
+        traceback.print_exc()
+        try:
+            err_str = str(e) if e else "unknown error"
+        except Exception:
+            err_str = "unknown error"
+        # Skapa JSON-svar manuellt så vi alltid får ett rent svar
+        from flask import jsonify
+        return jsonify({
+            "error": err_str,
+            "path": request.path,
+            "results": [],
+            "count": 0,
+            "warning": "Server error — fångad av global handler",
+        }), 200  # 200 så frontend inte triggar catch
+    # För icke-API: låt Flask hantera normalt
+    raise e
+
+
 # ── Server-side response cache (fast tab switches) ────────
 _api_cache = {}
 _API_CACHE_TTL = 90  # seconds
@@ -11501,21 +11529,29 @@ def api_batch_status():
 
 
 def _enrich_with_live_prices(results):
-    """Berika toplists-resultat med live-pris + delta från price_cache."""
+    """Berika toplists-resultat med live-pris + delta från price_cache.
+
+    Defensiv mot saknad price_cache-tabell, NULL-värden, datetime-typer.
+    """
     from edge_db import _fetchall, _ph
-    if not results: return results
-    db = get_db()
-    ph = _ph()
-    tickers = [r.get("ticker") for r in results if r.get("ticker")]
-    if not tickers: return results
-    placeholders = ",".join([ph] * len(tickers))
+    if not results: return results or []
     try:
-        rows = _fetchall(db,
-            f"SELECT ticker, live_price, currency, price_updated_at "
-            f"FROM price_cache WHERE ticker IN ({placeholders})", tuple(tickers))
-        by_t = {dict(r)["ticker"]: dict(r) for r in rows} if rows else {}
-    except Exception:
-        by_t = {}
+        db = get_db()
+        ph = _ph()
+        tickers = [r.get("ticker") for r in results if r and r.get("ticker")]
+        if not tickers: return results
+        placeholders = ",".join([ph] * len(tickers))
+        try:
+            rows = _fetchall(db,
+                f"SELECT ticker, live_price, currency, price_updated_at "
+                f"FROM price_cache WHERE ticker IN ({placeholders})", tuple(tickers))
+            by_t = {dict(r)["ticker"]: dict(r) for r in rows} if rows else {}
+        except Exception as e:
+            print(f"[enrich] price_cache fetch failed: {e}", file=sys.stderr)
+            by_t = {}
+    except Exception as e:
+        print(f"[enrich] outer failed: {e}", file=sys.stderr)
+        return results or []
     for r in results:
         pc = by_t.get(r.get("ticker"))
         if pc:
@@ -11710,7 +11746,10 @@ def api_toplists(strategy):
                         "results": top})
     except Exception as e:
         import traceback; traceback.print_exc()
-        return jsonify({"error": str(e), "strategy": strategy}), 500
+        # Returnera 200 med tom data + warning istället för 500 HTML
+        return jsonify({"error": str(e), "strategy": strategy,
+                        "results": [], "count": 0,
+                        "warning": f"Internal error: {str(e)[:200]}"}), 200
 
 
 # ── Price-update-worker (var 15:e min under börsöppet) ────────────
