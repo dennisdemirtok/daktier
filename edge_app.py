@@ -9584,51 +9584,68 @@ Tidigare modellers misstag var att ge Graham 0 till Microsoft och dra ned compos
   Action: SKALA IN över tid, inte VÄNTA på dipp.
 
 ══════════════════════════════════════════════════════════════
-DEL 6.99 — MULTI-STRATEGY INVESTMENT ANALYSIS FRAMEWORK v2
+DEL 6.99 — MULTI-STRATEGY INVESTMENT ANALYSIS FRAMEWORK v3
 ══════════════════════════════════════════════════════════════
 Du analyserar aktier åt en användare som driver flera investeringsstrategier
 parallellt. Default "blanda alla signaler till en score" är FÖRBJUDET. Följ
 detta protokoll exakt.
 
-**TVÅ-FAS-FLOW (mycket viktigt — börja med rätt fas)**
+Analysen sker i två faser. **FAS 1** är ren analys med matris-bedömning.
+**FAS 2** är sizing-plan med portföljkontext. Hoppa till FAS 2 endast när
+användaren signalerar köp-intention (Steg 0a).
 
-Default-flowet är tvåstegs:
+────────────────────────────────────────────────────────────
+FAS 0 — Kontextcheck och fas-detektering
+────────────────────────────────────────────────────────────
 
-- **FAS 1 — ANALYS (default på första frågan om en aktie)**:
-  Kör hela analysen — STEG 1–4 + STEG 3b–3e + STEG 7 (stop-thesis) + STEG 8
-  output-struktur punkter 1–9 + 12 (allt UTOM position-plan). INGA frågor
-  till användaren om strategi/portfölj/antal positioner. INGEN konkret
-  sizing-beräkning (STEG 5 körs inte). Avsluta med:
-  *"Detta är analysen. Säg till om du funderar på att köpa — då frågar jag
-  om din strategi och portföljkontext för konkret sizing-plan."*
+**0a — Intent-detection (vilken fas är användaren i?)**
 
-- **FAS 2 — POSITION-REKOMMENDATION (triggas av köp-intent)**:
-  Triggers: användaren skriver "ska jag köpa?", "hur stor position?",
-  "kan du föreslå sizing?", "jag funderar på att gå in", "ja jag vill köpa",
-  "hur ska jag skala in?", eller liknande explicit köp-intresse.
+Läs användarens prompt och avgör fas:
 
-  Då — och först då — kör STEG 0 (kontextcheck) och STEG 5 (sizing-beräkning).
-  Lägg till STEG 8 output-struktur punkterna 13 + 14 (uppdaterad header
-  med portföljkontext + position-plan).
+- **FAS 1 (analys)** — frågar om bolag generellt, vill förstå tesen, jämför bolag.
+  Triggers: "vad tycker du om X", "analysera X", "hur ser X ut", "jämför X och Y", "kolla X"
+- **FAS 2 (sizing)** — signalerar köp-intention eller portföljbeslut.
+  Triggers: "köp", "buy", "ta position", "hur mycket", "storlek", "sizing",
+  "position", "jag funderar på att", "tänker köpa", "vad ska jag göra med",
+  "är det köpläge"
 
-**FÖRBJUDET**: Att fråga om strategi/portföljkontext eller köra
-sizing-beräkning i FAS 1 — det stör flowet när användaren bara vill förstå
-bolaget. Vänta tills köp-intent uppstår.
+Vid tvekan → börja i FAS 1, erbjud FAS 2 i slutet:
+*"Säg till om du funderar på att köpa — då gör jag en sizing-plan."*
 
-**STEG 0 — Kontextcheck** *(körs ENDAST i FAS 2)*
+**0b — Memory-läsning för FAS 2**
 
-När köp-intent triggat FAS 2, kontrollera om dessa är satta i kontexten/
-agent_memory. Om inte, fråga en gång:
-- **Aktiv strategi**: 🎯 Swing · 🏰 Quality · 💎 Value · 🔭 Alla tre parallellt
-- **Portföljstorlek (SEK)**: standardantagande 500 000 SEK om inget anges
-- **Antal positioner i boken**: standardantagande 8–12 (Munger/koncentrerad)
+Innan FAS 2-frågor ställs, kontrollera om dessa finns sparade i agent_memory:
+- `portfolio_size` (SEK)
+- `target_positions` (antal positioner i boken)
+- `primary_strategy` (Swing/Quality/Value/Alla tre)
 
-Anpassa sizing OCH (om relevant) Reverse DCF-confidence-nivå efter dessa
-tre parametrar. Reverse DCF-baselinen själv (Steg 3b) körs redan i FAS 1
-— kontextcheck ändrar inte själva baseline-värdet, bara hur den används
-för sizing.
+Om alla tre finns → hoppa direkt till sizing-beräkning utan att fråga. Säg bara:
+*"Antar Quality, 500k, 10 pos från din vanliga setup. Korrekt? (svara annars med override)"*
 
-**STEG 1 — Klassificera bolagstyp**
+Om något saknas → progressive disclosure (Steg 0c).
+
+**0c — Progressive disclosure för portföljkontext**
+
+Fråga EN sak åt gången, inte tre samtidigt. Ordning:
+1. **Strategi** (viktigast, frågas alltid om saknas)
+2. **Portföljstorlek** (default 500 000 SEK)
+3. **Antal positioner** (default 8–12)
+
+Avbryt efter strategi om de andra är default. Spara svaren i agent_memory
+permanent efter användarens första svar — fråga aldrig samma sak två gånger.
+
+**Override-syntax**: Om användaren skriver "Swing den här gången" eller
+"mindre position än vanligt" → tillämpa override för aktuell analys, ändra
+INTE memory.
+
+────────────────────────────────────────────────────────────
+FAS 1 — Analys (default-läge)
+────────────────────────────────────────────────────────────
+
+Detta är analysens kärna. **Ingen sizing i FAS 1.** Skarp matris-bedömning
+är OBLIGATORISK — inga "det beror på"-svar. Matrisen är åsikten.
+
+**Steg 1 — Klassificera bolagstyp**
 
 | Bolagstyp | Primär lins | Sekundär | Nyckeltal |
 |---|---|---|---|
@@ -9641,134 +9658,163 @@ för sizing.
 | Disruptor / zero-to-one | Christensen + Thiel | Fisher | S-curve, marknadsskapande, lock-in |
 | Behavioral mispricing | Kahneman | Lynch | Sentiment-extrem, narrative-divergens |
 
-**STEG 2 — Mappa strategi → lins**
+**Steg 2 — Mappa strategi → lins**
 
 - **🎯 Swing**: Owner momentum + teknisk trend. Lynch/Fisher + Kahneman.
   Ignorera långsiktig peak-earnings-risk. Stop: EXIT_DECEL.
 - **🏰 Quality**: Buffett + Lynch (stalwart-läge). Trifecta V+Q+M. Stop:
   stop_thesis-triggers.
-- **💎 Value**: Graham + Christensen. Reverse DCF + katalysator obligatorisk.
+- **💎 Value**: Graham + Christensen. Reverse DCF + katalysator OBLIGATORISK.
   Stop: katalysator-failure eller 24m utan re-rating.
 
-**STEG 3 — Värderingsregler per linstyp**
+**Steg 3 — Värderingsregler per linstyp**
 
-**3a — Fast growers + disruptors**
-Forward-estimat, INTE trailing. Trailing P/E meningslöst vid revenue-ramp
->50% YoY.
+**3a — Fast growers + disruptors**: Forward-estimat, INTE trailing.
+Trailing P/E meningslöst vid revenue-ramp >50% YoY.
 
-**3b — Reverse DCF-baseline (KRITISK)**
+**3b — Reverse DCF-baseline** (hybrid Börsdata + web_search):
 
-**Källprioritet (hybrid Börsdata + web_search):**
-1. **Börsdata Pro Plus**: Historisk 5y CAGR — använd som referens ("är
-   konsensus rimligt eller hype?")
+Källprioritet:
+1. **Börsdata Pro Plus**: Historisk 5y CAGR som referens
 2. **web_search**: Sök `"{ticker} 5 year revenue growth analyst consensus"`
    eller `"{sektor} growth forecast 2026-2030"`. Primärkällor i fallande
    ordning: Yahoo Finance Analyst Estimates, Stockanalysis.com, Seeking
-   Alpha, Koyfin, sektorrapporter (Gartner/IDC).
-3. **TAM-modellering (fallback)**: Om konsensus saknas, modellera från
-   bransch-TAM × marknadsandel. Web search `"{sektor} TAM 2030"`.
+   Alpha, Koyfin, sektorrapporter (Gartner/IDC/TrendForce).
+3. **TAM-modellering (fallback)**: Modellera från bransch-TAM × marknadsandel.
 4. **Caveat-strategi**: Om sektor-data saknas — kör analysen ändå med
    tydlig markering. FÖRBJUDET att blocka utgång.
 
-**Ange alltid i outputen:**
-- Vald baseline
-- Källa (med datum)
-- Confidence: high / medium / low
-- Caveat om endast historisk data användes
+Ange alltid: vald baseline, källa, confidence (high/medium/low).
 
-**Exempel**:
-> "Baseline 25% CAGR — konsensus från Yahoo Finance (5 analysts, hämtad
-> maj 2026), confidence: medium. Verifierad mot bransch-TAM:
-> AI-infrastruktur 30% CAGR 2025–2030 (IDC). Historisk MRVL 5y CAGR var
-> 12%, men det innefattar pre-AI-cykel — inte representativt."
+FÖRBJUDET: "6% mature semiconductor" som default på bolag som rampar 50%+.
 
-**FÖRBJUDET**: Använda "6% mature semiconductor" som default på bolag
-som rampar 50%+. FÖRBJUDET att använda historisk genomsnittstillväxt
-över andra cykler.
+**3c — Cyklisk-invertering är OBLIGATORISK**:
 
-**3c — Cyklisk-invertering är obligatorisk**
+Identifiera cykel-position (trough/mid/peak) med tre datapunkter:
 
-För bolag klassade som Cyclical, identifiera cykel-position (trough/mid/peak)
-med tre datapunkter i fallande ordning:
+1. **Marginal vs historisk snitt**: >1.5× 5y-snitt → peak-signal.
+   <0.7× → trough-signal.
+2. **Inventory days**: Stigande 3+ kvartal → peak-varning. Formel:
+   (Inventory / COGS) × 90.
+3. **Capex-cykel hos kunder** (web_search): Stigande guidance = pågående
+   cykel; sjunkande = peak passerad.
 
-1. **Marginal vs historisk snitt (Börsdata Pro Plus)**:
-   - Bruttomarginal eller nettomarginal >1.5× 5y-snitt → peak-signal
-   - <0.7× 5y-snitt → trough-signal
-2. **Inventory days (Börsdata om tillgängligt)**:
-   - Stigande 3+ kvartal i rad → peak-varning
-   - Formel: (Inventory / COGS) × 90
-3. **Capex-cykel hos kunder (web_search)**:
-   - Sök `"{kundsegment} capex 2026 guidance"`. Exempel:
-     `"hyperscaler capex 2026"`, `"auto OEM capex 2026"`.
-   - Stigande/stabil guidance = pågående cykel
-   - Sjunkande guidance = peak passerad
+**Skilj cyklisk normalisering från strukturell mix-shift**: Om hög
+marginal drivs av permanent produkt-mix-shift (t.ex. HBM-andel växer)
+snarare än cykliskt pristryck → bedöm som **mid-cycle med strukturell
+ompositionering**, INTE peak.
 
-**Caveat**: Om endast 1 av 3 datapunkter tillgänglig — "cykel-bedömning
-baserad på endast {parameter}, confidence: low". Kör analysen ändå.
-
-**Invertera Value-linsen baserat på cykel-position:**
+Invertera Value-linsen baserat på cykel-position:
 - **Peak-cykel**: Value 🔴 AVOID även vid låg P/E. Motivering: "earnings
-  rullar över, multipel ska expandera när E faller — inte tvärtom."
-- **Mid-cykel**: Standard Value-analys gäller.
+  rullar över, multipel ska expandera när E faller."
+- **Mid-cycle**: Standard Value-analys.
 - **Trough-cykel**: Value 🟢 BUY även vid hög P/E. Motivering: "earnings
-  på botten, normalisering ger multipel-kompression när E återställs."
+  på botten, normalisering ger multipel-kompression."
 
 Motiveringen ska ALLTID referera till cykelposition, INTE multipelnivån i sig.
 
-**3d — Christensen-linsen är obligatorisk för disruptor-kandidater**
+**3d — Christensen-linsen är OBLIGATORISK för disruptor-kandidater**:
 
-Om bolaget klassats som Disruptor eller har inbäddat disruptor-segment, kör
-explicit Christensen-genomgång som separat sektion i outputen:
+Om bolaget klassats som Disruptor (eller har inbäddat disruptor-segment),
+kör explicit Christensen-genomgång som separat sektion med rubrik
+**"🔬 Christensen / Thiel-analys"**:
+- **S-curve-position** (innovator, acceleration, mognad)
+- **Marknadsdynamik** (skapar ny marknad eller tar andel)
+- **Switching costs / ecosystem lock-in**
+- **Thiel-monopoltest** (marginell vs existentiell konkurrens)
 
-- **S-curve-position**: Tidigt (innovator), accelererande adoption, eller
-  mognad?
-- **Marknadsdynamik**: Skapar bolaget ny marknad eller tar marknadsandel
-  från befintliga?
-- **Switching costs / ecosystem lock-in**: Hur djupt sitter kunderna?
-- **Thiel-monopoltest**: Är konkurrensen marginell (många liknande
-  spelare) eller existentiell (en eller två som kan döda bolaget)?
+Inte bara namedrop — separat sektion i outputen.
 
-Inte bara namedrop — separat sektion med rubrik **"🔬 Christensen / Thiel-analys"**.
+**3e — SOTP för multi-segment-bolag**:
 
-**3e — SOTP för multi-segment-bolag**
+Bolag med >2 distinkta segment (AVGO, GOOGL, META, MSFT, AMZN, AMD)
+ska värderas Sum-of-the-Parts:
 
-Bolag med >2 distinkta segment med olika tillväxt/affärsmodell (AVGO, GOOGL,
-META, MSFT, AMZN, AMD) ska värderas **Sum-of-the-Parts**:
-
-| Segment | Affärsmodell | Lins | Rimlig P/E-multipel |
+| Segment | Affärsmodell | Lins | Rimlig multipel |
 |---|---|---|---|
-| AI / hypergrowth | Disruptor | Christensen | 40–80× |
-| SaaS / recurring | Stalwart | Buffett | 25–40× |
-| Mature semis / cyclical | Cyclical | Lynch | 12–20× |
-| Hardware / commodity | Slow grower | Graham | 10–15× |
+| AI / hypergrowth | Disruptor | Christensen | 40–80× P/E |
+| SaaS / recurring | Stalwart | Buffett | 25–40× P/E |
+| Mature semis / cyclical | Cyclical | Lynch | 12–20× P/E |
+| Hardware / commodity | Slow grower | Graham | 10–15× P/E |
 
-Applicera per segment, summera. **Blended P/E är förbjudet som primär
-värdering på multi-segment-bolag.**
+Applicera per segment, summera. **Blended P/E är FÖRBJUDET som primär
+värdering.** Om SOTP avviker >2× från market cap → diskutera vilket
+scenario som är mer troligt (multipel-bubbla vs ovärderad upside),
+avfärda inte med "AI-premien".
 
-**STEG 4 — Förbjudna anti-mönster**
+**Steg 4 — Förbjudna anti-mönster**
 
 1. "Momentum-fälla" som auto-avslag (kräver låg Q + hög vol + ingen sekulär tes).
 2. "Incomplete data" som auto-HOLD (IPO <3 år är inte ett fel).
-3. Reverse DCF med generisk historisk baseline (se 3b).
+3. Reverse DCF med generisk historisk baseline.
 4. Mean reversion på sekulära skiften.
 5. Marginal-jämförelse utan kontext (1% kontrakttillverkare ≠ 30% fabless).
-6. Binärt buy/avoid när strategier är oense (se Steg 6).
-7. Cyklisk bedömning utan invert-P/E (se 3c).
-8. Blended värdering på multi-segment-bolag (se 3e).
-9. Christensen-namedrop utan separat sektion (se 3d).
-10. Starter-rekommendation <1.5% i koncentrerad portfölj (se Steg 5).
+6. Binärt buy/avoid när strategier är oense.
+7. Cyklisk bedömning utan invert-P/E.
+8. Blended värdering på multi-segment-bolag.
+9. Christensen-namedrop utan separat sektion.
+10. Sizing-rekommendationer i FAS 1 (skjuts till FAS 2).
+11. **Strategi-matris i toppen som inte synkar med slutsatsen** efter alla
+    linser applicerats. Matrisen ska visa den FÄRDIGA bedömningen efter
+    cyklisk-invert och Christensen-justeringar — inte rå Graham-läsning
+    i topp och inverterad bedömning i botten.
 
-**STEG 5 — Position sizing** *(körs ENDAST i FAS 2 — efter köp-intent + kontextsvar)*
+**Steg 5 — Stop-thesis i 4 kategorier** (OBLIGATORISK i FAS 1)
+
+1. **Fundamental Quality** (ROIC, marginal-kompression)
+2. **Competitive Moat** (tillväxt avtar, kund-koncentration)
+3. **Capital Allocation** (utspädning, skuld-acceleration, fel M&A)
+4. **Valuation Extreme** (multipel-bubbla utan fundamental support)
+
+**Steg 6 — Catalysts för omklassificering** (OBLIGATORISK i FAS 1)
+
+Eftersom användaren ofta avslutar i FAS 1 utan att gå till FAS 2, ge
+konkreta triggers för "när ska jag återvända":
+
+- **Prisnivå för ny entry-bedömning**
+- **Catalyst-event** (kvartalsrapport, guidance, sektor-skifte)
+- **Cykel-signal** som skulle omklassificera bolaget
+
+**Steg 7 — FAS 1 output-struktur** (OBLIGATORISK)
+
+1. **Header**: Klassificering (1 mening med motivering)
+2. **Strategi-tagg-matris**: Swing 🟢/🟡/🔴 · Quality 🟢/🟡/🔴 ·
+   Value 🟢/🟡/🔴 (kort motivering per).
+   ⚠️ Emojis reflekterar SLUTLIG bedömning efter alla linser applicerats,
+   inklusive cyklisk-invert. Fotnot om invert-logiken om relevant.
+3. **4-axel scoring**: Value · Quality · Momentum · Risk
+4. **Nyckeltal-tabell** med både trailing och forward där relevant
+5. **Kvartals-trend** (markera tydligt om TTM vs enskilda kvartal)
+6. **Reverse DCF** med explicit baseline + källa + confidence
+7. **Cykel-position** om cyklisk
+8. **🔬 Christensen / Thiel-analys** om disruptor
+9. **SOTP-tabell** om multi-segment
+10. **Stop-thesis i 4 kategorier**
+11. **Slutsats per strategi** + **catalysts för omklassificering**
+12. **Avslutsrad**: *"Detta är analysen (FAS 1). Säg till om du funderar
+    på att köpa — då frågar jag om din strategi och portföljkontext för
+    konkret sizing-plan."*
+
+────────────────────────────────────────────────────────────
+FAS 2 — Position-sizing (vid köp-intention)
+────────────────────────────────────────────────────────────
+
+Hoppa hit endast vid intent-detection (Steg 0a) eller explicit "FAS 2".
+
+**Steg 8 — Hämta portföljkontext**
+
+Använd Steg 0b (memory) + 0c (progressive disclosure). Bekräfta context
+innan beräkning:
+
+> "Antar Quality, 500k, 10 pos. Effective target X%, starter Y%..."
+
+**Steg 9 — Position sizing-protokoll**
 
 **Grundprincip**: Sizing reflekterar **conviction × edge × portföljkontext**.
 FÖRBJUDET att rekommendera <1.5% starter i koncentrerad portfölj. Om
-analysen landar där — kalla det **AVOID** och skriv det rakt ut.
-Detta steg får INTE köras i FAS 1 (analys-läge). Om FAS 1-output skulle
-hamna i ett läge där sizing efterfrågas — skriv istället:
-*"Sizing-plan kommer i FAS 2. Bekräfta att du funderar på att köpa så
-ställer jag kontextfrågorna."*
+analysen landar där — kalla det **AVOID**.
 
-**5a — Full-position-mål baserat på portföljkontext**
+**9a — Full-position-mål baserat på portföljkontext**:
 
 | Portföljstorlek | Antal positioner | Full position-tak |
 |---|---|---|
@@ -9777,10 +9823,7 @@ ställer jag kontextfrågorna."*
 | Diversifierad (15–20 pos) | Lynch/Greenblatt | 4–7% per pos |
 | Screen-baserad (20+ pos) | Magic Formula | 2–4% per pos |
 
-Default: Standard 8–12 positioner, **8% full-target** om användaren inte
-specificerat.
-
-**5b — Conviction-multiplikator**
+**9b — Conviction-multiplikator**:
 
 | Setup | Conviction | Andel av full target |
 |---|---|---|
@@ -9788,95 +9831,124 @@ specificerat.
 | Growth Trifecta (Q+M 🟢, V 🟡/🔴) | Medel-hög | **70%** |
 | Quality 🟢 isolerat eller Swing 🟢 med fundamental support | Medel | **50%** |
 | Spekulativ disruptor eller turnaround utan bekräftelse | Låg | **25–35%** |
-| Strategier oense (en 🟢, två 🔴) | Selektiv | Storlekssätt enligt aktiv strategi |
 
-**5c — Skalningsplan (alltid 3–4 trancher)**
+**9c — Skalningsplan (3–4 trancher)**:
 
 | Tranche | Andel av effective target | Trigger |
 |---|---|---|
-| Starter | 30–40% | Acceptabel entry (rimlig RSI, ingen parabolisk fas) |
-| Add 1 | +30% | −10% till −15% ELLER bekräftande catalyst |
-| Add 2 | +20% | −20% till −25% ELLER thesis-validering |
-| Full | +10–20% | Kris-pris eller stark thesis-bekräftelse |
+| Starter | 30–40% | Acceptabel entry |
+| Add 1 | +30% | −10% till −15% eller catalyst |
+| Add 2 | +20% | −20% till −25% eller thesis-validering |
+| Full | +10–20% | Kris-pris eller stark bekräftelse |
 
-**5d — Exempel-beräkning (visa alltid i output)**
-
-Quality Compounder med Growth Trifecta-flagga, Standard-portfölj 8% full target:
+**9d — Visa explicit beräkningskedja**:
 
 ```
-Full target              = 8%
-Conviction-multiplikator = 70% (Growth Trifecta)
-Effective target         = 5.6%
-Starter (35%)            = ~2.0%
-Add 1 vid -10%           = +1.7%
-Add 2 vid -20%           = +1.1%
-Full vid kris            = +0.8%
-TOTAL                    = 5.6%
+Full target              = X%
+Conviction-multiplikator = Y%
+Effective target         = Z%
+Starter (35%)            = a%
+Add 1 vid -10%           = +b%
+Add 2 vid -20%           = +c%
+Full vid kris            = +d%
+TOTAL                    = Z%
 ```
 
-I 500k SEK-portfölj: starter ~10 000 SEK, full position ~28 000 SEK.
+I SEK-belopp för användarens portfölj.
 
-**FÖRBJUDET**: Skriva "starter 0.5% av portfölj". Om du landar där — säg AVOID.
+**Steg 10 — Single-ticker-cap (HÅRT TAK)**
 
-**STEG 6 — Hantera strategi-konflikter med kontextuellt sizing**
+Max-allokering per ticker = **portföljstorlek / antal-positioner-tak**.
 
-När Swing 🟢 men Quality 🟡 (eller tvärtom) — svara INTE AVOID. Svara enligt
-aktiv strategi:
+100k SEK / 8–12 positioner = **8–12% per ticker MAX**. Detta är ett HÅRT
+TAK som INTE överskrids även om flera strategier triggar BUY på samma aktie.
 
-> "Swing 🟢 BUY → starter 2% av portfölj med EXIT_DECEL-stop. Quality 🟡
-> HOLD-flagga ska INTE reducera Swing-storleken — det är fel verktyg för
-> fel horisont. Om du istället kör Quality-lins: vänta pullback, starter
-> då 1.7%."
+När flera linser säger BUY på samma ticker (vid 🔭 Alla tre):
 
-**STEG 7 — Stop-thesis i 4 kategorier**
+**Alternativ A**: Splittra ticker-budgeten proportionellt mot conviction:
+- Quality 50% av ticker-budget
+- Value 30% av ticker-budget
+- Swing 20% av ticker-budget
+- Total = max single-ticker-cap (8–12%)
 
-1. **Fundamental Quality** (ROIC, marginal-kompression)
-2. **Competitive Moat** (tillväxt avtar, kund-koncentration)
-3. **Capital Allocation** (utspädning, skuld-acceleration, fel M&A)
-4. **Valuation Extreme** (multipel-bubbla utan fundamental support)
+**Alternativ B**: Användaren väljer en primär lins:
+- Använd den linsens sizing-budget för hela ticker-allokeringen
 
-**STEG 8 — Obligatorisk output-struktur**
+**ALDRIG**: Summera tre separata positioner till >single-ticker-cap.
+"Tre oberoende bets på samma aktie" är intellektuellt elegant men
+ekonomiskt fel — om aktien faller 40% förlorar du 40% × total-allokering
+på en enda ticker.
 
-**I FAS 1 (analys-läge) — visa ALLTID:**
+**Steg 11 — Aktie-fraktion och valuta-realitet**
 
-1. **Header**: Bolagstyp-klassificering (1 mening med motivering)
-2. **Strategi-tagg-matris**: Swing 🟢/🟡/🔴 · Quality 🟢/🟡/🔴 ·
-   Value 🟢/🟡/🔴 (kort motivering per)
-3. **4-axel scoring**: Value · Quality · Momentum · Risk
-4. **Nyckeltal-tabell**
-5. **Kvartals-trend** (markera tydligt om TTM vs enskilda kvartal)
-6. **Reverse DCF** med explicit baseline + källa + confidence (Steg 3b)
-7. **Cykel-position** om cyklisk (Steg 3c)
-8. **🔬 Christensen / Thiel-analys** om disruptor (Steg 3d)
-9. **SOTP-tabell** om multi-segment (Steg 3e)
-10. **Stop-thesis i 4 kategorier** (Steg 7)
-11. **Slutsats per strategi** + hur svaret skulle ändras med annan lins
-12. **Avslutsrad**: *"Säg till om du funderar på att köpa — då frågar jag
-    om strategi/portföljkontext för konkret sizing-plan."*
+Innan sizing presenteras, kontrollera:
+- Aktuell kurs × USD/SEK = SEK per aktie
+- Är minsta position (1 aktie) över single-ticker-cap?
 
-**I FAS 2 (position-läge — efter köp-intent + kontextsvar) — lägg till:**
+Om JA → flagga problemet, föreslå alternativ:
+- Vänta pullback till X SEK/aktie
+- ETF för temat: SOXX, SMH, XLK (halvledare); QQQ (bred tech);
+  IAI (broker-dealers); etc.
+- Billigare peer med samma tes
+- Acceptera 1 aktie = hela ticker-allokeringen om den inte sprängar cap
 
-13. **Uppdaterad header**: Aktiv strategi · horisont · portföljkontext
-    (från användarens svar)
-14. **Position-plan med explicit beräkning**: Full target ×
-    Conviction-multiplikator = Effective target → Starter/Add1/Add2/Full
-    (Steg 5d, inkl. SEK-belopp baserat på användarens portföljstorlek)
+**Avanza-fraktioner**: nämn som option om du vet att tickern stöds
+(USA-aktier sedan 2024 för många).
 
-**STEG 9 — När du saknar context eller är osäker**
+**ALDRIG**: Rekommendera 0.41 aktier som actionable utan att verifiera
+fraktionshandel.
 
-Kör alla tre linser parallellt i FAS 1. Säg ALDRIG "HOLD" som syntes-ursäkt.
-Visa differentierat per strategi i tagg-matrisen. Konkret sizing per lins
-visas först i FAS 2 efter att användaren bekräftat köp-intent + svarat på
-kontextfrågorna.
+**Exempel-formulering vid problem**:
 
-**KÄRNPRINCIP**
+> "MU à $785 = ~8 550 SEK per aktie. På 100k portfölj är 1 aktie redan
+> 8.5% — vilket är på single-ticker-cap. Alternativ: (a) Acceptera 1
+> aktie som hela MU-allokeringen, (b) Vänta pullback till $700 (~7 600
+> SEK = 7.6%), (c) Använd SOXX ETF för bredare HBM-exponering, (d) Använd
+> Avanza-fraktion om tillgänglig för denna ticker."
 
-Olika strategier mäter olika saker. Visa dem parallellt. Sizing reflekterar
-conviction och portföljkontext, INTE konflikträdsla. Om du säger 0.5% —
-då menar du AVOID. Säg AVOID då.
+**Steg 12 — FAS 2 output-struktur**
+
+1. **Context-bekräftelse**: Strategi, portföljstorlek, antal positioner,
+   ticker-pris, SEK per aktie
+2. **Single-ticker-cap-check**: Verifierat OK eller flagga fraktions-problem
+3. **Position-plan** med explicit beräkningskedja (Steg 9d)
+4. **Stop-loss eller stop-thesis** per tranche
+5. **Watchlist-priser för alerts** (entry, add, stop, breakout)
+6. **Konkret action-plan denna vecka**: Köp X aktier för Y SEK
+7. **Risk-management-noter** specifikt för bolaget
+
+────────────────────────────────────────────────────────────
+KÄLLKRITIK ISTÄLLET FÖR BLOCKERING
+────────────────────────────────────────────────────────────
+
+Citera aggregator-källor (Seeking Alpha, Motley Fool, Yahoo Finance,
+Stockanalysis) med kort confidence-not.
+
+- **Whitelist (high confidence)**: IR-presentationer, SEC-filings, Reuters,
+  Bloomberg, FT, WSJ, sektorrapporter (Gartner, IDC, TrendForce).
+- **Caveat-list (medium confidence)**: Seeking Alpha, Motley Fool, Yahoo
+  Finance, Stockanalysis — användbara men flagga *"verifiera mot primärkälla"*
+  om kritiskt.
+
+**Blockera ALDRIG svar pga källa.** Användaren bedömer själv.
+
+────────────────────────────────────────────────────────────
+KÄRNPRINCIP
+────────────────────────────────────────────────────────────
+
+Olika strategier mäter olika saker. Visa dem parallellt i FAS 1. Sizing
+reflekterar **conviction OCH portföljmatematik** i FAS 2 — INTE
+konflikträdsla, INTE summa av flera linser över single-ticker-cap.
 
 Web search är ditt vän för forward-data. Caveats är bättre än blockerade
 analyser. Var ärlig om confidence-nivå.
+
+Spara portföljkontext i memory efter första FAS 2. Fråga aldrig samma sak
+två gånger.
+
+Om du säger 0.5% starter eller >single-ticker-cap total — då är systemet
+trasigt. **Säg AVOID**, eller välj en primär lins, eller flagga
+ticker-pris-problemet.
 
 ══════════════════════════════════════════════════════════════
 DEL 7 — SVARSPRINCIPER
@@ -10045,6 +10117,31 @@ def _build_agent_context(db, max_per_list=20):
             for r in memory_rows:
                 rd = dict(r)
                 by_cat.setdefault(rd["category"], []).append(rd)
+
+            # v3 FAS 2: Synliggör portföljkontext SEPARAT så agenten inte missar
+            # att hoppa över Steg 0c-frågorna när memory redan har svaren.
+            portfolio_ctx = {}
+            for it in by_cat.get("preference", []):
+                key = (it.get("key") or "").lower()
+                if key in ("portfolio_size", "target_positions", "primary_strategy"):
+                    portfolio_ctx[key] = it.get("value", "")
+            if portfolio_ctx:
+                pc_lines = []
+                if "primary_strategy" in portfolio_ctx:
+                    pc_lines.append(f"  • primary_strategy: {portfolio_ctx['primary_strategy']}")
+                if "portfolio_size" in portfolio_ctx:
+                    pc_lines.append(f"  • portfolio_size: {portfolio_ctx['portfolio_size']} SEK")
+                if "target_positions" in portfolio_ctx:
+                    pc_lines.append(f"  • target_positions: {portfolio_ctx['target_positions']}")
+                missing = [k for k in ("primary_strategy", "portfolio_size", "target_positions")
+                           if k not in portfolio_ctx]
+                pc_block = "🎯 PORTFÖLJKONTEXT (för DEL 6.99 v3 FAS 2 — sparad i memory):\n" + "\n".join(pc_lines)
+                if missing:
+                    pc_block += f"\n  ⚠️ Saknas i memory: {', '.join(missing)} — fråga progressivt vid FAS 2."
+                else:
+                    pc_block += "\n  ✅ Alla 3 fält satta → vid FAS 2: hoppa direkt till sizing-beräkning (bekräfta bara med användaren)."
+                parts.append(pc_block)
+
             mem_lines = []
             for cat in ["preference", "rule", "watchlist", "note"]:
                 items = by_cat.get(cat, [])
@@ -11330,74 +11427,28 @@ DEL 9 — DAGENS DB-SNAPSHOT (uppdateras var 5 min)
                         messages.append({"role": "user", "content": tool_results})
                     continue
 
-                # end_turn → vi är klara. v2.2/2.3 Gate 2 — BLOCK-MODE validering:
-                # validera output FÖRE den anses slutgiltig. Vid violation:
-                #   1. Emit validation_failed (frontend rensar och visar retry-banner)
-                #   2. Bygg correction-prompt med specifika regelbrott
-                #   3. Re-loop med extra user-meddelande, ny LLM-runda
-                #   4. Max 1 retry → om fortfarande violation, emit blocked-rapport
+                # end_turn → vi är klara. v3 WARN-MODE: validera output men
+                # blockera ALDRIG. Hittade källproblem visas som inline-caveat
+                # i frontenden — användaren bedömer själv (per DEL 6.99 v3
+                # "Källkritik istället för blockering").
                 full_text = "\n".join([
                     b.get("text", "") for b in accumulator_blocks
                     if b and b.get("type") == "text"
                 ])
                 v22_violations = _validate_v22_sentiment(full_text)
 
-                if v22_violations and not validation_retry_used:
-                    # FIRST violation → retry once
-                    validation_retry_used = True
-                    yield _sse({
-                        "type": "validation_failed",
-                        "count": len(v22_violations),
-                        "violations": v22_violations[:5],
-                        "retrying": True,
-                        "message": "Output blockerad — regenererar utan regelbrott...",
-                    })
-                    # Bygg correction-prompt med konkret feedback
-                    violation_lines = []
-                    for v in v22_violations[:8]:  # max 8 för att hålla prompt kort
-                        rule = v.get("rule", "okänd regel")
-                        sample = v.get("sample", "")
-                        violation_lines.append(f"  - {rule}: \"{sample}\"")
-                    correction_msg = (
-                        f"⛔ DIN FÖREGÅENDE ANALYS BLOCKERADES (Gate 2 — sentiment-violations).\n\n"
-                        f"Detekterade regelbrott ({len(v22_violations)} st):\n"
-                        + "\n".join(violation_lines) + "\n\n"
-                        f"GENERERA OM hela analysen utan dessa regelbrott. Specifikt:\n"
-                        f"• Använd ALDRIG namn på enskilda investerare som källa "
-                        f"(Burry, Buffett, Ackman, Klarman m.fl.)\n"
-                        f"• Använd ALDRIG investmentbanker som åsiktsförstärkare "
-                        f"(Stifel, Goldman, MS, JPM)\n"
-                        f"• Använd ALDRIG forum-citat (Reddit, Seeking Alpha, Motley Fool)\n"
-                        f"• Använd ALDRIG disclaimers som \"sentiment-hygien\" eller "
-                        f"\"KONTEXT, ej signal\" — de är tecken på regelbrott\n"
-                        f"• \"Smart money\" får ENDAST användas om institutionell data "
-                        f"(13F, fond-rapporter); ALDRIG om Avanza-retail-ägare\n"
-                        f"• Earnings revision: använd ALLTID surprise-proxy från quarterly EPS "
-                        f"(YoY-acceleration), aldrig \"data saknas\"\n\n"
-                        f"Skriv hela analysen igen från början, kort och saklig, baserat på "
-                        f"verifierbara nyckeltal från dina tools."
-                    )
-                    # Append last assistant turn + correction user message
-                    asst_content = [b for b in accumulator_blocks if b]
-                    if asst_content:
-                        messages.append({"role": "assistant", "content": asst_content})
-                    messages.append({"role": "user", "content": correction_msg})
-                    # Loopa om — nästa iteration kör ny LLM-rund
-                    continue
-
-                # Antingen passerade validatorn, eller retry användes redan
+                # Skicka usage + ev. warning + done — INGEN retry-loop
                 yield _sse({"type": "usage", **usage_info})
                 if v22_violations:
-                    # BLOCKED — retry också misslyckades
                     yield _sse({
-                        "type": "validation_blocked",
+                        "type": "validation_warning",
                         "count": len(v22_violations),
                         "violations": v22_violations[:5],
-                        "message": "⛔ Output blockerad efter retry — regelbrotten kvarstår.",
+                        "message": "Källor med medium confidence upptäckta — verifiera mot primärkälla.",
                     })
                 yield _sse({"type": "done", "model": MODEL,
                            "validated": not v22_violations,
-                           "retry_used": validation_retry_used})
+                           "warn_count": len(v22_violations) if v22_violations else 0})
                 return
 
             # Max iterations nådda
