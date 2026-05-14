@@ -7712,7 +7712,13 @@ function renderDashboardContent(d) {
     const today = document.getElementById('dashToday');
     if (today) {
         const t = d.today || {};
+        const ms = t.market_status || {};
+        const statusBadge = ms.status ? `
+            <div style="margin-bottom:10px;display:inline-block;padding:6px 12px;background:${ms.color || '#6b7280'};color:white;border-radius:8px;font-size:11px;font-weight:600;letter-spacing:0.3px">
+                ${escapeHtml(ms.status)}
+            </div>` : '';
         today.innerHTML = `
+            ${statusBadge}
             <div class="today-grid">
                 <div class="today-box">
                     <div class="today-label">Topp Vinnare SE</div>

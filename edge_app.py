@@ -946,6 +946,7 @@ def api_dashboard():
 
     # Build top SE/US DAGENS movers (1d change, inte YTD)
     top_se_gainer = top_se_loser = top_us_gainer = None
+    market_status = None
     try:
         se_stocks, _ = search_stocks(db, country="SE", sort="price_1d", order="desc", limit=1, offset=0, min_owners=2000)
         if se_stocks:
@@ -959,6 +960,41 @@ def api_dashboard():
         if us_stocks:
             s = us_stocks[0]
             top_us_gainer = {"name": s.get("name"), "change": (s.get("one_day_change_pct") or 0)}
+
+        # Bestäm market status baserat på tid + senaste pris-update
+        from datetime import datetime as dt
+        now = dt.now()
+        weekday = now.weekday()  # 0=mån, 6=sön
+        hour = now.hour
+        minute = now.minute
+        time_decimal = hour + minute / 60
+        last_price_row = _fetchone(db,
+            "SELECT MAX(date) as d FROM borsdata_prices") or {}
+        last_price_date = dict(last_price_row).get("d", "?") if last_price_row else "?"
+        today_str = now.strftime("%Y-%m-%d")
+
+        if weekday >= 5:  # helg
+            status = "Stängd · Helg"
+            badge_color = "#6b7280"
+        elif time_decimal < 9.0:  # före SE-öppning
+            status = f"Pre-market · SE öppnar 09:00 (senaste data: {last_price_date})"
+            badge_color = "#ea580c"
+        elif time_decimal < 15.5:  # SE öppen, US ej öppen
+            status = "🟢 Live · SE öppen (US öppnar 15:30)"
+            badge_color = "#059669"
+        elif time_decimal < 17.30:  # SE + US öppna
+            status = "🟢 Live · Båda öppna"
+            badge_color = "#059669"
+        elif time_decimal < 22.0:  # US öppen
+            status = "🟢 Live · US öppen (SE stängd)"
+            badge_color = "#059669"
+        else:  # efter US-stängning
+            status = f"Stängd · Senaste handelsdag {last_price_date}"
+            badge_color = "#6b7280"
+
+        market_status = {"status": status, "color": badge_color,
+                          "last_price_date": last_price_date,
+                          "today": today_str}
     except Exception as e:
         print(f"[dashboard] today section failed: {e}", file=sys.stderr)
 
@@ -1007,6 +1043,7 @@ def api_dashboard():
             "top_se_loser": top_se_loser,
             "top_us_gainer": top_us_gainer,
             "top_insider_buy": None,  # placeholder; can be wired to insiders endpoint
+            "market_status": market_status,
         },
     }
     _set_cache(ck, out)
