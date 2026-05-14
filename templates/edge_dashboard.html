@@ -35,6 +35,17 @@
             --surface-high: #e8e8e8;
             --sidebar-w: 240px;
             --header-h: 56px;
+            /* v3 Signal-färgsystem — konsekvent med /toplists */
+            --signal-strong-buy: #059669;
+            --signal-buy: #22c55e;
+            --signal-buy-light: #a3e635;
+            --signal-hold: #eab308;
+            --signal-avoid: #ef4444;
+            --signal-strong-avoid: #b91c1c;
+            --freshness-fresh: #059669;
+            --freshness-aging: #eab308;
+            --freshness-stale: #6b7280;
+            --freshness-awaiting: #3b82f6;
         }
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg); color: var(--text); line-height: 1.5; }
@@ -663,6 +674,67 @@
 </head>
 <body>
 
+<!-- v3 Welcome Modal — visas första gången per user (localStorage-flag) -->
+<div id="welcomeModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:9999;align-items:center;justify-content:center;padding:20px">
+  <div style="background:white;max-width:540px;width:100%;border-radius:18px;padding:30px;box-shadow:0 16px 48px rgba(0,0,0,0.25);max-height:92vh;overflow-y:auto">
+    <div style="text-align:center;margin-bottom:18px">
+      <div style="font-size:38px;margin-bottom:6px">🎯</div>
+      <h2 style="margin:0;font-size:24px;color:#0f172a">Välkommen till DAKTIER v3</h2>
+      <p style="margin:6px 0 0;color:#6b7280;font-size:13px">Multi-strategi-investeringsanalys driven av agent-validering</p>
+    </div>
+
+    <div style="background:#f8fafc;border-radius:10px;padding:14px 18px;margin-bottom:16px;font-size:13px;line-height:1.7">
+      All data på dashboarden har granskats av DAKTIER-agenten enligt:
+      <div style="margin-top:8px;display:flex;flex-direction:column;gap:4px">
+        <div><strong style="color:#059669">🎯 Edge Signals</strong> — Din beprövade momentum-strategi (+43% backtest 76 dagar)</div>
+        <div><strong style="color:#1e40af">🏰 Quality</strong> — Buffett/Lynch compounder-bedömning (≥12m horisont)</div>
+        <div><strong style="color:#7c3aed">💎 Value</strong> — Graham/Klarman margin of safety (≥24m horisont)</div>
+        <div><strong style="color:#0f172a">📊 Multi-lens</strong> — Christensen, Thiel, Howard Marks, Spier</div>
+      </div>
+    </div>
+
+    <div style="background:#eff6ff;border-left:3px solid #1e40af;border-radius:8px;padding:10px 14px;margin-bottom:16px;font-size:12px;color:#1e3a8a">
+      <strong>Kärn-princip</strong>: Du ser ALDRIG score 91 utan att agenten har sagt
+      "ja, multi-lens-tesen håller". Kvantitativa screens är input, agenten är gatekeeper.
+    </div>
+
+    <div style="display:flex;flex-direction:column;gap:8px;font-size:12.5px;color:#475569">
+      <div>📊 <strong>Backtest-validerade screens</strong> har dokumenterad alpha 2015–2024.</div>
+      <div>📚 <strong>Bok-baserade topplistor</strong> är idé-generatorer för djupanalys.</div>
+      <div>🏆 <strong>/toplists</strong> visar pre-computed agent-analyser sorterade per strategi.</div>
+    </div>
+
+    <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:22px">
+      <button onclick="dismissWelcome()" style="background:linear-gradient(135deg,#1d4ed8,#3b82f6);color:white;border:none;padding:11px 22px;border-radius:10px;cursor:pointer;font-weight:600;font-family:inherit;font-size:14px">
+        Förstått — visa dashboarden
+      </button>
+    </div>
+  </div>
+</div>
+
+<script>
+// Welcome-modal: visa första besök per browser
+(function() {
+  try {
+    if (!localStorage.getItem('daktier_welcomed_v3')) {
+      const m = document.getElementById('welcomeModal');
+      if (m) m.style.display = 'flex';
+    }
+  } catch (e) { /* localStorage disabled */ }
+})();
+function dismissWelcome() {
+  try { localStorage.setItem('daktier_welcomed_v3', String(Date.now())); } catch (e) {}
+  const m = document.getElementById('welcomeModal');
+  if (m) m.style.display = 'none';
+}
+// Manuell trigger för testning
+window.showWelcome = function() {
+  try { localStorage.removeItem('daktier_welcomed_v3'); } catch (e) {}
+  const m = document.getElementById('welcomeModal');
+  if (m) m.style.display = 'flex';
+};
+</script>
+
 <!-- ── Header ──── -->
 <header class="header">
     <div class="header-left">
@@ -699,31 +771,36 @@
 
 <!-- ── Sidebar ──── -->
 <aside class="sidebar" id="sidebar">
-    <div class="sidebar-section-label">Verktyg</div>
-    <div class="sidebar-sublabel">Edge Signals Analytics</div>
+    <div class="sidebar-section-label">DAKTIER v3</div>
+    <div class="sidebar-sublabel">Multi-strategy Investment AI</div>
     <nav class="sidebar-nav">
+        <!-- ── DAGLIGT (alltid synligt) ── -->
+        <div class="sidebar-section-label" style="margin-top:4px;font-size:10px;color:#9ca3af;letter-spacing:0.5px">DAGLIGT</div>
         <button class="sidebar-item active" onclick="sidebarNav('dashboard', this)" data-tab="dashboard">
             <span class="material-symbols-outlined">space_dashboard</span>
             Dashboard
         </button>
+        <button class="sidebar-item" onclick="sidebarNav('myportfolio', this)" data-tab="myportfolio">
+            <span class="material-symbols-outlined">folder_special</span>
+            💼 Min Portfölj
+        </button>
         <button class="sidebar-item" onclick="sidebarNav('signals', this)" data-tab="signals">
             <span class="material-symbols-outlined">electric_bolt</span>
-            Edge Signals
+            🎯 Edge Signals
         </button>
+        <a class="sidebar-item" href="/toplists" target="_blank" rel="noopener" style="text-decoration:none">
+            <span class="material-symbols-outlined">emoji_events</span>
+            🏆 Agent-topplistor
+        </a>
+
+        <div class="sidebar-divider"></div>
+
+        <!-- ── ANALYS ── -->
+        <div class="sidebar-section-label" style="margin-top:4px;font-size:10px;color:#9ca3af;letter-spacing:0.5px">ANALYS</div>
         <button class="sidebar-item" onclick="sidebarNav('stocks', this)" data-tab="stocks">
             <span class="material-symbols-outlined">bar_chart</span>
             Alla aktier
         </button>
-        <button class="sidebar-item" onclick="sidebarNav('hotmovers', this)" data-tab="hotmovers">
-            <span class="material-symbols-outlined">local_fire_department</span>
-            Ägarmomentum
-        </button>
-        <button class="sidebar-item" onclick="sidebarNav('insiders', this)" data-tab="insiders">
-            <span class="material-symbols-outlined">person_search</span>
-            Insiders
-        </button>
-        <div class="sidebar-divider"></div>
-        <div class="sidebar-section-label" style="margin-top:8px">Analys</div>
         <button class="sidebar-item" onclick="sidebarNav('metrics', this)" data-tab="metrics">
             <span class="material-symbols-outlined">functions</span>
             Nyckeltal
@@ -732,51 +809,60 @@
             <span class="material-symbols-outlined">account_balance</span>
             Kassaflöde
         </button>
-        <button class="sidebar-item" onclick="sidebarNav('portfolio', this)" data-tab="portfolio">
-            <span class="material-symbols-outlined">monitoring</span>
-            Simulering
+        <button class="sidebar-item" onclick="sidebarNav('insiders', this)" data-tab="insiders">
+            <span class="material-symbols-outlined">person_search</span>
+            Insiders
         </button>
-        <button class="sidebar-item" onclick="sidebarNav('myportfolio', this)" data-tab="myportfolio">
-            <span class="material-symbols-outlined">folder_special</span>
-            Min Portfölj
+        <button class="sidebar-item" onclick="sidebarNav('hotmovers', this)" data-tab="hotmovers">
+            <span class="material-symbols-outlined">local_fire_department</span>
+            Ägarmomentum
         </button>
-        <div class="sidebar-divider"></div>
-        <button class="sidebar-item" onclick="sidebarNav('backtest', this)" data-tab="backtest">
-            <span class="material-symbols-outlined">analytics</span>
-            Backtest
-        </button>
-        <a class="sidebar-item" href="/backtest-report" target="_blank" rel="noopener" style="text-decoration:none">
-            <span class="material-symbols-outlined">description</span>
-            📊 Backtest-rapport
-        </a>
-        <a class="sidebar-item" href="/live-tracker" target="_blank" rel="noopener" style="text-decoration:none">
-            <span class="material-symbols-outlined">visibility</span>
-            📅 Live Tracker
-        </a>
-        <a class="sidebar-item" href="/portfolio-builder" target="_blank" rel="noopener" style="text-decoration:none">
-            <span class="material-symbols-outlined">work</span>
-            📦 Portfölj-Builder
-        </a>
-        <a class="sidebar-item" href="/external-signals" target="_blank" rel="noopener" style="text-decoration:none">
-            <span class="material-symbols-outlined">rss_feed</span>
-            📰 Externa signaler
-        </a>
-        <a class="sidebar-item" href="/toplists" target="_blank" rel="noopener" style="text-decoration:none">
-            <span class="material-symbols-outlined">emoji_events</span>
-            🏆 Agent-topplistor
-        </a>
         <button class="sidebar-item" onclick="sidebarNav('trending', this)" data-tab="trending">
             <span class="material-symbols-outlined">leaderboard</span>
             Trending V/Q
         </button>
+
+        <div class="sidebar-divider"></div>
+
+        <!-- ── TOPPLISTOR ── -->
+        <div class="sidebar-section-label" style="margin-top:4px;font-size:10px;color:#9ca3af;letter-spacing:0.5px">TOPPLISTOR & AI</div>
         <button class="sidebar-item" onclick="sidebarNav('aitoplist', this)" data-tab="aitoplist">
             <span class="material-symbols-outlined">smart_toy</span>
             AI Topplista
         </button>
         <button class="sidebar-item" onclick="sidebarNav('agent', this)" data-tab="agent">
             <span class="material-symbols-outlined">forum</span>
-            AI Agent
+            🤖 AI Agent
         </button>
+
+        <div class="sidebar-divider"></div>
+
+        <!-- ── VERKTYG ── -->
+        <div class="sidebar-section-label" style="margin-top:4px;font-size:10px;color:#9ca3af;letter-spacing:0.5px">VERKTYG</div>
+        <button class="sidebar-item" onclick="sidebarNav('backtest', this)" data-tab="backtest">
+            <span class="material-symbols-outlined">analytics</span>
+            🧪 Backtest
+        </button>
+        <a class="sidebar-item" href="/backtest-report" target="_blank" rel="noopener" style="text-decoration:none">
+            <span class="material-symbols-outlined">description</span>
+            📑 Backtest-rapport
+        </a>
+        <a class="sidebar-item" href="/live-tracker" target="_blank" rel="noopener" style="text-decoration:none">
+            <span class="material-symbols-outlined">visibility</span>
+            📡 Live Tracker
+        </a>
+        <a class="sidebar-item" href="/portfolio-builder" target="_blank" rel="noopener" style="text-decoration:none">
+            <span class="material-symbols-outlined">work</span>
+            🏗️ Portfölj-Builder
+        </a>
+        <button class="sidebar-item" onclick="sidebarNav('portfolio', this)" data-tab="portfolio">
+            <span class="material-symbols-outlined">monitoring</span>
+            🔮 Simulering
+        </button>
+        <a class="sidebar-item" href="/external-signals" target="_blank" rel="noopener" style="text-decoration:none">
+            <span class="material-symbols-outlined">rss_feed</span>
+            🔗 Externa signaler
+        </a>
     </nav>
     <div class="sidebar-footer">
         <div class="sidebar-footer-card">
@@ -7237,15 +7323,8 @@ async function loadBuyZoneWatchlist() {
         const data = await r.json();
         const items = data.results || [];
         if (items.length === 0) {
-            el.outerHTML = `<div class="daily-picks-empty">
-                <div style="display:flex;align-items:center;gap:10px">
-                    <span class="material-symbols-outlined" style="font-size:28px;color:#92400e">radar</span>
-                    <div>
-                        <div style="font-weight:700;color:#92400e">Inga aktier inom 10% från köpzon just nu</div>
-                        <div style="font-size:12px;color:var(--text-muted)">Ingen övervakad aktie ligger tillräckligt nära sitt beräknade köpzonspris (där composite ≥ 75).</div>
-                    </div>
-                </div>
-            </div>`;
+            // v3: ta bort negativ banner — om inget finns, dölj sektionen helt
+            el.outerHTML = '';
             return;
         }
         items.forEach(p => { if (p.orderbook_id) _picksLookup[p.orderbook_id] = p; });
@@ -7499,6 +7578,30 @@ async function renderDashboard() {
 
     root.innerHTML = `
         <div class="dash-grid">
+            <!-- v3 Hero KPI-row: agent-validerade signaler -->
+            <div class="dash-section" id="heroKpiWrap" style="background:linear-gradient(135deg,#fff,#f8fafc);border-radius:14px;padding:16px 20px;border:1px solid #e5e7eb">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px">
+                    <h3 class="dash-heading" style="margin:0;border:none;padding:0">🎯 Dagens marknadsläge <span class="dash-sub" style="font-size:11px">agent-validerade signaler</span></h3>
+                    <a href="/toplists" target="_blank" style="font-size:12px;color:#1e40af;text-decoration:none;font-weight:600">🏆 Se alla topplistor →</a>
+                </div>
+                <div id="heroKpiRow" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:8px">
+                    <div class="kpi-skel" style="height:60px;background:#f1f5f9;border-radius:8px;animation:pulse 1.5s infinite"></div>
+                    <div class="kpi-skel" style="height:60px;background:#f1f5f9;border-radius:8px;animation:pulse 1.5s infinite"></div>
+                    <div class="kpi-skel" style="height:60px;background:#f1f5f9;border-radius:8px;animation:pulse 1.5s infinite"></div>
+                    <div class="kpi-skel" style="height:60px;background:#f1f5f9;border-radius:8px;animation:pulse 1.5s infinite"></div>
+                </div>
+            </div>
+
+            <!-- v3 Super Confluence top-5 (förstorade kort) -->
+            <div class="dash-section" id="superConfluenceWrap">
+                <h3 class="dash-heading">⭐ TOP 5 Super Confluence
+                    <span class="dash-sub">≥3 av 4 flaggor TRUE samtidigt · agent-validerade · backtest +63%</span>
+                </h3>
+                <div id="superConfluenceCards" style="margin-top:10px;display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px">
+                    <div class="loading-wrap" style="padding:20px;grid-column:1/-1">Laddar Super Confluence-kandidater…</div>
+                </div>
+            </div>
+
             <div class="dash-section" id="dailyPicksWrap">
                 <div id="dailyPicksBanner" class="daily-picks-skel">Hämtar dagens köp-rekommendationer...</div>
             </div>
@@ -7562,6 +7665,105 @@ async function renderDashboard() {
         console.warn('dashboard fetch failed', e);
         renderDashboardContent({});
     }
+
+    // v3: Ladda hero KPI-row + Super Confluence-kort (parallellt med dashboard-data)
+    loadHeroKpiRow();
+    loadSuperConfluenceCards();
+}
+
+// v3 — Hero KPI-row
+async function loadHeroKpiRow() {
+    const el = document.getElementById('heroKpiRow');
+    if (!el) return;
+    try {
+        const r = await fetch('/api/dashboard/kpi-row');
+        const d = await r.json();
+        if (d.error) {
+            el.innerHTML = `<div style="grid-column:1/-1;font-size:12px;color:#6b7280;padding:10px">⚠️ Ingen agent-validerad data än. <a href="/toplists" style="color:#1e40af">Kör en batch-analys</a> så fylls KPI-row på.</div>`;
+            return;
+        }
+        const total = d.total_validated || 0;
+        if (total === 0) {
+            el.innerHTML = `<div style="grid-column:1/-1;font-size:13px;color:#6b7280;padding:14px;text-align:center;background:#f8fafc;border-radius:8px">
+                <strong style="color:#1e40af">Inga agent-validerade bolag än.</strong><br>
+                <a href="/toplists" target="_blank" style="font-size:12px;color:#1e40af">→ Kör batch-analys på /toplists</a> för att fylla på dashboarden.
+            </div>`;
+            return;
+        }
+        const kpis = [
+            {label:'🟢 BUY',           v: d.buy_count,             c:'#22c55e', tip:'Bolag där ≥1 lins säger BUY/STRONG_BUY'},
+            {label:'🟢 BUY-LIGHT',     v: d.buy_light_count,       c:'#a3e635', tip:'Growth Trifecta — Q+M utan V'},
+            {label:'🔴 AVOID',         v: d.avoid_count,           c:'#ef4444', tip:'Alla 3 linser AVOID/EXIT'},
+            {label:'🎯 Edge Entry',    v: d.edge_entry_count,      c:'#059669', tip:'Edge Action = ENTRY (Edge ≥70)'},
+            {label:'⭐ Super Confluence', v: d.super_confluence_count, c:'#059669', tip:'≥3 av 4 flaggor TRUE'},
+            {label:'📊 Rapport idag',  v: d.reports_today_count,   c:'#3b82f6', tip:'Bolag i report_calendar med dagens datum'},
+            {label:'⏳ Väntar rapport',v: d.awaiting_report_count, c:'#3b82f6', tip:'Bolag med rapport inom 7 dagar'},
+            {label:'🛑 Stop-Thesis',   v: d.stop_thesis_count,     c:'#b91c1c', tip:'Stop-thesis-flaggor utlösta'},
+        ];
+        el.innerHTML = kpis.map(k =>
+            `<div title="${escapeHtml(k.tip)}" style="background:white;border:1px solid #e5e7eb;border-left:3px solid ${k.c};border-radius:8px;padding:10px 12px;cursor:help">
+               <div style="font-size:10px;color:#6b7280;font-weight:600;text-transform:uppercase;letter-spacing:0.3px">${k.label}</div>
+               <div style="font-size:24px;font-weight:800;color:${k.c};margin-top:2px;line-height:1">${k.v}</div>
+             </div>`).join('');
+    } catch (e) {
+        console.warn('hero KPI-row failed', e);
+        el.innerHTML = `<div style="grid-column:1/-1;font-size:12px;color:#dc2626;padding:10px">Fel: ${e.message}</div>`;
+    }
+}
+
+// v3 — Super Confluence top-5 (förstorade kort)
+async function loadSuperConfluenceCards() {
+    const el = document.getElementById('superConfluenceCards');
+    if (!el) return;
+    try {
+        const r = await fetch('/api/toplists/super_confluence');
+        const d = await r.json();
+        if (d.error || !d.results || d.results.length === 0) {
+            el.innerHTML = `<div style="grid-column:1/-1;padding:20px;text-align:center;color:#6b7280;background:#f8fafc;border-radius:10px">
+                <div style="font-size:13px;margin-bottom:6px">Inga Super Confluence-kandidater just nu.</div>
+                <div style="font-size:11px;color:#9ca3af">≥3 av 4 flaggor (Trifecta, GT, Recurring, Cyclical Bottom) krävs samtidigt — extremt sällsynt.</div>
+                <a href="/toplists" target="_blank" style="display:inline-block;margin-top:8px;font-size:11px;color:#1e40af;text-decoration:none">Se alla agent-validerade bolag →</a>
+            </div>`;
+            return;
+        }
+        const top5 = (d.results || []).slice(0, 5);
+        el.innerHTML = top5.map(r => {
+            const flags = [
+                r.is_trifecta ? '🏆 Trifecta' : null,
+                r.is_growth_trifecta ? '🚀 Growth Trifecta' : null,
+                r.is_recurring_compounder ? '💫 Recurring' : null,
+                r.is_cyclical_bottom ? '💎 Cyclical Bottom' : null,
+            ].filter(Boolean).map(f => `<span style="background:#fef3c7;color:#92400e;padding:2px 7px;border-radius:6px;font-size:10.5px;font-weight:700">${f}</span>`).join(' ');
+            const composite = (r.composite_score || 0).toFixed(0);
+            const edgeColor = (r.edge_score || 0) >= 70 ? '#059669' : (r.edge_score || 0) >= 50 ? '#d97706' : '#6b7280';
+            const lp = r.live_price ? `${r.live_price.toFixed(2)} ${r.live_price_currency || ''}` : (r.price_at_analysis ? `${Number(r.price_at_analysis).toFixed(2)} ${r.price_currency || ''} <span style="font-size:10px;color:#9ca3af">(analys-pris)</span>` : '—');
+            const delta = r.price_delta_pct != null
+                ? `<span style="color:${Math.abs(r.price_delta_pct) > 10 ? '#dc2626' : Math.abs(r.price_delta_pct) > 5 ? '#d97706' : '#6b7280'};font-size:11px;font-weight:600">${r.price_delta_pct >= 0 ? '+' : ''}${r.price_delta_pct.toFixed(1)}%</span>` : '';
+            return `<a href="/toplists" target="_blank" style="text-decoration:none;color:inherit">
+              <div style="background:white;border:1px solid #e5e7eb;border-left:4px solid #f59e0b;border-radius:10px;padding:14px 16px;transition:all 0.2s;cursor:pointer" onmouseover="this.style.transform='translateY(-2px)';this.style.boxShadow='0 4px 12px rgba(0,0,0,0.08)'" onmouseout="this.style.transform='';this.style.boxShadow=''">
+                <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin-bottom:8px">
+                    <div>
+                        <div style="font-size:17px;font-weight:800;color:#0f172a">${escapeHtml(r.ticker)}</div>
+                        <div style="font-size:11px;color:#6b7280">${escapeHtml(r.short_name || '')}</div>
+                    </div>
+                    <div style="text-align:right">
+                        <div style="font-size:22px;font-weight:800;color:#0f172a">${composite}</div>
+                        <div style="font-size:9.5px;color:#9ca3af;text-transform:uppercase">Composite</div>
+                    </div>
+                </div>
+                <div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:8px">${flags}</div>
+                <div style="display:flex;gap:14px;font-size:11px;border-top:1px solid #f3f4f6;padding-top:8px">
+                    <div>Edge: <strong style="color:${edgeColor}">${r.edge_score ? r.edge_score.toFixed(0) : '—'}</strong></div>
+                    <div>Pris: <strong>${lp}</strong> ${delta}</div>
+                </div>
+                <div style="font-size:10.5px;color:#6b7280;margin-top:6px;font-style:italic">${escapeHtml(r.classification || '')}${r.cycle_position && r.cycle_position !== 'NA' ? ' · ' + r.cycle_position : ''}</div>
+              </div>
+            </a>`;
+        }).join('');
+    } catch (e) {
+        console.warn('super confluence cards failed', e);
+        el.innerHTML = `<div style="grid-column:1/-1;color:#dc2626;font-size:12px;padding:10px">Fel: ${e.message}</div>`;
+    }
 }
 
 function renderDashboardContent(d) {
@@ -7571,15 +7773,8 @@ function renderDashboardContent(d) {
     const banner = document.getElementById('dailyPicksBanner');
     if (banner) {
         if (picks.length === 0) {
-            banner.outerHTML = `<div class="daily-picks-empty">
-                <div style="display:flex;align-items:center;gap:10px">
-                    <span class="material-symbols-outlined" style="font-size:28px;color:#92400e">hourglass_empty</span>
-                    <div>
-                        <div style="font-weight:700;color:#92400e">Inga köpkandidater passerar tröskeln idag</div>
-                        <div style="font-size:12px;color:var(--text-muted)">Inget bolag har composite ≥ 68 över minst 6 modeller just nu. Kom tillbaka om några timmar — det uppdateras löpande.</div>
-                    </div>
-                </div>
-            </div>`;
+            // v3: ta bort negativ banner — dölj sektionen helt
+            banner.outerHTML = '';
         } else {
             const cards = picks.map((p, i) => {
                 const flag = FLAGS[p.country] || '';
