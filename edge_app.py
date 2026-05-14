@@ -581,11 +581,54 @@ def api_status():
 _MACRO_CACHE = {"ts": 0, "data": None}
 _MACRO_TTL = 60 * 60  # 1 hour — these move slowly
 
+def _fetch_shiller_cape_live():
+    """Skrapa multpl.com för aktuellt Shiller CAPE-värde."""
+    import re as _re
+    try:
+        resp = requests.get("https://www.multpl.com/shiller-pe",
+                             timeout=10,
+                             headers={"User-Agent": "Mozilla/5.0 Daktier-Bot"})
+        if resp.status_code != 200:
+            return None
+        # Multpl visar current i <div id="current"> eller liknande
+        # Format: "Shiller PE Ratio: 37.51"
+        m = _re.search(r"Shiller PE Ratio[^\d]*([\d]+\.[\d]+)", resp.text)
+        if m:
+            return float(m.group(1))
+        # Alternativ: HTML-struktur
+        m = _re.search(r'id="current"[^>]*>\s*([\d.]+)', resp.text)
+        if m:
+            return float(m.group(1))
+        return None
+    except Exception as e:
+        print(f"[CAPE scrape] {e}", file=sys.stderr)
+        return None
+
+
+def _fetch_buffett_indicator_live():
+    """Skrapa multpl.com för Buffett Indicator (market cap / GDP)."""
+    import re as _re
+    try:
+        resp = requests.get("https://www.multpl.com/buffett-indicator",
+                             timeout=10,
+                             headers={"User-Agent": "Mozilla/5.0 Daktier-Bot"})
+        if resp.status_code != 200:
+            return None
+        m = _re.search(r"Buffett Indicator[^\d]*([\d]+\.?[\d]*)\s*%", resp.text)
+        if m:
+            return float(m.group(1))
+        m = _re.search(r'id="current"[^>]*>\s*([\d.]+)', resp.text)
+        if m:
+            return float(m.group(1))
+        return None
+    except Exception as e:
+        print(f"[Buffett scrape] {e}", file=sys.stderr)
+        return None
+
+
 def _fetch_macro_indicators():
-    """Live macro indicators with graceful fallback to book-referenced April 2026 levels.
-    Uses yfinance for VIX, ^TNX (10y), GC=F (gold), ^GSPC (S&P). CAPE and
-    Buffett indicator are computed from approximations when live data is available,
-    otherwise falls back to the figures cited in book 2 (CAPE 36-39, Buffett 210%).
+    """Live macro indicators: VIX/10Y/S&P/Gold via yfinance, CAPE/Buffett via multpl.com scrape.
+    Fallback till book-referenced April 2026-värden om alla källor failar.
     """
     now = _time.time()
     if _MACRO_CACHE["data"] and (now - _MACRO_CACHE["ts"]) < _MACRO_TTL:
@@ -593,16 +636,37 @@ def _fetch_macro_indicators():
 
     # Book-referenced fallback (April 2026)
     data = {
-        "cape": 37.5,               # Shiller CAPE — "mer än dubbla historiska snittet"
+        "cape": 37.5,               # Shiller CAPE
         "buffett_indicator": 210.0, # Market cap / GDP
         "vix": 18.5,
-        "us_10y": 4.35,             # US 10y treasury yield
-        "se_rate": 2.25,            # Riksbanken styrränta
-        "gold_ratio": 1.55,         # Gold / S&P 500 relative
-        "fear_greed": 62,           # 0 = extreme fear, 100 = extreme greed
+        "us_10y": 4.35,
+        "se_rate": 2.25,
+        "gold_ratio": 1.55,
+        "fear_greed": 62,
         "sp500": 5850.0,
         "source": "fallback-apr2026",
+        "fetched_at": datetime.now().isoformat(),
+        "sources": {"cape": "fallback", "buffett": "fallback"},
     }
+
+    # ── NYTT: Live-scrape multpl.com för CAPE + Buffett ──
+    try:
+        cape_live = _fetch_shiller_cape_live()
+        if cape_live and 10 < cape_live < 100:  # sanity check
+            data["cape"] = cape_live
+            data["sources"]["cape"] = "multpl.com"
+            print(f"[macro] CAPE live: {cape_live}", file=sys.stderr)
+    except Exception as e:
+        print(f"[macro] CAPE fetch failed: {e}", file=sys.stderr)
+
+    try:
+        bi_live = _fetch_buffett_indicator_live()
+        if bi_live and 50 < bi_live < 400:  # sanity check
+            data["buffett_indicator"] = bi_live
+            data["sources"]["buffett"] = "multpl.com"
+            print(f"[macro] Buffett live: {bi_live}", file=sys.stderr)
+    except Exception as e:
+        print(f"[macro] Buffett fetch failed: {e}", file=sys.stderr)
 
     try:
         import yfinance as yf  # type: ignore
@@ -612,7 +676,7 @@ def _fetch_macro_indicators():
             data["vix"] = float(vix["Close"].iloc[-1])
         tnx = tickers.tickers["^TNX"].history(period="5d")
         if not tnx.empty:
-            data["us_10y"] = float(tnx["Close"].iloc[-1]) / 10.0  # ^TNX is 10× yield
+            data["us_10y"] = float(tnx["Close"].iloc[-1]) / 10.0
         sp = tickers.tickers["^GSPC"].history(period="5d")
         if not sp.empty:
             data["sp500"] = float(sp["Close"].iloc[-1])
@@ -620,14 +684,14 @@ def _fetch_macro_indicators():
         if not gold.empty and data["sp500"]:
             data["gold_ratio"] = float(gold["Close"].iloc[-1]) / data["sp500"]
 
-        # Heuristic Fear & Greed from VIX (inverse): vix 12 → 85, vix 40 → 15
         v = data["vix"]
         fg = max(0, min(100, round(100 - (v - 10) * 3.0)))
         data["fear_greed"] = fg
-        data["source"] = "live"
+        data["source"] = "live-mixed"  # mixed källor
     except Exception as e:
-        print(f"[macro] live fetch failed, using fallback: {e}", file=sys.stderr)
+        print(f"[macro] yfinance failed, using fallback: {e}", file=sys.stderr)
 
+    data["fetched_at"] = datetime.now().isoformat()
     _MACRO_CACHE["ts"] = now
     _MACRO_CACHE["data"] = data
     return data
