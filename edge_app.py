@@ -9718,6 +9718,67 @@ def _build_agent_context(db, max_per_list=20):
     except Exception as e:
         print(f"[agent ctx] memory-error: {e}", file=sys.stderr)
 
+    # ── NYTT: MACRO-INDIKATORER — agenten ska veta vad VIX/CAPE etc står på ──
+    try:
+        macro = _fetch_macro_indicators()
+        cape = macro.get("cape")
+        buffett = macro.get("buffett_indicator")
+        vix = macro.get("vix")
+        us_10y = macro.get("us_10y")
+        fear_greed = macro.get("fear_greed")
+        sp500 = macro.get("sp500")
+        sources = macro.get("sources", {})
+        macro_lines = [
+            f"  📊 Shiller CAPE: {cape:.1f} (historiskt snitt 17; >35 = kraftigt övervärderat) [källa: {sources.get('cape', '?')}]",
+            f"  💼 Buffett Indicator: {buffett:.0f}% (>140% = bubbla; >100% = övervärderat) [källa: {sources.get('buffett', '?')}]",
+            f"  ⚡ VIX: {vix:.1f} (<15 = lugn; >30 = rädsla)",
+            f"  💵 US 10Y Treasury: {us_10y:.2f}%",
+            f"  😨 Fear & Greed: {fear_greed} (0 = extreme fear, 100 = extreme greed)",
+            f"  📈 S&P 500: {sp500:.0f}" if sp500 else "",
+            f"  ⏰ Senast uppdaterad: {macro.get('fetched_at', '?')[:19]}",
+        ]
+        # Tolka: vad ska agenten kommunicera baserat på dessa?
+        signals = []
+        if cape and cape >= 35:
+            signals.append("⚠️ CAPE varnar för extremt övervärderad marknad — förv. 10-årsavkastning < 3%/år. Var mer defensiv.")
+        if buffett and buffett >= 140:
+            signals.append("⚠️ Buffett Indicator i bubblezon — överväg defensiva positioner + ökad kassa.")
+        if vix and vix >= 30:
+            signals.append("🟢 VIX >30 = rädsla i marknaden → ofta köpläge enligt 'be greedy when others are fearful'.")
+        elif vix and vix < 15:
+            signals.append("🟠 VIX <15 = komplaceans → akta för plötsliga regimskiften.")
+
+        if signals:
+            macro_lines.append("\n  💡 TOLKNING:\n    " + "\n    ".join(signals))
+
+        parts.append("🌍 MAKRO-INDIKATORER (live, agent måste använda dessa i analyser):\n" +
+                     "\n".join(filter(None, macro_lines)))
+    except Exception as e:
+        print(f"[agent ctx] macro-error: {e}", file=sys.stderr)
+
+    # ── NYTT: DAGENS TOP MOVERS (1d-change) ──
+    try:
+        from edge_db import _fetchall, _ph as ph_fn3
+        ph3 = ph_fn3()
+        # Top 3 winners + losers 1d, US + SE
+        for label, country, order in [("US +1d", "US", "DESC"), ("SE +1d", "SE", "DESC"),
+                                         ("US -1d", "US", "ASC"), ("SE -1d", "SE", "ASC")]:
+            rows = _fetchall(db, f"""
+                SELECT short_name, name, country, last_price, one_day_change_pct, number_of_owners
+                FROM stocks
+                WHERE country = {ph3}
+                AND number_of_owners >= 2000
+                AND one_day_change_pct IS NOT NULL
+                ORDER BY one_day_change_pct {order} NULLS LAST
+                LIMIT 3
+            """, (country,))
+            if rows:
+                lines = [f"  - {dict(r).get('short_name')}: {(dict(r).get('one_day_change_pct') or 0)*100:+.1f}% ({(dict(r).get('name') or '')[:25]})"
+                         for r in rows]
+                parts.append(f"🚀 DAGENS TOP-MOVERS {label}:\n" + "\n".join(lines))
+    except Exception as e:
+        print(f"[agent ctx] today-movers error: {e}", file=sys.stderr)
+
     return "\n\n".join(parts)
 
 
