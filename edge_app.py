@@ -11170,6 +11170,9 @@ def _analyze_single_ticker_for_batch(ticker, run_id):
     try:
         ph = _ph()
         country = stock_data.get("country")
+        # Defensiv: kolla vilka kolumner som faktiskt finns
+        from edge_db import _list_batch_analyses_columns
+        existing_cols = _list_batch_analyses_columns(db)
         # v3.2: pris vid analystidpunkt från Börsdata-data
         price_at_analysis = stock_data.get("last_price") or stock_data.get("price")
         price_currency = stock_data.get("currency") or ("SEK" if country == "SE" else "USD")
@@ -11252,24 +11255,36 @@ def _analyze_single_ticker_for_batch(ticker, run_id):
                     # v3 dashboard-validering — failad parsing = inte säker
                     False, "JSON-parsing failed — kan inte validera", None,
                     "stale", False, None, None]
-        cols_sql = ("ticker, short_name, country, trigger_type, "
-                    "classification, primary_lens, swing_signal, quality_signal, "
-                    "value_signal, swing_motivation, quality_motivation, value_motivation, "
-                    "value_score, quality_score, momentum_score, risk_score, "
-                    "composite_score, is_trifecta, is_growth_trifecta, "
-                    "is_recurring_compounder, is_cyclical_bottom, cycle_position, "
-                    "reverse_dcf_implied_growth, reverse_dcf_baseline, reverse_dcf_gap, "
-                    "reverse_dcf_confidence, full_analysis_markdown, full_analysis_json, "
-                    "cost_usd, cached_tokens, input_tokens, output_tokens, "
-                    "fundamentals_hash, json_parse_ok, error_message, "
-                    "price_at_analysis, price_currency, edge_score, edge_action, "
-                    "edge_components, value_score_method, value_score_note, "
-                    "stop_thesis_triggered, reverse_dcf_baseline_source, "
-                    "dashboard_safe, dashboard_safe_reason, dashboard_primary_concern, "
-                    "data_freshness, awaiting_report, report_date, post_report_thesis_change")
-        placeholders = ", ".join([ph] * len(cols))
+        all_col_names = [
+            "ticker", "short_name", "country", "trigger_type",
+            "classification", "primary_lens", "swing_signal", "quality_signal",
+            "value_signal", "swing_motivation", "quality_motivation", "value_motivation",
+            "value_score", "quality_score", "momentum_score", "risk_score",
+            "composite_score", "is_trifecta", "is_growth_trifecta",
+            "is_recurring_compounder", "is_cyclical_bottom", "cycle_position",
+            "reverse_dcf_implied_growth", "reverse_dcf_baseline", "reverse_dcf_gap",
+            "reverse_dcf_confidence", "full_analysis_markdown", "full_analysis_json",
+            "cost_usd", "cached_tokens", "input_tokens", "output_tokens",
+            "fundamentals_hash", "json_parse_ok", "error_message",
+            "price_at_analysis", "price_currency", "edge_score", "edge_action",
+            "edge_components", "value_score_method", "value_score_note",
+            "stop_thesis_triggered", "reverse_dcf_baseline_source",
+            "dashboard_safe", "dashboard_safe_reason", "dashboard_primary_concern",
+            "data_freshness", "awaiting_report", "report_date", "post_report_thesis_change",
+        ]
+        # Defensiv: filtrera bort kolumner som inte finns i DB (om migrationen inte kört)
+        valid_pairs = [(name, val) for name, val in zip(all_col_names, cols)
+                       if name in existing_cols]
+        if not valid_pairs:
+            return {"ticker": ticker, "ok": False,
+                    "error": "no valid columns in batch_analyses — migration not run",
+                    "cost": cost}
+        used_names = [p[0] for p in valid_pairs]
+        used_vals = [p[1] for p in valid_pairs]
+        cols_sql = ", ".join(used_names)
+        placeholders = ", ".join([ph] * len(used_vals))
         db.execute(f"INSERT INTO batch_analyses ({cols_sql}) VALUES ({placeholders})",
-                   tuple(cols))
+                   tuple(used_vals))
         db.commit()
     except Exception as e:
         import traceback; traceback.print_exc()
@@ -11355,7 +11370,18 @@ def api_batch_run():
     Body: {"tickers": ["HEXPOL B", "MU", "NVDA", ...]}
     Returnerar omedelbart med run_id; worker körs i bakgrundstråd.
     """
-    from edge_db import _ph
+    from edge_db import _ph, _ensure_batch_analyses_columns
+
+    # KRITISK: kör migrationen explicit innan batch startar.
+    # Detta säkerställer att alla v3-kolumner finns i DB innan workern
+    # försöker INSERT — annars kraschar varje analys med "column does not exist".
+    try:
+        db_mig = get_db()
+        mig_result = _ensure_batch_analyses_columns(db_mig)
+        print(f"[batch] pre-flight migration: {mig_result}", file=sys.stderr)
+    except Exception as mig_err:
+        print(f"[batch] pre-flight migration FAILED: {mig_err}", file=sys.stderr)
+        # Fortsätt ändå — defensive INSERT hanterar saknade kolumner
 
     with _BATCH_LOCK:
         if _BATCH_STATE.get("running"):
@@ -11950,6 +11976,28 @@ def api_dashboard_kpi_row():
         "total_validated": total,
         "warning": warning,
     })
+
+
+@app.route("/api/diagnostics/migrate-v3", methods=["POST", "GET"])
+def api_diagnostics_migrate_v3():
+    """Tvingar körning av v3-migrationen (batch_analyses-kolumntillägg).
+
+    Returnerar antal kolumner som lades till, hoppades över (fanns redan)
+    eller failade. Användbar när migration inte hunnit köra automatiskt.
+    """
+    from edge_db import _ensure_batch_analyses_columns, _list_batch_analyses_columns
+    db = get_db()
+    try:
+        result = _ensure_batch_analyses_columns(db)
+        cols_after = sorted(_list_batch_analyses_columns(db))
+        return jsonify({
+            "migration": result,
+            "total_columns_after": len(cols_after),
+            "columns_after": cols_after,
+        })
+    except Exception as e:
+        import traceback; traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
 
 
 @app.route("/api/diagnostics/columns")

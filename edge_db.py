@@ -1188,12 +1188,32 @@ def _create_tables(db):
         _ensure_batch_analyses_columns(db)
 
 
+def _list_batch_analyses_columns(db):
+    """Returnera set av kolumnnamn i batch_analyses (för defensiv INSERT)."""
+    try:
+        if _use_postgres():
+            cur = db.cursor()
+            cur.execute("SELECT column_name FROM information_schema.columns "
+                        "WHERE table_name = 'batch_analyses'")
+            rows = cur.fetchall()
+            cur.close()
+            return {r[0] for r in rows}
+        else:
+            rows = db.execute("PRAGMA table_info(batch_analyses)").fetchall()
+            return {r[1] if not hasattr(r, "keys") else r["name"] for r in rows}
+    except Exception as e:
+        import sys
+        print(f"[migration] _list_batch_analyses_columns failed: {e}", file=sys.stderr)
+        return set()
+
+
 def _ensure_batch_analyses_columns(db):
     """Idempotent migration: lägg till v3.2/v3-kolumner i batch_analyses.
 
     v3.2: Edge Signal + live-pris + value-score-method + stop_thesis.
     v3:   dashboard_safe + data_freshness + agent_validated_at + report-triggers.
     """
+    import sys as _sys
     new_cols_pg = [
         # v3.2-kolumner
         ("price_at_analysis", "NUMERIC(12,4)"),
@@ -1237,13 +1257,25 @@ def _ensure_batch_analyses_columns(db):
         ("post_report_thesis_change", "TEXT"),
     ]
     cols = new_cols_pg if _use_postgres() else new_cols_sqlite
+    added = 0
+    skipped = 0
+    failed = 0
     for col_name, col_type in cols:
         try:
             db.execute(f"ALTER TABLE batch_analyses ADD COLUMN {col_name} {col_type}")
             db.commit()
-        except Exception:
+            added += 1
+        except Exception as e:
+            msg = str(e).lower()
+            if "already exists" in msg or "duplicate" in msg:
+                skipped += 1
+            else:
+                failed += 1
+                print(f"[migration] FAILED to add {col_name}: {e}", file=_sys.stderr)
             try: db.rollback()
             except Exception: pass
+    print(f"[migration] batch_analyses columns: +{added} added, "
+          f"{skipped} already existed, {failed} failed", file=_sys.stderr)
     # Index för dashboard-filtrering
     for idx_sql in [
         "CREATE INDEX IF NOT EXISTS idx_batch_dashboard_safe ON batch_analyses(dashboard_safe) WHERE dashboard_safe = TRUE" if _use_postgres()
@@ -1258,6 +1290,7 @@ def _ensure_batch_analyses_columns(db):
         except Exception:
             try: db.rollback()
             except Exception: pass
+    return {"added": added, "skipped": skipped, "failed": failed}
 
 
 def _ensure_borsdata_columns(db):
