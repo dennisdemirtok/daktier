@@ -6058,26 +6058,19 @@ function renderAgentTurn(h, idx) {
                 <div style="margin-top:4px;font-size:10px;font-style:italic">Disclaimer-prefix räddar inte regeln. Slutsatsen ska INTE förlita sig på dessa källor.</div>
             </div>`;
         }
-        // BLOCK-MODE: retry pågår just nu (förra försöket blockerades, agent regenererar)
-        if (h.validation_retry && !text) {
-            const list = h.validation_retry.violations.map(v => `<li><strong>${v.rule}:</strong> "${escapeHtml(v.sample)}"</li>`).join('');
-            const previousAttemptHtml = h.previous_attempt ? `
-                <details style="margin-top:10px;background:rgba(0,0,0,0.04);padding:8px 12px;border-radius:6px">
-                    <summary style="cursor:pointer;font-weight:600;font-size:11px">📋 Visa förra blockerade svaret (${h.previous_attempt.length} tecken)</summary>
-                    <div style="margin-top:8px;font-size:11px;line-height:1.5;white-space:pre-wrap;color:#6b7280;font-style:italic">${escapeHtml(h.previous_attempt.slice(0, 2000))}${h.previous_attempt.length > 2000 ? '\n\n[...trunkerat]' : ''}</div>
-                </details>` : '';
-            footer += `<div style="background:#fef3c7;color:#92400e;border-radius:8px;padding:10px 14px;margin-top:8px;font-size:12px;border-left:4px solid #f59e0b">
-                <div style="display:flex;align-items:center;gap:8px;font-weight:600">
-                    <span class="spinner" style="display:inline-block;width:12px;height:12px;border:2px solid #f59e0b;border-top-color:transparent;border-radius:50%;animation:spin 0.6s linear infinite"></span>
-                    🔄 Regenererar svar (försök ${(h.validation_retry.count || 0) + 1})
-                </div>
-                <div style="margin-top:6px;font-size:11px">Förra svaret blockerades pga ${h.validation_retry.violations.length} regelbrott:</div>
-                <ul style="margin:4px 0 0 16px;padding:0;font-size:11px">${list}</ul>
-                <div style="margin-top:6px;font-size:10px;font-style:italic;opacity:0.85">Agenten skriver om utan dessa regelbrott. Du kan slå av strict validation i settings om du föredrar att se det första svaret.</div>
-                ${previousAttemptHtml}
-            </div>
-            <style>@keyframes spin { to { transform: rotate(360deg); } }</style>`;
+        // BLOCKED-FÖRSTA-FÖRSÖKET: detta är förra (blockerade) svaret. Visas i
+        // sin helhet med en badge — användaren ser kvar texten, regenererat
+        // svar kommer i NÄSTA bubbla under (is_retry_attempt-flaggan).
+        if (h.was_blocked) {
+            const violations = h.validation_violations || [];
+            const list = violations.slice(0, 5).map(v => `<li><strong>${v.rule}:</strong> "${escapeHtml(v.sample)}"</li>`).join('');
+            footer += `<div style="background:#fef3c7;color:#92400e;border-radius:8px;padding:9px 13px;margin-top:8px;font-size:11.5px;border-left:4px solid #f59e0b">
+                <div style="font-weight:700;display:flex;align-items:center;gap:6px">⛔ Detta svar blockerades av sentiment-validatorn (${h.validation_block_count || violations.length} regelbrott)</div>
+                ${list ? `<ul style="margin:6px 0 0 16px;padding:0;font-size:10.5px">${list}</ul>` : ''}
+                <div style="margin-top:6px;font-size:10px;font-style:italic;opacity:0.85">Regenererat svar streamas nedan ↓</div>
+            </div>`;
         }
+        // RETRY-FÖRSÖKET: header-banner renderas separat ovanför .agent-md (se nedan).
         // BLOCK-MODE: retry också misslyckades — output blockerad permanent
         if (h.validation_blocked) {
             const list = h.validation_blocked.violations.map(v => `<li><strong>${v.rule}:</strong> "${escapeHtml(v.sample)}"</li>`).join('');
@@ -6093,10 +6086,20 @@ function renderAgentTurn(h, idx) {
             // footer += `<div style="font-size:10px;color:#059669;margin-top:6px">✓ Sentiment-validatorn passerade</div>`;
         }
 
+        // Header-banner (ovanför markdown) — t.ex. "Regenererat svar"-indikator
+        let headerBanner = '';
+        if (h.is_retry_attempt) {
+            headerBanner = `<div style="background:#ecfdf5;color:#065f46;border-radius:8px;padding:7px 12px;margin-bottom:10px;font-size:11.5px;border-left:3px solid #10b981;display:flex;align-items:center;gap:6px">
+                <span style="font-size:13px">🔄</span>
+                <span><strong>Regenererat svar</strong> — utan sentiment-regelbrott från förra försöket.</span>
+            </div>`;
+        }
+
         return `<div class="agent-msg ai">
             <div class="agent-avatar ai">E</div>
             <div class="agent-msg-bubble ${isStreaming ? 'streaming' : ''}">
                 <div class="agent-tools-container" style="${toolsHtml ? 'margin-bottom:8px' : ''}">${toolsHtml}</div>
+                ${headerBanner}
                 <div class="agent-md">${md}</div>
                 ${footer}
             </div>
@@ -6175,7 +6178,9 @@ async function agentSend() {
     _agentHistory.push({ role: 'user', content: userContent });
 
     // Förbered streaming-bubbla för assistent
-    const assistantTurn = { role: 'assistant', content: '', tools: [], usage: {}, streaming: true };
+    // OBS: let (inte const) — vid validation_failed swappar vi till en NY turn
+    // (gamla blir kvar som "blockerat svar") för att undvika "text restartar"-buggen.
+    let assistantTurn = { role: 'assistant', content: '', tools: [], usage: {}, streaming: true };
     _agentHistory.push(assistantTurn);
 
     const payload = {
@@ -6198,21 +6203,25 @@ async function agentSend() {
     // ── Hitta strömmnings-bubblans MD-element en gång — sedan in-place mutation
     // Detta undviker hackandet från full re-render var 100ms. Browsers kan inte
     // hänga med när 5KB+ HTML byggs om kontinuerligt.
+    // OBS: let-deklareras så att validation_failed kan re-targeta dem till en ny bubbla.
     const msgsEl = document.getElementById('agentMsgs');
-    const lastMsg = msgsEl ? msgsEl.lastElementChild : null;
-    const streamingMd = lastMsg ? lastMsg.querySelector('.agent-md') : null;
-    const streamingBubble = lastMsg ? lastMsg.querySelector('.agent-msg-bubble') : null;
-    const streamingToolsContainer = (() => {
-        if (!streamingBubble) return null;
-        let c = streamingBubble.querySelector('.agent-tools-container');
-        if (!c) {
-            c = document.createElement('div');
-            c.className = 'agent-tools-container';
-            c.style.marginBottom = '8px';
-            streamingBubble.insertBefore(c, streamingBubble.firstChild);
+    function _resolveStreamRefs() {
+        const last = msgsEl ? msgsEl.lastElementChild : null;
+        const md = last ? last.querySelector('.agent-md') : null;
+        const bubble = last ? last.querySelector('.agent-msg-bubble') : null;
+        let tools = null;
+        if (bubble) {
+            tools = bubble.querySelector('.agent-tools-container');
+            if (!tools) {
+                tools = document.createElement('div');
+                tools.className = 'agent-tools-container';
+                tools.style.marginBottom = '8px';
+                bubble.insertBefore(tools, bubble.firstChild);
+            }
         }
-        return c;
-    })();
+        return { md, bubble, tools };
+    }
+    let { md: streamingMd, bubble: streamingBubble, tools: streamingToolsContainer } = _resolveStreamRefs();
 
     let scheduledRaf = null;
     function scheduleStreamRender() {
@@ -6267,6 +6276,37 @@ async function agentSend() {
                 if (!ev.startsWith('data:')) continue;
                 let data;
                 try { data = JSON.parse(ev.slice(5).trim()); } catch { continue; }
+
+                // ── validation_failed: SWAPPA till ny turn istället för att wipa
+                // Detta löser buggen där färdig text "startade om" efter retry.
+                // Gamla turnen lämnas synlig med "⛔ Blockerad"-badge.
+                if (data && data.type === 'validation_failed') {
+                    if (scheduledRaf) { cancelAnimationFrame(scheduledRaf); scheduledRaf = null; }
+                    // Lås in slutligt innehåll på gamla bubblan via direkt DOM-uppdatering
+                    // (utan detta riskerar man se kvarvarande "streaming"-shimmer).
+                    if (streamingMd && assistantTurn.content) {
+                        try { streamingMd.innerHTML = formatAgentText(assistantTurn.content); } catch (e) {}
+                    }
+                    if (streamingBubble) streamingBubble.classList.remove('streaming');
+                    // Markera gamla turnen som blockerad
+                    assistantTurn.streaming = false;
+                    assistantTurn.was_blocked = true;
+                    assistantTurn.validation_violations = data.violations || [];
+                    assistantTurn.validation_block_count = data.count || (data.violations || []).length;
+                    // Skapa ny turn för retry-försöket (separat bubbla)
+                    assistantTurn = {
+                        role: 'assistant', content: '', tools: [], usage: {},
+                        streaming: true, is_retry_attempt: true,
+                        retry_message: data.message || 'Regenererat svar (regelbrott rensade).',
+                    };
+                    _agentHistory.push(assistantTurn);
+                    // Full re-render så blocked-banner + ny tom bubbla kommer in
+                    renderAgent();
+                    // Peka om DOM-refs mot den NYA sista bubblan
+                    ({ md: streamingMd, bubble: streamingBubble, tools: streamingToolsContainer } = _resolveStreamRefs());
+                    continue;
+                }
+
                 handleAgentSSE(data, assistantTurn);
             }
             // Schemalagd in-place re-render i nästa animation frame
@@ -6296,16 +6336,9 @@ function handleAgentSSE(ev, turn) {
             turn.v22_violations = ev.violations || [];
             break;
         case 'validation_failed':
-            // BLOCK-MODE: agent retry:ar nu. Behåll FÖRRA outputen som "tidigare försök"
-            // istället för att wipa — användaren ser då tydligt att retry sker.
-            turn.previous_attempt = turn.content; // spara förra outputen
-            turn.content = '';
-            turn.tools = (turn.tools || []).filter(t => t.status === 'done' || t.status === 'error');
-            turn.validation_retry = {
-                violations: ev.violations || [],
-                count: ev.count || 0,
-                message: ev.message || 'Output blockerad — regenererar...',
-            };
+            // Hanteras numera UPPSTRÖMS i agentSend (swap till ny turn) — denna
+            // case lämnas kvar som no-op för bakåtkompabilitet om eventet råkar
+            // nå hit (t.ex. vid återinläsning av äldre sparad chat).
             break;
         case 'validation_blocked':
             // Retry också misslyckades
