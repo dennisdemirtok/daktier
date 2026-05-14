@@ -4056,13 +4056,23 @@ function renderQuantRank(s) {
 
 // ── RSI-sparkline ───────────────────────────────────────────
 async function loadRsiSparkline(ticker, containerId) {
+    console.log('[rsi-spark]', ticker, '->', containerId);
     const el = document.getElementById(containerId);
-    if (!el || !ticker) return;
+    if (!el) {
+        console.warn('[rsi-spark] container saknas:', containerId);
+        return;
+    }
+    if (!ticker) { el.innerHTML = ''; return; }
+    el.innerHTML = '<div style="font-size:11px;color:#9ca3af;padding:6px">⏳ Laddar RSI-historik...</div>';
     try {
         const r = await fetch(`/api/stock/${encodeURIComponent(ticker)}/rsi-history?days=90`);
         const d = await r.json();
-        if (d.error || !d.rsi || !d.rsi.length) {
-            el.innerHTML = '';
+        if (d.error) {
+            el.innerHTML = `<div style="font-size:11px;color:#dc2626;padding:6px">RSI-fel: ${d.error}</div>`;
+            return;
+        }
+        if (!d.rsi || !d.rsi.length) {
+            el.innerHTML = `<div style="font-size:11px;color:#9ca3af;padding:6px">Ingen RSI-data tillgänglig (${ticker})</div>`;
             return;
         }
         // Bygg SVG-sparkline
@@ -5098,9 +5108,10 @@ function openDrawer(s) {
     // Ladda RSI-sparkline asynkront (om container finns)
     if (s.orderbook_id) {
         const sparkContainer = `rsi-sparkline-${s.orderbook_id}`;
-        const tk = s.ticker || s.short_name;
+        // Använd short_name som primär eftersom RSI-endpoint slår mot stocks.short_name
+        const tk = s.short_name || s.ticker;
         if (tk) {
-            setTimeout(() => loadRsiSparkline(tk, sparkContainer), 100);
+            setTimeout(() => loadRsiSparkline(tk, sparkContainer), 200);
         }
     }
     // Hydrera lazy-renderade chart-element (pris-graf med köpzon)
@@ -6956,14 +6967,27 @@ function fmtScore(v) { return v == null ? '—' : v.toFixed(0); }
 
 // ── 📊 Forward P/E + PEG-tabell ──
 async function loadForwardPeTable() {
+    console.log('[forward-pe] startar...');
     const wrap = document.getElementById('forwardPeContent');
-    if (!wrap) return;
+    if (!wrap) {
+        console.warn('[forward-pe] container forwardPeContent inte hittad');
+        return;
+    }
+    wrap.innerHTML = '<div style="padding:18px;color:#6b7280;text-align:center">⏳ Hämtar Forward P/E + PEG-data...</div>';
     try {
-        const r = await fetch('/api/dashboard/forward-pe-table');
+        const r = await fetch('/api/dashboard/forward-pe-table?t=' + Date.now());
+        if (!r.ok) {
+            wrap.innerHTML = `<div style="color:#dc2626;padding:14px">HTTP ${r.status} - endpoint failade</div>`;
+            return;
+        }
         const data = await r.json();
-        if (data.error) { wrap.innerHTML = `<div style="color:#dc2626">Fel: ${data.error}</div>`; return; }
-        const stocks = (data.stocks || []).filter(s => s.peg || s.fwd_pe);
-        if (!stocks.length) { wrap.innerHTML = '<div style="color:#9ca3af;padding:12px">Ingen data.</div>'; return; }
+        console.log('[forward-pe] fick', data.n, 'stocks');
+        if (data.error) { wrap.innerHTML = `<div style="color:#dc2626;padding:14px">Fel: ${data.error}</div>`; return; }
+        const stocks = (data.stocks || []).filter(s => s.peg != null || s.fwd_pe != null);
+        if (!stocks.length) {
+            wrap.innerHTML = `<div style="color:#9ca3af;padding:14px">Ingen tillgänglig PEG-data (${data.n || 0} stocks scannades men ingen har EPS-tillväxt).</div>`;
+            return;
+        }
 
         const rows = stocks.slice(0, 20).map(s => {
             const flag = s.country === 'US' ? '🇺🇸' : (s.country === 'SE' ? '🇸🇪' : '');
