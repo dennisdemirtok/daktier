@@ -151,6 +151,46 @@ def fetch_reports(insId, report_type="quarter"):
     return data.get("reports", [])
 
 
+def fetch_report_calendar(insIds):
+    """Hämtar rapport-KALENDER (kommande + gamla rapportdatum) för instrument.
+
+    Endpoint: /v1/instruments/report/calendar?instList=...  (max 50/anrop)
+    Response: {"companiesCalender": [{"insId": int,
+                 "reportCalendarDate": [{"releaseDate": "2026-07-20T...",
+                                          "reportType": "Q2-2026"}]}]}
+
+    Returnerar lista av dicts: {insId, releaseDate, reportType}.
+    Inkluderar BÅDE historiska och framtida datum — caller filtrerar.
+    """
+    if not insIds:
+        return []
+    insIds_str = ",".join(str(i) for i in insIds[:50])
+    url = f"{BORSDATA_BASE}/instruments/report/calendar"
+    try:
+        data = _rate_limited_get(url, params={"instList": insIds_str})
+    except RuntimeError as e:
+        print(f"[Börsdata] report/calendar fel: {e}")
+        return []
+    out = []
+    # Börsdata kan returnera olika nyckelnamn — hantera båda varianterna
+    companies = (data.get("companiesCalender")
+                 or data.get("companiesCalendar")
+                 or data.get("reportCalendarList") or [])
+    for c in companies:
+        ins_id = c.get("insId") or c.get("instrumentId")
+        dates = (c.get("reportCalendarDate") or c.get("reportCalendarDates")
+                 or c.get("reportCalenderDate") or c.get("dates") or [])
+        for d in dates:
+            release = (d.get("releaseDate") or d.get("reportDate")
+                       or d.get("date"))
+            rtype = (d.get("reportType") or d.get("report")
+                     or d.get("type"))
+            if release:
+                out.append({"insId": ins_id, "releaseDate": release,
+                            "reportType": rtype})
+    return out
+
+
 def fetch_reports_bulk(insIds, report_type="quarter", max_count=20):
     """Bulk: hämtar reports för flera instrument i ett anrop.
 

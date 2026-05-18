@@ -11603,6 +11603,98 @@ def _enrich_with_live_prices(results):
     return results
 
 
+_REPORT_CAL_STATE = {"running": False, "last_sync": None, "last_result": None}
+
+
+@app.route("/api/report-calendar/sync", methods=["POST", "GET"])
+def api_report_calendar_sync():
+    """Synkar rapport-kalender från Börsdata. Körs i bakgrundstråd.
+
+    Query: ?limit=N för att begränsa antal bolag (debug).
+    """
+    if _REPORT_CAL_STATE.get("running"):
+        return jsonify({"status": "already running",
+                        "last_result": _REPORT_CAL_STATE.get("last_result")}), 409
+
+    limit = request.args.get("limit", type=int)
+
+    def _run():
+        _REPORT_CAL_STATE["running"] = True
+        try:
+            from edge_db import sync_report_calendar
+            db = get_db()
+            result = sync_report_calendar(db, limit=limit)
+            _REPORT_CAL_STATE["last_result"] = result
+            _REPORT_CAL_STATE["last_sync"] = datetime.now().isoformat()
+            print(f"[report-cal] sync klar: {result}", file=sys.stderr)
+        except Exception as e:
+            import traceback; traceback.print_exc()
+            _REPORT_CAL_STATE["last_result"] = {"error": str(e)}
+        finally:
+            _REPORT_CAL_STATE["running"] = False
+
+    threading.Thread(target=_run, daemon=True).start()
+    return jsonify({"status": "started",
+                    "note": "Synkar rapport-kalender i bakgrunden — "
+                            "kolla /api/report-calendar/status"}), 202
+
+
+@app.route("/api/report-calendar/status")
+def api_report_calendar_status():
+    """Status för rapport-kalender-synk."""
+    return jsonify({
+        "running": _REPORT_CAL_STATE.get("running", False),
+        "last_sync": _REPORT_CAL_STATE.get("last_sync"),
+        "last_result": _REPORT_CAL_STATE.get("last_result"),
+    })
+
+
+@app.route("/api/report-calendar/today")
+def api_report_calendar_today():
+    """Bolag som rapporterar IDAG — för dashboard 'Rapport idag'-sektion."""
+    from edge_db import _fetchall
+    db = get_db()
+    try:
+        if _is_postgres():
+            rows = _fetchall(db,
+                "SELECT * FROM report_calendar WHERE report_date = CURRENT_DATE "
+                "ORDER BY expected_release_at NULLS LAST")
+        else:
+            rows = _fetchall(db,
+                "SELECT * FROM report_calendar WHERE report_date = date('now') "
+                "ORDER BY expected_release_at")
+        results = [dict(r) for r in rows] if rows else []
+        return jsonify({"date": datetime.now().date().isoformat(),
+                        "count": len(results), "reports": results})
+    except Exception as e:
+        return jsonify({"error": str(e), "reports": [], "count": 0}), 200
+
+
+@app.route("/api/report-calendar/upcoming")
+def api_report_calendar_upcoming():
+    """Kommande rapporter inom N dagar (default 14). För mail-digest + dashboard."""
+    from edge_db import _fetchall
+    db = get_db()
+    days = request.args.get("days", default=14, type=int)
+    try:
+        if _is_postgres():
+            rows = _fetchall(db,
+                f"SELECT * FROM report_calendar "
+                f"WHERE report_date >= CURRENT_DATE "
+                f"  AND report_date <= CURRENT_DATE + INTERVAL '{days} days' "
+                f"ORDER BY report_date, expected_release_at NULLS LAST")
+        else:
+            rows = _fetchall(db,
+                f"SELECT * FROM report_calendar "
+                f"WHERE report_date >= date('now') "
+                f"  AND report_date <= date('now', '+{days} days') "
+                f"ORDER BY report_date, expected_release_at")
+        results = [dict(r) for r in rows] if rows else []
+        return jsonify({"days": days, "count": len(results), "reports": results})
+    except Exception as e:
+        return jsonify({"error": str(e), "reports": [], "count": 0}), 200
+
+
 @app.route("/api/toplists/<strategy>")
 def api_toplists(strategy):
     """Topplista per strategi. Returnerar senaste analys per ticker.
@@ -11840,8 +11932,14 @@ def _price_update_tick():
     return {"updated": updated, "failed": failed, "tickers": len(tickers)}
 
 
+_LAST_REPORT_CAL_SYNC = [0.0]  # unix-tid för senaste rapport-kalender-sync
+
+
 def _price_update_loop():
-    """Bakgrundstråd som tickar var 15:e min."""
+    """Bakgrundstråd som tickar var 15:e min.
+
+    Kör även rapport-kalender-sync en gång/dygn (24h sedan senaste).
+    """
     import time
     while True:
         try:
@@ -11849,6 +11947,18 @@ def _price_update_loop():
             _LAST_PRICE_UPDATE_AT[0] = time.time()
         except Exception as e:
             print(f"[price-update loop] {e}", file=sys.stderr)
+        # Daglig rapport-kalender-sync (24h-intervall)
+        try:
+            if time.time() - _LAST_REPORT_CAL_SYNC[0] > 86400:
+                from edge_db import sync_report_calendar
+                db = get_db()
+                res = sync_report_calendar(db)
+                _LAST_REPORT_CAL_SYNC[0] = time.time()
+                _REPORT_CAL_STATE["last_result"] = res
+                _REPORT_CAL_STATE["last_sync"] = datetime.now().isoformat()
+                print(f"[report-cal] daglig auto-sync: {res}", file=sys.stderr)
+        except Exception as e:
+            print(f"[report-cal loop] {e}", file=sys.stderr)
         time.sleep(PRICE_UPDATE_INTERVAL_SEC)
 
 

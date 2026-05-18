@@ -4201,6 +4201,130 @@ def sync_borsdata_reports(db, limit=None, max_age_days=7):
     return {"synced": synced, "skipped": skipped, "errors": errors, "total": len(matched)}
 
 
+def sync_report_calendar(db, days_back=14, days_forward=120, limit=None):
+    """Synkar rapport-kalender från Börsdata för bolag i vår DB.
+
+    Hämtar kommande + nyligen passerade rapportdatum via Börsdata
+    /v1/instruments/report/calendar och sparar i report_calendar-tabellen.
+
+    Args:
+        days_back: hur många dagar bakåt som behålls (för post-report-analys)
+        days_forward: hur långt fram som hämtas
+        limit: max antal bolag (None = alla)
+
+    Returnerar {synced, upcoming, today, errors, instruments_checked}.
+    """
+    try:
+        from borsdata_fetcher import fetch_report_calendar, BORSDATA_KEY
+    except ImportError:
+        return {"error": "borsdata_fetcher saknas"}
+    if not BORSDATA_KEY:
+        return {"error": "BORSDATA_API_KEY saknas i miljön"}
+
+    ph = _ph()
+    now = datetime.now()
+    cutoff_back = (now - timedelta(days=days_back)).date()
+    cutoff_fwd = (now + timedelta(days=days_forward)).date()
+    today = now.date()
+
+    # Hämta bolag med Börsdata ins_id (JOIN stocks ↔ instrument_map via isin)
+    rows = _fetchall(db, f"""
+        SELECT s.short_name, s.name, s.country, m.ins_id, m.ticker AS bd_ticker
+        FROM stocks s
+        JOIN borsdata_instrument_map m ON s.isin = m.isin
+        WHERE m.ins_id IS NOT NULL
+          AND s.number_of_owners >= 100
+        ORDER BY s.number_of_owners DESC
+    """)
+    rows = [dict(r) for r in rows] if rows else []
+    if limit:
+        rows = rows[:limit]
+    if not rows:
+        return {"error": "inga bolag med ins_id i DB — kör Börsdata-sync först"}
+
+    # ins_id → ticker-mappning (för att skriva tillbaka rätt ticker)
+    insid_to_meta = {}
+    for r in rows:
+        iid = r.get("ins_id")
+        if iid is not None:
+            insid_to_meta[int(iid)] = {
+                "ticker": r.get("short_name") or r.get("bd_ticker"),
+                "name": r.get("name"),
+                "country": r.get("country"),
+            }
+
+    all_ins_ids = list(insid_to_meta.keys())
+    synced = 0
+    errors = 0
+    upcoming = 0
+    today_cnt = 0
+
+    cal_cols = ["ticker", "report_date", "report_type", "report_time",
+                "expected_release_at", "status", "updated_at"]
+    cal_sql = _upsert_sql("report_calendar", cal_cols, ["ticker", "report_date"])
+
+    # Batcha i grupper om 50 (Börsdata-gräns)
+    for i in range(0, len(all_ins_ids), 50):
+        batch = all_ins_ids[i:i+50]
+        try:
+            entries = fetch_report_calendar(batch)
+        except Exception as e:
+            print(f"[report-cal] batch {i//50} fel: {e}")
+            errors += 1
+            continue
+
+        for ent in entries:
+            iid = ent.get("insId")
+            release = ent.get("releaseDate")
+            rtype = ent.get("reportType")
+            if iid is None or not release:
+                continue
+            meta = insid_to_meta.get(int(iid))
+            if not meta or not meta.get("ticker"):
+                continue
+            # Parsa releaseDate → date
+            try:
+                rd_str = str(release).replace("T", " ").split(".")[0]
+                rd_dt = datetime.fromisoformat(rd_str.replace("Z", ""))
+            except Exception:
+                continue
+            rd_date = rd_dt.date()
+            # Filtrera till relevant intervall
+            if rd_date < cutoff_back or rd_date > cutoff_fwd:
+                continue
+            # Härled report_time + status
+            hour = rd_dt.hour
+            if hour and hour < 9:
+                rtime = "pre_market"
+            elif hour and hour >= 16:
+                rtime = "post_market"
+            elif hour:
+                rtime = "during_market"
+            else:
+                rtime = None
+            status = "upcoming" if rd_date >= today else "released"
+            if rd_date >= today:
+                upcoming += 1
+            if rd_date == today:
+                today_cnt += 1
+            try:
+                db.execute(cal_sql, (
+                    meta["ticker"], rd_date.isoformat(), rtype, rtime,
+                    rd_dt.isoformat(), status, now.isoformat()))
+                synced += 1
+            except Exception as e:
+                if not getattr(sync_report_calendar, "_logged_err", False):
+                    print(f"[report-cal] insert-fel: {e}")
+                    sync_report_calendar._logged_err = True
+                errors += 1
+                try: db.rollback()
+                except Exception: pass
+        db.commit()
+
+    return {"synced": synced, "upcoming": upcoming, "today": today_cnt,
+            "errors": errors, "instruments_checked": len(all_ins_ids)}
+
+
 def sync_borsdata_metadata(db):
     """Synkar sektor + bransch-metadata (en gång)."""
     try:
