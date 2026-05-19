@@ -7592,6 +7592,21 @@ async function renderDashboard() {
                 </div>
             </div>
 
+            <!-- v3 Rapport idag — bolag som rapporterar idag (Börsdata-kalender) -->
+            <div class="dash-section" id="reportsTodayWrap">
+                <h3 class="dash-heading" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+                    📊 Rapport idag
+                    <span class="dash-sub">bolag som rapporterar idag enligt Börsdata-kalendern</span>
+                    <button id="analyzeReportsBtn" onclick="analyzeReportsToday()"
+                        style="margin-left:auto;background:linear-gradient(135deg,#059669,#10b981);color:white;border:none;padding:7px 14px;border-radius:8px;cursor:pointer;font-weight:600;font-family:inherit;font-size:12px">
+                        🤖 Analysera dagens rapport-bolag
+                    </button>
+                </h3>
+                <div id="reportsTodayContent" style="margin-top:10px">
+                    <div class="loading-wrap" style="padding:18px">Laddar dagens rapporter…</div>
+                </div>
+            </div>
+
             <!-- v3 Super Confluence top-5 (förstorade kort) -->
             <div class="dash-section" id="superConfluenceWrap">
                 <h3 class="dash-heading">⭐ TOP 5 Super Confluence
@@ -7669,6 +7684,90 @@ async function renderDashboard() {
     // v3: Ladda hero KPI-row + Super Confluence-kort (parallellt med dashboard-data)
     loadHeroKpiRow();
     loadSuperConfluenceCards();
+    loadReportsToday();
+}
+
+// v3 — Rapport idag (Börsdata-kalender)
+let _reportsTodayTickers = [];
+async function loadReportsToday() {
+    const el = document.getElementById('reportsTodayContent');
+    if (!el) return;
+    try {
+        const r = await fetch('/api/report-calendar/today');
+        const d = await r.json();
+        const reports = d.reports || [];
+        _reportsTodayTickers = reports.map(x => x.ticker).filter(Boolean);
+        if (reports.length === 0) {
+            el.innerHTML = `<div style="padding:16px;text-align:center;color:#6b7280;background:#f8fafc;border-radius:10px;font-size:13px">
+                Inga bolag rapporterar idag enligt Börsdata-kalendern.
+            </div>`;
+            const btn = document.getElementById('analyzeReportsBtn');
+            if (btn) btn.style.display = 'none';
+            return;
+        }
+        // Sortera: pre_market först, sen during, sen post, sen okänd
+        const order = {pre_market: 0, during_market: 1, post_market: 2};
+        reports.sort((a, b) => (order[a.report_time] ?? 3) - (order[b.report_time] ?? 3));
+        const timeLabel = t => t === 'pre_market' ? '🌅 Pre-market'
+                              : t === 'post_market' ? '🌙 Efter stängning'
+                              : t === 'during_market' ? '☀️ Under dagen' : '🕐 Tid ej angiven';
+        const cards = reports.map(rp => {
+            const relTime = rp.expected_release_at
+                ? String(rp.expected_release_at).slice(11, 16) : '';
+            return `<div style="background:white;border:1px solid #e5e7eb;border-left:4px solid #3b82f6;border-radius:10px;padding:12px 14px">
+                <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">
+                    <div>
+                        <div style="font-size:15px;font-weight:800;color:#0f172a">${escapeHtml(rp.ticker || '')}</div>
+                        <div style="font-size:11px;color:#6b7280">${escapeHtml(rp.report_type || 'Rapport')}</div>
+                    </div>
+                    <div style="text-align:right;font-size:10.5px;color:#3b82f6;font-weight:600">
+                        ${timeLabel(rp.report_time)}${relTime ? `<div style="color:#9ca3af;font-weight:400">${relTime}</div>` : ''}
+                    </div>
+                </div>
+            </div>`;
+        }).join('');
+        el.innerHTML = `
+            <div style="font-size:12px;color:#6b7280;margin-bottom:8px">
+                <strong>${reports.length}</strong> bolag rapporterar idag.
+                Klicka "Analysera dagens rapport-bolag" för att köra DAKTIER-analys på alla.
+            </div>
+            <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:8px">${cards}</div>`;
+    } catch (e) {
+        el.innerHTML = `<div style="padding:14px;color:#dc2626;font-size:12px">Kunde ej ladda rapport-kalendern: ${e.message}</div>`;
+    }
+}
+
+async function analyzeReportsToday() {
+    if (!_reportsTodayTickers.length) {
+        alert('Inga rapport-bolag att analysera idag.');
+        return;
+    }
+    const btn = document.getElementById('analyzeReportsBtn');
+    const n = _reportsTodayTickers.length;
+    if (!confirm(`Kör DAKTIER-analys på ${n} bolag som rapporterar idag?\n\n` +
+                 `Det startar en batch-analys i bakgrunden (~${Math.ceil(n*0.7)} min). ` +
+                 `Resultatet hamnar i Agent-topplistorna.`)) return;
+    if (btn) { btn.disabled = true; btn.textContent = 'Startar…'; }
+    try {
+        const r = await fetch('/api/batch/run', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({tickers: _reportsTodayTickers.slice(0, 50)}),
+        });
+        const d = await r.json();
+        if (!r.ok) {
+            alert('Fel: ' + (d.error || 'okänt') +
+                  (d.run_id ? ` (batch ${d.run_id} körs redan)` : ''));
+            if (btn) { btn.disabled = false; btn.textContent = '🤖 Analysera dagens rapport-bolag'; }
+            return;
+        }
+        if (btn) btn.textContent = `✅ Batch startad (${d.tickers} bolag)`;
+        alert(`Batch-analys startad på ${d.tickers} rapport-bolag.\n\n` +
+              `Följ progress på /toplists — den körs i bakgrunden även om du stänger sidan.`);
+    } catch (e) {
+        alert('Network error: ' + e.message);
+        if (btn) { btn.disabled = false; btn.textContent = '🤖 Analysera dagens rapport-bolag'; }
+    }
 }
 
 // v3 — Hero KPI-row
