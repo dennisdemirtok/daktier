@@ -155,9 +155,11 @@ def fetch_report_calendar(insIds):
     """Hämtar rapport-KALENDER (kommande + gamla rapportdatum) för instrument.
 
     Endpoint: /v1/instruments/report/calendar?instList=...  (max 50/anrop)
-    Response: {"companiesCalender": [{"insId": int,
-                 "reportCalendarDate": [{"releaseDate": "2026-07-20T...",
-                                          "reportType": "Q2-2026"}]}]}
+    Response (bekräftat via Börsdata swagger):
+      {"list": [{"insId": int,
+                 "values": [{"releaseDate": "2026-07-20T00:00:00Z",
+                              "reportType": "Q2"}],
+                 "error": null}]}
 
     Returnerar lista av dicts: {insId, releaseDate, reportType}.
     Inkluderar BÅDE historiska och framtida datum — caller filtrerar.
@@ -172,14 +174,16 @@ def fetch_report_calendar(insIds):
         print(f"[Börsdata] report/calendar fel: {e}")
         return []
     out = []
-    # Börsdata kan returnera olika nyckelnamn — hantera båda varianterna
-    companies = (data.get("companiesCalender")
-                 or data.get("companiesCalendar")
-                 or data.get("reportCalendarList") or [])
+    # Korrekt struktur: data["list"] → [{insId, values:[{releaseDate,reportType}]}]
+    # Fallbacks behålls för robusthet om Börsdata ändrar schema.
+    companies = (data.get("list")
+                 or data.get("companiesCalender")
+                 or data.get("companiesCalendar") or [])
     for c in companies:
         ins_id = c.get("insId") or c.get("instrumentId")
-        dates = (c.get("reportCalendarDate") or c.get("reportCalendarDates")
-                 or c.get("reportCalenderDate") or c.get("dates") or [])
+        dates = (c.get("values")
+                 or c.get("reportCalendarDate")
+                 or c.get("reportCalenderDate") or [])
         for d in dates:
             release = (d.get("releaseDate") or d.get("reportDate")
                        or d.get("date"))
