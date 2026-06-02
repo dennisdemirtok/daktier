@@ -12341,6 +12341,16 @@ DEL 9 — DAGENS DB-SNAPSHOT (uppdateras var 5 min)
                     payload["model"] = MODEL
                     resp = httpx.post("https://api.anthropic.com/v1/messages",
                                       headers=headers, json=payload, timeout=60.0)
+                # Transienta Anthropic-fel — auto-retry med backoff (max 3 försök)
+                if resp.status_code in (502, 503, 504, 529):
+                    import time as _t
+                    for retry in range(3):
+                        wait = 2 ** retry  # 1s, 2s, 4s
+                        _t.sleep(wait)
+                        resp = httpx.post("https://api.anthropic.com/v1/messages",
+                                          headers=headers, json=payload, timeout=60.0)
+                        if resp.status_code == 200:
+                            break
                 if resp.status_code != 200:
                     return jsonify({"error": f"Claude API: {resp.status_code} {resp.text[:200]}"}), 500
 
@@ -12838,14 +12848,26 @@ DEL 9 — DAGENS DB-SNAPSHOT (uppdateras var 5 min)
                                 _t.sleep(30)
                                 rate_limit_retries += 1
                                 continue
+                            # Transienta Anthropic-fel (503 overloaded, 529 overloaded,
+                            # 502 bad gateway, 504 gateway timeout) — auto-retry med
+                            # exponential backoff. Max 3 försök.
+                            if resp.status_code in (502, 503, 504, 529) and rate_limit_retries < 3:
+                                import time as _t
+                                wait = 2 ** rate_limit_retries  # 1s, 2s, 4s
+                                msg = (f"Anthropic temporärt överbelastat ({resp.status_code}) — "
+                                       f"försök {rate_limit_retries + 1}/3 om {wait}s...")
+                                yield _sse({"type": "info", "message": msg})
+                                _t.sleep(wait)
+                                rate_limit_retries += 1
+                                continue
                             # Alla andra fel: meddela användaren tydligt
                             user_msg = f"API-fel ({resp.status_code})"
                             if resp.status_code == 429:
                                 user_msg = "Rate limit nått — försök igen om en minut, eller byt till mindre kontext."
                             elif resp.status_code == 401:
                                 user_msg = "API-nyckel ogiltig"
-                            elif resp.status_code == 529:
-                                user_msg = "Anthropic överbelastat — försök igen"
+                            elif resp.status_code in (502, 503, 504, 529):
+                                user_msg = "Anthropic överbelastat efter 3 försök — vänta 30s och försök igen"
                             yield _sse({"type": "error", "error": f"{user_msg}: {err_text[:200]}"})
                             return
 
