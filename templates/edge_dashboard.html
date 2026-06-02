@@ -5652,6 +5652,37 @@ let _agentLoading = false;
 let _agentChatId = null;  // aktiv chat-id (null = ny chatt, ej sparad än)
 let _agentShowHistory = false;  // dropdown öppen?
 
+// ── Modell-val (Sonnet default, Opus opt-in per query) ──────
+const AGENT_MODELS = {
+  sonnet: {
+    id: 'claude-sonnet-4-5',
+    label: 'Sonnet',
+    emoji: '⚡',
+    desc: 'Snabb · ~$0.05 per djupanalys · räcker för 95%',
+    color: '#1e40af',
+  },
+  opus: {
+    id: 'claude-opus-4',
+    label: 'Opus',
+    emoji: '🧠',
+    desc: 'Djup · ~$0.30–0.80 per analys · post-report tes-skifte, stop-thesis i portfölj',
+    color: '#7c3aed',
+  },
+};
+let _agentModelKey = (() => {
+  try { return localStorage.getItem('daktier_agent_model') || 'sonnet'; }
+  catch (e) { return 'sonnet'; }
+})();
+function _setAgentModel(key) {
+  if (!AGENT_MODELS[key]) return;
+  _agentModelKey = key;
+  try { localStorage.setItem('daktier_agent_model', key); } catch (e) {}
+  renderAgent();
+}
+function agentToggleModel() {
+  _setAgentModel(_agentModelKey === 'sonnet' ? 'opus' : 'sonnet');
+}
+
 // ── Chat history (localStorage) ──────────────────────────
 const AGENT_CHATS_KEY = 'daktier_agent_chats_v1';
 const AGENT_MAX_CHATS = 30;  // håll bara 30 senaste
@@ -6066,14 +6097,19 @@ function renderAgent() {
                     <div style="font-size:10.5px;color:var(--text-muted)">${_agentHistory.length === 0 ? 'Edge Agent är redo' : `${_agentHistory.length} meddelanden`}</div>
                 </div>
             </div>
-            <div style="display:flex;gap:6px;position:relative">
+            <div style="display:flex;gap:6px;position:relative;align-items:center">
+                <button onclick="agentToggleModel()"
+                    title="${AGENT_MODELS[_agentModelKey].label}: ${AGENT_MODELS[_agentModelKey].desc}\n\nKlicka för att växla mellan Sonnet (snabb, default) och Opus (djup, dyrare)."
+                    style="background:linear-gradient(135deg, ${AGENT_MODELS[_agentModelKey].color}15, ${AGENT_MODELS[_agentModelKey].color}25);border:1px solid ${AGENT_MODELS[_agentModelKey].color}40;color:${AGENT_MODELS[_agentModelKey].color};padding:7px 12px;border-radius:10px;cursor:pointer;font-weight:700;font-family:inherit;font-size:12px;display:inline-flex;align-items:center;gap:4px">
+                    ${AGENT_MODELS[_agentModelKey].emoji} ${AGENT_MODELS[_agentModelKey].label}
+                </button>
                 <button class="agent-icon-btn" onclick="agentNewChat()" title="Ny chatt">${_msIcon('add', 16)} Ny</button>
                 <button class="agent-icon-btn" onclick="agentToggleHistory()" title="Historik">${_msIcon('history', 16)} Historik</button>
                 ${historyDropdown}
             </div>
         </div>
         ${_agentHistory.length === 0 ? `<div class="agent-hero">
-            <span style="display:inline-flex;align-items:center;gap:8px;font-weight:700;font-size:15px">${_msIcon('smart_toy', 22, { color: '#fef3c7' })} Edge Agent</span> — Claude Opus med direktåtkomst till databasen.
+            <span style="display:inline-flex;align-items:center;gap:8px;font-weight:700;font-size:15px">${_msIcon('smart_toy', 22, { color: '#fef3c7' })} Edge Agent</span> — Claude ${AGENT_MODELS[_agentModelKey].label} med direktåtkomst till databasen.
             Söker bolag, läser kvartalstrender, ägarhistorik, kollar forum/Reddit/nyheter via web search.
             Ladda upp en skärmbild av din portfölj för analys.
         </div>` : ''}
@@ -6136,6 +6172,10 @@ function renderAgentTurn(h, idx) {
 
         let footer = '';
         const footParts = [];
+        if (h.model_used && AGENT_MODELS[h.model_used]) {
+            const m = AGENT_MODELS[h.model_used];
+            footParts.push(`<span style="color:${m.color};font-weight:600">${m.emoji} via ${m.label}</span>`);
+        }
         if (usage.cache_read_input_tokens > 0) footParts.push(`⚡ ${(usage.cache_read_input_tokens).toLocaleString('sv')} tokens från cache`);
         if (usage.output_tokens) footParts.push(`📤 ${usage.output_tokens} tokens svar`);
         if (footParts.length) footer = `<div class="agent-foot">${footParts.join(' · ')}</div>`;
@@ -6275,11 +6315,14 @@ async function agentSend() {
             role: h.role,
             content: h.content,
         })),
+        model: AGENT_MODELS[_agentModelKey].id,  // användarens modell-val
     };
     if (_agentImage) {
         payload.image_b64 = _agentImage.b64;
         payload.image_media_type = _agentImage.media_type;
     }
+    // Tagga turn med vilken modell som användes (för rendering av badge)
+    assistantTurn.model_used = _agentModelKey;
 
     _agentLoading = true;
     if (inp) inp.value = '';

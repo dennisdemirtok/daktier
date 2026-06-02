@@ -12298,6 +12298,14 @@ DEL 9 — DAGENS DB-SNAPSHOT (uppdateras var 5 min)
     # Sonnet 4.5 default — högre rate limits än Opus (30k → 200k tokens/min)
     # och fortfarande mycket kompetent. Opus är opt-in via env.
     MODEL = os.environ.get("AGENT_MODEL", "claude-sonnet-4-5")
+    # v3: tillåt frontend att override:a modellen per request (Sonnet/Opus-val)
+    _model_override = data.get("model")
+    _allowed_models = {
+        "claude-sonnet-4-5", "claude-sonnet-4-20250514",
+        "claude-opus-4", "claude-opus-4-1",
+    }
+    if _model_override and _model_override in _allowed_models:
+        MODEL = _model_override
     headers = {
         "x-api-key": CLAUDE_API_KEY,
         "anthropic-version": "2023-06-01",
@@ -12789,6 +12797,16 @@ DEL 9 — DAGENS DB-SNAPSHOT (uppdateras var 5 min)
     tools = _agent_tools_definition()
     # Sonnet 4.5 default (200k tokens/min vs Opus 30k/min). Opus opt-in via env.
     MODEL = os.environ.get("AGENT_MODEL", "claude-sonnet-4-5")
+    # v3: tillåt frontend att override:a modellen per request (Sonnet/Opus-val).
+    # Whitelist för säkerhet — bara godkända Claude-modeller.
+    _model_override = data.get("model")
+    _allowed_models = {
+        "claude-sonnet-4-5", "claude-sonnet-4-20250514",
+        "claude-opus-4", "claude-opus-4-1",
+    }
+    if _model_override and _model_override in _allowed_models:
+        MODEL = _model_override
+        print(f"[agent] model override → {MODEL}", file=sys.stderr)
     headers = {
         "x-api-key": CLAUDE_API_KEY,
         "anthropic-version": "2023-06-01",
