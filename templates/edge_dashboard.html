@@ -156,6 +156,7 @@
 
         /* ── Filter ──── */
         .filter-bar { display: flex; gap: 10px; align-items: center; margin-bottom: 20px; flex-wrap: wrap; background: rgba(255,255,255,0.6); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); padding: 10px 12px; border-radius: 14px; }
+        .filter-bar:empty { display: none; }  /* v3.7: dölj tom filter-bar (t.ex. på dashboard) */
         .filter-group { display: inline-flex; align-items: center; gap: 4px; background: var(--surface-low); padding: 4px; border-radius: 10px; }
         .filter-group.tight { gap: 2px; }
         .filter-label { font-size: 9px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.8px; padding: 0 6px 0 10px; white-space: nowrap; }
