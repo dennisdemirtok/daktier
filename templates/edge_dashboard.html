@@ -111,6 +111,16 @@
         .subnav-item.active { background: rgba(30,64,175,0.08); color: #1e40af; font-weight: 700; }
         .subnav-item .material-symbols-outlined { font-size: 20px; }
         .subnav-item .ext { font-size: 14px; margin-left: auto; opacity: 0.5; }
+        /* v3.8 agent-historik i subnav */
+        .subnav-chat { position: relative; padding: 9px 30px 9px 12px; border-radius: 9px; cursor: pointer; transition: background 0.14s; }
+        .subnav-chat:hover { background: var(--surface-low); }
+        .subnav-chat.active { background: rgba(30,64,175,0.08); }
+        .subnav-chat-title { font-size: 12.5px; font-weight: 600; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .subnav-chat.active .subnav-chat-title { color: #1e40af; }
+        .subnav-chat-meta { font-size: 10px; color: var(--text-muted); margin-top: 1px; }
+        .subnav-chat-del { position: absolute; right: 6px; top: 50%; transform: translateY(-50%); background: none; border: none; color: var(--text-muted); cursor: pointer; opacity: 0; padding: 4px; border-radius: 6px; display: flex; }
+        .subnav-chat:hover .subnav-chat-del { opacity: 0.6; }
+        .subnav-chat-del:hover { opacity: 1 !important; background: #fee2e2; color: #dc2626; }
 
         /* ── Layout ──── */
         .main-content { margin-left: 0; padding-top: var(--topnav-h); min-height: 100vh; transition: margin-left 0.2s ease; }
@@ -579,14 +589,20 @@
         /* ── Drawer ──── */
         .drawer-overlay { position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.2);z-index:200;opacity:0;visibility:hidden;transition:opacity 0.3s,visibility 0.3s; }
         .drawer-overlay.open { opacity:1;visibility:visible; }
-        .drawer { position:fixed;top:0;right:0;bottom:0;width:520px;max-width:92vw;background:var(--white);z-index:201;box-shadow: -8px 0 32px rgba(25,28,29,0.06);transform:translateX(100%);transition:transform 0.3s ease;overflow-y:auto;display:flex;flex-direction:column; }
+        .drawer { position:fixed;top:0;right:0;bottom:0;width:760px;max-width:96vw;background:var(--white);z-index:301;box-shadow: -8px 0 40px rgba(15,23,42,0.14);transform:translateX(100%);transition:transform 0.3s cubic-bezier(0.32,0.72,0,1);overflow-y:auto;display:flex;flex-direction:column; }
         .drawer.open { transform:translateX(0); }
         .drawer-header { padding:20px 24px;border-bottom:none;background:var(--surface-low);display:flex;justify-content:space-between;align-items:flex-start;position:sticky;top:0;z-index:1; }
         .drawer-close { background:none;border:none;font-size:20px;cursor:pointer;color:var(--text-muted);padding:4px 8px;border-radius:6px; }
         .drawer-close:hover { background:var(--bg);color:var(--text); }
-        .drawer-body { padding:0 24px 24px;flex:1; }
-        .drawer-section { margin-top:20px; }
-        .drawer-section-title { font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;color:var(--text-muted);margin-bottom:10px;padding-bottom:6px;border-bottom:none; }
+        .drawer-body { padding:0 28px 32px;flex:1; }
+        .drawer-section { margin-top:22px; }
+        .drawer-section-title { font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;color:var(--text-muted);margin-bottom:11px;padding-bottom:7px;border-bottom:1px solid var(--line); }
+        /* v3.8: ren, läsbar tabell-stil i drawern */
+        .drawer-tbl { width:100%;border-collapse:collapse;font-size:12.5px; }
+        .drawer-tbl th { text-align:left;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.4px;color:var(--text-muted);padding:6px 8px;border-bottom:1px solid var(--line); }
+        .drawer-tbl td { padding:8px 8px;border-bottom:1px solid #f3f4f6;color:var(--ink);vertical-align:top; }
+        .drawer-tbl tr:last-child td { border-bottom:none; }
+        .drawer-tbl tr:hover td { background:#f8fafc; }
         .drawer-grid { display:grid;grid-template-columns:1fr 1fr;gap:8px; }
         .drawer-grid-3 { display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px; }
         .drawer-item { background:var(--bg);border-radius:8px;padding:10px 12px; }
@@ -785,8 +801,8 @@
             /* Dagens picks-banner */
             #dailyPicksBanner, #buyZoneWatchBanner { padding: 14px !important; }
 
-            /* Agent-chat — bredare bubblor på mobil */
-            .agent-wrap { height: calc(100vh - 110px) !important; gap: 10px !important; }
+            /* Agent-chat — bredare bubblor på mobil; höjd tar höjd för bottom-nav (62px) */
+            .agent-wrap { height: calc(100dvh - var(--topnav-h) - 96px) !important; gap: 10px !important; }
             .agent-msg-bubble { max-width: 88% !important; padding: 10px 13px !important; font-size: 13.5px !important; }
             .agent-hero { padding: 12px 14px !important; font-size: 12px; }
             .agent-msg-img { max-width: 220px; max-height: 160px; }
@@ -997,7 +1013,7 @@ window.showWelcome = function() {
 
 <script>
 // ── State ──────────────────────────────────────────────
-let currentTab = 'dashboard';
+let currentTab = 'agent';   // v3.8: agenten är sidans primära landningsvy
 let searchQuery = '';
 let countryFilter = '';
 let sortCol = 'meta';
@@ -1433,6 +1449,10 @@ function switchTab(tab, el) {
     // OBS: tidigare redirectade vi 'trending' till 'hotmovers', men nu har
     // 'trending' egen tab med backtest-validerade kvant-screens (Dual-Screen
     // m.fl.) — låt det vara dess egna tab.
+    // v3.8: snapshot:a dashboarden INNAN vi lämnar den (komplett DOM)
+    if (currentTab === 'dashboard' && tab !== 'dashboard') {
+        try { const c = document.getElementById('content'); if (c) _dashSnapshot = { html: c.innerHTML, ts: Date.now() }; } catch (e) {}
+    }
     currentTab = tab;
     // v3.7: synka top-nav + contextual subnav + mobile-nav aktiv-states
     if (typeof _syncNav === 'function') _syncNav();
@@ -1524,6 +1544,7 @@ function navTo(section) {
 
 function _syncNav() {
     const sec = TAB_TO_SECTION[currentTab] || 'dashboard';
+    document.body.setAttribute('data-tab', currentTab);  // v3.8: för tab-specifik CSS
     document.querySelectorAll('[data-section]').forEach(b => {
         b.classList.toggle('active', b.dataset.section === sec);
     });
@@ -1533,6 +1554,8 @@ function _syncNav() {
 function renderSubnav(sec) {
     const el = document.getElementById('subnav');
     if (!el) return;
+    // v3.8: agent-sektionen visar chat-historik i vänstermenyn (desktop)
+    if (sec === 'agent') { renderAgentSubnav(el); return; }
     const s = NAV_SECTIONS[sec];
     const subs = (s && s.sub) || [];
     if (!subs.length) {
@@ -1548,6 +1571,29 @@ function renderSubnav(sec) {
             <span class="material-symbols-outlined">${item.icon}</span><span>${item.label}</span>
             ${item.ext ? '<span class="material-symbols-outlined ext">open_in_new</span>' : ''}</button>`;
     }).join('');
+}
+
+// v3.8: agent chat-historik i vänster subnav (desktop)
+function renderAgentSubnav(el) {
+    document.body.classList.add('has-subnav');
+    let chats = [];
+    try { chats = Object.values(_loadChats()).sort((a, b) => b.updated_at - a.updated_at); } catch (e) {}
+    let html = `<button class="subnav-item" onclick="agentNewChat(); renderSubnav('agent')"
+        style="background:linear-gradient(135deg,#1d4ed8,#3b82f6);color:#fff;font-weight:700;margin-bottom:8px">
+        <span class="material-symbols-outlined">add</span><span>Ny chatt</span></button>
+        <div class="subnav-title">Historik</div>`;
+    if (!chats.length) {
+        html += `<div style="padding:8px 12px;font-size:12px;color:var(--text-muted)">Inga sparade chattar än.</div>`;
+    } else {
+        html += chats.slice(0, 40).map(c => `
+            <div class="subnav-chat ${c.id === _agentChatId ? 'active' : ''}" onclick="agentLoadChat('${c.id}'); renderSubnav('agent')">
+                <div class="subnav-chat-title">${escapeHtml(c.title || 'Chatt')}</div>
+                <div class="subnav-chat-meta">${_formatRelativeTime(c.updated_at)} · ${(c.history?.length || 0)} medd.</div>
+                <button class="subnav-chat-del" title="Radera" onclick="agentDeleteChat('${c.id}', event); renderSubnav('agent')">
+                    <span class="material-symbols-outlined" style="font-size:15px">delete</span></button>
+            </div>`).join('');
+    }
+    el.innerHTML = html;
 }
 
 // ── Mobile sheet ──
@@ -5423,10 +5469,21 @@ function openDrawer(s) {
         </div></div>`;
     }
 
+    // v3.8: Nyheter + Insider-transaktioner (lazy-laddas efter render om data finns)
+    html += `<div class="drawer-section" id="drawerNewsSection" style="display:none">
+        <div class="drawer-section-title">📰 Senaste nyheter</div>
+        <div id="drawerNews"></div></div>`;
+    html += `<div class="drawer-section" id="drawerInsidersSection" style="display:none">
+        <div class="drawer-section-title">👥 Insider-transaktioner (senaste)</div>
+        <div id="drawerInsiders"></div></div>`;
+
     document.getElementById('drawerBody').innerHTML = html;
     document.getElementById('stockDrawer').classList.add('open');
     document.getElementById('drawerOverlay').classList.add('open');
     document.body.style.overflow = 'hidden';
+
+    // v3.8: lazy-ladda nyheter + insider-transaktioner
+    if (s.short_name || s.name) { try { loadDrawerNewsAndInsiders(s); } catch (e) {} }
 
     // Ladda RSI-sparkline asynkront (om container finns)
     if (s.orderbook_id) {
@@ -5447,6 +5504,68 @@ function closeDrawer() {
     document.body.style.overflow = '';
 }
 document.addEventListener('keydown', e => { if (e.key === 'Escape') closeDrawer(); });
+
+// ── v3.8: Lazy-ladda nyheter + insider-transaktioner i drawern ──
+async function loadDrawerNewsAndInsiders(s) {
+    const tk = (s.short_name || '').toUpperCase();
+    const bareName = (s.short_name || s.name || '');
+    // ── Nyheter: svenska market-news (ticker-filter) + market-bullets (US) ──
+    try {
+        const news = [];
+        try {
+            const r = await fetch('/api/market-news?ticker=' + encodeURIComponent(tk));
+            const d = await r.json();
+            (d.items || []).forEach(it => news.push({ headline: it.headline, summary: it.summary, source: it.source, chg: it.change_pct }));
+        } catch (e) {}
+        try {
+            const r = await fetch('/api/market-bullets');
+            const d = await r.json();
+            if (d.found) {
+                for (const sec of (d.sections || [])) {
+                    for (const it of (sec.items || [])) {
+                        const itk = String(it.ticker || '').split(':').pop().toUpperCase();
+                        if (itk && (itk === tk || itk === String(s.ticker || '').toUpperCase()))
+                            news.push({ headline: it.text, summary: '', source: it.source });
+                    }
+                }
+            }
+        } catch (e) {}
+        if (news.length) {
+            const el = document.getElementById('drawerNews');
+            if (el && _currentDrawerStock && String(_currentDrawerStock.orderbook_id) === String(s.orderbook_id)) {
+                el.innerHTML = news.slice(0, 6).map(n => `
+                    <div style="padding:9px 0;border-bottom:1px solid #f3f4f6">
+                        <div style="font-size:13px;font-weight:600;color:#1f2937;line-height:1.45">${escapeHtml(n.headline || '')}${n.chg != null ? ` <span style="color:${n.chg >= 0 ? '#059669' : '#dc2626'};font-weight:700">${n.chg >= 0 ? '+' : ''}${Number(n.chg).toFixed(1)}%</span>` : ''}</div>
+                        ${n.summary ? `<div style="font-size:12px;color:#6b7280;margin-top:3px;line-height:1.5">${escapeHtml(n.summary)}</div>` : ''}
+                        ${n.source ? `<div style="font-size:10.5px;color:#9ca3af;margin-top:3px">${escapeHtml(n.source)}</div>` : ''}
+                    </div>`).join('');
+                document.getElementById('drawerNewsSection').style.display = '';
+            }
+        }
+    } catch (e) {}
+    // ── Insider-transaktioner ──
+    try {
+        const r = await fetch('/api/insiders?q=' + encodeURIComponent(bareName) + '&limit=10');
+        const d = await r.json();
+        let rows = d.transactions || [];
+        // Filtrera till samma bolag via ISIN om möjligt
+        if (s.isin) { const m = rows.filter(x => x.isin === s.isin); if (m.length) rows = m; }
+        rows = rows.slice(0, 8);
+        if (rows.length) {
+            const el = document.getElementById('drawerInsiders');
+            if (el && _currentDrawerStock && String(_currentDrawerStock.orderbook_id) === String(s.orderbook_id)) {
+                el.innerHTML = `<table class="drawer-tbl"><thead><tr><th>Datum</th><th>Person</th><th>Typ</th><th style="text-align:right">Belopp</th></tr></thead><tbody>${rows.map(x => {
+                    const buy = /förvärv|köp|tilldel/i.test(x.transaction_type || x.type || '');
+                    return `<tr><td>${escapeHtml((x.transaction_date || '').slice(0, 10))}</td>
+                        <td>${escapeHtml((x.person || '').slice(0, 22))}</td>
+                        <td style="color:${buy ? '#059669' : '#dc2626'};font-weight:600">${escapeHtml(x.transaction_type || x.type || '')}</td>
+                        <td style="text-align:right">${x.total_value ? (Number(x.total_value) / 1000).toFixed(0) + 'k' : '–'}</td></tr>`;
+                }).join('')}</tbody></table>`;
+                document.getElementById('drawerInsidersSection').style.display = '';
+            }
+        }
+    } catch (e) {}
+}
 
 // ── v3.6: Öppna aktie-drawer via ticker (för nyheter/trending/rapporter) ──
 async function openStockByTicker(ticker) {
@@ -6041,6 +6160,8 @@ function _saveCurrentChat() {
         history: _agentHistory,
     };
     _saveChats(chats);
+    // v3.8: uppdatera chat-historiken i vänster subnav
+    try { if (typeof renderSubnav === 'function' && TAB_TO_SECTION[currentTab] === 'agent') renderSubnav('agent'); } catch (e) {}
 }
 
 function agentNewChat() {
@@ -6241,7 +6362,9 @@ function renderAgent() {
         const styleEl = document.createElement('style');
         styleEl.id = 'agent-styles';
         styleEl.textContent = `
-        .agent-wrap { display:flex; flex-direction:column; gap:14px; height:calc(100vh - 160px); max-width:920px; margin:0 auto; }
+        /* v3.8: dölj generisk page-header på agent-fliken (agenten har egen toolbar) */
+        body[data-tab="agent"] #pageHeader { display: none; }
+        .agent-wrap { display:flex; flex-direction:column; gap:14px; height:calc(100vh - var(--topnav-h) - 40px); max-width:960px; margin:0 auto; }
         .agent-hero { background:linear-gradient(135deg,#1e3a8a 0%,#3b82f6 50%,#8b5cf6 100%); color:white; border-radius:14px; padding:14px 18px; font-size:13px; box-shadow:0 4px 12px rgba(30,58,138,0.15); }
         .agent-hero strong { color:#fef3c7; }
         .agent-msgs { flex:1; overflow-y:auto; padding:10px 4px; display:flex; flex-direction:column; gap:14px; }
@@ -7925,10 +8048,29 @@ function _renderModelDetail(el, d) {
         ${tradesHtml}
     `;
 }
+// v3.8: snapshot-cache så dashboarden inte laddar om varje gång
+let _dashSnapshot = null;   // {html, ts}
+let _dashSnapTimer = null;
+function _warmDashboard() {
+    // Warma backend + browser-cache i bakgrunden (medan man är i agenten)
+    try {
+        fetch('/api/dashboard').then(r => r.json()).then(d => { d._ts = Date.now(); _dashCache = d; }).catch(() => {});
+        ['/api/market-bullets', '/api/market-news', '/api/sa/trending', '/api/macro-pulse',
+         '/api/report-calendar/today', '/api/report-calendar/upcoming?days=14']
+            .forEach(u => fetch(u).catch(() => {}));
+    } catch (e) {}
+}
+
 async function renderDashboard() {
     const root = document.getElementById('content');
     const cards = document.getElementById('cards');
     if (cards) cards.innerHTML = '';
+
+    // v3.8: återställ från snapshot om färsk (<15 min) → instant, ingen omladdning
+    if (_dashSnapshot && (Date.now() - _dashSnapshot.ts) < 900000) {
+        root.innerHTML = _dashSnapshot.html;
+        return;
+    }
 
     root.innerHTML = `
         <div class="dash-grid">
@@ -8060,6 +8202,13 @@ async function renderDashboard() {
     loadTrending();
     loadMacroPulse();
     loadDailyBrief();
+
+    // v3.8: ta en snapshot när sektionerna hunnit ladda (fallback om man inte
+    // lämnar fliken — snapshot tas annars i switchTab vid byte FRÅN dashboard)
+    clearTimeout(_dashSnapTimer);
+    _dashSnapTimer = setTimeout(() => {
+        try { if (currentTab === 'dashboard') _dashSnapshot = { html: root.innerHTML, ts: Date.now() }; } catch (e) {}
+    }, 7000);
 }
 
 // ── v3.6 Svenska & nordiska nyheter (market_news, Nordic-fokus)
@@ -9283,18 +9432,19 @@ async function init() {
 
     await fetchStatus();
 
-    // Default to Dashboard on page load (no API fetch needed)
+    // v3.8: Agenten är landningsvyn — rendera den direkt
     const meta = TAB_META[currentTab] || {title:'',sub:''};
     const pt = document.getElementById('pageTitle'); if (pt) pt.textContent = meta.title;
     const ps = document.getElementById('pageSubtitle'); if (ps) ps.textContent = meta.sub;
 
     renderFilterBar();
-    if (currentTab === 'dashboard') { renderDashboard(); }
+    if (currentTab === 'agent') { renderAgent(); }
+    else if (currentTab === 'dashboard') { renderDashboard(); }
     else if (currentTab === 'metrics') { renderMetricsTool(); }
-    else {
-        await prefetchPromise;
-        await fetchData();
-    }
+    else { await prefetchPromise; await fetchData(); }
+
+    // v3.8: Warma dashboarden i bakgrunden så den är klar när man öppnar den
+    setTimeout(() => { try { _warmDashboard(); } catch (e) {} }, 800);
 
     // Auto-refresh: poll varje 60s, only when a market is open
     setInterval(async () => {
