@@ -8087,7 +8087,7 @@ async function loadTrending() {
     const el = document.getElementById('trendingContent');
     if (!el) return;
     try {
-        const r = await fetch('/api/trending');
+        const r = await fetch('/api/sa/trending');
         const d = await r.json();
         if (!d.found || !(d.stocks || []).length) {
             el.innerHTML = `<div style="padding:16px;text-align:center;color:#6b7280;background:#f8fafc;border-radius:10px;font-size:13px">
@@ -8124,7 +8124,7 @@ async function syncTrending() {
     const el = document.getElementById('trendingContent');
     if (el) el.innerHTML = '<div class="loading-wrap" style="padding:18px">🔥 Hämtar trending top-20…</div>';
     try {
-        await fetch('/api/trending/sync', { method: 'POST' });
+        await fetch('/api/sa/trending/sync', { method: 'POST' });
         loadTrending();
     } catch (e) {
         if (el) el.innerHTML = `<div style="padding:14px;color:#dc2626;font-size:12px">Fel: ${e.message}</div>`;

@@ -12585,9 +12585,13 @@ def api_market_bullets_status():
 
 # ── Trending (stockanalysis.com/trending) ──────────────────────
 
-@app.route("/api/trending")
-def api_trending():
-    """Senaste trending-snapshot (top-20 by pageviews)."""
+@app.route("/api/sa/trending")
+def api_sa_trending():
+    """Senaste stockanalysis.com trending-snapshot (top-20 by pageviews).
+
+    OBS: separat från /api/trending (Trending V/Q-fliken) — döpt /api/sa/
+    för att inte krocka med befintlig route + endpoint-namn.
+    """
     from edge_db import _fetchall, _fetchone
     db = get_db()
     try:
@@ -12610,9 +12614,9 @@ def api_trending():
         return jsonify({"found": False, "stocks": [], "error": str(e)}), 200
 
 
-@app.route("/api/trending/sync", methods=["POST"])
-def api_trending_sync():
-    """Hämtar trending top-20 nu (synkront — snabbt, ~1 anrop)."""
+@app.route("/api/sa/trending/sync", methods=["POST"])
+def api_sa_trending_sync():
+    """Hämtar stockanalysis.com trending top-20 nu (synkront — snabbt)."""
     db = get_db()
     try:
         res = _sync_trending(db)
