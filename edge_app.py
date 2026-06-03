@@ -8820,6 +8820,16 @@ Om `v2.fcf_debug` finns, visa minst:
 - FCF Yield på EV (inte mcap)
 - Sanity: om `data_quality.warning` finns, citera den i analysen
 
+**Market cap & shares-härledning — KRITISK datakvalitet-regel:**
+`market_cap` är nu konverterat till bolagets NATIVA valuta innan du ser det
+(matchar `currency` + `last_price`). `market_cap_currency` anger explicit
+valuta. Räkna implied shares så här: `shares = market_cap / last_price`
+(båda i samma valuta nu). Om du ser orimliga aktieantal (>10× consensus från
+web_search), MISSTÄNK kvarvarande FX-bug och flagga det istället för att
+acceptera siffran. Verifiera mot offentlig data (10-K, IR) om kritiskt.
+Speciellt för US-listade bolag: konsensus shares outstanding finns på
+Stockanalysis.com, Yahoo Finance — verifiera mot dem vid tvekan.
+
 **Quality-trend:**
 Om `v2.quality_trend.modifier < 0.85`, NÄMN att Quality-poängen är
 trend-justerad nedåt. Tower: ROE 21→7.5% → modifier 0.40 → trend "collapsing".
@@ -10616,7 +10626,11 @@ def _agent_search_stocks(db, query, limit=15):
             "return_on_equity": d.get("return_on_equity"),
             "operating_cash_flow": d.get("operating_cash_flow"),
             "net_profit": d.get("net_profit"), "sales": d.get("sales"),
-            "market_cap": d.get("market_cap"),
+            # FIX: Avanza lagrar market_cap i SEK för utländska bolag, men last_price
+            # är i nativ valuta. Konvertera till nativ så agenten inte räknar
+            # shares = mcap_sek / price_usd → 10× för många aktier.
+            "market_cap": _agent_mcap_native_safe(d),
+            "market_cap_currency": d.get("currency") or "SEK",
             "ytd_change_pct": d.get("ytd_change_pct"),
             "one_month_change_pct": d.get("one_month_change_pct"),
             "edge_score": d.get("edge_score"), "action": d.get("action"),
@@ -10625,6 +10639,24 @@ def _agent_search_stocks(db, query, limit=15):
                                    if d.get("smart_score") is not None and d.get("smart_score_yesterday") is not None else None,
         })
     return out
+
+
+def _agent_mcap_native_safe(d):
+    """Returnerar market_cap i bolagets nativa valuta (USD/EUR/...) istället för SEK.
+
+    Avanza screener-feeden konverterar market_cap till SEK för utländska bolag,
+    men last_price/sales/OCF lagras i nativ valuta. Detta orsakar att agenten
+    räknar fel när den härleder t.ex. shares = mcap/price (blir ~10× fel för
+    USD-bolag). Använder samma helper som v2-scorers redan kör.
+    """
+    try:
+        from edge_db import _market_cap_native
+        m = _market_cap_native(d)
+        if m and m > 0:
+            return round(m)
+    except Exception:
+        pass
+    return d.get("market_cap")
 
 
 def _agent_get_full_stock(db, query):
@@ -10667,6 +10699,20 @@ def _agent_get_full_stock(db, query):
         pass
     # Trim raw _hist från output (för stort)
     d.pop("_hist", None)
+    # FIX (kritisk): Avanza lagrar market_cap i SEK för utländska bolag,
+    # men last_price är i nativ valuta. Konvertera till nativ INNAN agenten
+    # ser värdet. Annars räknar agenten shares = mcap_sek/price_usd och får
+    # ~10× för många aktier (rapporterat bug: COHR/LITE/GFS/TSEM/AAOI/MRVL).
+    try:
+        mcap_sek = d.get("market_cap")
+        mcap_native = _agent_mcap_native_safe(d)
+        if mcap_native and mcap_sek and mcap_native != mcap_sek:
+            d["market_cap_sek_original"] = mcap_sek  # för transparens
+            d["market_cap"] = mcap_native
+            d["market_cap_native"] = mcap_native
+        d["market_cap_currency"] = d.get("currency") or "SEK"
+    except Exception as e:
+        print(f"[agent get_full_stock] mcap convert: {e}", file=sys.stderr)
     # Endast skickera det viktigaste — inte alla 80+ fält
     # Bygg v2-block separat så agenten enkelt ser klassificering + axlar
     v2 = {
@@ -10688,7 +10734,8 @@ def _agent_get_full_stock(db, query):
     keep = {
         # ── Grunddata ──
         "name", "short_name", "ticker", "country", "currency", "orderbook_id",
-        "last_price", "market_cap", "number_of_owners", "sector",
+        "last_price", "market_cap", "market_cap_native", "market_cap_currency",
+        "market_cap_sek_original", "number_of_owners", "sector",
         # ── Värdering ──
         "pe_ratio", "price_book_ratio", "ev_ebit_ratio", "ps_ratio",
         "direct_yield", "dividend_per_share",
