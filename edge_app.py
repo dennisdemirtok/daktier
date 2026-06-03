@@ -5661,6 +5661,359 @@ def _get_or_generate_market_news(db, max_age_hours=6, force=False):
         _NEWS_GEN_STATE["running"] = False
 
 
+# ══════════════════════════════════════════════════════════════
+# MARKET BULLETS + TRENDING (v3.4) — riktig data från stockanalysis.com
+# Market bullets: /market-bullets/YYYY-MM-DD/  (news, politik, earnings)
+# Trending: /trending/  (top-20 by pageviews, ny-flagga)
+# ══════════════════════════════════════════════════════════════
+
+_SA_HEADERS = {
+    "User-Agent": ("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+                   "AppleWebKit/537.36 (KHTML, like Gecko) "
+                   "Chrome/123.0.0.0 Safari/537.36"),
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    "Accept-Language": "en-US,en;q=0.9",
+}
+_BULLETS_STATE = {"running": False, "last_result": None}
+_TRENDING_STATE = {"running": False, "last_result": None}
+
+
+def _fetch_stockanalysis_html(url, timeout=15):
+    """Hämtar rå HTML från stockanalysis.com med browser-headers."""
+    try:
+        resp = requests.get(url, headers=_SA_HEADERS, timeout=timeout)
+        if resp.status_code == 404:
+            return None, 404
+        if resp.status_code != 200:
+            print(f"[stockanalysis] {url} → HTTP {resp.status_code}", file=sys.stderr)
+            return None, resp.status_code
+        return resp.text, 200
+    except Exception as e:
+        print(f"[stockanalysis] {url} fel: {e}", file=sys.stderr)
+        return None, 0
+
+
+def _html_to_clean_text(html, max_chars=14000):
+    """Strippar HTML → ren text (artikel-innehåll) via bs4."""
+    try:
+        from bs4 import BeautifulSoup
+        soup = BeautifulSoup(html, "lxml")
+        for tag in soup(["script", "style", "nav", "footer", "header", "noscript", "svg"]):
+            tag.decompose()
+        # Föredra <main> eller <article> om finns
+        main = soup.find("main") or soup.find("article") or soup.body or soup
+        text = main.get_text("\n", strip=True)
+        # Komprimera tomma rader
+        import re as _re
+        text = _re.sub(r"\n{3,}", "\n\n", text)
+        return text[:max_chars]
+    except Exception as e:
+        print(f"[stockanalysis] html→text fel: {e}", file=sys.stderr)
+        # Fallback: enkel regex-strip
+        import re as _re
+        t = _re.sub(r"<(script|style)[^>]*>.*?</\1>", "", html, flags=_re.DOTALL | _re.I)
+        t = _re.sub(r"<[^>]+>", " ", t)
+        return _re.sub(r"\s+", " ", t)[:max_chars]
+
+
+def _structure_bullets_with_claude(text, date_str):
+    """Strukturerar market-bullets-text → JSON via Claude Sonnet."""
+    import json as _json
+    if not CLAUDE_API_KEY:
+        return None, 0.0
+    prompt = f"""Nedan är råtext från Stock Analysis "Market Bullets" för {date_str}.
+Strukturera den till JSON. Returnera EXAKT ett JSON-block mellan markörerna.
+
+---BULLETS-JSON-START---
+{{
+  "summary": "1 mening: dagens viktigaste tema",
+  "market_overview": {{"sp500_pct": 0.13, "nasdaq_pct": 0.03, "dow_pct": 0.45}},
+  "sections": [
+    {{"title": "Stock & Market News", "items": [
+      {{"ticker": "GME", "company": "GameStop", "text": "Kort sammanfattning av nyheten med siffror.", "source": "WSJ"}}
+    ]}},
+    {{"title": "Legal & Regulatory", "items": [...]}},
+    {{"title": "Economic News", "items": [...]}},
+    {{"title": "Politics & World", "items": [...]}}
+  ],
+  "earnings_recent": [
+    {{"ticker": "PANW", "company": "Palo Alto Networks", "revenue": "$3.00B", "revenue_yoy": 31.15, "eps": "$0.85", "eps_yoy": 6.25}}
+  ],
+  "earnings_upcoming": [
+    {{"ticker": "AVGO", "company": "Broadcom", "est_revenue": "$22.10B", "est_revenue_yoy": 47.30, "est_eps": "$2.32", "est_eps_yoy": 46.84}}
+  ]
+}}
+---BULLETS-JSON-END---
+
+REGLER:
+- Behåll ALLA nyheter och bolag som nämns (förlora ingen ticker).
+- ticker = börssymbol (utländska behåller prefix om angivet, t.ex. "VIE:AKZO").
+- Behåll source-attribut (CNBC, WSJ, Reuters etc).
+- text: kondensera till 1-2 meningar, behåll siffror + kursrörelser.
+- Gruppera politik/world/us-politics i "Politics & World".
+- Sätt null för saknade fält. Översätt INTE — behåll engelska.
+- Om en sektion saknas, utelämna den. Inga påhittade siffror.
+
+RÅTEXT:
+{text}"""
+    headers = {"x-api-key": CLAUDE_API_KEY, "anthropic-version": "2023-06-01",
+               "content-type": "application/json"}
+    try:
+        import httpx
+        with httpx.Client(timeout=90.0) as client:
+            r = client.post("https://api.anthropic.com/v1/messages", headers=headers,
+                            json={"model": "claude-sonnet-4-20250514", "max_tokens": 4000,
+                                  "messages": [{"role": "user", "content": prompt}]})
+        if r.status_code != 200:
+            print(f"[bullets] Claude HTTP {r.status_code}", file=sys.stderr)
+            return None, 0.0
+        resp = r.json()
+    except Exception as e:
+        print(f"[bullets] Claude fel: {e}", file=sys.stderr)
+        return None, 0.0
+    try:
+        cost = _calc_sonnet_cost(resp.get("usage", {}))
+    except Exception:
+        cost = 0.0
+    full = "".join(b.get("text", "") for b in resp.get("content", []) if b.get("type") == "text")
+    import re as _re
+    m = _re.search(r"---BULLETS-JSON-START---\s*(.*?)\s*---BULLETS-JSON-END---", full, _re.DOTALL)
+    if not m:
+        return None, cost
+    js = _re.sub(r"^```(?:json)?\s*|\s*```$", "", m.group(1).strip())
+    try:
+        return _json.loads(js), cost
+    except Exception as e:
+        print(f"[bullets] JSON parse fel: {e}", file=sys.stderr)
+        return None, cost
+
+
+def _collect_bullet_tickers(db, parsed):
+    """Plocka alla tickers ur strukturerade bullets + cross-ref DB."""
+    from edge_db import _ph, _fetchone
+    ph = _ph()
+    tickers = set()
+    for sec in (parsed.get("sections") or []):
+        for it in (sec.get("items") or []):
+            tk = (it.get("ticker") or "").strip()
+            if tk:
+                tickers.add(tk)
+    for key in ("earnings_recent", "earnings_upcoming"):
+        for e in (parsed.get(key) or []):
+            tk = (e.get("ticker") or "").strip()
+            if tk:
+                tickers.add(tk)
+    out = []
+    for tk in sorted(tickers):
+        in_db = False
+        # Rensa exchange-prefix (VIE:AKZO → AKZO) för DB-matchning
+        bare = tk.split(":")[-1].strip().upper()
+        try:
+            row = _fetchone(db,
+                f"SELECT short_name FROM stocks WHERE UPPER(short_name)={ph} "
+                f"OR UPPER(ticker)={ph} LIMIT 1", (bare, bare))
+            in_db = bool(row)
+        except Exception:
+            pass
+        out.append({"ticker": tk, "in_db": in_db})
+    return out
+
+
+def _sync_market_bullet(db, date_str, force=False):
+    """Hämtar + strukturerar + sparar EN dags market-bullets."""
+    from edge_db import _ph, _fetchone, _upsert_sql
+    import json as _json
+    ph = _ph()
+    if not force:
+        try:
+            existing = _fetchone(db,
+                f"SELECT bullet_date FROM market_bullets WHERE bullet_date={ph}", (date_str,))
+            if existing:
+                return {"date": date_str, "status": "exists"}
+        except Exception:
+            pass
+    url = f"https://stockanalysis.com/market-bullets/{date_str}/"
+    html, code = _fetch_stockanalysis_html(url)
+    if code == 404:
+        return {"date": date_str, "status": "no_publication"}  # helg/helgdag
+    if not html:
+        return {"date": date_str, "status": "fetch_failed", "code": code}
+    text = _html_to_clean_text(html)
+    if not text or len(text) < 200:
+        return {"date": date_str, "status": "empty"}
+    parsed, cost = _structure_bullets_with_claude(text, date_str)
+    if not parsed:
+        return {"date": date_str, "status": "parse_failed"}
+    tickers = _collect_bullet_tickers(db, parsed)
+    cols = ["bullet_date", "market_overview", "sections_json",
+            "earnings_recent_json", "earnings_upcoming_json", "tickers_json",
+            "summary", "source_url"]
+    sql = _upsert_sql("market_bullets", cols, ["bullet_date"])
+    try:
+        db.execute(sql, (
+            date_str,
+            _json.dumps(parsed.get("market_overview") or {}, default=str),
+            _json.dumps(parsed.get("sections") or [], ensure_ascii=False, default=str),
+            _json.dumps(parsed.get("earnings_recent") or [], ensure_ascii=False, default=str),
+            _json.dumps(parsed.get("earnings_upcoming") or [], ensure_ascii=False, default=str),
+            _json.dumps(tickers, ensure_ascii=False, default=str),
+            parsed.get("summary"),
+            url))
+        db.commit()
+    except Exception as e:
+        print(f"[bullets] spara fel {date_str}: {e}", file=sys.stderr)
+        try: db.rollback()
+        except Exception: pass
+        return {"date": date_str, "status": "db_error", "error": str(e)}
+    return {"date": date_str, "status": "synced", "tickers": len(tickers), "cost": cost}
+
+
+def _backfill_market_bullets(db, days=180):
+    """Bakgrunds-backfill: hämtar senaste N dagars market-bullets."""
+    from datetime import datetime, timedelta
+    _BULLETS_STATE["running"] = True
+    synced = exists = skipped = failed = 0
+    total_cost = 0.0
+    try:
+        # Iterera bakåt från igår (idag kanske inte publicerad än)
+        base = datetime.utcnow().date()
+        for d in range(1, days + 1):
+            date_str = (base - timedelta(days=d)).isoformat()
+            try:
+                res = _sync_market_bullet(db, date_str)
+                st = res.get("status")
+                if st == "synced":
+                    synced += 1; total_cost += res.get("cost", 0) or 0
+                elif st == "exists":
+                    exists += 1
+                elif st == "no_publication":
+                    skipped += 1
+                else:
+                    failed += 1
+                _BULLETS_STATE["last_result"] = {
+                    "synced": synced, "exists": exists, "skipped": skipped,
+                    "failed": failed, "cost_usd": round(total_cost, 3),
+                    "last_date": date_str, "progress": f"{d}/{days}"}
+            except Exception as e:
+                failed += 1
+                print(f"[bullets backfill] {date_str}: {e}", file=sys.stderr)
+            import time as _t
+            _t.sleep(0.4)  # snäll mot stockanalysis.com
+    finally:
+        _BULLETS_STATE["running"] = False
+        print(f"[bullets backfill] klar: {_BULLETS_STATE.get('last_result')}", file=sys.stderr)
+    return _BULLETS_STATE["last_result"]
+
+
+def _fetch_trending_stocks():
+    """Hämtar top-20 trending från stockanalysis.com/trending/ via bs4."""
+    html, code = _fetch_stockanalysis_html("https://stockanalysis.com/trending/")
+    if not html:
+        return None
+    try:
+        from bs4 import BeautifulSoup
+        soup = BeautifulSoup(html, "lxml")
+        table = soup.find("table")
+        if not table:
+            return None
+        rows = table.find_all("tr")
+        out = []
+        for tr in rows:
+            cells = tr.find_all(["td"])
+            if len(cells) < 4:
+                continue
+            # Droppa tomma celler (logos/checkboxar) som annars förskjuter index
+            vals = [c.get_text(strip=True) for c in cells]
+            vals = [v for v in vals if v != ""]
+            if len(vals) < 4:
+                continue
+            # Förväntad ordning: No., Symbol, Company, Views, Market Cap, % Change, Volume
+            try:
+                rank = int(vals[0].replace(".", "").strip())
+            except Exception:
+                continue
+            ticker = vals[1].strip().upper()
+            # Sanity: ticker ska se ut som en symbol (inte ett tal/procent)
+            if not ticker or len(ticker) > 8 or "%" in ticker or ticker.replace(".", "").isdigit():
+                continue
+            company = vals[2] if len(vals) > 2 else ""
+            def _num(s):
+                try: return int(s.replace(",", "").replace(" ", ""))
+                except Exception: return None
+            def _pct(s):
+                try: return float(s.replace("%", "").replace("+", "").replace(",", "").strip())
+                except Exception: return None
+            views = _num(vals[3]) if len(vals) > 3 else None
+            mcap = vals[4] if len(vals) > 4 else None
+            chg = _pct(vals[5]) if len(vals) > 5 else None
+            vol = vals[6] if len(vals) > 6 else None
+            out.append({"rank": rank, "ticker": ticker, "company": company,
+                        "views": views, "market_cap": mcap, "change_pct": chg,
+                        "volume": vol})
+            if len(out) >= 20:
+                break
+        return out
+    except Exception as e:
+        print(f"[trending] parse fel: {e}", file=sys.stderr)
+        return None
+
+
+def _sync_trending(db):
+    """Hämtar trending top-20, diffar mot gårdagens snapshot (ny-flagga), sparar."""
+    from edge_db import _ph, _fetchone, _fetchall, _upsert_sql
+    from datetime import datetime
+    items = _fetch_trending_stocks()
+    if not items:
+        return {"status": "fetch_failed"}
+    ph = _ph()
+    today = datetime.utcnow().date().isoformat()
+
+    # Gårdagens (senaste tidigare) snapshot för ny-entrant-diff
+    prev_tickers = set()
+    try:
+        prev = _fetchall(db,
+            f"SELECT DISTINCT ticker FROM trending_snapshots "
+            f"WHERE snapshot_date = (SELECT MAX(snapshot_date) FROM trending_snapshots "
+            f"WHERE snapshot_date < {ph})", (today,))
+        prev_tickers = {dict(r)["ticker"] for r in prev} if prev else set()
+    except Exception:
+        pass
+
+    cols = ["snapshot_date", "rank", "ticker", "company", "views", "market_cap",
+            "change_pct", "volume", "is_new", "in_db"]
+    sql = _upsert_sql("trending_snapshots", cols, ["snapshot_date", "ticker"])
+    n_new = 0
+    for it in items:
+        tk = it["ticker"]
+        is_new = bool(prev_tickers) and tk not in prev_tickers
+        if is_new:
+            n_new += 1
+        # cross-ref DB
+        in_db = False
+        bare = tk.split(":")[-1].strip().upper()
+        try:
+            row = _fetchone(db,
+                f"SELECT short_name FROM stocks WHERE UPPER(short_name)={ph} "
+                f"OR UPPER(ticker)={ph} LIMIT 1", (bare, bare))
+            in_db = bool(row)
+        except Exception:
+            pass
+        try:
+            db.execute(sql, (today, it["rank"], tk, it.get("company"),
+                             it.get("views"), it.get("market_cap"),
+                             it.get("change_pct"), it.get("volume"),
+                             is_new, in_db))
+        except Exception as e:
+            print(f"[trending] insert {tk}: {e}", file=sys.stderr)
+            try: db.rollback()
+            except Exception: pass
+    db.commit()
+    res = {"status": "synced", "count": len(items), "new_entrants": n_new,
+           "date": today, "had_baseline": bool(prev_tickers)}
+    _TRENDING_STATE["last_result"] = res
+    return res
+
+
 def _generate_market_recap(top_movers_us, top_movers_se, owner_movers, external_signals):
     """Stock Analysis-stil "Market Recap" — konkreta dagens händelser med tickers + %."""
     import json as _json
@@ -10837,6 +11190,63 @@ def _build_agent_context(db, max_per_list=20):
     except Exception as e:
         print(f"[agent ctx] news error: {e}", file=sys.stderr)
 
+    # ── NYTT: SENASTE MARKET BULLETS (stockanalysis.com — news/politik/earnings) ──
+    try:
+        from edge_db import _fetchone
+        import json as _json3
+        row = _fetchone(db,
+            "SELECT bullet_date, summary, sections_json, earnings_recent_json, "
+            "earnings_upcoming_json FROM market_bullets ORDER BY bullet_date DESC LIMIT 1")
+        if row:
+            rd = dict(row)
+            bl = [f"  Datum: {rd.get('bullet_date')} — {rd.get('summary','')}"]
+            secs = rd.get("sections_json")
+            if isinstance(secs, str):
+                try: secs = _json3.loads(secs)
+                except Exception: secs = []
+            for sec in (secs or [])[:4]:
+                items = sec.get("items") or []
+                if not items: continue
+                bl.append(f"  [{sec.get('title','')}]:")
+                for it in items[:6]:
+                    bl.append(f"    • {it.get('ticker','')}: {it.get('text','')[:160]} ({it.get('source','')})")
+            er = rd.get("earnings_recent_json")
+            if isinstance(er, str):
+                try: er = _json3.loads(er)
+                except Exception: er = []
+            if er:
+                bl.append("  [Senaste rapporter]:")
+                for e in (er or [])[:6]:
+                    bl.append(f"    • {e.get('ticker','')}: rev {e.get('revenue','?')} "
+                              f"({e.get('revenue_yoy','?')}% YoY), EPS {e.get('eps','?')} "
+                              f"({e.get('eps_yoy','?')}% YoY)")
+            if len(bl) > 1:
+                parts.append("🗞️ MARKET BULLETS (stockanalysis.com — referera vid bolags-"
+                             "frågor, makro & politik):\n" + "\n".join(bl))
+    except Exception as e:
+        print(f"[agent ctx] bullets error: {e}", file=sys.stderr)
+
+    # ── NYTT: TRENDING (stockanalysis.com top-views + nya entranter) ──
+    try:
+        from edge_db import _fetchall
+        rows = _fetchall(db,
+            "SELECT ticker, company, views, change_pct, is_new, rank "
+            "FROM trending_snapshots WHERE snapshot_date = "
+            "(SELECT MAX(snapshot_date) FROM trending_snapshots) ORDER BY rank LIMIT 20")
+        if rows:
+            tl = []
+            for r in rows:
+                rd = dict(r)
+                new_tag = " 🆕NY" if rd.get("is_new") else ""
+                ch = rd.get("change_pct")
+                ch_str = f" {ch:+.1f}%" if isinstance(ch, (int, float)) else ""
+                tl.append(f"  #{rd.get('rank')} {rd.get('ticker')}{ch_str}{new_tag} "
+                          f"({rd.get('views','?')} views)")
+            parts.append("🔥 TRENDING NU (mest sedda på stockanalysis.com — 🆕NY = "
+                         "nyss inhoppad, ofta tidig signal):\n" + "\n".join(tl))
+    except Exception as e:
+        print(f"[agent ctx] trending error: {e}", file=sys.stderr)
+
     return "\n\n".join(parts)
 
 
@@ -12056,6 +12466,162 @@ def api_market_news_refresh():
                     "note": "Genererar nyheter i bakgrunden (~15-30s)"}), 202
 
 
+# ── Market Bullets (stockanalysis.com dagligt digest) ──────────
+
+@app.route("/api/market-bullets")
+def api_market_bullets():
+    """Senaste market-bullets (eller ?date=YYYY-MM-DD)."""
+    from edge_db import _fetchone, _ph
+    import json as _json
+    db = get_db()
+    ph = _ph()
+    date_q = request.args.get("date")
+    try:
+        if date_q:
+            row = _fetchone(db, f"SELECT * FROM market_bullets WHERE bullet_date={ph}", (date_q,))
+        else:
+            row = _fetchone(db, "SELECT * FROM market_bullets ORDER BY bullet_date DESC LIMIT 1")
+        if not row:
+            return jsonify({"found": False, "note": "Inga bullets ännu — kör sync/backfill."})
+        rd = dict(row)
+        def _j(v):
+            if v is None: return None
+            if isinstance(v, str):
+                try: return _json.loads(v)
+                except Exception: return None
+            return v
+        return jsonify({
+            "found": True,
+            "bullet_date": str(rd.get("bullet_date")),
+            "summary": rd.get("summary"),
+            "market_overview": _j(rd.get("market_overview")),
+            "sections": _j(rd.get("sections_json")) or [],
+            "earnings_recent": _j(rd.get("earnings_recent_json")) or [],
+            "earnings_upcoming": _j(rd.get("earnings_upcoming_json")) or [],
+            "tickers": _j(rd.get("tickers_json")) or [],
+            "source_url": rd.get("source_url"),
+        })
+    except Exception as e:
+        import traceback; traceback.print_exc()
+        return jsonify({"found": False, "error": str(e)}), 200
+
+
+@app.route("/api/market-bullets/dates")
+def api_market_bullets_dates():
+    """Lista tillgängliga bullet-datum (för arkiv-navigering)."""
+    from edge_db import _fetchall
+    db = get_db()
+    try:
+        rows = _fetchall(db, "SELECT bullet_date, summary FROM market_bullets "
+                             "ORDER BY bullet_date DESC LIMIT 200")
+        return jsonify({"dates": [{"date": str(dict(r)["bullet_date"]),
+                                    "summary": dict(r).get("summary")} for r in rows]
+                        if rows else []})
+    except Exception as e:
+        return jsonify({"dates": [], "error": str(e)}), 200
+
+
+@app.route("/api/market-bullets/sync", methods=["POST"])
+def api_market_bullets_sync():
+    """Hämtar dagens (eller ?date=) market-bullets i bakgrunden."""
+    date_q = request.args.get("date")
+    from datetime import datetime, timedelta
+    target = date_q or (datetime.utcnow().date() - timedelta(days=0)).isoformat()
+
+    def _run():
+        try:
+            db = get_db()
+            res = _sync_market_bullet(db, target, force=True)
+            _BULLETS_STATE["last_result"] = res
+            print(f"[bullets sync] {res}", file=sys.stderr)
+        except Exception as e:
+            print(f"[bullets sync] {e}", file=sys.stderr)
+
+    threading.Thread(target=_run, daemon=True).start()
+    return jsonify({"status": "started", "date": target}), 202
+
+
+@app.route("/api/market-bullets/backfill", methods=["POST"])
+def api_market_bullets_backfill():
+    """Backfill senaste N dagars market-bullets (default 180). Bakgrundsjobb."""
+    if _BULLETS_STATE.get("running"):
+        return jsonify({"status": "already running",
+                        "progress": _BULLETS_STATE.get("last_result")}), 409
+    days = request.args.get("days", default=180, type=int)
+    days = max(1, min(days, 400))
+
+    def _run():
+        try:
+            db = get_db()
+            _backfill_market_bullets(db, days=days)
+        except Exception as e:
+            print(f"[bullets backfill] {e}", file=sys.stderr)
+            _BULLETS_STATE["running"] = False
+
+    threading.Thread(target=_run, daemon=True).start()
+    return jsonify({"status": "started", "days": days,
+                    "note": f"Backfill av {days} dagar i bakgrunden. "
+                            f"Följ /api/market-bullets/status"}), 202
+
+
+@app.route("/api/market-bullets/status")
+def api_market_bullets_status():
+    from edge_db import _fetchone
+    db = get_db()
+    try:
+        cnt = _fetchone(db, "SELECT COUNT(*) AS n, MIN(bullet_date) AS oldest, "
+                           "MAX(bullet_date) AS newest FROM market_bullets")
+        cd = dict(cnt) if cnt else {}
+    except Exception:
+        cd = {}
+    return jsonify({
+        "running": _BULLETS_STATE.get("running", False),
+        "last_result": _BULLETS_STATE.get("last_result"),
+        "total_days": cd.get("n", 0),
+        "oldest": str(cd.get("oldest")) if cd.get("oldest") else None,
+        "newest": str(cd.get("newest")) if cd.get("newest") else None,
+    })
+
+
+# ── Trending (stockanalysis.com/trending) ──────────────────────
+
+@app.route("/api/trending")
+def api_trending():
+    """Senaste trending-snapshot (top-20 by pageviews)."""
+    from edge_db import _fetchall, _fetchone
+    db = get_db()
+    try:
+        latest = _fetchone(db, "SELECT MAX(snapshot_date) AS d FROM trending_snapshots")
+        if not latest or not dict(latest).get("d"):
+            return jsonify({"found": False, "stocks": [], "note": "Ingen trending-data ännu."})
+        d = dict(latest)["d"]
+        from edge_db import _ph
+        ph = _ph()
+        rows = _fetchall(db,
+            f"SELECT rank, ticker, company, views, market_cap, change_pct, volume, "
+            f"is_new, in_db FROM trending_snapshots WHERE snapshot_date={ph} "
+            f"ORDER BY rank", (d,))
+        stocks = [dict(r) for r in rows] if rows else []
+        n_new = sum(1 for s in stocks if s.get("is_new"))
+        return jsonify({"found": True, "date": str(d), "stocks": stocks,
+                        "count": len(stocks), "new_entrants": n_new})
+    except Exception as e:
+        import traceback; traceback.print_exc()
+        return jsonify({"found": False, "stocks": [], "error": str(e)}), 200
+
+
+@app.route("/api/trending/sync", methods=["POST"])
+def api_trending_sync():
+    """Hämtar trending top-20 nu (synkront — snabbt, ~1 anrop)."""
+    db = get_db()
+    try:
+        res = _sync_trending(db)
+        return jsonify(res)
+    except Exception as e:
+        import traceback; traceback.print_exc()
+        return jsonify({"status": "error", "error": str(e)}), 200
+
+
 @app.route("/api/report-calendar/upcoming")
 def api_report_calendar_upcoming():
     """Kommande rapporter inom N dagar (default 14). För mail-digest + dashboard."""
@@ -12345,7 +12911,32 @@ def _price_update_loop():
                 print(f"[report-cal] daglig auto-sync: {res}", file=sys.stderr)
         except Exception as e:
             print(f"[report-cal loop] {e}", file=sys.stderr)
+        # Daglig trending-sync (var ~6h — trending ändras under dagen)
+        try:
+            if time.time() - _LAST_TRENDING_SYNC[0] > 21600:
+                db = get_db()
+                res = _sync_trending(db)
+                _LAST_TRENDING_SYNC[0] = time.time()
+                print(f"[trending] auto-sync: {res}", file=sys.stderr)
+        except Exception as e:
+            print(f"[trending loop] {e}", file=sys.stderr)
+        # Daglig market-bullets-sync (24h — hämtar igår + idag)
+        try:
+            if time.time() - _LAST_BULLETS_SYNC[0] > 86400:
+                from datetime import timedelta as _td
+                db = get_db()
+                base = datetime.utcnow().date()
+                for _dd in (1, 0):  # igår + idag
+                    _sync_market_bullet(db, (base - _td(days=_dd)).isoformat())
+                _LAST_BULLETS_SYNC[0] = time.time()
+                print(f"[bullets] daglig auto-sync klar", file=sys.stderr)
+        except Exception as e:
+            print(f"[bullets loop] {e}", file=sys.stderr)
         time.sleep(PRICE_UPDATE_INTERVAL_SEC)
+
+
+_LAST_TRENDING_SYNC = [0.0]
+_LAST_BULLETS_SYNC = [0.0]
 
 
 @app.route("/api/price-cache/update", methods=["POST"])

@@ -601,6 +601,40 @@ def _create_tables(db):
             );
             CREATE INDEX IF NOT EXISTS idx_market_news_gen
                 ON market_news(generated_at DESC);
+
+            -- v3.4: Market Bullets (stockanalysis.com dagligt digest, per datum)
+            -- En rad per dag. Strukturerade sektioner + earnings som JSON.
+            CREATE TABLE IF NOT EXISTS market_bullets (
+                bullet_date DATE PRIMARY KEY,
+                market_overview JSONB,        -- {sp500, nasdaq, dow: {pct, pre_pct}}
+                sections_json JSONB,          -- [{title, items:[{ticker, company, text, source}]}]
+                earnings_recent_json JSONB,   -- [{ticker, company, revenue, revenue_yoy, eps, eps_yoy}]
+                earnings_upcoming_json JSONB, -- [{ticker, company, est_revenue, ...}]
+                tickers_json JSONB,           -- [{ticker, in_db}] alla nämnda tickers
+                summary TEXT,                 -- 1-rads sammanfattning av dagen
+                source_url TEXT,
+                fetched_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+            CREATE INDEX IF NOT EXISTS idx_market_bullets_date
+                ON market_bullets(bullet_date DESC);
+
+            -- v3.4: Trending stocks (stockanalysis.com/trending, daglig top-20)
+            CREATE TABLE IF NOT EXISTS trending_snapshots (
+                snapshot_date DATE NOT NULL,
+                rank INTEGER,
+                ticker TEXT NOT NULL,
+                company TEXT,
+                views INTEGER,
+                market_cap TEXT,
+                change_pct NUMERIC(8,2),
+                volume TEXT,
+                is_new BOOLEAN DEFAULT FALSE,  -- ny i top-20 vs gårdagen
+                in_db BOOLEAN DEFAULT FALSE,
+                fetched_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (snapshot_date, ticker)
+            );
+            CREATE INDEX IF NOT EXISTS idx_trending_date
+                ON trending_snapshots(snapshot_date DESC, rank);
             -- OBS: idx_batch_edge_action + idx_batch_stop_thesis hanteras i
             -- _ensure_batch_analyses_columns eftersom kolumnerna inte finns i
             -- ursprungliga CREATE TABLE. Att lägga dem här aborterar hela
@@ -1145,6 +1179,39 @@ def _create_tables(db):
             );
             CREATE INDEX IF NOT EXISTS idx_market_news_gen
                 ON market_news(generated_at DESC);
+
+            -- v3.4: Market Bullets (SQLite)
+            CREATE TABLE IF NOT EXISTS market_bullets (
+                bullet_date TEXT PRIMARY KEY,
+                market_overview TEXT,
+                sections_json TEXT,
+                earnings_recent_json TEXT,
+                earnings_upcoming_json TEXT,
+                tickers_json TEXT,
+                summary TEXT,
+                source_url TEXT,
+                fetched_at TEXT DEFAULT CURRENT_TIMESTAMP
+            );
+            CREATE INDEX IF NOT EXISTS idx_market_bullets_date
+                ON market_bullets(bullet_date DESC);
+
+            -- v3.4: Trending stocks (SQLite)
+            CREATE TABLE IF NOT EXISTS trending_snapshots (
+                snapshot_date TEXT NOT NULL,
+                rank INTEGER,
+                ticker TEXT NOT NULL,
+                company TEXT,
+                views INTEGER,
+                market_cap TEXT,
+                change_pct REAL,
+                volume TEXT,
+                is_new INTEGER DEFAULT 0,
+                in_db INTEGER DEFAULT 0,
+                fetched_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (snapshot_date, ticker)
+            );
+            CREATE INDEX IF NOT EXISTS idx_trending_date
+                ON trending_snapshots(snapshot_date DESC, rank);
 
             -- Live screen-tracker (SQLite): snapshot för 12m-uppföljning
             CREATE TABLE IF NOT EXISTS screen_snapshots (

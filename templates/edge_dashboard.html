@@ -258,6 +258,44 @@
         .dash-more[open] > summary::before { transform: rotate(90deg); }
         .dash-more[open] > summary { color: #1e40af; border-bottom: 1px solid #e5e7eb; margin-bottom: 18px; }
         .dash-more-inner { display: flex; flex-direction: column; gap: 28px; }
+
+        /* v3.4 — Market overview strip + bullets sections */
+        .mkt-strip { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }
+        .mkt-pill { background: #f8fafc; border: 1px solid #eef0f2; border-radius: 9px; padding: 8px 14px;
+            display: flex; flex-direction: column; gap: 1px; min-width: 96px; }
+        .mkt-pill .mkt-name { font-size: 10px; color: #6b7280; font-weight: 600; text-transform: uppercase; letter-spacing: 0.4px; }
+        .mkt-pill .mkt-val { font-size: 15px; font-weight: 800; font-variant-numeric: tabular-nums; }
+        .bullet-sec { margin-bottom: 14px; }
+        .bullet-sec-title { font-size: 11.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;
+            color: #475569; margin-bottom: 8px; padding-bottom: 4px; border-bottom: 1px solid #eef0f2; }
+        .bullet-item { display: flex; gap: 9px; padding: 7px 0; border-bottom: 1px solid #f6f7f8; align-items: baseline; }
+        .bullet-item:last-child { border-bottom: 0; }
+        .bullet-tk { font-weight: 800; font-size: 12px; color: #0f172a; flex-shrink: 0; min-width: 52px; }
+        .bullet-tk.linked { color: #1e40af; cursor: pointer; }
+        .bullet-tk.linked:hover { text-decoration: underline; }
+        .bullet-txt { font-size: 12.5px; color: #374151; line-height: 1.5; }
+        .bullet-txt .src { color: #9ca3af; font-size: 11px; }
+        .earn-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 8px; }
+        .earn-card { background: #f8fafc; border-radius: 8px; padding: 9px 12px; font-size: 11.5px; }
+        .earn-card .et { font-weight: 800; color: #0f172a; font-size: 12.5px; }
+        .earn-card .em { color: #6b7280; margin-top: 3px; }
+        .yoy-pos { color: #059669; font-weight: 700; }
+        .yoy-neg { color: #dc2626; font-weight: 700; }
+
+        /* v3.4 — Trending */
+        .trend-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }
+        .trend-card { background: var(--white); border: 1px solid #eef0f2; border-radius: 10px; padding: 10px 12px;
+            cursor: pointer; transition: all 0.15s; position: relative; }
+        .trend-card:hover { box-shadow: 0 3px 10px rgba(0,0,0,0.06); transform: translateY(-1px); }
+        .trend-card.is-new { border-color: #fbbf24; background: linear-gradient(135deg, #fffbeb, #fff); }
+        .trend-rank { font-size: 10px; color: #9ca3af; font-weight: 700; }
+        .trend-tk { font-size: 15px; font-weight: 800; color: #0f172a; }
+        .trend-tk.linked { color: #1e40af; }
+        .trend-co { font-size: 10.5px; color: #9ca3af; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .trend-meta { display: flex; justify-content: space-between; align-items: center; margin-top: 5px; font-size: 11px; }
+        .trend-views { color: #6b7280; }
+        .new-badge { position: absolute; top: 8px; right: 8px; background: #f59e0b; color: #fff; font-size: 9px;
+            font-weight: 800; padding: 2px 6px; border-radius: 6px; letter-spacing: 0.5px; }
         .dash-heading { font-size: 14px; font-weight: 600; color: var(--text); text-transform: uppercase; letter-spacing: 0.08em; margin: 0 0 14px; }
         .dash-heading .dash-sub { font-weight: 400; text-transform: none; letter-spacing: 0; color: var(--text-muted); font-size: 12px; margin-left: 8px; }
         .dash-top-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
@@ -7680,16 +7718,33 @@ async function renderDashboard() {
                 <div class="brief-chips" id="briefChips"></div>
             </div>
 
-            <!-- v3.3 ② MARKNADSNYHETER -->
+            <!-- v3.4 ② MARKNADSNYHETER (Market Bullets från stockanalysis.com) -->
             <div class="dash-section" id="marketNewsWrap">
                 <h3 class="dash-heading" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-                    📰 Marknadsnyheter
-                    <span class="dash-sub">dagsfärskt · USA + Norden · AI-sammanställt</span>
-                    <button id="newsRefreshBtn" onclick="refreshMarketNews()" title="Uppdatera nyheter"
-                        style="margin-left:auto;background:white;border:1px solid var(--border);padding:6px 12px;border-radius:8px;font-size:12px;cursor:pointer;font-family:inherit;font-weight:600">🔄 Uppdatera</button>
+                    📰 Market Bullets
+                    <span class="dash-sub" id="bulletsDateSub">nyheter · politik · rapporter</span>
+                    <span style="margin-left:auto;display:flex;gap:6px">
+                        <select id="bulletsDateSelect" onchange="loadBulletDate(this.value)"
+                            style="background:white;border:1px solid var(--border);padding:6px 10px;border-radius:8px;font-size:12px;font-family:inherit;cursor:pointer"></select>
+                        <button id="newsRefreshBtn" onclick="refreshBullets()" title="Hämta senaste"
+                            style="background:white;border:1px solid var(--border);padding:6px 12px;border-radius:8px;font-size:12px;cursor:pointer;font-family:inherit;font-weight:600">🔄</button>
+                    </span>
                 </h3>
                 <div id="marketNewsContent" style="margin-top:6px">
-                    <div class="loading-wrap" style="padding:18px">Hämtar dagens nyheter…</div>
+                    <div class="loading-wrap" style="padding:18px">Hämtar dagens bullets…</div>
+                </div>
+            </div>
+
+            <!-- v3.4 ②b TRENDING (top-20 by views, stockanalysis.com) -->
+            <div class="dash-section" id="trendingWrap">
+                <h3 class="dash-heading" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+                    🔥 Trending nu
+                    <span class="dash-sub">mest sedda aktier · 🆕 = nyss inhoppad (tidig signal)</span>
+                    <button onclick="syncTrending()" title="Uppdatera trending"
+                        style="margin-left:auto;background:white;border:1px solid var(--border);padding:6px 12px;border-radius:8px;font-size:12px;cursor:pointer;font-family:inherit;font-weight:600">🔄</button>
+                </h3>
+                <div id="trendingContent" style="margin-top:6px">
+                    <div class="loading-wrap" style="padding:18px">Hämtar trending…</div>
                 </div>
             </div>
 
@@ -7806,7 +7861,9 @@ async function renderDashboard() {
     loadHeroKpiRow();
     loadSuperConfluenceCards();
     loadReportsToday();
-    loadMarketNews();
+    loadBullets();
+    loadBulletDates();
+    loadTrending();
     loadDailyBrief();
 }
 
@@ -7882,84 +7939,194 @@ async function loadDailyBrief() {
     _maybeRenderBrief();
 }
 
-// ── v3.3 Marknadsnyheter
-function _newsChg(v) {
-    if (v == null) return '';
-    const c = v >= 0 ? '#059669' : '#dc2626';
-    return `<span class="news-chg" style="color:${c}">${v >= 0 ? '+' : ''}${Number(v).toFixed(1)}%</span>`;
+// ── v3.4 Market Bullets (riktig data från stockanalysis.com)
+function _bulletTicker(tk, inDb) {
+    if (!tk) return '<span class="bullet-tk"></span>';
+    const bare = String(tk).split(':').pop();
+    return inDb
+        ? `<span class="bullet-tk linked" onclick="window.location.href='/?q=${encodeURIComponent(bare)}'">${escapeHtml(tk)}</span>`
+        : `<span class="bullet-tk">${escapeHtml(tk)}</span>`;
 }
-async function loadMarketNews() {
+function _ovPct(v) {
+    if (v == null) return '<span style="color:#9ca3af">–</span>';
+    const c = v >= 0 ? '#059669' : '#dc2626';
+    return `<span style="color:${c}">${v >= 0 ? '+' : ''}${Number(v).toFixed(2)}%</span>`;
+}
+function _yoy(v) {
+    if (v == null) return '';
+    const cls = v >= 0 ? 'yoy-pos' : 'yoy-neg';
+    return `<span class="${cls}">${v >= 0 ? '+' : ''}${Number(v).toFixed(1)}%</span>`;
+}
+
+async function loadBullets(date) {
     const el = document.getElementById('marketNewsContent');
     if (!el) return;
     try {
-        const r = await fetch('/api/market-news');
+        const url = date ? `/api/market-bullets?date=${encodeURIComponent(date)}` : '/api/market-bullets';
+        const r = await fetch(url);
         const d = await r.json();
-        _briefData.newsRecap = d.market_recap || null;
-        _maybeRenderBrief();
-        const items = d.items || [];
-        if (!d.market_recap && items.length === 0) {
+        if (!d.found) {
             el.innerHTML = `<div style="padding:16px;text-align:center;color:#6b7280;background:#f8fafc;border-radius:10px;font-size:13px">
-                ${d.regenerating ? '⏳ Genererar dagens nyheter… ladda om strax.' : 'Inga nyheter laddade än. Klicka 🔄 Uppdatera för att hämta dagens digest.'}
+                Inga market bullets ännu. Klicka 🔄 för att hämta dagens, eller kör backfill för historik.
+                <div style="margin-top:8px"><button onclick="backfillBullets()" style="background:#1d4ed8;color:#fff;border:none;padding:7px 14px;border-radius:7px;cursor:pointer;font-size:12px;font-weight:600">⬇ Backfill 6 mån historik</button></div>
             </div>`;
             return;
         }
-        const recapHtml = d.market_recap
-            ? `<div class="news-recap">📈 ${escapeHtml(d.market_recap)}</div>` : '';
-        const cards = items.map(it => {
-            const cat = (it.category || 'other').toLowerCase();
-            const tk = it.ticker || '';
-            const linked = it.in_db && (it.db_short_name || tk);
-            const tickerHtml = linked
-                ? `<span class="news-ticker linked" onclick="window.location.href='/?q=${encodeURIComponent(it.db_short_name || tk)}'">${escapeHtml(tk)}</span>`
-                : `<span class="news-ticker">${escapeHtml(tk)}</span>`;
-            const src = it.source_url
-                ? `<a href="${escapeHtml(it.source_url)}" target="_blank" rel="noopener">${escapeHtml(it.source || 'Källa')}</a>`
-                : escapeHtml(it.source || '');
-            return `<div class="news-card">
-                <div class="news-card-head">
-                    ${tickerHtml}
-                    ${it.company ? `<span style="font-size:11px;color:#9ca3af">${escapeHtml(it.company)}</span>` : ''}
-                    ${_newsChg(it.change_pct)}
-                    <span class="news-cat ${cat}" style="margin-left:auto">${escapeHtml(cat)}</span>
-                </div>
-                <div class="news-headline">${escapeHtml(it.headline || '')}</div>
-                <div class="news-summary">${escapeHtml(it.summary || '')}</div>
-                <div class="news-source">${src}${it.in_db ? ' · 🔗 finns i din databas' : ''}</div>
+        // För daglig brief
+        _briefData.newsRecap = d.summary || null;
+        _maybeRenderBrief();
+        // Sub-rubrik med datum
+        const sub = document.getElementById('bulletsDateSub');
+        if (sub) sub.textContent = `${d.bullet_date} · nyheter · politik · rapporter`;
+
+        let html = '';
+        // Market overview strip
+        const ov = d.market_overview || {};
+        if (ov.sp500_pct != null || ov.nasdaq_pct != null || ov.dow_pct != null) {
+            html += `<div class="mkt-strip">
+                <div class="mkt-pill"><div class="mkt-name">S&P 500</div><div class="mkt-val">${_ovPct(ov.sp500_pct)}</div></div>
+                <div class="mkt-pill"><div class="mkt-name">Nasdaq</div><div class="mkt-val">${_ovPct(ov.nasdaq_pct)}</div></div>
+                <div class="mkt-pill"><div class="mkt-name">Dow</div><div class="mkt-val">${_ovPct(ov.dow_pct)}</div></div>
             </div>`;
-        }).join('');
-        el.innerHTML = recapHtml +
-            (cards ? `<div class="news-grid">${cards}</div>` : '') +
-            (d.generated_at ? `<div style="font-size:10.5px;color:#9ca3af;margin-top:10px">Uppdaterad ${new Date(d.generated_at + (d.generated_at.endsWith('Z')?'':'Z')).toLocaleString('sv-SE')} · AI-sammanställt via web-sökning</div>` : '');
+        }
+        if (d.summary) html += `<div class="news-recap">📈 ${escapeHtml(d.summary)}</div>`;
+
+        // Sektioner
+        for (const sec of (d.sections || [])) {
+            const items = sec.items || [];
+            if (!items.length) continue;
+            html += `<div class="bullet-sec"><div class="bullet-sec-title">${escapeHtml(sec.title || '')}</div>`;
+            for (const it of items) {
+                html += `<div class="bullet-item">
+                    ${_bulletTicker(it.ticker, it.in_db)}
+                    <div class="bullet-txt">${escapeHtml(it.text || '')} ${it.source ? `<span class="src">(${escapeHtml(it.source)})</span>` : ''}</div>
+                </div>`;
+            }
+            html += `</div>`;
+        }
+
+        // Earnings recent + upcoming
+        const er = d.earnings_recent || [], eu = d.earnings_upcoming || [];
+        if (er.length) {
+            html += `<div class="bullet-sec"><div class="bullet-sec-title">📊 Senaste rapporter</div><div class="earn-grid">`;
+            for (const e of er) {
+                html += `<div class="earn-card"><div class="et">${escapeHtml(e.ticker || '')}</div>
+                    <div class="em">Rev ${escapeHtml(e.revenue || '?')} ${_yoy(e.revenue_yoy)}<br>EPS ${escapeHtml(e.eps || '?')} ${_yoy(e.eps_yoy)}</div></div>`;
+            }
+            html += `</div></div>`;
+        }
+        if (eu.length) {
+            html += `<div class="bullet-sec"><div class="bullet-sec-title">🔜 Kommande rapporter</div><div class="earn-grid">`;
+            for (const e of eu) {
+                html += `<div class="earn-card"><div class="et">${escapeHtml(e.ticker || '')}</div>
+                    <div class="em">Est. rev ${escapeHtml(e.est_revenue || '?')} ${_yoy(e.est_revenue_yoy)}<br>Est. EPS ${escapeHtml(e.est_eps || '?')} ${_yoy(e.est_eps_yoy)}</div></div>`;
+            }
+            html += `</div></div>`;
+        }
+        if (d.source_url) {
+            html += `<div style="font-size:10.5px;color:#9ca3af;margin-top:8px">Källa: <a href="${escapeHtml(d.source_url)}" target="_blank" rel="noopener" style="color:#9ca3af">stockanalysis.com market bullets</a></div>`;
+        }
+        el.innerHTML = html || '<div style="padding:14px;color:#6b7280">Inget innehåll.</div>';
     } catch (e) {
-        el.innerHTML = `<div style="padding:14px;color:#dc2626;font-size:12px">Kunde ej ladda nyheter: ${e.message}</div>`;
+        el.innerHTML = `<div style="padding:14px;color:#dc2626;font-size:12px">Kunde ej ladda bullets: ${e.message}</div>`;
     }
 }
-async function refreshMarketNews() {
+
+async function loadBulletDates() {
+    const sel = document.getElementById('bulletsDateSelect');
+    if (!sel) return;
+    try {
+        const r = await fetch('/api/market-bullets/dates');
+        const d = await r.json();
+        const dates = d.dates || [];
+        if (!dates.length) { sel.innerHTML = '<option value="">— inga datum —</option>'; return; }
+        sel.innerHTML = dates.map((x, i) =>
+            `<option value="${x.date}">${x.date}${i === 0 ? ' (senaste)' : ''}</option>`).join('');
+    } catch (e) { sel.innerHTML = '<option value="">—</option>'; }
+}
+function loadBulletDate(date) { if (date) loadBullets(date); }
+
+async function refreshBullets() {
     const btn = document.getElementById('newsRefreshBtn');
     const el = document.getElementById('marketNewsContent');
-    if (btn) { btn.disabled = true; btn.textContent = '⏳ Genererar…'; }
-    if (el) el.innerHTML = '<div class="loading-wrap" style="padding:18px">🤖 Söker dagens nyheter via webben + sammanställer… (~20s)</div>';
+    if (btn) { btn.disabled = true; btn.textContent = '⏳'; }
+    if (el) el.innerHTML = '<div class="loading-wrap" style="padding:18px">📰 Hämtar dagens market bullets från stockanalysis.com…</div>';
     try {
-        await fetch('/api/market-news/refresh', { method: 'POST' });
-        // Polla tills ny digest finns (max ~40s)
+        await fetch('/api/market-bullets/sync', { method: 'POST' });
         let tries = 0;
         const poll = setInterval(async () => {
             tries++;
             try {
-                const r = await fetch('/api/market-news?refresh=0');
-                const d = await r.json();
-                if ((d.items && d.items.length) || !d.regenerating || tries > 13) {
+                const r = await fetch('/api/market-bullets/status');
+                const s = await r.json();
+                if (!s.running && (s.last_result || tries > 12)) {
                     clearInterval(poll);
-                    if (btn) { btn.disabled = false; btn.textContent = '🔄 Uppdatera'; }
-                    loadMarketNews();
+                    if (btn) { btn.disabled = false; btn.textContent = '🔄'; }
+                    loadBullets(); loadBulletDates();
                 }
-            } catch (e) {
-                if (tries > 13) { clearInterval(poll);
-                    if (btn) { btn.disabled = false; btn.textContent = '🔄 Uppdatera'; } }
-            }
-        }, 3000);
+            } catch (e) { if (tries > 12) { clearInterval(poll); if (btn) { btn.disabled = false; btn.textContent = '🔄'; } } }
+        }, 2500);
     } catch (e) {
-        if (btn) { btn.disabled = false; btn.textContent = '🔄 Uppdatera'; }
+        if (btn) { btn.disabled = false; btn.textContent = '🔄'; }
+    }
+}
+
+async function backfillBullets() {
+    if (!confirm('Hämta senaste ~6 månaders market bullets (≈120 publicerade dagar)?\n\nKör i bakgrunden ~10-20 min, kostar ~$2-3 i AI-strukturering. Du kan stänga sidan.')) return;
+    try {
+        const r = await fetch('/api/market-bullets/backfill?days=180', { method: 'POST' });
+        const d = await r.json();
+        alert(d.status === 'started'
+            ? `Backfill startad (${d.days} dagar). Följ /api/market-bullets/status — bullets dyker upp i datum-väljaren efterhand.`
+            : `Status: ${d.status}`);
+    } catch (e) { alert('Fel: ' + e.message); }
+}
+
+// ── v3.4 Trending
+async function loadTrending() {
+    const el = document.getElementById('trendingContent');
+    if (!el) return;
+    try {
+        const r = await fetch('/api/trending');
+        const d = await r.json();
+        if (!d.found || !(d.stocks || []).length) {
+            el.innerHTML = `<div style="padding:16px;text-align:center;color:#6b7280;background:#f8fafc;border-radius:10px;font-size:13px">
+                Ingen trending-data ännu. Klicka 🔄 för att hämta top-20.
+            </div>`;
+            return;
+        }
+        const newInfo = d.new_entrants > 0
+            ? `<div style="font-size:12px;color:#92400e;margin-bottom:8px">🆕 <strong>${d.new_entrants}</strong> nya bolag hoppade in i top-20 sedan förra mätningen — ofta tidig signal.</div>` : '';
+        const cards = (d.stocks || []).map(s => {
+            const bare = String(s.ticker || '').split(':').pop();
+            const linked = s.in_db;
+            const chg = s.change_pct;
+            const chgHtml = chg != null
+                ? `<span style="color:${chg >= 0 ? '#059669' : '#dc2626'};font-weight:700">${chg >= 0 ? '+' : ''}${Number(chg).toFixed(1)}%</span>` : '';
+            return `<div class="trend-card ${s.is_new ? 'is-new' : ''}" onclick="window.location.href='/?q=${encodeURIComponent(bare)}'">
+                ${s.is_new ? '<span class="new-badge">NY</span>' : ''}
+                <div class="trend-rank">#${s.rank}</div>
+                <div class="trend-tk ${linked ? 'linked' : ''}">${escapeHtml(s.ticker || '')}</div>
+                <div class="trend-co">${escapeHtml(s.company || '')}</div>
+                <div class="trend-meta">
+                    <span class="trend-views">👁 ${s.views ? Number(s.views).toLocaleString('sv') : '–'}</span>
+                    ${chgHtml}
+                </div>
+            </div>`;
+        }).join('');
+        el.innerHTML = newInfo + `<div class="trend-grid">${cards}</div>` +
+            `<div style="font-size:10.5px;color:#9ca3af;margin-top:8px">${d.date} · sorterat efter sidvisningar · stockanalysis.com</div>`;
+    } catch (e) {
+        el.innerHTML = `<div style="padding:14px;color:#dc2626;font-size:12px">Kunde ej ladda trending: ${e.message}</div>`;
+    }
+}
+async function syncTrending() {
+    const el = document.getElementById('trendingContent');
+    if (el) el.innerHTML = '<div class="loading-wrap" style="padding:18px">🔥 Hämtar trending top-20…</div>';
+    try {
+        await fetch('/api/trending/sync', { method: 'POST' });
+        loadTrending();
+    } catch (e) {
         if (el) el.innerHTML = `<div style="padding:14px;color:#dc2626;font-size:12px">Fel: ${e.message}</div>`;
     }
 }
