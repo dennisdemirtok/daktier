@@ -635,6 +635,22 @@ def _create_tables(db):
             );
             CREATE INDEX IF NOT EXISTS idx_trending_date
                 ON trending_snapshots(snapshot_date DESC, rank);
+
+            -- v3.5: Macro Pulse (MarketSense-AI-inspirerad veckomakro via web_search)
+            CREATE TABLE IF NOT EXISTS macro_pulse (
+                id SERIAL PRIMARY KEY,
+                generated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                headline TEXT,                -- 1 mening: makro-temat
+                sentiment TEXT,               -- risk-on / neutral / risk-off
+                summary TEXT,                 -- 2-3 meningar övergripande
+                sections_json JSONB,          -- [{title, points:[...]}] equity/rates/regional/risker
+                indicators_json JSONB,        -- [{name, value, note}]
+                sources_json JSONB,           -- [{title, url}]
+                model TEXT,
+                cost_usd NUMERIC(8,4)
+            );
+            CREATE INDEX IF NOT EXISTS idx_macro_pulse_gen
+                ON macro_pulse(generated_at DESC);
             -- OBS: idx_batch_edge_action + idx_batch_stop_thesis hanteras i
             -- _ensure_batch_analyses_columns eftersom kolumnerna inte finns i
             -- ursprungliga CREATE TABLE. Att lägga dem här aborterar hela
@@ -1212,6 +1228,22 @@ def _create_tables(db):
             );
             CREATE INDEX IF NOT EXISTS idx_trending_date
                 ON trending_snapshots(snapshot_date DESC, rank);
+
+            -- v3.5: Macro Pulse (SQLite)
+            CREATE TABLE IF NOT EXISTS macro_pulse (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                generated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                headline TEXT,
+                sentiment TEXT,
+                summary TEXT,
+                sections_json TEXT,
+                indicators_json TEXT,
+                sources_json TEXT,
+                model TEXT,
+                cost_usd REAL
+            );
+            CREATE INDEX IF NOT EXISTS idx_macro_pulse_gen
+                ON macro_pulse(generated_at DESC);
 
             -- Live screen-tracker (SQLite): snapshot för 12m-uppföljning
             CREATE TABLE IF NOT EXISTS screen_snapshots (

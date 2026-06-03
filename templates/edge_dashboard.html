@@ -296,6 +296,25 @@
         .trend-views { color: #6b7280; }
         .new-badge { position: absolute; top: 8px; right: 8px; background: #f59e0b; color: #fff; font-size: 9px;
             font-weight: 800; padding: 2px 6px; border-radius: 6px; letter-spacing: 0.5px; }
+
+        /* v3.5 — Macro Pulse */
+        .mp-card { background: linear-gradient(135deg, #f8fafc, #fff); border: 1px solid #eef0f2; border-radius: 12px; padding: 16px 18px; }
+        .mp-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 8px; }
+        .mp-sent { font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; padding: 3px 10px; border-radius: 20px; }
+        .mp-sent.risk-on { background: #d1fae5; color: #065f46; }
+        .mp-sent.neutral { background: #fef3c7; color: #92400e; }
+        .mp-sent.risk-off { background: #fee2e2; color: #991b1b; }
+        .mp-headline { font-size: 15px; font-weight: 700; color: #0f172a; }
+        .mp-summary { font-size: 13px; color: #374151; line-height: 1.55; margin-bottom: 12px; }
+        .mp-ind-strip { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+        .mp-ind { background: #fff; border: 1px solid #eef0f2; border-radius: 8px; padding: 7px 11px; min-width: 88px; }
+        .mp-ind .n { font-size: 9.5px; color: #6b7280; font-weight: 600; text-transform: uppercase; letter-spacing: 0.3px; }
+        .mp-ind .v { font-size: 14px; font-weight: 800; color: #0f172a; }
+        .mp-ind .note { font-size: 10px; color: #9ca3af; }
+        .mp-secs { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
+        .mp-sec-title { font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.4px; color: #475569; margin-bottom: 5px; }
+        .mp-sec ul { margin: 0; padding-left: 16px; }
+        .mp-sec li { font-size: 12px; color: #374151; line-height: 1.5; margin-bottom: 3px; }
         .dash-heading { font-size: 14px; font-weight: 600; color: var(--text); text-transform: uppercase; letter-spacing: 0.08em; margin: 0 0 14px; }
         .dash-heading .dash-sub { font-weight: 400; text-transform: none; letter-spacing: 0; color: var(--text-muted); font-size: 12px; margin-left: 8px; }
         .dash-top-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
@@ -7787,6 +7806,19 @@ async function renderDashboard() {
                 </div>
             </div>
 
+            <!-- v3.5 ⑤b MACRO PULSE -->
+            <div class="dash-section" id="macroPulseWrap">
+                <h3 class="dash-heading" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+                    🌐 Macro Pulse
+                    <span class="dash-sub">veckans makroläge · MarketSense-AI-inspirerat · web-sökt</span>
+                    <button onclick="refreshMacroPulse()" title="Uppdatera makro-puls"
+                        style="margin-left:auto;background:white;border:1px solid var(--border);padding:6px 12px;border-radius:8px;font-size:12px;cursor:pointer;font-family:inherit;font-weight:600">🔄</button>
+                </h3>
+                <div id="macroPulseContent" style="margin-top:6px">
+                    <div class="loading-wrap" style="padding:18px">Hämtar makro-puls…</div>
+                </div>
+            </div>
+
             <!-- v3.3 ⑥ MER DATA — allt det datatunga, hopfällt by default -->
             <details class="dash-more" id="dashMoreData">
                 <summary>Mer data, screens &amp; tabeller</summary>
@@ -7864,7 +7896,64 @@ async function renderDashboard() {
     loadBullets();
     loadBulletDates();
     loadTrending();
+    loadMacroPulse();
     loadDailyBrief();
+}
+
+// ── v3.5 Macro Pulse
+async function loadMacroPulse() {
+    const el = document.getElementById('macroPulseContent');
+    if (!el) return;
+    try {
+        const r = await fetch('/api/macro-pulse');
+        const d = await r.json();
+        if (!d.found) {
+            el.innerHTML = `<div style="padding:16px;text-align:center;color:#6b7280;background:#f8fafc;border-radius:10px;font-size:13px">
+                ${d.regenerating ? '⏳ Genererar makro-puls via web-sökning… ladda om strax.' : 'Ingen makro-puls ännu. Klicka 🔄 för att hämta.'}
+            </div>`;
+            return;
+        }
+        const sent = (d.sentiment || 'neutral').toLowerCase().replace(/[^a-z-]/g, '');
+        const sentCls = sent.includes('on') ? 'risk-on' : sent.includes('off') ? 'risk-off' : 'neutral';
+        const inds = (d.indicators || []).map(i =>
+            `<div class="mp-ind"><div class="n">${escapeHtml(i.name || '')}</div><div class="v">${escapeHtml(i.value || '')}</div>${i.note ? `<div class="note">${escapeHtml(i.note)}</div>` : ''}</div>`).join('');
+        const secs = (d.sections || []).map(s =>
+            `<div class="mp-sec"><div class="mp-sec-title">${escapeHtml(s.title || '')}</div><ul>${(s.points || []).map(p => `<li>${escapeHtml(p)}</li>`).join('')}</ul></div>`).join('');
+        const src = (d.sources || []).slice(0, 4).map(s =>
+            s.url ? `<a href="${escapeHtml(s.url)}" target="_blank" rel="noopener" style="color:#9ca3af">${escapeHtml(s.title || 'källa')}</a>` : '').filter(Boolean).join(' · ');
+        el.innerHTML = `<div class="mp-card">
+            <div class="mp-head">
+                <span class="mp-sent ${sentCls}">${escapeHtml(d.sentiment || 'neutral')}</span>
+                <span class="mp-headline">${escapeHtml(d.headline || '')}</span>
+            </div>
+            ${d.summary ? `<div class="mp-summary">${escapeHtml(d.summary)}</div>` : ''}
+            ${inds ? `<div class="mp-ind-strip">${inds}</div>` : ''}
+            ${secs ? `<div class="mp-secs">${secs}</div>` : ''}
+            ${(src || d.generated_at) ? `<div style="font-size:10.5px;color:#9ca3af;margin-top:12px">${src ? 'Källor: ' + src + ' · ' : ''}${d.generated_at ? 'uppdaterad ' + new Date(d.generated_at + (String(d.generated_at).endsWith('Z') ? '' : 'Z')).toLocaleDateString('sv-SE') : ''}</div>` : ''}
+        </div>`;
+    } catch (e) {
+        el.innerHTML = `<div style="padding:14px;color:#dc2626;font-size:12px">Kunde ej ladda makro-puls: ${e.message}</div>`;
+    }
+}
+async function refreshMacroPulse() {
+    const el = document.getElementById('macroPulseContent');
+    if (el) el.innerHTML = '<div class="loading-wrap" style="padding:18px">🌐 Söker makroläge via webben + sammanställer… (~25s)</div>';
+    try {
+        await fetch('/api/macro-pulse/refresh', { method: 'POST' });
+        let tries = 0;
+        const poll = setInterval(async () => {
+            tries++;
+            try {
+                const r = await fetch('/api/macro-pulse');
+                const d = await r.json();
+                if (d.found && !d.regenerating || tries > 15) {
+                    clearInterval(poll); loadMacroPulse();
+                }
+            } catch (e) { if (tries > 15) clearInterval(poll); }
+        }, 3000);
+    } catch (e) {
+        if (el) el.innerHTML = `<div style="padding:14px;color:#dc2626;font-size:12px">Fel: ${e.message}</div>`;
+    }
 }
 
 // ── v3.3 Daglig brief — komponeras från KPI + rapporter + nyheter (gratis, instant)

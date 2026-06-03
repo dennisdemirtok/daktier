@@ -5868,6 +5868,46 @@ def _sync_market_bullet(db, date_str, force=False):
     return {"date": date_str, "status": "synced", "tickers": len(tickers), "cost": cost}
 
 
+def _stockanalysis_today():
+    """Dagens datum i US/Eastern — stockanalysis daterar bullets efter US-börsdag."""
+    from datetime import datetime
+    try:
+        import zoneinfo
+        return datetime.now(zoneinfo.ZoneInfo("America/New_York")).date()
+    except Exception:
+        return datetime.utcnow().date()
+
+
+def _sync_recent_bullets(db, days=4):
+    """Synkar ett rullande fönster av de senaste dagarnas bullets (US/Eastern).
+
+    Idag re-hämtas ALLTID (force) så den fångas så fort den publiceras + ev.
+    intradag-uppdateringar. Tidigare dagar hoppas om de redan finns.
+    Returnerar dict med antal synkade/befintliga/utgivna-ej.
+    """
+    from datetime import timedelta as _td
+    today = _stockanalysis_today()
+    synced = exists = no_pub = failed = 0
+    results = []
+    for dd in range(0, days):
+        date_str = (today - _td(days=dd)).isoformat()
+        force = (dd == 0)  # idag re-hämtas alltid
+        try:
+            res = _sync_market_bullet(db, date_str, force=force)
+            st = res.get("status")
+            if st == "synced": synced += 1
+            elif st == "exists": exists += 1
+            elif st == "no_publication": no_pub += 1
+            else: failed += 1
+            results.append({date_str: st})
+        except Exception as e:
+            failed += 1
+            print(f"[bullets recent] {date_str}: {e}", file=sys.stderr)
+    out = {"synced": synced, "exists": exists, "no_publication": no_pub,
+           "failed": failed, "newest_tried": today.isoformat(), "detail": results}
+    return out
+
+
 def _backfill_market_bullets(db, days=180):
     """Bakgrunds-backfill: hämtar senaste N dagars market-bullets."""
     from datetime import datetime, timedelta
@@ -6012,6 +6052,153 @@ def _sync_trending(db):
            "date": today, "had_baseline": bool(prev_tickers)}
     _TRENDING_STATE["last_result"] = res
     return res
+
+
+# ══════════════════════════════════════════════════════════════
+# MACRO PULSE (v3.5) — MarketSense-AI-inspirerad veckomakro via web_search
+# marketsense-ai.com är JS-renderad (går ej scrapa direkt). Vi använder
+# Claude + web_search för att hämta deras senaste macro pulse + aktuell makro,
+# strukturerat. Veckokadens (cache ~3 dygn).
+# ══════════════════════════════════════════════════════════════
+
+_MACRO_PULSE_STATE = {"running": False}
+
+
+def _generate_macro_pulse_digest():
+    """Genererar makro-puls via Claude + web_search. Returnerar (dict, cost)."""
+    import json as _json
+    if not CLAUDE_API_KEY:
+        return None, 0.0
+    prompt = """Du är makrostrateg. Skapa en "Macro Pulse" för veckan, med fokus
+på vad som är relevant för svenska + amerikanska aktiemarknader.
+
+Använd web_search. Sök specifikt efter MarketSenseAI:s senaste macro pulse
+("MarketSenseAI macro pulse", "marketsense-ai.com macro pulse") OCH aktuell makro
+("Fed rate decision latest", "ECB rate", "US CPI latest", "market outlook this week").
+Väg in MarketSenseAI:s tes om du hittar den, men verifiera mot primärkällor.
+
+Returnera EXAKT ett JSON-block mellan markörerna:
+
+---MACRO-JSON-START---
+{
+  "headline": "1 mening: veckans makrotema",
+  "sentiment": "risk-on | neutral | risk-off",
+  "summary": "2-3 meningar: övergripande marknadsläge, drivkrafter, vad investerare bör bevaka.",
+  "indicators": [
+    {"name": "Fed Funds Rate", "value": "4.25-4.50%", "note": "håll/cut-bias"},
+    {"name": "US 10Y", "value": "4.3%", "note": "kort kommentar"},
+    {"name": "US CPI", "value": "x.x%", "note": "..."},
+    {"name": "VIX", "value": "xx", "note": "..."}
+  ],
+  "sections": [
+    {"title": "Aktier", "points": ["punkt 1", "punkt 2"]},
+    {"title": "Räntor & valuta", "points": ["..."]},
+    {"title": "Regionalt (US/EU/Asien)", "points": ["..."]},
+    {"title": "Risker att bevaka", "points": ["..."]}
+  ],
+  "sources": [{"title": "Källa", "url": "https://..."}]
+}
+---MACRO-JSON-END---
+
+REGLER:
+- Aktuella, verifierbara värden. Inga påhittade exakta siffror — om osäkert, ange intervall + "ca".
+- 3-5 indicators, 3-4 sections med 2-4 punkter var.
+- Svenska i text, behåll engelska metric-namn (CPI, FFR, VIX).
+- Saklig ton, inga köp/sälj-råd på enskilda aktier."""
+    headers = {"x-api-key": CLAUDE_API_KEY, "anthropic-version": "2023-06-01",
+               "content-type": "application/json"}
+    payload = {"model": "claude-sonnet-4-20250514", "max_tokens": 3000,
+               "messages": [{"role": "user", "content": prompt}],
+               "tools": [{"type": "web_search_20250305", "name": "web_search", "max_uses": 6}]}
+    try:
+        import httpx
+        with httpx.Client(timeout=120.0) as client:
+            r = client.post("https://api.anthropic.com/v1/messages", headers=headers, json=payload)
+        if r.status_code != 200:
+            print(f"[macro pulse] HTTP {r.status_code}: {r.text[:200]}", file=sys.stderr)
+            return None, 0.0
+        resp = r.json()
+    except Exception as e:
+        print(f"[macro pulse] request fel: {e}", file=sys.stderr)
+        return None, 0.0
+    try:
+        cost = _calc_sonnet_cost(resp.get("usage", {}))
+    except Exception:
+        cost = 0.0
+    full = "".join(b.get("text", "") for b in resp.get("content", []) if b.get("type") == "text")
+    import re as _re
+    m = _re.search(r"---MACRO-JSON-START---\s*(.*?)\s*---MACRO-JSON-END---", full, _re.DOTALL)
+    if not m:
+        return None, cost
+    js = _re.sub(r"^```(?:json)?\s*|\s*```$", "", m.group(1).strip())
+    try:
+        return _json.loads(js), cost
+    except Exception as e:
+        print(f"[macro pulse] JSON parse fel: {e}", file=sys.stderr)
+        return None, cost
+
+
+def _get_or_generate_macro_pulse(db, max_age_hours=72, force=False):
+    """Returnerar senaste macro-pulse; regenererar om äldre än max_age_hours."""
+    from edge_db import _fetchone, _ph
+    import json as _json
+    from datetime import datetime, timedelta
+    if not force:
+        try:
+            row = _fetchone(db, "SELECT * FROM macro_pulse ORDER BY generated_at DESC LIMIT 1")
+            if row:
+                rd = dict(row)
+                gen = rd.get("generated_at")
+                try:
+                    dt = datetime.fromisoformat(str(gen).replace("T", " ").split(".")[0].replace("Z", "")) if isinstance(gen, str) else gen
+                    fresh = (datetime.utcnow() - dt) < timedelta(hours=max_age_hours)
+                except Exception:
+                    fresh = False
+                if fresh:
+                    def _j(v):
+                        if isinstance(v, str):
+                            try: return _json.loads(v)
+                            except Exception: return None
+                        return v
+                    return {"cached": True, "generated_at": str(gen),
+                            "headline": rd.get("headline"), "sentiment": rd.get("sentiment"),
+                            "summary": rd.get("summary"),
+                            "indicators": _j(rd.get("indicators_json")) or [],
+                            "sections": _j(rd.get("sections_json")) or [],
+                            "sources": _j(rd.get("sources_json")) or []}
+        except Exception as e:
+            print(f"[macro pulse] cache fel: {e}", file=sys.stderr)
+    if _MACRO_PULSE_STATE.get("running"):
+        return {"regenerating": True, "headline": None, "sections": []}
+    _MACRO_PULSE_STATE["running"] = True
+    try:
+        parsed, cost = _generate_macro_pulse_digest()
+        if not parsed:
+            return {"error": "generering misslyckades", "sections": []}
+        ph = _ph()
+        try:
+            db.execute(
+                f"INSERT INTO macro_pulse (headline, sentiment, summary, sections_json, "
+                f"indicators_json, sources_json, model, cost_usd) "
+                f"VALUES ({ph},{ph},{ph},{ph},{ph},{ph},{ph},{ph})",
+                (parsed.get("headline"), parsed.get("sentiment"), parsed.get("summary"),
+                 _json.dumps(parsed.get("sections") or [], ensure_ascii=False, default=str),
+                 _json.dumps(parsed.get("indicators") or [], ensure_ascii=False, default=str),
+                 _json.dumps(parsed.get("sources") or [], ensure_ascii=False, default=str),
+                 "claude-sonnet-4-20250514", cost))
+            db.commit()
+        except Exception as e:
+            print(f"[macro pulse] spara fel: {e}", file=sys.stderr)
+            try: db.rollback()
+            except Exception: pass
+        return {"cached": False, "generated_at": datetime.utcnow().isoformat(),
+                "headline": parsed.get("headline"), "sentiment": parsed.get("sentiment"),
+                "summary": parsed.get("summary"),
+                "indicators": parsed.get("indicators") or [],
+                "sections": parsed.get("sections") or [],
+                "sources": parsed.get("sources") or [], "cost_usd": cost}
+    finally:
+        _MACRO_PULSE_STATE["running"] = False
 
 
 def _generate_market_recap(top_movers_us, top_movers_se, owner_movers, external_signals):
@@ -11247,6 +11434,38 @@ def _build_agent_context(db, max_per_list=20):
     except Exception as e:
         print(f"[agent ctx] trending error: {e}", file=sys.stderr)
 
+    # ── NYTT: MACRO PULSE (MarketSense-AI-inspirerad veckomakro) ──
+    try:
+        from edge_db import _fetchone
+        import json as _json4
+        row = _fetchone(db, "SELECT headline, sentiment, summary, sections_json, "
+                           "indicators_json FROM macro_pulse ORDER BY generated_at DESC LIMIT 1")
+        if row:
+            rd = dict(row)
+            ml = [f"  Tema: {rd.get('headline','')} (sentiment: {rd.get('sentiment','')})"]
+            if rd.get("summary"):
+                ml.append(f"  {rd['summary']}")
+            inds = rd.get("indicators_json")
+            if isinstance(inds, str):
+                try: inds = _json4.loads(inds)
+                except Exception: inds = []
+            if inds:
+                ml.append("  Indikatorer: " + " · ".join(
+                    f"{i.get('name','')} {i.get('value','')}" for i in (inds or [])[:5]))
+            secs = rd.get("sections_json")
+            if isinstance(secs, str):
+                try: secs = _json4.loads(secs)
+                except Exception: secs = []
+            for sec in (secs or [])[:4]:
+                pts = sec.get("points") or []
+                if pts:
+                    ml.append(f"  [{sec.get('title','')}]: " + "; ".join(pts[:3]))
+            if len(ml) > 1:
+                parts.append("🌐 MACRO PULSE (veckans makroläge — väg in i timing & "
+                             "sektor-allokering):\n" + "\n".join(ml))
+    except Exception as e:
+        print(f"[agent ctx] macro pulse error: {e}", file=sys.stderr)
+
     return "\n\n".join(parts)
 
 
@@ -12523,22 +12742,29 @@ def api_market_bullets_dates():
 
 @app.route("/api/market-bullets/sync", methods=["POST"])
 def api_market_bullets_sync():
-    """Hämtar dagens (eller ?date=) market-bullets i bakgrunden."""
+    """Hämtar dagens market-bullets i bakgrunden.
+
+    Utan ?date= synkas ett rullande fönster (idag + senaste 3 dagar, US/Eastern)
+    så dagens bullets fångas oavsett tidszon/publiceringstid. Med ?date=YYYY-MM-DD
+    synkas exakt den dagen.
+    """
     date_q = request.args.get("date")
-    from datetime import datetime, timedelta
-    target = date_q or (datetime.utcnow().date() - timedelta(days=0)).isoformat()
 
     def _run():
         try:
             db = get_db()
-            res = _sync_market_bullet(db, target, force=True)
+            if date_q:
+                res = _sync_market_bullet(db, date_q, force=True)
+            else:
+                res = _sync_recent_bullets(db, days=4)
             _BULLETS_STATE["last_result"] = res
             print(f"[bullets sync] {res}", file=sys.stderr)
         except Exception as e:
             print(f"[bullets sync] {e}", file=sys.stderr)
 
     threading.Thread(target=_run, daemon=True).start()
-    return jsonify({"status": "started", "date": target}), 202
+    return jsonify({"status": "started",
+                    "target": date_q or "rullande fönster (idag + 3 dagar, US/Eastern)"}), 202
 
 
 @app.route("/api/market-bullets/backfill", methods=["POST"])
@@ -12584,6 +12810,67 @@ def api_market_bullets_status():
 
 
 # ── Trending (stockanalysis.com/trending) ──────────────────────
+
+@app.route("/api/macro-pulse")
+def api_macro_pulse():
+    """Senaste macro-pulse (cachat ~72h). NON-BLOCKING — triggar bakgrunds-
+    generering om stale/saknas."""
+    from edge_db import _fetchone
+    import json as _json
+    from datetime import datetime, timedelta
+    db = get_db()
+    row = None
+    try:
+        row = _fetchone(db, "SELECT * FROM macro_pulse ORDER BY generated_at DESC LIMIT 1")
+    except Exception as e:
+        print(f"[macro pulse GET] {e}", file=sys.stderr)
+    is_stale = True
+    payload = {"found": False, "headline": None, "summary": None, "sentiment": None,
+               "indicators": [], "sections": [], "sources": [], "generated_at": None}
+    if row:
+        rd = dict(row)
+        def _j(v):
+            if isinstance(v, str):
+                try: return _json.loads(v)
+                except Exception: return []
+            return v or []
+        gen = rd.get("generated_at")
+        try:
+            dt = datetime.fromisoformat(str(gen).replace("T", " ").split(".")[0].replace("Z", "")) if isinstance(gen, str) else gen
+            is_stale = (datetime.utcnow() - dt) > timedelta(hours=72)
+        except Exception:
+            is_stale = True
+        payload = {"found": True, "headline": rd.get("headline"),
+                   "summary": rd.get("summary"), "sentiment": rd.get("sentiment"),
+                   "indicators": _j(rd.get("indicators_json")),
+                   "sections": _j(rd.get("sections_json")),
+                   "sources": _j(rd.get("sources_json")),
+                   "generated_at": str(gen)}
+    regenerating = _MACRO_PULSE_STATE.get("running", False)
+    if (is_stale or not row) and not regenerating:
+        def _bg():
+            try:
+                _get_or_generate_macro_pulse(get_db(), force=True)
+            except Exception as e:
+                print(f"[macro pulse bg] {e}", file=sys.stderr)
+        threading.Thread(target=_bg, daemon=True).start()
+        regenerating = True
+    payload["regenerating"] = regenerating
+    return jsonify(payload)
+
+
+@app.route("/api/macro-pulse/refresh", methods=["POST"])
+def api_macro_pulse_refresh():
+    if _MACRO_PULSE_STATE.get("running"):
+        return jsonify({"status": "already running"}), 409
+    def _run():
+        try:
+            _get_or_generate_macro_pulse(get_db(), force=True)
+        except Exception as e:
+            print(f"[macro pulse refresh] {e}", file=sys.stderr)
+    threading.Thread(target=_run, daemon=True).start()
+    return jsonify({"status": "started", "note": "Genererar makro-puls (~20-30s)"}), 202
+
 
 @app.route("/api/sa/trending")
 def api_sa_trending():
@@ -12924,23 +13211,31 @@ def _price_update_loop():
                 print(f"[trending] auto-sync: {res}", file=sys.stderr)
         except Exception as e:
             print(f"[trending loop] {e}", file=sys.stderr)
-        # Daglig market-bullets-sync (24h — hämtar igår + idag)
+        # Market-bullets-sync var ~3h — rullande fönster i US/Eastern så dagens
+        # bullets fångas så fort de publiceras (US pre-market) + fyller ev. gap.
         try:
-            if time.time() - _LAST_BULLETS_SYNC[0] > 86400:
-                from datetime import timedelta as _td
+            if time.time() - _LAST_BULLETS_SYNC[0] > 10800:  # 3h
                 db = get_db()
-                base = datetime.utcnow().date()
-                for _dd in (1, 0):  # igår + idag
-                    _sync_market_bullet(db, (base - _td(days=_dd)).isoformat())
+                res = _sync_recent_bullets(db, days=4)
                 _LAST_BULLETS_SYNC[0] = time.time()
-                print(f"[bullets] daglig auto-sync klar", file=sys.stderr)
+                print(f"[bullets] rullande auto-sync: {res.get('synced')} nya, "
+                      f"{res.get('no_publication')} ej publicerade", file=sys.stderr)
         except Exception as e:
             print(f"[bullets loop] {e}", file=sys.stderr)
+        # Macro pulse — veckokadens (regenerera om >3 dygn sedan senaste)
+        try:
+            if time.time() - _LAST_MACRO_PULSE_SYNC[0] > 259200:  # 72h
+                _get_or_generate_macro_pulse(get_db(), max_age_hours=72)
+                _LAST_MACRO_PULSE_SYNC[0] = time.time()
+                print(f"[macro pulse] auto-gen klar", file=sys.stderr)
+        except Exception as e:
+            print(f"[macro pulse loop] {e}", file=sys.stderr)
         time.sleep(PRICE_UPDATE_INTERVAL_SEC)
 
 
 _LAST_TRENDING_SYNC = [0.0]
 _LAST_BULLETS_SYNC = [0.0]
+_LAST_MACRO_PULSE_SYNC = [0.0]
 
 
 @app.route("/api/price-cache/update", methods=["POST"])
