@@ -8,6 +8,9 @@
     <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet">
     <!-- Markdown rendering för AI Agent -->
     <script src="https://cdn.jsdelivr.net/npm/marked@12.0.0/marked.min.js"></script>
+    <!-- v3.6: PNG/PDF-export av aktie-drawern -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <style>
         :root {
             --green: #00C281;
@@ -315,6 +318,23 @@
         .mp-sec-title { font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.4px; color: #475569; margin-bottom: 5px; }
         .mp-sec ul { margin: 0; padding-left: 16px; }
         .mp-sec li { font-size: 12px; color: #374151; line-height: 1.5; margin-bottom: 3px; }
+
+        /* v3.6 — Rapporter tabs */
+        .rep-tab { background: #f1f5f9; border: 1px solid #e5e7eb; color: #475569; padding: 6px 13px;
+            border-radius: 20px; font-size: 12.5px; font-weight: 600; cursor: pointer; font-family: inherit; transition: all 0.15s; }
+        .rep-tab:hover { background: #e2e8f0; }
+        .rep-tab.active { background: #1e40af; color: #fff; border-color: #1e40af; }
+        .rep-tab span { opacity: 0.75; font-weight: 700; }
+        .rep-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(165px, 1fr)); gap: 8px; }
+        .rep-card { background: #fff; border: 1px solid #eef0f2; border-left: 4px solid #3b82f6; border-radius: 10px;
+            padding: 11px 13px; cursor: pointer; transition: all 0.15s; }
+        .rep-card:hover { box-shadow: 0 3px 10px rgba(0,0,0,0.06); transform: translateY(-1px); }
+        .rep-card.beat { border-left-color: #059669; }
+        .rep-card.miss { border-left-color: #dc2626; }
+        .rep-tk { font-size: 14px; font-weight: 800; color: #0f172a; }
+        .rep-co { font-size: 10.5px; color: #9ca3af; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .rep-meta { font-size: 11px; color: #6b7280; margin-top: 5px; line-height: 1.5; }
+        .rep-time { font-size: 10px; font-weight: 700; padding: 1px 7px; border-radius: 6px; background: #eff6ff; color: #1e40af; }
         .dash-heading { font-size: 14px; font-weight: 600; color: var(--text); text-transform: uppercase; letter-spacing: 0.08em; margin: 0 0 14px; }
         .dash-heading .dash-sub { font-weight: 400; text-transform: none; letter-spacing: 0; color: var(--text-muted); font-size: 12px; margin-left: 8px; }
         .dash-top-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
@@ -1007,7 +1027,13 @@ window.showWelcome = function() {
 <div class="drawer" id="stockDrawer">
     <div class="drawer-header">
         <div id="drawerHeaderContent"></div>
-        <button class="drawer-close" onclick="closeDrawer()">&#x2715;</button>
+        <div style="display:flex;gap:6px;align-items:center;flex-shrink:0">
+            <button onclick="downloadStockPng()" title="Ladda ner som PNG"
+                style="background:white;border:1px solid var(--border);color:#1e40af;padding:6px 10px;border-radius:7px;cursor:pointer;font-size:12px;font-weight:600;font-family:inherit">📷 PNG</button>
+            <button onclick="downloadStockPdf()" title="Ladda ner som PDF"
+                style="background:linear-gradient(135deg,#1d4ed8,#3b82f6);border:none;color:white;padding:6px 10px;border-radius:7px;cursor:pointer;font-size:12px;font-weight:600;font-family:inherit">📄 PDF</button>
+            <button class="drawer-close" onclick="closeDrawer()">&#x2715;</button>
+        </div>
     </div>
     <div class="drawer-body" id="drawerBody"></div>
 </div>
@@ -5323,6 +5349,84 @@ function closeDrawer() {
 }
 document.addEventListener('keydown', e => { if (e.key === 'Escape') closeDrawer(); });
 
+// ── v3.6: Öppna aktie-drawer via ticker (för nyheter/trending/rapporter) ──
+async function openStockByTicker(ticker) {
+    if (!ticker) return;
+    const bare = String(ticker).split(':').pop().trim();
+    try {
+        const r = await fetch('/api/stocks?q=' + encodeURIComponent(bare) + '&limit=1');
+        const d = await r.json();
+        const rows = d.stocks || d.results || (Array.isArray(d) ? d : []);
+        if (rows && rows.length && rows[0].orderbook_id) {
+            openDrawer(rows[0]);
+        } else {
+            // Inte i vår DB (ofta US-bolag) → öppna stockanalysis.com
+            window.open('https://stockanalysis.com/stocks/' + encodeURIComponent(bare) + '/', '_blank');
+        }
+    } catch (e) {
+        window.open('https://stockanalysis.com/stocks/' + encodeURIComponent(bare) + '/', '_blank');
+    }
+}
+
+// ── v3.6: PNG/PDF-export av aktie-drawern ──
+async function _captureStockDrawer() {
+    if (typeof html2canvas === 'undefined') { alert('Bild-biblioteket laddas än, försök strax igen.'); return null; }
+    const s = _currentDrawerStock || {};
+    const headerHtml = document.getElementById('drawerHeaderContent')?.innerHTML || '';
+    const bodyHtml = document.getElementById('drawerBody')?.innerHTML || '';
+    const exportEl = document.createElement('div');
+    exportEl.style.cssText = 'position:fixed;left:-9999px;top:0;background:#fff;padding:28px 30px;width:780px;font-family:-apple-system,BlinkMacSystemFont,Inter,sans-serif;color:#1f2937';
+    exportEl.innerHTML = `
+        <div style="border-bottom:2px solid #1e40af;padding-bottom:12px;margin-bottom:16px">
+            <div style="font-size:11px;color:#6b7280;font-weight:600;text-transform:uppercase;letter-spacing:0.6px">DAKTIER · Multi-strategy aktieanalys</div>
+            <div style="margin-top:4px">${headerHtml}</div>
+            <div style="font-size:11.5px;color:#9ca3af;margin-top:4px">Genererad ${new Date().toLocaleString('sv-SE')}</div>
+        </div>
+        ${bodyHtml}
+        <div style="margin-top:22px;padding-top:10px;border-top:1px dashed #e5e7eb;font-size:10px;color:#9ca3af;text-align:center">DAKTIER v3 · agent-validerad analys</div>`;
+    document.body.appendChild(exportEl);
+    try {
+        return await html2canvas(exportEl, { scale: 2, backgroundColor: '#ffffff', logging: false, useCORS: true });
+    } finally { document.body.removeChild(exportEl); }
+}
+function _stockFilename(ext) {
+    const s = _currentDrawerStock || {};
+    const name = (s.short_name || s.name || 'aktie').replace(/[^a-zA-Z0-9_-]+/g, '_').slice(0, 30);
+    return `DAKTIER_${name}_${new Date().toISOString().slice(0,10)}.${ext}`;
+}
+async function downloadStockPng() {
+    try {
+        const canvas = await _captureStockDrawer(); if (!canvas) return;
+        const a = document.createElement('a'); a.download = _stockFilename('png');
+        a.href = canvas.toDataURL('image/png'); a.click();
+    } catch (e) { alert('Kunde inte skapa PNG: ' + e.message); }
+}
+async function downloadStockPdf() {
+    try {
+        if (typeof window.jspdf === 'undefined') { alert('PDF-biblioteket laddas än, försök strax igen.'); return; }
+        const canvas = await _captureStockDrawer(); if (!canvas) return;
+        const { jsPDF } = window.jspdf;
+        const pdf = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'p' });
+        const pageW = 210, pageH = 297, margin = 10, usableW = pageW - 2*margin;
+        const imgW = usableW, imgH = (canvas.height * imgW) / canvas.width;
+        const img = canvas.toDataURL('image/jpeg', 0.9);
+        if (imgH <= pageH - 2*margin) {
+            pdf.addImage(img, 'JPEG', margin, margin, imgW, imgH);
+        } else {
+            const contentH = pageH - 2*margin, pages = Math.ceil(imgH / contentH);
+            for (let p = 0; p < pages; p++) {
+                if (p > 0) pdf.addPage();
+                pdf.addImage(img, 'JPEG', margin, margin - p*contentH, imgW, imgH);
+                if (p === pages - 1) {
+                    const last = imgH - p*contentH;
+                    if (last < contentH) { pdf.setFillColor(255,255,255); pdf.rect(0, margin+last, pageW, pageH, 'F'); }
+                }
+            }
+        }
+        pdf.save(_stockFilename('pdf'));
+    } catch (e) { alert('Kunde inte skapa PDF: ' + e.message); }
+}
+
 // ── Infinity Scroll ──────────────────────────────────
 
 function showLoadMore() {
@@ -7754,6 +7858,19 @@ async function renderDashboard() {
                 </div>
             </div>
 
+            <!-- v3.6 ②a SVENSKA NYHETER (Nordic-fokus, web-sökt) -->
+            <div class="dash-section" id="seNewsWrap">
+                <h3 class="dash-heading" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+                    🇸🇪 Svenska & nordiska nyheter
+                    <span class="dash-sub">bolagen vi följer · web-sökt · AI-sammanställt</span>
+                    <button id="seNewsRefreshBtn" onclick="refreshSwedishNews()" title="Uppdatera"
+                        style="margin-left:auto;background:white;border:1px solid var(--border);padding:6px 12px;border-radius:8px;font-size:12px;cursor:pointer;font-family:inherit;font-weight:600">🔄</button>
+                </h3>
+                <div id="seNewsContent" style="margin-top:6px">
+                    <div class="loading-wrap" style="padding:18px">Hämtar svenska nyheter…</div>
+                </div>
+            </div>
+
             <!-- v3.4 ②b TRENDING (top-20 by views, stockanalysis.com) -->
             <div class="dash-section" id="trendingWrap">
                 <h3 class="dash-heading" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
@@ -7781,18 +7898,23 @@ async function renderDashboard() {
                 </div>
             </div>
 
-            <!-- v3.3 ④ RAPPORT IDAG -->
-            <div class="dash-section" id="reportsTodayWrap">
+            <!-- v3.6 ④ RAPPORTER (konsoliderat: Idag / Kommande / Senaste) -->
+            <div class="dash-section" id="reportsWrap">
                 <h3 class="dash-heading" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-                    📊 Rapport idag
-                    <span class="dash-sub">bolag som rapporterar idag enligt Börsdata-kalendern</span>
+                    📊 Rapporter
+                    <span class="dash-sub">allt på ett ställe · Börsdata + stockanalysis</span>
                     <button id="analyzeReportsBtn" onclick="analyzeReportsToday()"
                         style="margin-left:auto;background:linear-gradient(135deg,#059669,#10b981);color:white;border:none;padding:7px 14px;border-radius:8px;cursor:pointer;font-weight:600;font-family:inherit;font-size:12px">
                         🤖 Analysera dagens rapport-bolag
                     </button>
                 </h3>
-                <div id="reportsTodayContent" style="margin-top:10px">
-                    <div class="loading-wrap" style="padding:18px">Laddar dagens rapporter…</div>
+                <div class="rep-tabs" id="repTabs" style="display:flex;gap:6px;margin:4px 0 10px">
+                    <button class="rep-tab active" data-tab="today" onclick="switchReportTab('today')">📅 Idag <span id="repCntToday"></span></button>
+                    <button class="rep-tab" data-tab="upcoming" onclick="switchReportTab('upcoming')">🔜 Kommande <span id="repCntUpcoming"></span></button>
+                    <button class="rep-tab" data-tab="recent" onclick="switchReportTab('recent')">✅ Senaste <span id="repCntRecent"></span></button>
+                </div>
+                <div id="reportsContent">
+                    <div class="loading-wrap" style="padding:18px">Laddar rapporter…</div>
                 </div>
             </div>
 
@@ -7892,12 +8014,81 @@ async function renderDashboard() {
     // v3: Ladda hero KPI-row + Super Confluence-kort (parallellt med dashboard-data)
     loadHeroKpiRow();
     loadSuperConfluenceCards();
-    loadReportsToday();
+    loadReports();
     loadBullets();
     loadBulletDates();
+    loadSwedishNews();
     loadTrending();
     loadMacroPulse();
     loadDailyBrief();
+}
+
+// ── v3.6 Svenska & nordiska nyheter (market_news, Nordic-fokus)
+function _seNewsChg(v) {
+    if (v == null) return '';
+    const c = v >= 0 ? '#059669' : '#dc2626';
+    return `<span class="news-chg" style="color:${c}">${v >= 0 ? '+' : ''}${Number(v).toFixed(1)}%</span>`;
+}
+async function loadSwedishNews() {
+    const el = document.getElementById('seNewsContent');
+    if (!el) return;
+    try {
+        const r = await fetch('/api/market-news');
+        const d = await r.json();
+        // För daglig brief (svensk recap)
+        if (d.market_recap) { _briefData.newsRecap = d.market_recap; _maybeRenderBrief(); }
+        const items = d.items || [];
+        if (!d.market_recap && !items.length) {
+            el.innerHTML = `<div style="padding:16px;text-align:center;color:#6b7280;background:#f8fafc;border-radius:10px;font-size:13px">
+                ${d.regenerating ? '⏳ Genererar svenska nyheter… ladda om strax.' : 'Inga svenska nyheter än. Klicka 🔄 för att hämta.'}
+            </div>`;
+            return;
+        }
+        const recap = d.market_recap ? `<div class="news-recap">🇸🇪 ${escapeHtml(d.market_recap)}</div>` : '';
+        const cards = items.map(it => {
+            const cat = (it.category || 'other').toLowerCase();
+            const tk = it.ticker || '';
+            const bare = String(tk).split(':').pop().replace(/'/g, '');
+            return `<div class="news-card">
+                <div class="news-card-head">
+                    <span class="news-ticker linked" onclick="openStockByTicker('${bare}')">${escapeHtml(tk)}</span>
+                    ${it.company ? `<span style="font-size:11px;color:#9ca3af">${escapeHtml(it.company)}</span>` : ''}
+                    ${_seNewsChg(it.change_pct)}
+                    <span class="news-cat ${cat}" style="margin-left:auto">${escapeHtml(cat)}</span>
+                </div>
+                <div class="news-headline">${escapeHtml(it.headline || '')}</div>
+                <div class="news-summary">${escapeHtml(it.summary || '')}</div>
+                <div class="news-source">${escapeHtml(it.source || '')}${it.in_db ? ' · 🔗 i din databas' : ''}</div>
+            </div>`;
+        }).join('');
+        el.innerHTML = recap + (cards ? `<div class="news-grid">${cards}</div>` : '');
+    } catch (e) {
+        el.innerHTML = `<div style="padding:14px;color:#dc2626;font-size:12px">Kunde ej ladda svenska nyheter: ${e.message}</div>`;
+    }
+}
+async function refreshSwedishNews() {
+    const btn = document.getElementById('seNewsRefreshBtn');
+    const el = document.getElementById('seNewsContent');
+    if (btn) { btn.disabled = true; btn.textContent = '⏳'; }
+    if (el) el.innerHTML = '<div class="loading-wrap" style="padding:18px">🇸🇪 Söker svenska/nordiska nyheter via webben… (~20s)</div>';
+    try {
+        await fetch('/api/market-news/refresh', { method: 'POST' });
+        let tries = 0;
+        const poll = setInterval(async () => {
+            tries++;
+            try {
+                const r = await fetch('/api/market-news');
+                const d = await r.json();
+                if ((d.items && d.items.length) || (!d.regenerating && tries > 2) || tries > 13) {
+                    clearInterval(poll);
+                    if (btn) { btn.disabled = false; btn.textContent = '🔄'; }
+                    loadSwedishNews();
+                }
+            } catch (e) { if (tries > 13) { clearInterval(poll); if (btn) { btn.disabled = false; btn.textContent = '🔄'; } } }
+        }, 3000);
+    } catch (e) {
+        if (btn) { btn.disabled = false; btn.textContent = '🔄'; }
+    }
 }
 
 // ── v3.5 Macro Pulse
@@ -8006,7 +8197,7 @@ function _maybeRenderBrief() {
         const chips = [];
         if (k.edge_entry_count) chips.push(`<a class="brief-chip" href="/toplists" target="_blank">🎯 ${k.edge_entry_count} Edge Entry</a>`);
         if (k.super_confluence_count) chips.push(`<a class="brief-chip" href="/toplists" target="_blank">⭐ ${k.super_confluence_count} Super Confluence</a>`);
-        if (k.reports_today_count) chips.push(`<span class="brief-chip" onclick="document.getElementById('reportsTodayWrap').scrollIntoView({behavior:'smooth'})">📊 ${k.reports_today_count} rapporter</span>`);
+        if (k.reports_today_count) chips.push(`<span class="brief-chip" onclick="document.getElementById('reportsWrap').scrollIntoView({behavior:'smooth'})">📊 ${k.reports_today_count} rapporter</span>`);
         if (k.buy_count) chips.push(`<span class="brief-chip">🟢 ${k.buy_count} BUY</span>`);
         chipsEl.innerHTML = chips.join('');
     }
@@ -8031,10 +8222,9 @@ async function loadDailyBrief() {
 // ── v3.4 Market Bullets (riktig data från stockanalysis.com)
 function _bulletTicker(tk, inDb) {
     if (!tk) return '<span class="bullet-tk"></span>';
-    const bare = String(tk).split(':').pop();
-    return inDb
-        ? `<span class="bullet-tk linked" onclick="window.location.href='/?q=${encodeURIComponent(bare)}'">${escapeHtml(tk)}</span>`
-        : `<span class="bullet-tk">${escapeHtml(tk)}</span>`;
+    const bare = String(tk).split(':').pop().replace(/'/g, '');
+    // Alla klickbara: in_db → drawer, annars → stockanalysis.com (via openStockByTicker)
+    return `<span class="bullet-tk linked" onclick="openStockByTicker('${bare}')">${escapeHtml(tk)}</span>`;
 }
 function _ovPct(v) {
     if (v == null) return '<span style="color:#9ca3af">–</span>';
@@ -8094,24 +8284,8 @@ async function loadBullets(date) {
             html += `</div>`;
         }
 
-        // Earnings recent + upcoming
-        const er = d.earnings_recent || [], eu = d.earnings_upcoming || [];
-        if (er.length) {
-            html += `<div class="bullet-sec"><div class="bullet-sec-title">📊 Senaste rapporter</div><div class="earn-grid">`;
-            for (const e of er) {
-                html += `<div class="earn-card"><div class="et">${escapeHtml(e.ticker || '')}</div>
-                    <div class="em">Rev ${escapeHtml(e.revenue || '?')} ${_yoy(e.revenue_yoy)}<br>EPS ${escapeHtml(e.eps || '?')} ${_yoy(e.eps_yoy)}</div></div>`;
-            }
-            html += `</div></div>`;
-        }
-        if (eu.length) {
-            html += `<div class="bullet-sec"><div class="bullet-sec-title">🔜 Kommande rapporter</div><div class="earn-grid">`;
-            for (const e of eu) {
-                html += `<div class="earn-card"><div class="et">${escapeHtml(e.ticker || '')}</div>
-                    <div class="em">Est. rev ${escapeHtml(e.est_revenue || '?')} ${_yoy(e.est_revenue_yoy)}<br>Est. EPS ${escapeHtml(e.est_eps || '?')} ${_yoy(e.est_eps_yoy)}</div></div>`;
-            }
-            html += `</div></div>`;
-        }
+        // OBS: earnings (recent/upcoming) renderas INTE här längre — de samlas
+        // i den konsoliderade "📊 Rapporter"-sektionen (loadReports).
         if (d.source_url) {
             html += `<div style="font-size:10.5px;color:#9ca3af;margin-top:8px">Källa: <a href="${escapeHtml(d.source_url)}" target="_blank" rel="noopener" style="color:#9ca3af">stockanalysis.com market bullets</a></div>`;
         }
@@ -8192,7 +8366,7 @@ async function loadTrending() {
             const chg = s.change_pct;
             const chgHtml = chg != null
                 ? `<span style="color:${chg >= 0 ? '#059669' : '#dc2626'};font-weight:700">${chg >= 0 ? '+' : ''}${Number(chg).toFixed(1)}%</span>` : '';
-            return `<div class="trend-card ${s.is_new ? 'is-new' : ''}" onclick="window.location.href='/?q=${encodeURIComponent(bare)}'">
+            return `<div class="trend-card ${s.is_new ? 'is-new' : ''}" onclick="openStockByTicker('${String(bare).replace(/'/g,'')}')">
                 ${s.is_new ? '<span class="new-badge">NY</span>' : ''}
                 <div class="trend-rank">#${s.rank}</div>
                 <div class="trend-tk ${linked ? 'linked' : ''}">${escapeHtml(s.ticker || '')}</div>
@@ -8221,53 +8395,103 @@ async function syncTrending() {
 }
 
 // v3 — Rapport idag (Börsdata-kalender)
+// ── v3.6 Konsoliderade Rapporter (Idag / Kommande / Senaste) ──
 let _reportsTodayTickers = [];
-async function loadReportsToday() {
-    const el = document.getElementById('reportsTodayContent');
+let _reportsData = { today: [], upcoming: [], recent: [] };
+let _reportTab = 'today';
+
+const _repTimeLabel = t => t === 'pre_market' ? '🌅 Pre' : t === 'post_market' ? '🌙 Efter' : t === 'during_market' ? '☀️ Dagen' : '';
+
+async function loadReports() {
+    const el = document.getElementById('reportsContent');
     if (!el) return;
-    try {
-        const r = await fetch('/api/report-calendar/today');
-        const d = await r.json();
-        const reports = d.reports || [];
-        _reportsTodayTickers = reports.map(x => x.ticker).filter(Boolean);
-        if (reports.length === 0) {
-            el.innerHTML = `<div style="padding:16px;text-align:center;color:#6b7280;background:#f8fafc;border-radius:10px;font-size:13px">
-                Inga bolag rapporterar idag enligt Börsdata-kalendern.
-            </div>`;
-            const btn = document.getElementById('analyzeReportsBtn');
-            if (btn) btn.style.display = 'none';
-            return;
-        }
-        // Sortera: pre_market först, sen during, sen post, sen okänd
-        const order = {pre_market: 0, during_market: 1, post_market: 2};
-        reports.sort((a, b) => (order[a.report_time] ?? 3) - (order[b.report_time] ?? 3));
-        const timeLabel = t => t === 'pre_market' ? '🌅 Pre-market'
-                              : t === 'post_market' ? '🌙 Efter stängning'
-                              : t === 'during_market' ? '☀️ Under dagen' : '🕐 Tid ej angiven';
-        const cards = reports.map(rp => {
-            const relTime = rp.expected_release_at
-                ? String(rp.expected_release_at).slice(11, 16) : '';
-            return `<div style="background:white;border:1px solid #e5e7eb;border-left:4px solid #3b82f6;border-radius:10px;padding:12px 14px">
-                <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">
-                    <div>
-                        <div style="font-size:15px;font-weight:800;color:#0f172a">${escapeHtml(rp.ticker || '')}</div>
-                        <div style="font-size:11px;color:#6b7280">${escapeHtml(rp.report_type || 'Rapport')}</div>
-                    </div>
-                    <div style="text-align:right;font-size:10.5px;color:#3b82f6;font-weight:600">
-                        ${timeLabel(rp.report_time)}${relTime ? `<div style="color:#9ca3af;font-weight:400">${relTime}</div>` : ''}
-                    </div>
-                </div>
-            </div>`;
-        }).join('');
-        el.innerHTML = `
-            <div style="font-size:12px;color:#6b7280;margin-bottom:8px">
-                <strong>${reports.length}</strong> bolag rapporterar idag.
-                Klicka "Analysera dagens rapport-bolag" för att köra DAKTIER-analys på alla.
-            </div>
-            <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:8px">${cards}</div>`;
-    } catch (e) {
-        el.innerHTML = `<div style="padding:14px;color:#dc2626;font-size:12px">Kunde ej ladda rapport-kalendern: ${e.message}</div>`;
+    // Hämta alla tre källor parallellt
+    const [todayR, upcomingR, bulletsR] = await Promise.allSettled([
+        fetch('/api/report-calendar/today').then(r => r.json()),
+        fetch('/api/report-calendar/upcoming?days=14').then(r => r.json()),
+        fetch('/api/market-bullets').then(r => r.json()),
+    ]);
+    const today = (todayR.value && todayR.value.reports) || [];
+    const upcomingCal = (upcomingR.value && upcomingR.value.reports) || [];
+    const bullets = bulletsR.value || {};
+    // Idag = Börsdata today
+    _reportsData.today = today;
+    _reportsTodayTickers = today.map(x => x.ticker).filter(Boolean);
+    // Kommande = Börsdata upcoming (exkl idag) + bullets earnings_upcoming (US)
+    const todaySet = new Set(today.map(x => x.ticker));
+    const calUpcoming = upcomingCal.filter(x => !todaySet.has(x.ticker)).map(x => ({
+        ticker: x.ticker, report_type: x.report_type, report_date: x.report_date,
+        report_time: x.report_time, source: 'borsdata' }));
+    const usUpcoming = (bullets.earnings_upcoming || []).map(e => ({
+        ticker: e.ticker, company: e.company, est_revenue: e.est_revenue,
+        est_revenue_yoy: e.est_revenue_yoy, est_eps: e.est_eps, est_eps_yoy: e.est_eps_yoy,
+        source: 'us' }));
+    _reportsData.upcoming = [...calUpcoming, ...usUpcoming];
+    // Senaste = bullets earnings_recent (US)
+    _reportsData.recent = (bullets.earnings_recent || []);
+
+    // Uppdatera räknare
+    const setCnt = (id, n) => { const e = document.getElementById(id); if (e) e.textContent = n ? `(${n})` : ''; };
+    setCnt('repCntToday', _reportsData.today.length);
+    setCnt('repCntUpcoming', _reportsData.upcoming.length);
+    setCnt('repCntRecent', _reportsData.recent.length);
+    renderReportTab();
+}
+
+function switchReportTab(tab) {
+    _reportTab = tab;
+    document.querySelectorAll('#repTabs .rep-tab').forEach(b =>
+        b.classList.toggle('active', b.dataset.tab === tab));
+    renderReportTab();
+}
+
+function renderReportTab() {
+    const el = document.getElementById('reportsContent');
+    if (!el) return;
+    const btn = document.getElementById('analyzeReportsBtn');
+    if (btn) btn.style.display = (_reportTab === 'today' && _reportsTodayTickers.length) ? '' : 'none';
+
+    if (_reportTab === 'today') {
+        const reps = [..._reportsData.today].sort((a, b) =>
+            ({pre_market:0,during_market:1,post_market:2}[a.report_time] ?? 3) -
+            ({pre_market:0,during_market:1,post_market:2}[b.report_time] ?? 3));
+        if (!reps.length) { el.innerHTML = _repEmpty('Inga bolag rapporterar idag.'); return; }
+        el.innerHTML = `<div style="font-size:12px;color:#6b7280;margin-bottom:8px"><strong>${reps.length}</strong> bolag rapporterar idag (Börsdata). Klicka en för analys.</div>
+            <div class="rep-grid">${reps.map(rp => {
+                const t = rp.expected_release_at ? String(rp.expected_release_at).slice(11,16) : '';
+                return `<div class="rep-card" onclick="openStockByTicker('${String(rp.ticker||'').replace(/'/g,'')}')">
+                    <div class="rep-tk">${escapeHtml(rp.ticker||'')}</div>
+                    <div class="rep-co">${escapeHtml(rp.report_type||'Rapport')}</div>
+                    <div class="rep-meta">${_repTimeLabel(rp.report_time)}${t?' · '+t:''}</div>
+                </div>`; }).join('')}</div>`;
+    } else if (_reportTab === 'upcoming') {
+        const reps = _reportsData.upcoming;
+        if (!reps.length) { el.innerHTML = _repEmpty('Inga kommande rapporter inom 14 dagar.'); return; }
+        el.innerHTML = `<div class="rep-grid">${reps.map(rp => {
+            const flag = rp.source === 'us' ? '🇺🇸' : '🇸🇪';
+            const meta = rp.source === 'us'
+                ? `Est. rev ${escapeHtml(rp.est_revenue||'?')} ${_yoy(rp.est_revenue_yoy)}`
+                : `${escapeHtml(rp.report_date||'')}${rp.report_time?' · '+_repTimeLabel(rp.report_time):''}`;
+            return `<div class="rep-card" onclick="openStockByTicker('${String(rp.ticker||'').replace(/'/g,'')}')">
+                <div class="rep-tk">${flag} ${escapeHtml(rp.ticker||'')}</div>
+                ${rp.company?`<div class="rep-co">${escapeHtml(rp.company)}</div>`:''}
+                <div class="rep-meta">${meta}</div>
+            </div>`; }).join('')}</div>`;
+    } else {
+        const reps = _reportsData.recent;
+        if (!reps.length) { el.innerHTML = _repEmpty('Inga senaste rapporter i digesten än.'); return; }
+        el.innerHTML = `<div class="rep-grid">${reps.map(e => {
+            const beat = (e.revenue_yoy != null && e.revenue_yoy >= 0 && e.eps_yoy != null && e.eps_yoy >= 0);
+            const miss = (e.eps_yoy != null && e.eps_yoy < 0);
+            return `<div class="rep-card ${beat?'beat':miss?'miss':''}" onclick="openStockByTicker('${String(e.ticker||'').replace(/'/g,'')}')">
+                <div class="rep-tk">${escapeHtml(e.ticker||'')}</div>
+                ${e.company?`<div class="rep-co">${escapeHtml(e.company)}</div>`:''}
+                <div class="rep-meta">Rev ${escapeHtml(e.revenue||'?')} ${_yoy(e.revenue_yoy)}<br>EPS ${escapeHtml(e.eps||'?')} ${_yoy(e.eps_yoy)}</div>
+            </div>`; }).join('')}</div>`;
     }
+}
+function _repEmpty(msg) {
+    return `<div style="padding:16px;text-align:center;color:#6b7280;background:#f8fafc;border-radius:10px;font-size:13px">${msg}</div>`;
 }
 
 async function analyzeReportsToday() {
@@ -8371,7 +8595,7 @@ async function loadSuperConfluenceCards() {
             const lp = r.live_price ? `${r.live_price.toFixed(2)} ${r.live_price_currency || ''}` : (r.price_at_analysis ? `${Number(r.price_at_analysis).toFixed(2)} ${r.price_currency || ''} <span style="font-size:10px;color:#9ca3af">(analys-pris)</span>` : '—');
             const delta = r.price_delta_pct != null
                 ? `<span style="color:${Math.abs(r.price_delta_pct) > 10 ? '#dc2626' : Math.abs(r.price_delta_pct) > 5 ? '#d97706' : '#6b7280'};font-size:11px;font-weight:600">${r.price_delta_pct >= 0 ? '+' : ''}${r.price_delta_pct.toFixed(1)}%</span>` : '';
-            return `<a href="/toplists" target="_blank" style="text-decoration:none;color:inherit">
+            return `<div onclick="openStockByTicker('${String(r.ticker||'').replace(/'/g,'')}')" style="text-decoration:none;color:inherit">
               <div style="background:white;border:1px solid #e5e7eb;border-left:4px solid #f59e0b;border-radius:10px;padding:14px 16px;transition:all 0.2s;cursor:pointer" onmouseover="this.style.transform='translateY(-2px)';this.style.boxShadow='0 4px 12px rgba(0,0,0,0.08)'" onmouseout="this.style.transform='';this.style.boxShadow=''">
                 <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin-bottom:8px">
                     <div>
@@ -8390,7 +8614,7 @@ async function loadSuperConfluenceCards() {
                 </div>
                 <div style="font-size:10.5px;color:#6b7280;margin-top:6px;font-style:italic">${escapeHtml(r.classification || '')}${r.cycle_position && r.cycle_position !== 'NA' ? ' · ' + r.cycle_position : ''}</div>
               </div>
-            </a>`;
+            </div>`;
         }).join('');
     } catch (e) {
         console.warn('super confluence cards failed', e);

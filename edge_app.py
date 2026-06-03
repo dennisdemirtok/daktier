@@ -5453,26 +5453,29 @@ def _generate_market_news_digest():
         print("[market news] CLAUDE_API_KEY saknas", file=sys.stderr)
         return None, 0.0
 
-    prompt = """Du är finansredaktör som skriver ett kort dagligt marknads-digest
-i stil med Stock Analysis news (kort, sakligt, faktabaserat).
+    prompt = """Du är finansredaktör på en SVENSK finanssajt. Skriv ett kort dagligt
+nyhets-digest med FOKUS PÅ SVERIGE & NORDEN (de amerikanska nyheterna täcks
+separat — här vill vi INTE missa de svenska/nordiska bolagen vi följer).
 
-Använd web_search för att hitta DAGENS faktiska marknadsnyheter (USA + Sverige/Norden).
-Sök på flera saker: "stock market news today", "biggest stock movers today",
-"earnings today", samt svenska bolag ("OMX large cap nyheter idag").
+Använd web_search. Sök på svenska källor och bolag:
+"Stockholmsbörsen idag", "OMXS30 nyheter", "Di.se senaste", "Placera nyheter",
+"large cap Stockholm rapport idag", "svenska aktier kursrörelser idag",
+samt enskilda bolag (Investor, Atlas Copco, Evolution, Volvo, SEB, Ericsson,
+Hexagon, Saab, Boliden, Sandvik m.fl). Ta även med Norge/Danmark/Finland.
 
 Returnera EXAKT ett JSON-block mellan markörerna, inget annat efter:
 
 ---NEWS-JSON-START---
 {
-  "market_recap": "2-3 meningar om dagens marknadsläge: index-rörelser (S&P 500, Nasdaq, Dow, OMXS30), räntor, råvaror, övergripande tema. Konkreta siffror.",
+  "market_recap": "2-3 meningar på SVENSKA om Stockholmsbörsen idag: OMXS30-rörelse, sektorer, valuta (USD/SEK, EUR/SEK), ränteläge, övergripande tema. Konkreta siffror.",
   "items": [
     {
-      "ticker": "GME",
-      "company": "GameStop",
-      "headline": "Kort rubrik (max 70 tecken)",
-      "summary": "1-2 meningar: vad hände, siffror, kursrörelse. Sakligt.",
-      "change_pct": 11.0,
-      "source": "WSJ",
+      "ticker": "EVO",
+      "company": "Evolution",
+      "headline": "Kort svensk rubrik (max 70 tecken)",
+      "summary": "1-2 meningar på svenska: vad hände, siffror, kursrörelse.",
+      "change_pct": 3.2,
+      "source": "Di",
       "source_url": "https://...",
       "category": "earnings"
     }
@@ -5481,14 +5484,14 @@ Returnera EXAKT ett JSON-block mellan markörerna, inget annat efter:
 ---NEWS-JSON-END---
 
 REGLER:
-- 8-12 items. Prioritera: stora kursrörelser, rapporter, M&A, guidance-ändringar,
-  makro-händelser, och MINST 2 nordiska/svenska bolag om möjligt.
+- 8-12 items, MINST 6 svenska/nordiska bolag. Prioritera: kursrörelser,
+  rapporter, M&A, guidance, insynshandel, analytiker-rek på nordiska bolag.
+- ALLT på SVENSKA (summary, recap, rubriker). Behåll bolagsnamn/ticker.
 - category ∈ ["earnings","mna","guidance","macro","analyst","product","other"]
-- change_pct = dagens kursrörelse i % (positivt/negativt tal) eller null om okänt.
-- ticker = riktig börsticker (US: ren ticker; svenskt: t.ex. "EVO","VOLVO B").
-- source = nyhetskälla (WSJ, CNBC, Reuters, Bloomberg, DI, etc).
-- Saklig ton. Inga köp/sälj-råd. Bara vad som hände.
-- Svenska i summary/recap, behåll engelska egennamn/termer."""
+- change_pct = dagens kursrörelse i % eller null.
+- ticker = svensk börsticker (t.ex. "EVO","VOLVO B","INVE B") eller nordisk.
+- source = nordisk nyhetskälla (Di, Placera, Avanza, DN, E24, Børsen etc).
+- Saklig ton. Inga köp/sälj-råd."""
 
     headers = {
         "x-api-key": CLAUDE_API_KEY,
@@ -5746,13 +5749,18 @@ Strukturera den till JSON. Returnera EXAKT ett JSON-block mellan markörerna.
 ---BULLETS-JSON-END---
 
 REGLER:
+- **ÖVERSÄTT ALLT TILL SVENSKA** — summary, text, rubriker, section-titlar.
+  Behåll bolagsnamn, ticker och egennamn (t.ex. "GameStop", "Federal Reserve",
+  "WSJ") på originalspråk. Översätt själva nyhetstexten + sektionsrubriker
+  till naturlig svenska.
+- Section-titlar på svenska: "Aktie- & marknadsnyheter", "Juridik & reglering",
+  "Ekonomi", "Politik & omvärld".
 - Behåll ALLA nyheter och bolag som nämns (förlora ingen ticker).
 - ticker = börssymbol (utländska behåller prefix om angivet, t.ex. "VIE:AKZO").
 - Behåll source-attribut (CNBC, WSJ, Reuters etc).
-- text: kondensera till 1-2 meningar, behåll siffror + kursrörelser.
-- Gruppera politik/world/us-politics i "Politics & World".
-- Sätt null för saknade fält. Översätt INTE — behåll engelska.
-- Om en sektion saknas, utelämna den. Inga påhittade siffror.
+- text: kondensera till 1-2 meningar på svenska, behåll siffror + kursrörelser.
+- Sätt null för saknade fält. Om en sektion saknas, utelämna den.
+- Inga påhittade siffror.
 
 RÅTEXT:
 {text}"""
@@ -11372,8 +11380,8 @@ def _build_agent_context(db, max_per_list=20):
                 ch_str = f" ({ch:+.1f}%)" if isinstance(ch, (int, float)) else ""
                 news_lines.append(f"  - {tk}{ch_str}: {hl}")
             if news_lines:
-                parts.append("📰 DAGENS MARKNADSNYHETER (använd när relevant för "
-                             "ett bolag användaren frågar om):\n" + "\n".join(news_lines))
+                parts.append("🇸🇪 SVENSKA/NORDISKA MARKNADSNYHETER (använd när relevant "
+                             "för ett nordiskt bolag användaren frågar om):\n" + "\n".join(news_lines))
     except Exception as e:
         print(f"[agent ctx] news error: {e}", file=sys.stderr)
 
@@ -13230,12 +13238,21 @@ def _price_update_loop():
                 print(f"[macro pulse] auto-gen klar", file=sys.stderr)
         except Exception as e:
             print(f"[macro pulse loop] {e}", file=sys.stderr)
+        # Svenska marknadsnyheter — var ~6h
+        try:
+            if time.time() - _LAST_SE_NEWS_SYNC[0] > 21600:  # 6h
+                _get_or_generate_market_news(get_db(), max_age_hours=6)
+                _LAST_SE_NEWS_SYNC[0] = time.time()
+                print(f"[se-news] auto-gen klar", file=sys.stderr)
+        except Exception as e:
+            print(f"[se-news loop] {e}", file=sys.stderr)
         time.sleep(PRICE_UPDATE_INTERVAL_SEC)
 
 
 _LAST_TRENDING_SYNC = [0.0]
 _LAST_BULLETS_SYNC = [0.0]
 _LAST_MACRO_PULSE_SYNC = [0.0]
+_LAST_SE_NEWS_SYNC = [0.0]
 
 
 @app.route("/api/price-cache/update", methods=["POST"])
