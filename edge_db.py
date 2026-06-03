@@ -587,6 +587,20 @@ def _create_tables(db):
                 ON report_calendar(report_date, status);
             CREATE INDEX IF NOT EXISTS idx_price_cache_updated
                 ON price_cache(price_updated_at DESC);
+
+            -- v3.3: Marknadsnyheter (stockanalysis.com-stil dagligt digest)
+            -- En rad per genererad digest; items lagras som JSON.
+            CREATE TABLE IF NOT EXISTS market_news (
+                id SERIAL PRIMARY KEY,
+                generated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                market_recap TEXT,           -- AI-genererad marknadssammanfattning
+                items_json JSONB,            -- [{ticker, company, headline, summary, change_pct, source, source_url, category, in_db}]
+                n_items INTEGER DEFAULT 0,
+                model TEXT,
+                cost_usd NUMERIC(8,4)
+            );
+            CREATE INDEX IF NOT EXISTS idx_market_news_gen
+                ON market_news(generated_at DESC);
             -- OBS: idx_batch_edge_action + idx_batch_stop_thesis hanteras i
             -- _ensure_batch_analyses_columns eftersom kolumnerna inte finns i
             -- ursprungliga CREATE TABLE. Att lägga dem här aborterar hela
@@ -1118,6 +1132,19 @@ def _create_tables(db):
                 PRIMARY KEY (ticker, report_date)
             );
             CREATE INDEX IF NOT EXISTS idx_report_status_sqlite ON report_calendar(status);
+
+            -- v3.3: Marknadsnyheter (SQLite)
+            CREATE TABLE IF NOT EXISTS market_news (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                generated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                market_recap TEXT,
+                items_json TEXT,
+                n_items INTEGER DEFAULT 0,
+                model TEXT,
+                cost_usd REAL
+            );
+            CREATE INDEX IF NOT EXISTS idx_market_news_gen
+                ON market_news(generated_at DESC);
 
             -- Live screen-tracker (SQLite): snapshot för 12m-uppföljning
             CREATE TABLE IF NOT EXISTS screen_snapshots (

@@ -5432,6 +5432,235 @@ INGA rubriker eller h1/h2. Bara den HTML-struktur jag specificerat."""
         return None
 
 
+# ══════════════════════════════════════════════════════════════
+# MARKNADSNYHETER (v3.3) — stockanalysis.com-stil dagligt digest
+# Claude + web_search genererar ett digest: marknadssammanfattning +
+# per-bolag-nyheter. Robust (ingen scraping), alltid dagsfärskt.
+# ══════════════════════════════════════════════════════════════
+
+_NEWS_GEN_STATE = {"running": False}
+
+
+def _generate_market_news_digest():
+    """Genererar dagens marknadsnyheter via Claude + web_search.
+
+    Returnerar (dict, cost_usd) eller (None, 0). Dict:
+      {"market_recap": str, "items": [{ticker, company, headline, summary,
+        change_pct, source, source_url, category}]}
+    """
+    import json as _json
+    if not CLAUDE_API_KEY:
+        print("[market news] CLAUDE_API_KEY saknas", file=sys.stderr)
+        return None, 0.0
+
+    prompt = """Du är finansredaktör som skriver ett kort dagligt marknads-digest
+i stil med Stock Analysis news (kort, sakligt, faktabaserat).
+
+Använd web_search för att hitta DAGENS faktiska marknadsnyheter (USA + Sverige/Norden).
+Sök på flera saker: "stock market news today", "biggest stock movers today",
+"earnings today", samt svenska bolag ("OMX large cap nyheter idag").
+
+Returnera EXAKT ett JSON-block mellan markörerna, inget annat efter:
+
+---NEWS-JSON-START---
+{
+  "market_recap": "2-3 meningar om dagens marknadsläge: index-rörelser (S&P 500, Nasdaq, Dow, OMXS30), räntor, råvaror, övergripande tema. Konkreta siffror.",
+  "items": [
+    {
+      "ticker": "GME",
+      "company": "GameStop",
+      "headline": "Kort rubrik (max 70 tecken)",
+      "summary": "1-2 meningar: vad hände, siffror, kursrörelse. Sakligt.",
+      "change_pct": 11.0,
+      "source": "WSJ",
+      "source_url": "https://...",
+      "category": "earnings"
+    }
+  ]
+}
+---NEWS-JSON-END---
+
+REGLER:
+- 8-12 items. Prioritera: stora kursrörelser, rapporter, M&A, guidance-ändringar,
+  makro-händelser, och MINST 2 nordiska/svenska bolag om möjligt.
+- category ∈ ["earnings","mna","guidance","macro","analyst","product","other"]
+- change_pct = dagens kursrörelse i % (positivt/negativt tal) eller null om okänt.
+- ticker = riktig börsticker (US: ren ticker; svenskt: t.ex. "EVO","VOLVO B").
+- source = nyhetskälla (WSJ, CNBC, Reuters, Bloomberg, DI, etc).
+- Saklig ton. Inga köp/sälj-råd. Bara vad som hände.
+- Svenska i summary/recap, behåll engelska egennamn/termer."""
+
+    headers = {
+        "x-api-key": CLAUDE_API_KEY,
+        "anthropic-version": "2023-06-01",
+        "content-type": "application/json",
+    }
+    payload = {
+        "model": "claude-sonnet-4-20250514",
+        "max_tokens": 3000,
+        "messages": [{"role": "user", "content": prompt}],
+        "tools": [{"type": "web_search_20250305", "name": "web_search",
+                   "max_uses": 5}],
+    }
+    try:
+        import httpx
+        with httpx.Client(timeout=120.0) as client:
+            r = client.post("https://api.anthropic.com/v1/messages",
+                            headers=headers, json=payload)
+        if r.status_code != 200:
+            print(f"[market news] HTTP {r.status_code}: {r.text[:200]}", file=sys.stderr)
+            return None, 0.0
+        resp = r.json()
+    except Exception as e:
+        print(f"[market news] request fel: {e}", file=sys.stderr)
+        return None, 0.0
+
+    # Kostnad
+    usage = resp.get("usage", {})
+    try:
+        cost = _calc_sonnet_cost(usage)
+    except Exception:
+        cost = 0.0
+
+    full_text = ""
+    for blk in resp.get("content", []):
+        if blk.get("type") == "text":
+            full_text += blk.get("text", "")
+
+    import re as _re
+    m = _re.search(r"---NEWS-JSON-START---\s*(.*?)\s*---NEWS-JSON-END---",
+                   full_text, _re.DOTALL)
+    if not m:
+        print(f"[market news] inget JSON-block i svaret ({len(full_text)} tecken)",
+              file=sys.stderr)
+        return None, cost
+    json_str = m.group(1).strip()
+    json_str = _re.sub(r"^```(?:json)?\s*", "", json_str)
+    json_str = _re.sub(r"\s*```$", "", json_str)
+    try:
+        parsed = _json.loads(json_str)
+    except Exception as e:
+        print(f"[market news] JSON parse fel: {e}", file=sys.stderr)
+        return None, cost
+    return parsed, cost
+
+
+def _cross_reference_news_tickers(db, items):
+    """Markera vilka news-tickers som finns i vår DB (för länkning) + lägg till
+    kort nyckeltals-snapshot."""
+    from edge_db import _ph, _fetchone
+    ph = _ph()
+    for it in items:
+        tk = (it.get("ticker") or "").strip()
+        it["in_db"] = False
+        if not tk:
+            continue
+        try:
+            row = _fetchone(db,
+                f"SELECT short_name, name, country, last_price, currency, "
+                f"pe_ratio, one_day_change_pct, number_of_owners "
+                f"FROM stocks WHERE UPPER(short_name) = {ph} OR UPPER(ticker) = {ph} "
+                f"ORDER BY number_of_owners DESC NULLS LAST LIMIT 1"
+                if _is_postgres() else
+                f"SELECT short_name, name, country, last_price, currency, "
+                f"pe_ratio, one_day_change_pct, number_of_owners "
+                f"FROM stocks WHERE UPPER(short_name) = {ph} OR UPPER(ticker) = {ph} "
+                f"ORDER BY number_of_owners DESC LIMIT 1",
+                (tk.upper(), tk.upper()))
+            if row:
+                rd = dict(row)
+                it["in_db"] = True
+                it["db_short_name"] = rd.get("short_name")
+                it["db_country"] = rd.get("country")
+                it["db_pe"] = rd.get("pe_ratio")
+                it["db_owners"] = rd.get("number_of_owners")
+        except Exception:
+            pass
+    return items
+
+
+def _get_or_generate_market_news(db, max_age_hours=6, force=False):
+    """Returnerar senaste marknadsnyheter; regenererar om äldre än max_age_hours."""
+    from edge_db import _fetchone
+    import json as _json
+    from datetime import datetime, timedelta
+
+    if not force:
+        try:
+            row = _fetchone(db,
+                "SELECT generated_at, market_recap, items_json, n_items, model "
+                "FROM market_news ORDER BY generated_at DESC LIMIT 1")
+            if row:
+                rd = dict(row)
+                gen_at = rd.get("generated_at")
+                # Parsa tidsstämpel
+                age_ok = False
+                try:
+                    if isinstance(gen_at, str):
+                        dt = datetime.fromisoformat(gen_at.replace("T", " ").split(".")[0].replace("Z", ""))
+                    else:
+                        dt = gen_at
+                    age_ok = (datetime.utcnow() - dt) < timedelta(hours=max_age_hours)
+                except Exception:
+                    age_ok = False
+                if age_ok and rd.get("items_json"):
+                    items = rd["items_json"]
+                    if isinstance(items, str):
+                        items = _json.loads(items)
+                    return {"market_recap": rd.get("market_recap"),
+                            "items": items, "generated_at": str(gen_at),
+                            "cached": True}
+        except Exception as e:
+            print(f"[market news] cache-läsning fel: {e}", file=sys.stderr)
+
+    # Generera nytt
+    if _NEWS_GEN_STATE.get("running"):
+        # En annan generering pågår — returnera senaste cache (även om gammal)
+        try:
+            row = _fetchone(db,
+                "SELECT generated_at, market_recap, items_json FROM market_news "
+                "ORDER BY generated_at DESC LIMIT 1")
+            if row:
+                rd = dict(row)
+                items = rd.get("items_json")
+                if isinstance(items, str):
+                    items = _json.loads(items)
+                return {"market_recap": rd.get("market_recap"), "items": items or [],
+                        "generated_at": str(rd.get("generated_at")), "cached": True,
+                        "regenerating": True}
+        except Exception:
+            pass
+        return {"market_recap": None, "items": [], "regenerating": True}
+
+    _NEWS_GEN_STATE["running"] = True
+    try:
+        parsed, cost = _generate_market_news_digest()
+        if not parsed:
+            return {"market_recap": None, "items": [], "error": "generering misslyckades"}
+        items = parsed.get("items", []) or []
+        items = _cross_reference_news_tickers(db, items)
+        recap = parsed.get("market_recap", "")
+        # Spara
+        try:
+            from edge_db import _ph
+            ph = _ph()
+            db.execute(
+                f"INSERT INTO market_news (market_recap, items_json, n_items, model, cost_usd) "
+                f"VALUES ({ph}, {ph}, {ph}, {ph}, {ph})",
+                (recap, _json.dumps(items, ensure_ascii=False, default=str),
+                 len(items), "claude-sonnet-4-20250514", cost))
+            db.commit()
+        except Exception as e:
+            print(f"[market news] spara fel: {e}", file=sys.stderr)
+            try: db.rollback()
+            except Exception: pass
+        return {"market_recap": recap, "items": items,
+                "generated_at": datetime.utcnow().isoformat(),
+                "cached": False, "cost_usd": cost}
+    finally:
+        _NEWS_GEN_STATE["running"] = False
+
+
 def _generate_market_recap(top_movers_us, top_movers_se, owner_movers, external_signals):
     """Stock Analysis-stil "Market Recap" — konkreta dagens händelser med tickers + %."""
     import json as _json
@@ -10580,6 +10809,34 @@ def _build_agent_context(db, max_per_list=20):
     except Exception as e:
         print(f"[agent ctx] today-movers error: {e}", file=sys.stderr)
 
+    # ── NYTT: DAGENS MARKNADSNYHETER (cachat, ingen ny generering här) ──
+    try:
+        from edge_db import _fetchone
+        import json as _json2
+        row = _fetchone(db,
+            "SELECT market_recap, items_json FROM market_news "
+            "ORDER BY generated_at DESC LIMIT 1")
+        if row:
+            rd = dict(row)
+            news_lines = []
+            if rd.get("market_recap"):
+                news_lines.append(f"  Marknadsläge: {rd['market_recap']}")
+            items = rd.get("items_json")
+            if isinstance(items, str):
+                try: items = _json2.loads(items)
+                except Exception: items = []
+            for it in (items or [])[:10]:
+                tk = it.get("ticker", "")
+                hl = it.get("headline", "")
+                ch = it.get("change_pct")
+                ch_str = f" ({ch:+.1f}%)" if isinstance(ch, (int, float)) else ""
+                news_lines.append(f"  - {tk}{ch_str}: {hl}")
+            if news_lines:
+                parts.append("📰 DAGENS MARKNADSNYHETER (använd när relevant för "
+                             "ett bolag användaren frågar om):\n" + "\n".join(news_lines))
+    except Exception as e:
+        print(f"[agent ctx] news error: {e}", file=sys.stderr)
+
     return "\n\n".join(parts)
 
 
@@ -11715,6 +11972,88 @@ def api_report_calendar_today():
                         "count": len(results), "reports": results})
     except Exception as e:
         return jsonify({"error": str(e), "reports": [], "count": 0}), 200
+
+
+@app.route("/api/market-news")
+def api_market_news():
+    """Dagens marknadsnyheter (cachat ~6h). NON-BLOCKING — returnerar cache
+    direkt och triggar bakgrundsgenerering om stale/saknas.
+    ?ticker=XXX filtrerar till bolag som nämner den tickern."""
+    from edge_db import _fetchone
+    import json as _json
+    from datetime import datetime, timedelta
+    db = get_db()
+    ticker = (request.args.get("ticker") or "").strip().upper()
+
+    recap, items, gen_at = None, [], None
+    is_stale = True
+    try:
+        row = _fetchone(db,
+            "SELECT generated_at, market_recap, items_json FROM market_news "
+            "ORDER BY generated_at DESC LIMIT 1")
+        if row:
+            rd = dict(row)
+            recap = rd.get("market_recap")
+            gen_at = rd.get("generated_at")
+            it = rd.get("items_json")
+            if isinstance(it, str):
+                try: it = _json.loads(it)
+                except Exception: it = []
+            items = it or []
+            try:
+                if isinstance(gen_at, str):
+                    dt = datetime.fromisoformat(gen_at.replace("T", " ").split(".")[0].replace("Z", ""))
+                else:
+                    dt = gen_at
+                is_stale = (datetime.utcnow() - dt) > timedelta(hours=6)
+            except Exception:
+                is_stale = True
+    except Exception as e:
+        print(f"[market news GET] {e}", file=sys.stderr)
+
+    # Trigga bakgrundsgenerering om stale/saknas och ingen körning pågår
+    regenerating = _NEWS_GEN_STATE.get("running", False)
+    if (is_stale or not items) and not regenerating:
+        def _bg():
+            try:
+                db2 = get_db()
+                _get_or_generate_market_news(db2, force=True)
+            except Exception as e:
+                print(f"[market news bg] {e}", file=sys.stderr)
+        threading.Thread(target=_bg, daemon=True).start()
+        regenerating = True
+
+    if ticker:
+        items = [it for it in items
+                 if (it.get("ticker") or "").upper() == ticker
+                 or (it.get("db_short_name") or "").upper() == ticker]
+
+    return jsonify({
+        "market_recap": recap,
+        "items": items,
+        "count": len(items),
+        "generated_at": str(gen_at) if gen_at else None,
+        "cached": bool(items),
+        "regenerating": regenerating,
+    })
+
+
+@app.route("/api/market-news/refresh", methods=["POST"])
+def api_market_news_refresh():
+    """Tvingar regenerering av marknadsnyheter i bakgrundstråd."""
+    if _NEWS_GEN_STATE.get("running"):
+        return jsonify({"status": "already running"}), 409
+
+    def _run():
+        try:
+            db = get_db()
+            _get_or_generate_market_news(db, force=True)
+        except Exception as e:
+            print(f"[market news refresh] {e}", file=sys.stderr)
+
+    threading.Thread(target=_run, daemon=True).start()
+    return jsonify({"status": "started",
+                    "note": "Genererar nyheter i bakgrunden (~15-30s)"}), 202
 
 
 @app.route("/api/report-calendar/upcoming")

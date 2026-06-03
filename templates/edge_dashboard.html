@@ -205,8 +205,59 @@
         .loading-spinner { width: 28px; height: 28px; border: 3px solid var(--surface-high); border-top-color: var(--green); border-radius: 50%; animation: spin 0.8s linear infinite; margin-bottom: 12px; }
 
         /* ── Dashboard page ─────────────────────────────── */
-        .dash-grid { display: flex; flex-direction: column; gap: 28px; }
+        .dash-grid { display: flex; flex-direction: column; gap: 22px; }
         .dash-section { }
+
+        /* v3.3 — Daglig brief hero */
+        .daily-brief { background: linear-gradient(135deg, #0f172a 0%, #1e3a8a 55%, #3b82f6 100%);
+            color: #fff; border-radius: 16px; padding: 22px 26px; box-shadow: 0 6px 20px rgba(30,58,138,0.18); }
+        .daily-brief .brief-eyebrow { font-size: 11px; text-transform: uppercase; letter-spacing: 1.5px;
+            opacity: 0.7; font-weight: 600; }
+        .daily-brief .brief-text { font-size: 16px; line-height: 1.6; margin-top: 8px; font-weight: 500; }
+        .daily-brief .brief-text strong { color: #fde68a; font-weight: 700; }
+        .daily-brief .brief-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
+        .daily-brief .brief-chip { background: rgba(255,255,255,0.14); border: 1px solid rgba(255,255,255,0.18);
+            padding: 6px 12px; border-radius: 20px; font-size: 12px; font-weight: 600; display: inline-flex;
+            align-items: center; gap: 5px; cursor: pointer; transition: all 0.15s; text-decoration: none; color: #fff; }
+        .daily-brief .brief-chip:hover { background: rgba(255,255,255,0.24); transform: translateY(-1px); }
+
+        /* v3.3 — Marknadsnyheter */
+        .news-recap { background: #f8fafc; border-left: 3px solid #3b82f6; border-radius: 0 8px 8px 0;
+            padding: 12px 16px; font-size: 13.5px; line-height: 1.55; color: #1e293b; margin-bottom: 14px; }
+        .news-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(330px, 1fr)); gap: 10px; }
+        .news-card { background: var(--white); border: 1px solid #eef0f2; border-radius: 11px; padding: 13px 15px;
+            transition: all 0.15s; }
+        .news-card:hover { box-shadow: 0 3px 12px rgba(0,0,0,0.06); transform: translateY(-1px); }
+        .news-card-head { display: flex; align-items: center; gap: 8px; margin-bottom: 5px; flex-wrap: wrap; }
+        .news-ticker { font-weight: 800; font-size: 13px; color: #0f172a; cursor: pointer; }
+        .news-ticker.linked { color: #1e40af; }
+        .news-ticker.linked:hover { text-decoration: underline; }
+        .news-chg { font-size: 12px; font-weight: 700; font-variant-numeric: tabular-nums; }
+        .news-cat { font-size: 9.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.4px;
+            padding: 2px 7px; border-radius: 6px; }
+        .news-cat.earnings { background: #dbeafe; color: #1e40af; }
+        .news-cat.mna { background: #fae8ff; color: #86198f; }
+        .news-cat.guidance { background: #fef3c7; color: #92400e; }
+        .news-cat.macro { background: #e0e7ff; color: #3730a3; }
+        .news-cat.analyst { background: #d1fae5; color: #065f46; }
+        .news-cat.product { background: #ccfbf1; color: #115e59; }
+        .news-cat.other { background: #f1f5f9; color: #475569; }
+        .news-headline { font-size: 13px; font-weight: 600; color: #1f2937; line-height: 1.4; margin-bottom: 3px; }
+        .news-summary { font-size: 12px; color: #6b7280; line-height: 1.5; }
+        .news-source { font-size: 10.5px; color: #9ca3af; margin-top: 5px; }
+        .news-source a { color: #9ca3af; }
+
+        /* v3.3 — Collapsible "Mer data"-sektion */
+        .dash-more { border-top: 1px dashed #d1d5db; padding-top: 6px; margin-top: 4px; }
+        .dash-more > summary { cursor: pointer; font-size: 13px; font-weight: 700; color: #475569;
+            padding: 12px 4px; list-style: none; display: flex; align-items: center; gap: 8px;
+            user-select: none; transition: color 0.15s; }
+        .dash-more > summary:hover { color: #1e40af; }
+        .dash-more > summary::-webkit-details-marker { display: none; }
+        .dash-more > summary::before { content: '▸'; font-size: 14px; transition: transform 0.2s; }
+        .dash-more[open] > summary::before { transform: rotate(90deg); }
+        .dash-more[open] > summary { color: #1e40af; border-bottom: 1px solid #e5e7eb; margin-bottom: 18px; }
+        .dash-more-inner { display: flex; flex-direction: column; gap: 28px; }
         .dash-heading { font-size: 14px; font-weight: 600; color: var(--text); text-transform: uppercase; letter-spacing: 0.08em; margin: 0 0 14px; }
         .dash-heading .dash-sub { font-weight: 400; text-transform: none; letter-spacing: 0; color: var(--text-muted); font-size: 12px; margin-left: 8px; }
         .dash-top-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
@@ -7621,10 +7672,31 @@ async function renderDashboard() {
 
     root.innerHTML = `
         <div class="dash-grid">
-            <!-- v3 Hero KPI-row: agent-validerade signaler -->
+
+            <!-- v3.3 ① DAGLIG BRIEF — en mening om dagen -->
+            <div class="daily-brief" id="dailyBriefWrap">
+                <div class="brief-eyebrow">📋 Dagens brief · ${new Date().toLocaleDateString('sv-SE', {weekday:'long', day:'numeric', month:'long'})}</div>
+                <div class="brief-text" id="briefText" style="opacity:0.6">Sammanställer dagens läge…</div>
+                <div class="brief-chips" id="briefChips"></div>
+            </div>
+
+            <!-- v3.3 ② MARKNADSNYHETER -->
+            <div class="dash-section" id="marketNewsWrap">
+                <h3 class="dash-heading" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+                    📰 Marknadsnyheter
+                    <span class="dash-sub">dagsfärskt · USA + Norden · AI-sammanställt</span>
+                    <button id="newsRefreshBtn" onclick="refreshMarketNews()" title="Uppdatera nyheter"
+                        style="margin-left:auto;background:white;border:1px solid var(--border);padding:6px 12px;border-radius:8px;font-size:12px;cursor:pointer;font-family:inherit;font-weight:600">🔄 Uppdatera</button>
+                </h3>
+                <div id="marketNewsContent" style="margin-top:6px">
+                    <div class="loading-wrap" style="padding:18px">Hämtar dagens nyheter…</div>
+                </div>
+            </div>
+
+            <!-- v3.3 ③ DAGENS ACTION: KPI-row (agent-validerat) -->
             <div class="dash-section" id="heroKpiWrap" style="background:linear-gradient(135deg,#fff,#f8fafc);border-radius:14px;padding:16px 20px;border:1px solid #e5e7eb">
                 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px">
-                    <h3 class="dash-heading" style="margin:0;border:none;padding:0">🎯 Dagens marknadsläge <span class="dash-sub" style="font-size:11px">agent-validerade signaler</span></h3>
+                    <h3 class="dash-heading" style="margin:0;border:none;padding:0">🎯 Dagens action <span class="dash-sub" style="font-size:11px">agent-validerade signaler</span></h3>
                     <a href="/toplists" target="_blank" style="font-size:12px;color:#1e40af;text-decoration:none;font-weight:600">🏆 Se alla topplistor →</a>
                 </div>
                 <div id="heroKpiRow" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:8px">
@@ -7635,7 +7707,7 @@ async function renderDashboard() {
                 </div>
             </div>
 
-            <!-- v3 Rapport idag — bolag som rapporterar idag (Börsdata-kalender) -->
+            <!-- v3.3 ④ RAPPORT IDAG -->
             <div class="dash-section" id="reportsTodayWrap">
                 <h3 class="dash-heading" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
                     📊 Rapport idag
@@ -7650,7 +7722,7 @@ async function renderDashboard() {
                 </div>
             </div>
 
-            <!-- v3 Super Confluence top-5 (förstorade kort) -->
+            <!-- v3.3 ⑤ Super Confluence top-5 (förstorade kort) -->
             <div class="dash-section" id="superConfluenceWrap">
                 <h3 class="dash-heading">⭐ TOP 5 Super Confluence
                     <span class="dash-sub">≥3 av 4 flaggor TRUE samtidigt · agent-validerade · backtest +63%</span>
@@ -7660,55 +7732,61 @@ async function renderDashboard() {
                 </div>
             </div>
 
-            <div class="dash-section" id="dailyPicksWrap">
-                <div id="dailyPicksBanner" class="daily-picks-skel">Hämtar dagens köp-rekommendationer...</div>
-            </div>
-            <div class="dash-section" id="buyZoneWatchWrap">
-                <div id="buyZoneWatchBanner" class="daily-picks-skel">Letar köpzon-kandidater...</div>
-            </div>
-            <div class="dash-section" id="todaysSignalsWrap">
-                <h3 class="dash-heading">🎯 Dagens BUY/AVOID-signaler <span class="dash-sub">empiriskt validerat från backtest 2015-2024</span></h3>
-                <div id="todaysSignalsContent" style="margin-top:8px"><div class="loading-wrap" style="padding:24px">Laddar dagens rekommendationer…</div></div>
-            </div>
-            <div class="dash-section" id="forwardPeWrap">
-                <h3 class="dash-heading">📊 Forward P/E + PEG-tabell <span class="dash-sub">aktier på BUY/BUY-LIGHT, sorterade efter PEG (lägre = bättre)</span></h3>
-                <div id="forwardPeContent" style="margin-top:8px"><div class="loading-wrap" style="padding:24px">Laddar...</div></div>
-            </div>
-            <div class="dash-section" id="quantScreensWrap">
-                <h3 class="dash-heading">🏆 Backtest-validerade screens <span class="dash-sub">+19.64% alpha för C80+GT Confluence (SE)</span></h3>
-                <div id="quantScreensContent" style="margin-top:8px"></div>
-            </div>
-            <div class="dash-section" id="v2SetupsWrap" style="display:none">
-                <h3 class="dash-heading">🎯 v2 Setup-listor <span class="dash-sub">klassificerings-baserad analys (Aktieagent v2)</span></h3>
-                <div id="v2SetupsContent" style="margin-top:8px"></div>
-            </div>
-            <div class="dash-section">
-                <h3 class="dash-heading">Marknadsöversikt</h3>
-                <div class="dash-top-stats" id="dashTopStats">
-                    <div class="stat-skel"></div><div class="stat-skel"></div>
-                    <div class="stat-skel"></div><div class="stat-skel"></div>
+            <!-- v3.3 ⑥ MER DATA — allt det datatunga, hopfällt by default -->
+            <details class="dash-more" id="dashMoreData">
+                <summary>Mer data, screens &amp; tabeller</summary>
+                <div class="dash-more-inner">
+                    <div class="dash-section" id="dailyPicksWrap">
+                        <div id="dailyPicksBanner" class="daily-picks-skel">Hämtar dagens köp-rekommendationer...</div>
+                    </div>
+                    <div class="dash-section" id="buyZoneWatchWrap">
+                        <div id="buyZoneWatchBanner" class="daily-picks-skel">Letar köpzon-kandidater...</div>
+                    </div>
+                    <div class="dash-section" id="todaysSignalsWrap">
+                        <h3 class="dash-heading">🎯 Dagens BUY/AVOID-signaler <span class="dash-sub">empiriskt validerat från backtest 2015-2024</span></h3>
+                        <div id="todaysSignalsContent" style="margin-top:8px"><div class="loading-wrap" style="padding:24px">Laddar dagens rekommendationer…</div></div>
+                    </div>
+                    <div class="dash-section" id="forwardPeWrap">
+                        <h3 class="dash-heading">📊 Forward P/E + PEG-tabell <span class="dash-sub">aktier på BUY/BUY-LIGHT, sorterade efter PEG (lägre = bättre)</span></h3>
+                        <div id="forwardPeContent" style="margin-top:8px"><div class="loading-wrap" style="padding:24px">Laddar...</div></div>
+                    </div>
+                    <div class="dash-section" id="quantScreensWrap">
+                        <h3 class="dash-heading">🏆 Backtest-validerade screens <span class="dash-sub">+19.64% alpha för C80+GT Confluence (SE)</span></h3>
+                        <div id="quantScreensContent" style="margin-top:8px"></div>
+                    </div>
+                    <div class="dash-section" id="v2SetupsWrap" style="display:none">
+                        <h3 class="dash-heading">🎯 v2 Setup-listor <span class="dash-sub">klassificerings-baserad analys (Aktieagent v2)</span></h3>
+                        <div id="v2SetupsContent" style="margin-top:8px"></div>
+                    </div>
+                    <div class="dash-section">
+                        <h3 class="dash-heading">Marknadsöversikt</h3>
+                        <div class="dash-top-stats" id="dashTopStats">
+                            <div class="stat-skel"></div><div class="stat-skel"></div>
+                            <div class="stat-skel"></div><div class="stat-skel"></div>
+                        </div>
+                    </div>
+                    <div class="dash-section">
+                        <h3 class="dash-heading" style="display:flex;align-items:center;gap:12px">
+                            Makro-indikatorer <span class="dash-sub">från böckerna</span>
+                            <button id="macroHistToggle" onclick="toggleMacroHistory()" style="margin-left:auto;background:white;border:1px solid var(--border);padding:6px 12px;border-radius:8px;font-size:12px;cursor:pointer;font-family:inherit;font-weight:500">📊 Visa historik</button>
+                        </h3>
+                        <div class="dash-macro-grid" id="dashMacroGrid"></div>
+                        <div id="macroHistPanel" style="display:none;margin-top:14px"></div>
+                    </div>
+                    <div class="dash-section">
+                        <h3 class="dash-heading">Modell-signaler <span class="dash-sub">baserat på Graham, Greenblatt, Lynch, Klarman, Shiller m.fl.</span></h3>
+                        <div class="dash-model-grid" id="dashModelGrid"></div>
+                    </div>
+                    <div class="dash-section">
+                        <h3 class="dash-heading">Topplistor per bokmodell <span class="dash-sub">top 20 per strategi</span></h3>
+                        <div id="dashModelToplists" class="model-toplist-wrap"></div>
+                    </div>
+                    <div class="dash-section">
+                        <h3 class="dash-heading">Idag på marknaden</h3>
+                        <div class="dash-today" id="dashToday"></div>
+                    </div>
                 </div>
-            </div>
-            <div class="dash-section">
-                <h3 class="dash-heading" style="display:flex;align-items:center;gap:12px">
-                    Makro-indikatorer <span class="dash-sub">från böckerna</span>
-                    <button id="macroHistToggle" onclick="toggleMacroHistory()" style="margin-left:auto;background:white;border:1px solid var(--border);padding:6px 12px;border-radius:8px;font-size:12px;cursor:pointer;font-family:inherit;font-weight:500">📊 Visa historik</button>
-                </h3>
-                <div class="dash-macro-grid" id="dashMacroGrid"></div>
-                <div id="macroHistPanel" style="display:none;margin-top:14px"></div>
-            </div>
-            <div class="dash-section">
-                <h3 class="dash-heading">Modell-signaler <span class="dash-sub">baserat på Graham, Greenblatt, Lynch, Klarman, Shiller m.fl.</span></h3>
-                <div class="dash-model-grid" id="dashModelGrid"></div>
-            </div>
-            <div class="dash-section">
-                <h3 class="dash-heading">Topplistor per bokmodell <span class="dash-sub">top 20 per strategi</span></h3>
-                <div id="dashModelToplists" class="model-toplist-wrap"></div>
-            </div>
-            <div class="dash-section">
-                <h3 class="dash-heading">Idag på marknaden</h3>
-                <div class="dash-today" id="dashToday"></div>
-            </div>
+            </details>
         </div>
     `;
 
@@ -7728,6 +7806,162 @@ async function renderDashboard() {
     loadHeroKpiRow();
     loadSuperConfluenceCards();
     loadReportsToday();
+    loadMarketNews();
+    loadDailyBrief();
+}
+
+// ── v3.3 Daglig brief — komponeras från KPI + rapporter + nyheter (gratis, instant)
+let _briefData = { kpi: null, reports: null, newsRecap: null };
+function _maybeRenderBrief() {
+    // Rendera när vi har minst KPI ELLER reports (news kan dröja)
+    const el = document.getElementById('briefText');
+    const chipsEl = document.getElementById('briefChips');
+    if (!el) return;
+    const k = _briefData.kpi, rep = _briefData.reports;
+    if (k === null && rep === null) return;  // inget än
+
+    const parts = [];
+    const hour = new Date().getHours();
+    const greeting = hour < 10 ? 'God morgon' : hour < 17 ? 'Hej' : 'God kväll';
+    parts.push(`${greeting}!`);
+
+    // Marknadsläge från nyheter (första meningen av recap)
+    if (_briefData.newsRecap) {
+        const firstSentence = _briefData.newsRecap.split(/(?<=[.!?])\s/)[0];
+        parts.push(firstSentence);
+    }
+
+    // Rapporter idag
+    if (rep && rep.length > 0) {
+        const pre = rep.filter(r => r.report_time === 'pre_market').map(r => r.ticker).slice(0, 3);
+        let s = `<strong>${rep.length} bolag</strong> rapporterar idag`;
+        if (pre.length) s += ` (pre-market: ${pre.join(', ')})`;
+        parts.push(s + '.');
+    }
+
+    // Agent-actions
+    if (k && k.total_validated > 0) {
+        const bits = [];
+        if (k.edge_entry_count) bits.push(`<strong>${k.edge_entry_count}</strong> Edge Entry`);
+        if (k.super_confluence_count) bits.push(`<strong>${k.super_confluence_count}</strong> Super Confluence`);
+        if (bits.length) parts.push(`Att kolla: ${bits.join(' · ')}.`);
+        if (k.stop_thesis_count > 0) {
+            parts.push(`⚠️ <strong>${k.stop_thesis_count} stop-thesis</strong>-varning${k.stop_thesis_count > 1 ? 'ar' : ''} i bevakningen.`);
+        }
+    } else if (k && k.total_validated === 0) {
+        parts.push(`Inga agent-validerade signaler än — <a href="/toplists" target="_blank" style="color:#fde68a">kör en batch-analys</a>.`);
+    }
+
+    el.style.opacity = '1';
+    el.innerHTML = parts.join(' ');
+
+    // Chips (snabbnavigering)
+    if (chipsEl && k) {
+        const chips = [];
+        if (k.edge_entry_count) chips.push(`<a class="brief-chip" href="/toplists" target="_blank">🎯 ${k.edge_entry_count} Edge Entry</a>`);
+        if (k.super_confluence_count) chips.push(`<a class="brief-chip" href="/toplists" target="_blank">⭐ ${k.super_confluence_count} Super Confluence</a>`);
+        if (k.reports_today_count) chips.push(`<span class="brief-chip" onclick="document.getElementById('reportsTodayWrap').scrollIntoView({behavior:'smooth'})">📊 ${k.reports_today_count} rapporter</span>`);
+        if (k.buy_count) chips.push(`<span class="brief-chip">🟢 ${k.buy_count} BUY</span>`);
+        chipsEl.innerHTML = chips.join('');
+    }
+}
+
+async function loadDailyBrief() {
+    // KPI
+    try {
+        const r = await fetch('/api/dashboard/kpi-row');
+        _briefData.kpi = await r.json();
+    } catch (e) { _briefData.kpi = {}; }
+    _maybeRenderBrief();
+    // Reports (loadReportsToday sätter _reportsTodayTickers; vi hämtar separat för datat)
+    try {
+        const r = await fetch('/api/report-calendar/today');
+        const d = await r.json();
+        _briefData.reports = d.reports || [];
+    } catch (e) { _briefData.reports = []; }
+    _maybeRenderBrief();
+}
+
+// ── v3.3 Marknadsnyheter
+function _newsChg(v) {
+    if (v == null) return '';
+    const c = v >= 0 ? '#059669' : '#dc2626';
+    return `<span class="news-chg" style="color:${c}">${v >= 0 ? '+' : ''}${Number(v).toFixed(1)}%</span>`;
+}
+async function loadMarketNews() {
+    const el = document.getElementById('marketNewsContent');
+    if (!el) return;
+    try {
+        const r = await fetch('/api/market-news');
+        const d = await r.json();
+        _briefData.newsRecap = d.market_recap || null;
+        _maybeRenderBrief();
+        const items = d.items || [];
+        if (!d.market_recap && items.length === 0) {
+            el.innerHTML = `<div style="padding:16px;text-align:center;color:#6b7280;background:#f8fafc;border-radius:10px;font-size:13px">
+                ${d.regenerating ? '⏳ Genererar dagens nyheter… ladda om strax.' : 'Inga nyheter laddade än. Klicka 🔄 Uppdatera för att hämta dagens digest.'}
+            </div>`;
+            return;
+        }
+        const recapHtml = d.market_recap
+            ? `<div class="news-recap">📈 ${escapeHtml(d.market_recap)}</div>` : '';
+        const cards = items.map(it => {
+            const cat = (it.category || 'other').toLowerCase();
+            const tk = it.ticker || '';
+            const linked = it.in_db && (it.db_short_name || tk);
+            const tickerHtml = linked
+                ? `<span class="news-ticker linked" onclick="window.location.href='/?q=${encodeURIComponent(it.db_short_name || tk)}'">${escapeHtml(tk)}</span>`
+                : `<span class="news-ticker">${escapeHtml(tk)}</span>`;
+            const src = it.source_url
+                ? `<a href="${escapeHtml(it.source_url)}" target="_blank" rel="noopener">${escapeHtml(it.source || 'Källa')}</a>`
+                : escapeHtml(it.source || '');
+            return `<div class="news-card">
+                <div class="news-card-head">
+                    ${tickerHtml}
+                    ${it.company ? `<span style="font-size:11px;color:#9ca3af">${escapeHtml(it.company)}</span>` : ''}
+                    ${_newsChg(it.change_pct)}
+                    <span class="news-cat ${cat}" style="margin-left:auto">${escapeHtml(cat)}</span>
+                </div>
+                <div class="news-headline">${escapeHtml(it.headline || '')}</div>
+                <div class="news-summary">${escapeHtml(it.summary || '')}</div>
+                <div class="news-source">${src}${it.in_db ? ' · 🔗 finns i din databas' : ''}</div>
+            </div>`;
+        }).join('');
+        el.innerHTML = recapHtml +
+            (cards ? `<div class="news-grid">${cards}</div>` : '') +
+            (d.generated_at ? `<div style="font-size:10.5px;color:#9ca3af;margin-top:10px">Uppdaterad ${new Date(d.generated_at + (d.generated_at.endsWith('Z')?'':'Z')).toLocaleString('sv-SE')} · AI-sammanställt via web-sökning</div>` : '');
+    } catch (e) {
+        el.innerHTML = `<div style="padding:14px;color:#dc2626;font-size:12px">Kunde ej ladda nyheter: ${e.message}</div>`;
+    }
+}
+async function refreshMarketNews() {
+    const btn = document.getElementById('newsRefreshBtn');
+    const el = document.getElementById('marketNewsContent');
+    if (btn) { btn.disabled = true; btn.textContent = '⏳ Genererar…'; }
+    if (el) el.innerHTML = '<div class="loading-wrap" style="padding:18px">🤖 Söker dagens nyheter via webben + sammanställer… (~20s)</div>';
+    try {
+        await fetch('/api/market-news/refresh', { method: 'POST' });
+        // Polla tills ny digest finns (max ~40s)
+        let tries = 0;
+        const poll = setInterval(async () => {
+            tries++;
+            try {
+                const r = await fetch('/api/market-news?refresh=0');
+                const d = await r.json();
+                if ((d.items && d.items.length) || !d.regenerating || tries > 13) {
+                    clearInterval(poll);
+                    if (btn) { btn.disabled = false; btn.textContent = '🔄 Uppdatera'; }
+                    loadMarketNews();
+                }
+            } catch (e) {
+                if (tries > 13) { clearInterval(poll);
+                    if (btn) { btn.disabled = false; btn.textContent = '🔄 Uppdatera'; } }
+            }
+        }, 3000);
+    } catch (e) {
+        if (btn) { btn.disabled = false; btn.textContent = '🔄 Uppdatera'; }
+        if (el) el.innerHTML = `<div style="padding:14px;color:#dc2626;font-size:12px">Fel: ${e.message}</div>`;
+    }
 }
 
 // v3 — Rapport idag (Börsdata-kalender)
