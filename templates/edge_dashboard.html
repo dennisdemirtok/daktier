@@ -603,6 +603,20 @@
         .drawer-tbl td { padding:8px 8px;border-bottom:1px solid #f3f4f6;color:var(--ink);vertical-align:top; }
         .drawer-tbl tr:last-child td { border-bottom:none; }
         .drawer-tbl tr:hover td { background:#f8fafc; }
+        /* v3.10: agentens analys-markdown i PDF-rapporten */
+        .report-md h1, .report-md h2 { font-size:14px; font-weight:800; color:#0f172a; margin:12px 0 5px; padding-bottom:3px; border-bottom:1px solid #eef0f2; }
+        .report-md h3 { font-size:12.5px; font-weight:700; color:#1e3a8a; margin:10px 0 4px; }
+        .report-md h4 { font-size:11.5px; font-weight:700; color:#334155; margin:8px 0 3px; }
+        .report-md p { margin:5px 0; }
+        .report-md ul, .report-md ol { margin:4px 0 6px; padding-left:18px; }
+        .report-md li { margin:2px 0; }
+        .report-md strong { color:#0f172a; font-weight:700; }
+        .report-md table { width:100%; border-collapse:collapse; font-size:11px; margin:6px 0; }
+        .report-md th { background:#f8fafc; text-align:left; padding:5px 7px; border:1px solid #eef0f2; font-weight:700; }
+        .report-md td { padding:5px 7px; border:1px solid #f1f5f9; }
+        .report-md code { background:#f1f5f9; padding:1px 4px; border-radius:3px; font-size:10.5px; }
+        .report-md blockquote { border-left:3px solid #93c5fd; padding:2px 10px; margin:6px 0; color:#475569; background:#f8fafc; }
+        .report-md hr { border:none; border-top:1px solid #eef0f2; margin:8px 0; }
         .drawer-grid { display:grid;grid-template-columns:1fr 1fr;gap:8px; }
         .drawer-grid-3 { display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px; }
         .drawer-item { background:var(--bg);border-radius:8px;padding:10px 12px; }
@@ -5643,7 +5657,8 @@ function _repSigColors(sig) {
 }
 function _repScoreColor(v) { return v == null ? '#94a3b8' : (v >= 70 ? '#047857' : v >= 50 ? '#b45309' : '#b91c1c'); }
 
-function _buildReportCard(d) {
+function _buildReportCard(d, rich) {
+    rich = rich || {};
     const el = document.createElement('div');
     el.style.cssText = 'position:fixed;left:-9999px;top:0;width:760px;background:#fff;font-family:-apple-system,BlinkMacSystemFont,Inter,Helvetica,sans-serif;color:#0f172a';
     const cur = d.currency || '';
@@ -5669,7 +5684,64 @@ function _buildReportCard(d) {
         d.classification ? `<span style="background:#eef2ff;color:#4338ca;font-size:11px;font-weight:700;padding:3px 10px;border-radius:7px">${escapeHtml(d.classification)}</span>` : '',
         (d.cycle_position && d.cycle_position !== 'NA') ? `<span style="background:#ecfeff;color:#0e7490;font-size:11px;font-weight:700;padding:3px 10px;border-radius:7px">cykel: ${escapeHtml(d.cycle_position)}</span>` : '',
         d.edge_action ? `<span style="background:#f0fdf4;color:#15803d;font-size:11px;font-weight:700;padding:3px 10px;border-radius:7px">Edge: ${escapeHtml(d.edge_action)}${d.edge_score != null ? ' ' + Math.round(d.edge_score) : ''}</span>` : '',
+        (d.value_trap_warning || rich.value_trap_warning) ? `<span style="background:#fef2f2;color:#b91c1c;font-size:11px;font-weight:700;padding:3px 10px;border-radius:7px">⚠️ Värdefälla-flagga</span>` : '',
     ].filter(Boolean).join(' ');
+
+    // ── v3.10: RIK DATA (det som gör rapporten unik) ──
+    const _secTitle = (t) => `<div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:0.6px;color:#94a3b8;margin:20px 0 9px">${t}</div>`;
+    // NAV / substansvärde (investmentbolag — t.ex. Investor)
+    let navHtml = '';
+    if (rich.is_investment_company && rich.nav_data && rich.nav_data.discount_pct != null) {
+        const nv = rich.nav_data, disc = nv.discount_pct;
+        const isRabatt = nv.interpretation === 'rabatt' || disc > 0;
+        const c = isRabatt ? '#047857' : nv.interpretation === 'premium' ? '#991b1b' : '#b45309';
+        const bg = isRabatt ? '#d1fae5' : nv.interpretation === 'premium' ? '#fee2e2' : '#fef3c7';
+        navHtml = _secTitle('Substansvärde (NAV)') + `<div style="background:${bg};border-radius:11px;padding:13px 17px;display:flex;justify-content:space-between;align-items:center;gap:14px">
+            <div><div style="font-size:12px;color:#475569;font-weight:600">${isRabatt ? 'Substansrabatt' : nv.interpretation === 'premium' ? 'Premium mot NAV' : 'Nära NAV'}</div>
+            <div style="font-size:24px;font-weight:800;color:${c}">${disc > 0 ? '+' : ''}${Number(disc).toFixed(1)}%</div></div>
+            <div style="font-size:11px;color:#64748b;max-width:340px;text-align:right;line-height:1.5">${escapeHtml(nv.note || 'Substansrabatt är det primära värderingsmåttet för investmentbolag.')}</div></div>`;
+    }
+    // Bokmodeller (klassiska investerare)
+    let bookHtml = '';
+    const bms = (d.book_models && Object.keys(d.book_models).length) ? d.book_models : (rich.book_model_scores || {});
+    const bmCells = [['graham', 'Graham'], ['buffett', 'Buffett'], ['lynch', 'Lynch'], ['magic', 'Magic F.'], ['klarman', 'Klarman'], ['divq', 'Div-kval.']]
+        .filter(([k]) => bms[k] != null).map(([k, label]) => {
+            const v = Math.round(bms[k]), col = _repScoreColor(v);
+            return `<div style="flex:1;min-width:88px;text-align:center;background:#f8fafc;border-radius:9px;padding:9px 4px">
+                <div style="font-size:18px;font-weight:800;color:${col}">${v}</div>
+                <div style="font-size:9px;color:#94a3b8;font-weight:700;text-transform:uppercase;letter-spacing:0.3px;margin-top:1px">${label}</div></div>`;
+        }).join('');
+    if (bmCells) bookHtml = _secTitle('Bokmodeller (klassiska investerare)') + `<div style="display:flex;gap:7px;flex-wrap:wrap">${bmCells}</div>`;
+    // F-Score
+    let fHtml = '';
+    if (rich.f_score && typeof rich.f_score.score === 'number') {
+        const f = rich.f_score, c = f.score >= 7 ? '#047857' : f.score >= 5 ? '#b45309' : '#b91c1c';
+        fHtml = `<div style="display:inline-flex;align-items:center;gap:9px;background:#f8fafc;border-radius:9px;padding:9px 14px;margin-top:9px">
+            <span style="font-size:11.5px;color:#64748b;font-weight:600">Piotroski F-Score</span>
+            <span style="font-size:16px;font-weight:800;color:${c}">${f.score}/${f.max || 9}</span></div>`;
+    }
+    // Kvartalstrend (senaste 4)
+    let qHtml = '';
+    const q = rich.historical_quarterly || [];
+    if (q.length >= 2) {
+        const last = q.slice(-4);
+        qHtml = _secTitle('Kvartalstrend (senaste)') + `<table style="width:100%;border-collapse:collapse;font-size:12px">
+            <thead><tr><th style="text-align:left;color:#94a3b8;font-size:10px;text-transform:uppercase;padding:5px 6px">Kvartal</th>
+            <th style="text-align:right;color:#94a3b8;font-size:10px;text-transform:uppercase;padding:5px 6px">Omsättning</th>
+            <th style="text-align:right;color:#94a3b8;font-size:10px;text-transform:uppercase;padding:5px 6px">EPS</th></tr></thead><tbody>
+            ${last.map(r => `<tr><td style="padding:6px;border-top:1px solid #f1f5f9">${r.financial_year || ''} Q${r.period || r.quarter || ''}</td>
+            <td style="padding:6px;text-align:right;border-top:1px solid #f1f5f9">${r.sales != null ? (r.sales / 1e6).toFixed(0) + ' M' : '–'}</td>
+            <td style="padding:6px;text-align:right;border-top:1px solid #f1f5f9">${r.eps != null ? Number(r.eps).toFixed(2) : '–'}</td></tr>`).join('')}</tbody></table>`;
+    }
+    // Agentens FULLA skrivna analys
+    let analysisHtml = '';
+    if (d.analysis_markdown && d.analysis_markdown.trim()) {
+        let md;
+        try { md = (typeof marked !== 'undefined') ? marked.parse(d.analysis_markdown) : escapeHtml(d.analysis_markdown).replace(/\n/g, '<br>'); }
+        catch (e) { md = escapeHtml(d.analysis_markdown).replace(/\n/g, '<br>'); }
+        analysisHtml = _secTitle('Agentens analys (multi-strategi)') + `<div class="report-md" style="font-size:11.5px;line-height:1.62;color:#334155">${md}</div>`;
+    }
+    const richBlock = navHtml + bookHtml + fHtml + qHtml + analysisHtml;
 
     el.innerHTML = `
         <!-- Header -->
@@ -5722,6 +5794,8 @@ function _buildReportCard(d) {
                 </div>
             </div>
 
+            ${richBlock}
+
             <!-- Footer -->
             <div style="margin-top:24px;padding-top:12px;border-top:1px solid #e5e7eb;display:flex;justify-content:space-between;align-items:center;font-size:10px;color:#94a3b8">
                 <span>Agent-validerad analys (DEL 6.99 v3.1)${d.analysis_date ? ' · analys ' + d.analysis_date : ''}${d.ran_fresh ? ' · färsk' : ''}</span>
@@ -5741,7 +5815,7 @@ async function generateStockReport(format) {
         const d = await r.json();
         if (d.error) { _reportLoading(false); alert('Kunde ej generera rapport: ' + d.error); return; }
         _reportLoading(true, 'Renderar rapport…');
-        const card = _buildReportCard(d);
+        const card = _buildReportCard(d, _currentDrawerStock || {});
         document.body.appendChild(card);
         let canvas;
         try { canvas = await html2canvas(card, { scale: 2, backgroundColor: '#ffffff', logging: false, useCORS: true }); }

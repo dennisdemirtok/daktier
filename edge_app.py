@@ -13587,7 +13587,19 @@ def api_stock_quick_report(orderbook_id):
             "market_cap_currency": full.get("market_cap_currency"),
             "owners": full.get("number_of_owners"),
             "sector": full.get("sector"),
+            "fcf_yield": _f(full.get("fcf_yield")),
+            "roic": _f(full.get("return_on_capital_employed")),
+            "debt_eq": _f(full.get("debt_to_equity_ratio")),
+            "net_profit": _f(full.get("net_profit")), "sales": _f(full.get("sales")),
+            "eps": _f(full.get("eps")),
         },
+        # v3.10: agentens FULLA skrivna analys + bokmodeller (unik data)
+        "analysis_markdown": (a.get("full_analysis_markdown") or "")[:5000],
+        "book_models": full.get("book_model_scores") or {},
+        "book_composite": _f(full.get("book_composite")),
+        "value_trap_warning": full.get("value_trap_warning"),
+        "owners_change_1m": _f(full.get("owners_change_1m")),
+        "owners_change_1y": _f(full.get("owners_change_1y")),
     }
     return jsonify(payload)
 
