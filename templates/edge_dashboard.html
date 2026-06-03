@@ -37,7 +37,12 @@
             --surface-low: #f3f4f5;
             --surface-high: #e8e8e8;
             --sidebar-w: 240px;
-            --header-h: 56px;
+            --header-h: 60px;
+            --topnav-h: 60px;
+            --subnav-w: 224px;
+            --ink: #0f172a;
+            --ink-soft: #475569;
+            --line: #e9ecef;
             /* v3 Signal-färgsystem — konsekvent med /toplists */
             --signal-strong-buy: #059669;
             --signal-buy: #22c55e;
@@ -54,39 +59,85 @@
         body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg); color: var(--text); line-height: 1.5; }
         .material-symbols-outlined { font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24; vertical-align: middle; }
 
-        /* ── Header ──── */
-        .header { background: rgba(255,255,255,0.82); backdrop-filter: blur(24px); -webkit-backdrop-filter: blur(24px); border-bottom: none; padding: 0 32px; display: flex; justify-content: space-between; align-items: center; position: fixed; top: 0; left: 0; right: 0; height: var(--header-h); z-index: 100; }
-        .header-left { display: flex; align-items: center; gap: 20px; }
-        .logo { width: 34px; height: 34px; background: linear-gradient(135deg, var(--green-dark), var(--green)); border-radius: 10px; display: flex; align-items: center; justify-content: center; color: white; font-weight: 800; font-size: 16px; }
-        .header h1 { font-size: 17px; font-weight: 800; letter-spacing: -0.3px; }
-        .header h1 span { color: var(--text-muted); font-weight: 400; font-size: 13px; margin-left: 2px; }
-        .header-center { display: flex; align-items: center; gap: 16px; }
-        .header-right { display: flex; align-items: center; gap: 10px; }
+        /* ══ TOP NAV (v3.7) ══ */
+        .topnav { background: rgba(255,255,255,0.86); backdrop-filter: saturate(180%) blur(20px); -webkit-backdrop-filter: saturate(180%) blur(20px);
+            border-bottom: 1px solid var(--line); padding: 0 22px; display: flex; justify-content: space-between; align-items: center;
+            position: fixed; top: 0; left: 0; right: 0; height: var(--topnav-h); z-index: 200; }
+        .topnav-left { display: flex; align-items: center; gap: 6px; min-width: 0; }
+        .topnav-burger { display: none; background: none; border: none; cursor: pointer; color: var(--ink-soft); padding: 8px; border-radius: 8px; }
+        .topnav-burger:hover { background: var(--surface-low); }
+        .brand { display: flex; align-items: center; gap: 9px; cursor: pointer; padding: 4px 14px 4px 4px; margin-right: 6px; user-select: none; }
+        .brand-logo { width: 30px; height: 30px; background: linear-gradient(135deg, #0f172a, #1e3a8a); border-radius: 9px; display: flex; align-items: center; justify-content: center; color: #fff; font-weight: 800; font-size: 15px; box-shadow: 0 2px 6px rgba(30,58,138,0.25); }
+        .brand-name { font-size: 16px; font-weight: 800; letter-spacing: -0.4px; color: var(--ink); }
+        .topnav-menu { display: flex; align-items: center; gap: 2px; }
+        .topnav-item { display: inline-flex; align-items: center; gap: 7px; padding: 8px 14px; border: none; background: none; cursor: pointer;
+            font-family: inherit; font-size: 13.5px; font-weight: 600; color: var(--ink-soft); border-radius: 9px; transition: all 0.14s; white-space: nowrap; }
+        .topnav-item .material-symbols-outlined { font-size: 19px; }
+        .topnav-item:hover { background: var(--surface-low); color: var(--ink); }
+        .topnav-item.active { background: rgba(30,64,175,0.08); color: #1e40af; }
+        .topnav-item.primary { color: #1e40af; }
+        .topnav-item.primary.active { background: linear-gradient(135deg, #1d4ed8, #3b82f6); color: #fff; box-shadow: 0 2px 8px rgba(29,78,216,0.28); }
+        .topnav-item.primary:not(.active):hover { background: rgba(30,64,175,0.10); }
+        .topnav-right { display: flex; align-items: center; gap: 8px; }
         .update-time { font-size: 12px; color: var(--text-muted); font-weight: 500; font-variant-numeric: tabular-nums; }
-        .refresh-btn { background: linear-gradient(135deg, var(--green-dark), var(--green)); color: white; border: none; padding: 7px 18px; border-radius: 8px; cursor: pointer; font-family: inherit; font-size: 12px; font-weight: 600; transition: all 0.2s; display: flex; align-items: center; gap: 6px; }
-        .refresh-btn:hover { opacity: 0.9; transform: translateY(-1px); }
+        .refresh-btn { background: linear-gradient(135deg, var(--green-dark), var(--green)); color: white; border: none; padding: 7px 16px; border-radius: 8px; cursor: pointer; font-family: inherit; font-size: 12px; font-weight: 600; transition: all 0.2s; display: inline-flex; align-items: center; gap: 6px; }
+        .refresh-btn:hover { opacity: 0.92; transform: translateY(-1px); }
         .refresh-btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
-        .header-icon-btn { background: none; border: none; padding: 6px; border-radius: 8px; cursor: pointer; color: var(--text-muted); transition: all 0.15s; display: flex; align-items: center; }
-        .header-icon-btn:hover { background: var(--surface-low); color: var(--text); }
+        .topnav-icon { background: none; border: none; padding: 8px; border-radius: 9px; cursor: pointer; color: var(--ink-soft); transition: all 0.14s; display: inline-flex; align-items: center; }
+        .topnav-icon:hover { background: var(--surface-low); color: var(--ink); }
+        .topnav-icon.active { background: rgba(30,64,175,0.08); color: #1e40af; }
 
-        /* ── Sidebar ──── */
-        .sidebar { position: fixed; left: 0; top: var(--header-h); bottom: 0; width: var(--sidebar-w); background: var(--surface-low); display: flex; flex-direction: column; padding: 20px 12px; z-index: 90; overflow-y: auto; transition: transform 0.25s ease; }
-        .sidebar-section-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 1.2px; color: var(--green); padding: 0 12px; margin-bottom: 8px; }
-        .sidebar-sublabel { font-size: 10px; color: var(--text-muted); padding: 0 12px; margin-bottom: 16px; opacity: 0.7; }
-        .sidebar-nav { display: flex; flex-direction: column; gap: 2px; flex: 1; }
-        .sidebar-item { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 10px; font-size: 13px; font-weight: 500; color: var(--text-muted); cursor: pointer; transition: all 0.15s; border: none; background: none; font-family: inherit; text-align: left; width: 100%; }
-        .sidebar-item:hover { background: rgba(255,255,255,0.6); color: var(--text); transform: translateX(2px); }
-        .sidebar-item.active { background: var(--white); color: var(--green-dark); font-weight: 600; box-shadow: 0 1px 4px rgba(0,0,0,0.04); }
-        .sidebar-item .material-symbols-outlined { font-size: 20px; }
-        .sidebar-divider { height: 1px; background: var(--surface-high); margin: 12px 8px; opacity: 0.5; }
-        .sidebar-footer { margin-top: auto; padding: 16px 12px; }
-        .sidebar-footer-card { background: rgba(0,108,70,0.06); border-radius: 12px; padding: 14px; }
-        .sidebar-footer-label { font-size: 10px; font-weight: 700; color: var(--green-dark); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; }
-        .sidebar-footer-btn { width: 100%; padding: 8px; background: linear-gradient(135deg, var(--green-dark), var(--green)); color: white; border: none; border-radius: 8px; font-size: 11px; font-weight: 700; font-family: inherit; cursor: pointer; text-transform: uppercase; letter-spacing: 0.5px; }
+        /* ── Stock search ── */
+        .nav-search { position: relative; display: flex; align-items: center; background: var(--surface-low); border: 1px solid transparent; border-radius: 10px; padding: 0 10px; height: 38px; width: 240px; transition: all 0.15s; }
+        .nav-search:focus-within { background: #fff; border-color: #c7d2fe; box-shadow: 0 0 0 3px rgba(99,102,241,0.10); }
+        .nav-search-icon { font-size: 19px; color: var(--text-muted); }
+        .nav-search input { border: none; background: none; outline: none; font-family: inherit; font-size: 13.5px; color: var(--ink); width: 100%; padding: 0 6px; }
+        .nav-search-results { position: absolute; top: 46px; left: 0; right: 0; background: #fff; border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 12px 32px rgba(15,23,42,0.12); overflow: hidden; display: none; z-index: 210; max-height: 360px; overflow-y: auto; }
+        .nav-search-results.open { display: block; }
+        .nav-search-item { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 10px 14px; cursor: pointer; border-bottom: 1px solid #f5f6f7; }
+        .nav-search-item:last-child { border-bottom: 0; }
+        .nav-search-item:hover { background: #f8fafc; }
+        .nss-name { font-size: 13px; font-weight: 600; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .nss-tk { font-size: 11px; color: var(--text-muted); font-weight: 600; flex-shrink: 0; }
+        .nav-search-empty { padding: 14px; text-align: center; color: var(--text-muted); font-size: 12.5px; }
+
+        /* ── Contextual left subnav ── */
+        .subnav { position: fixed; left: 0; top: var(--topnav-h); bottom: 0; width: var(--subnav-w); background: #fff; border-right: 1px solid var(--line);
+            display: none; flex-direction: column; padding: 16px 12px; gap: 2px; z-index: 90; overflow-y: auto; }
+        body.has-subnav .subnav { display: flex; }
+        .subnav-title { font-size: 10.5px; font-weight: 800; text-transform: uppercase; letter-spacing: 1px; color: var(--text-muted); padding: 4px 12px 10px; }
+        .subnav-item { display: flex; align-items: center; gap: 11px; padding: 10px 12px; border-radius: 9px; font-size: 13.5px; font-weight: 500; color: var(--ink-soft); cursor: pointer; transition: all 0.14s; border: none; background: none; font-family: inherit; text-align: left; width: 100%; }
+        .subnav-item:hover { background: var(--surface-low); color: var(--ink); }
+        .subnav-item.active { background: rgba(30,64,175,0.08); color: #1e40af; font-weight: 700; }
+        .subnav-item .material-symbols-outlined { font-size: 20px; }
+        .subnav-item .ext { font-size: 14px; margin-left: auto; opacity: 0.5; }
 
         /* ── Layout ──── */
-        .main-content { margin-left: var(--sidebar-w); padding-top: var(--header-h); min-height: 100vh; transition: margin-left 0.25s ease; }
-        .container { max-width: 1400px; margin: 0 auto; padding: 24px 32px; }
+        .main-content { margin-left: 0; padding-top: var(--topnav-h); min-height: 100vh; transition: margin-left 0.2s ease; }
+        body.has-subnav .main-content { margin-left: var(--subnav-w); }
+        .container { max-width: 1320px; margin: 0 auto; padding: 24px 28px 80px; }
+
+        /* ── Mobile bottom nav + sheet ── */
+        .mobile-bottom-nav { display: none; position: fixed; bottom: 0; left: 0; right: 0; height: 62px; background: rgba(255,255,255,0.94);
+            backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); border-top: 1px solid var(--line); z-index: 200;
+            padding-bottom: env(safe-area-inset-bottom, 0); }
+        .mobile-bottom-nav button { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+            background: none; border: none; cursor: pointer; color: var(--text-muted); font-family: inherit; font-size: 10px; font-weight: 600; padding: 0; }
+        .mobile-bottom-nav button .material-symbols-outlined { font-size: 23px; }
+        .mobile-bottom-nav button.active { color: #1e40af; }
+        .mobile-sheet-overlay { display: none; position: fixed; inset: 0; background: rgba(15,23,42,0.4); z-index: 300; }
+        .mobile-sheet-overlay.open { display: block; }
+        .mobile-sheet { position: fixed; left: 0; right: 0; bottom: 0; background: #fff; border-radius: 20px 20px 0 0; z-index: 310;
+            transform: translateY(100%); transition: transform 0.26s cubic-bezier(0.32,0.72,0,1); padding: 8px 14px calc(20px + env(safe-area-inset-bottom,0)); max-height: 82vh; overflow-y: auto; }
+        .mobile-sheet.open { transform: translateY(0); }
+        .sheet-handle { width: 38px; height: 4px; background: #d1d5db; border-radius: 3px; margin: 6px auto 12px; }
+        .sheet-item { display: flex; align-items: center; gap: 12px; width: 100%; padding: 13px 14px; border: none; background: none; font-family: inherit;
+            font-size: 15px; font-weight: 700; color: var(--ink); border-radius: 11px; cursor: pointer; text-align: left; }
+        .sheet-item.active { background: rgba(30,64,175,0.08); color: #1e40af; }
+        .sheet-item .material-symbols-outlined { font-size: 22px; }
+        .sheet-subitem { display: flex; align-items: center; gap: 11px; width: 100%; padding: 11px 14px 11px 30px; border: none; background: none; font-family: inherit;
+            font-size: 13.5px; font-weight: 500; color: var(--ink-soft); border-radius: 10px; cursor: pointer; text-align: left; }
+        .sheet-subitem .material-symbols-outlined { font-size: 19px; opacity: 0.7; }
 
         /* ── Summary ──── */
         .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 28px; }
@@ -656,43 +707,31 @@
         .consistency-bar-fill { height: 100%; border-radius: 4px; background: linear-gradient(90deg, #22c55e, #16a34a); }
 
         /* ── Mobile (best-practice responsive) ──── */
-        @media (max-width: 1024px) {
-            /* Z-index ordning på mobil: header (100) < overlay (150) < sidebar (200)
-               Tidigare bug: overlay 99 låg ÖVER sidebar 90 → klick blockerades */
-            .sidebar {
-                transform: translateX(-100%);
-                box-shadow: 4px 0 24px rgba(0,0,0,0.15);
-                z-index: 200;
-                top: 0;  /* full skärmhöjd när öppen — header skall inte överlappa */
-                padding-top: 70px;  /* ge plats åt mobile-menu-btn */
-            }
-            .sidebar.open { transform: translateX(0); }
-            .main-content { margin-left: 0; }
-            .mobile-menu-btn { display: flex !important; }
-            body.sidebar-open::before {
-                content: ''; position: fixed; inset: 0; background: rgba(0,0,0,0.4);
-                z-index: 150; backdrop-filter: blur(2px);
-            }
-            /* Header måste vara under sidebar+overlay på mobil */
-            .header { z-index: 100; }
+        /* ── Surfplatta/liten desktop: topnav-menyn blir tightare, subnav döljs ── */
+        @media (max-width: 1100px) {
+            .topnav-item span:not(.material-symbols-outlined) { display: none; }  /* bara ikoner */
+            .topnav-item { padding: 8px 10px; }
+        }
+        @media (max-width: 900px) {
+            /* Mobilläge: top-meny + subnav döljs, bottom-nav + sheet tar över */
+            .topnav-menu { display: none; }
+            .topnav-burger { display: flex; }
+            body.has-subnav .subnav { display: none; }
+            body.has-subnav .main-content { margin-left: 0; }
+            .mobile-bottom-nav { display: flex; }
+            .main-content { padding-bottom: 70px; }
+            .nav-search { width: 150px; }
+            .market-status, .update-time { display: none; }
         }
         @media (max-width: 768px) {
-            /* Container & layout */
-            :root { --header-h: 56px; }
-            .container { padding: 12px; }
-            .header { padding: 0 12px; height: 56px; gap: 8px; }
-            .header-left { gap: 8px; flex: 1; min-width: 0; overflow: hidden; }
-            /* Dölj h1-text på mobil — bara logo + ev. menyknapp */
-            .header h1 { font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-            .header h1 span { display: none; }
-            .header-center { display: none; }
-            .header-right { gap: 4px; flex-shrink: 0; }
-            /* Klocka tar plats — gömma på mobil */
-            .update-time { display: none; }
-            /* Refresh-knappar kompaktare */
+            :root { --topnav-h: 56px; --header-h: 56px; }
+            .container { padding: 12px 12px 80px; }
+            .topnav { padding: 0 12px; }
+            .brand-name { display: none; }
+            .nav-search { width: 130px; }
+            .topnav-right { gap: 4px; }
             .refresh-btn { padding: 7px 10px !important; font-size: 11px !important; }
             .refresh-btn .material-symbols-outlined { font-size: 14px !important; }
-            .header-icon-btn { padding: 8px; }
             .page-header { gap: 8px; margin: 4px 0 12px; }
             .page-title { font-size: 20px; }
             .page-subtitle { font-size: 12px; }
@@ -864,142 +903,59 @@ window.showWelcome = function() {
 </script>
 
 <!-- ── Header ──── -->
-<header class="header">
-    <div class="header-left">
-        <button class="mobile-menu-btn" onclick="toggleSidebar()">
+<!-- ── TOP NAV (v3.7) ──── -->
+<header class="topnav">
+    <div class="topnav-left">
+        <button class="topnav-burger" onclick="openMobileSheet()" aria-label="Meny">
             <span class="material-symbols-outlined">menu</span>
         </button>
-        <div class="logo">E</div>
-        <h1>Edge Signals <span>DAKTIER</span></h1>
-    </div>
-    <div class="header-center">
-        <div class="market-status closed" id="marketStatusSE">
-            <div class="market-dot closed" id="marketDotSE"></div>
-            <span id="marketLabelSE">SE: Stängd</span>
+        <div class="brand" onclick="navTo('agent')">
+            <div class="brand-logo">D</div>
+            <span class="brand-name">DAKTIER</span>
         </div>
-        <div class="market-status closed" id="marketStatusUS">
-            <div class="market-dot closed" id="marketDotUS"></div>
-            <span id="marketLabelUS">US: Stängd</span>
-        </div>
+        <nav class="topnav-menu" id="topnavMenu"></nav>
     </div>
-    <div class="header-right">
+    <div class="topnav-right">
+        <div class="nav-search" id="navSearch">
+            <span class="material-symbols-outlined nav-search-icon">search</span>
+            <input id="navStockSearch" type="text" placeholder="Sök aktie…" autocomplete="off"
+                   oninput="navSearchSuggest(this.value)" onkeydown="navSearchKey(event)" onfocus="navSearchSuggest(this.value)">
+            <div class="nav-search-results" id="navSearchResults"></div>
+        </div>
+        <div class="market-status closed" id="marketStatusSE" title="Stockholmsbörsen">
+            <div class="market-dot closed" id="marketDotSE"></div><span id="marketLabelSE">SE</span>
+        </div>
+        <div class="market-status closed" id="marketStatusUS" title="USA-börsen">
+            <div class="market-dot closed" id="marketDotUS"></div><span id="marketLabelUS">US</span>
+        </div>
         <span class="update-time" id="liveClock"></span>
-        <div class="btn-group">
-            <button class="refresh-btn" id="refreshPricesBtn" onclick="doRefreshPrices()">
-                <span class="material-symbols-outlined" style="font-size:16px">refresh</span>
-                Uppdatera
-            </button>
-            <button class="refresh-btn btn-insider" id="refreshInsidersBtn" onclick="doRefreshInsiders()">Insiders</button>
-        </div>
-        <button class="header-icon-btn" title="Inställningar">
+        <button class="topnav-icon" id="refreshPricesBtn" onclick="doRefreshPrices()" title="Uppdatera priser">
+            <span class="material-symbols-outlined">refresh</span>
+        </button>
+        <button class="topnav-icon" data-section="settings" onclick="navTo('settings')" title="Inställningar">
             <span class="material-symbols-outlined">settings</span>
         </button>
+        <button class="topnav-icon" title="Konto">
+            <span class="material-symbols-outlined">account_circle</span>
+        </button>
+        <button id="refreshInsidersBtn" onclick="doRefreshInsiders()" style="display:none"></button>
     </div>
 </header>
 
-<!-- ── Sidebar ──── -->
-<aside class="sidebar" id="sidebar">
-    <div class="sidebar-section-label">DAKTIER v3</div>
-    <div class="sidebar-sublabel">Multi-strategy Investment AI</div>
-    <nav class="sidebar-nav">
-        <!-- ── DAGLIGT (alltid synligt) ── -->
-        <div class="sidebar-section-label" style="margin-top:4px;font-size:10px;color:#9ca3af;letter-spacing:0.5px">DAGLIGT</div>
-        <button class="sidebar-item active" onclick="sidebarNav('dashboard', this)" data-tab="dashboard">
-            <span class="material-symbols-outlined">space_dashboard</span>
-            Dashboard
-        </button>
-        <button class="sidebar-item" onclick="sidebarNav('myportfolio', this)" data-tab="myportfolio">
-            <span class="material-symbols-outlined">folder_special</span>
-            💼 Min Portfölj
-        </button>
-        <button class="sidebar-item" onclick="sidebarNav('signals', this)" data-tab="signals">
-            <span class="material-symbols-outlined">electric_bolt</span>
-            🎯 Edge Signals
-        </button>
-        <a class="sidebar-item" href="/toplists" target="_blank" rel="noopener" style="text-decoration:none">
-            <span class="material-symbols-outlined">emoji_events</span>
-            🏆 Agent-topplistor
-        </a>
+<!-- ── CONTEXTUAL LEFT SUBNAV ──── -->
+<aside class="subnav" id="subnav"></aside>
 
-        <div class="sidebar-divider"></div>
+<!-- ── MOBILE BOTTOM NAV ──── -->
+<nav class="mobile-bottom-nav" id="mobileBottomNav">
+    <button data-section="agent" onclick="navTo('agent')"><span class="material-symbols-outlined">forum</span><span>Agent</span></button>
+    <button data-section="dashboard" onclick="navTo('dashboard')"><span class="material-symbols-outlined">space_dashboard</span><span>Dashboard</span></button>
+    <button onclick="focusNavSearch()"><span class="material-symbols-outlined">search</span><span>Sök</span></button>
+    <button onclick="openMobileSheet()"><span class="material-symbols-outlined">menu</span><span>Meny</span></button>
+</nav>
 
-        <!-- ── ANALYS ── -->
-        <div class="sidebar-section-label" style="margin-top:4px;font-size:10px;color:#9ca3af;letter-spacing:0.5px">ANALYS</div>
-        <button class="sidebar-item" onclick="sidebarNav('stocks', this)" data-tab="stocks">
-            <span class="material-symbols-outlined">bar_chart</span>
-            Alla aktier
-        </button>
-        <button class="sidebar-item" onclick="sidebarNav('metrics', this)" data-tab="metrics">
-            <span class="material-symbols-outlined">functions</span>
-            Nyckeltal
-        </button>
-        <button class="sidebar-item" onclick="sidebarNav('ocf', this)" data-tab="ocf">
-            <span class="material-symbols-outlined">account_balance</span>
-            Kassaflöde
-        </button>
-        <button class="sidebar-item" onclick="sidebarNav('insiders', this)" data-tab="insiders">
-            <span class="material-symbols-outlined">person_search</span>
-            Insiders
-        </button>
-        <button class="sidebar-item" onclick="sidebarNav('hotmovers', this)" data-tab="hotmovers">
-            <span class="material-symbols-outlined">local_fire_department</span>
-            Ägarmomentum
-        </button>
-        <button class="sidebar-item" onclick="sidebarNav('trending', this)" data-tab="trending">
-            <span class="material-symbols-outlined">leaderboard</span>
-            Trending V/Q
-        </button>
-
-        <div class="sidebar-divider"></div>
-
-        <!-- ── TOPPLISTOR ── -->
-        <div class="sidebar-section-label" style="margin-top:4px;font-size:10px;color:#9ca3af;letter-spacing:0.5px">TOPPLISTOR & AI</div>
-        <button class="sidebar-item" onclick="sidebarNav('aitoplist', this)" data-tab="aitoplist">
-            <span class="material-symbols-outlined">smart_toy</span>
-            AI Topplista
-        </button>
-        <button class="sidebar-item" onclick="sidebarNav('agent', this)" data-tab="agent">
-            <span class="material-symbols-outlined">forum</span>
-            🤖 AI Agent
-        </button>
-
-        <div class="sidebar-divider"></div>
-
-        <!-- ── VERKTYG ── -->
-        <div class="sidebar-section-label" style="margin-top:4px;font-size:10px;color:#9ca3af;letter-spacing:0.5px">VERKTYG</div>
-        <button class="sidebar-item" onclick="sidebarNav('backtest', this)" data-tab="backtest">
-            <span class="material-symbols-outlined">analytics</span>
-            🧪 Backtest
-        </button>
-        <a class="sidebar-item" href="/backtest-report" target="_blank" rel="noopener" style="text-decoration:none">
-            <span class="material-symbols-outlined">description</span>
-            📑 Backtest-rapport
-        </a>
-        <a class="sidebar-item" href="/live-tracker" target="_blank" rel="noopener" style="text-decoration:none">
-            <span class="material-symbols-outlined">visibility</span>
-            📡 Live Tracker
-        </a>
-        <a class="sidebar-item" href="/portfolio-builder" target="_blank" rel="noopener" style="text-decoration:none">
-            <span class="material-symbols-outlined">work</span>
-            🏗️ Portfölj-Builder
-        </a>
-        <button class="sidebar-item" onclick="sidebarNav('portfolio', this)" data-tab="portfolio">
-            <span class="material-symbols-outlined">monitoring</span>
-            🔮 Simulering
-        </button>
-        <a class="sidebar-item" href="/external-signals" target="_blank" rel="noopener" style="text-decoration:none">
-            <span class="material-symbols-outlined">rss_feed</span>
-            🔗 Externa signaler
-        </a>
-    </nav>
-    <div class="sidebar-footer">
-        <div class="sidebar-footer-card">
-            <div class="sidebar-footer-label">Edge Pro</div>
-            <div style="font-size:11px;color:var(--text-sec);margin-bottom:8px">Realtidsdata & AI-analys</div>
-            <button class="sidebar-footer-btn">Uppgradera</button>
-        </div>
-    </div>
-</aside>
+<!-- ── MOBILE SHEET (hamburger) ──── -->
+<div class="mobile-sheet-overlay" id="mobileSheetOverlay" onclick="closeMobileSheet()"></div>
+<div class="mobile-sheet" id="mobileSheet"></div>
 
 <!-- ── Main Content ──── -->
 <div class="main-content">
@@ -1477,10 +1433,8 @@ function switchTab(tab, el) {
     // 'trending' egen tab med backtest-validerade kvant-screens (Dual-Screen
     // m.fl.) — låt det vara dess egna tab.
     currentTab = tab;
-    // Update sidebar
-    document.querySelectorAll('.sidebar-item').forEach(s => {
-        s.classList.toggle('active', s.dataset.tab === tab);
-    });
+    // v3.7: synka top-nav + contextual subnav + mobile-nav aktiv-states
+    if (typeof _syncNav === 'function') _syncNav();
     // Dölj/visa stat-kort beroende på tabb (dashboard/trending/hotmovers har egna motsv. stats)
     updateCardsVisibility();
     // Update page header title/subtitle
@@ -1512,20 +1466,164 @@ function switchTab(tab, el) {
     fetchData();
 }
 
-function sidebarNav(tab, el) {
-    switchTab(tab);
-    // Close sidebar on mobile + lyft body-class
-    if (window.innerWidth <= 1024) {
-        document.getElementById('sidebar').classList.remove('open');
-        document.body.classList.remove('sidebar-open');
-    }
+// ══ v3.7 NAVIGATION (top-nav + contextual subnav + mobile) ══════════
+const NAV_SECTIONS = {
+    agent:     { label: 'Agent',         icon: 'forum',                 tab: 'agent',     sub: [] },
+    dashboard: { label: 'Dashboard',     icon: 'space_dashboard',       tab: 'dashboard', sub: [] },
+    owners:    { label: 'Ägarmomentum',  icon: 'local_fire_department', tab: 'hotmovers', sub: [] },
+    stocks:    { label: 'Aktier',        icon: 'bar_chart',             tab: 'stocks',    sub: [
+                    { label: 'Alla aktier', icon: 'bar_chart',       tab: 'stocks' },
+                    { label: 'Nyckeltal',   icon: 'functions',       tab: 'metrics' },
+                    { label: 'Kassaflöde',  icon: 'account_balance', tab: 'ocf' },
+                    { label: 'Insiders',    icon: 'person_search',   tab: 'insiders' },
+                    { label: 'Utredning',   icon: 'analytics',       tab: 'backtest' },
+                ] },
+    edge:      { label: 'Edge Signals',  icon: 'electric_bolt',         tab: 'signals',   sub: [] },
+    settings:  { label: 'Inställningar',  icon: 'settings',             tab: null,        sub: [
+                    { label: 'Simulering',       icon: 'monitoring',  tab: 'portfolio' },
+                    { label: 'Backtest-rapport', icon: 'description', ext: '/backtest-report' },
+                    { label: 'Live Tracker',     icon: 'visibility',  ext: '/live-tracker' },
+                    { label: 'Portfölj-Builder', icon: 'work',        ext: '/portfolio-builder' },
+                    { label: 'Externa signaler', icon: 'rss_feed',    ext: '/external-signals' },
+                ] },
+};
+// Edge Signals sist (lägre prioritet, användaren osäker på den)
+const PRIMARY_ORDER = ['agent', 'dashboard', 'owners', 'stocks', 'edge'];
+const TAB_TO_SECTION = {
+    agent: 'agent', dashboard: 'dashboard', hotmovers: 'owners',
+    stocks: 'stocks', metrics: 'stocks', ocf: 'stocks', insiders: 'stocks', backtest: 'stocks',
+    signals: 'edge', portfolio: 'settings',
+    // legacy/borttagna tabbar mappar till dashboard
+    trending: 'dashboard', aitoplist: 'dashboard', myportfolio: 'dashboard',
+};
+
+function renderTopnavMenu() {
+    const el = document.getElementById('topnavMenu');
+    if (!el) return;
+    el.innerHTML = PRIMARY_ORDER.map(key => {
+        const s = NAV_SECTIONS[key];
+        const cls = 'topnav-item' + (key === 'agent' ? ' primary' : '');
+        return `<button class="${cls}" data-section="${key}" onclick="navTo('${key}')">
+            <span class="material-symbols-outlined">${s.icon}</span><span>${s.label}</span></button>`;
+    }).join('');
 }
 
-function toggleSidebar() {
-    const sb = document.getElementById('sidebar');
-    sb.classList.toggle('open');
-    document.body.classList.toggle('sidebar-open', sb.classList.contains('open'));
+function navTo(section) {
+    const s = NAV_SECTIONS[section];
+    if (!s) return;
+    if (s.tab) {
+        switchTab(s.tab);
+    } else if (s.sub && s.sub.length) {
+        const first = s.sub.find(x => x.tab);
+        if (first) switchTab(first.tab);
+        else _syncNav();
+    }
+    closeMobileSheet();
 }
+
+function _syncNav() {
+    const sec = TAB_TO_SECTION[currentTab] || 'dashboard';
+    document.querySelectorAll('[data-section]').forEach(b => {
+        b.classList.toggle('active', b.dataset.section === sec);
+    });
+    renderSubnav(sec);
+}
+
+function renderSubnav(sec) {
+    const el = document.getElementById('subnav');
+    if (!el) return;
+    const s = NAV_SECTIONS[sec];
+    const subs = (s && s.sub) || [];
+    if (!subs.length) {
+        document.body.classList.remove('has-subnav');
+        el.innerHTML = '';
+        return;
+    }
+    document.body.classList.add('has-subnav');
+    el.innerHTML = `<div class="subnav-title">${s.label}</div>` + subs.map(item => {
+        const active = item.tab && item.tab === currentTab;
+        const click = item.ext ? `window.open('${item.ext}','_blank')` : `switchTab('${item.tab}')`;
+        return `<button class="subnav-item ${active ? 'active' : ''}" onclick="${click}">
+            <span class="material-symbols-outlined">${item.icon}</span><span>${item.label}</span>
+            ${item.ext ? '<span class="material-symbols-outlined ext">open_in_new</span>' : ''}</button>`;
+    }).join('');
+}
+
+// ── Mobile sheet ──
+function renderMobileSheet() {
+    const el = document.getElementById('mobileSheet');
+    if (!el) return;
+    const sec = TAB_TO_SECTION[currentTab] || 'dashboard';
+    let html = '<div class="sheet-handle"></div>';
+    for (const key of [...PRIMARY_ORDER, 'settings']) {
+        const s = NAV_SECTIONS[key];
+        html += `<button class="sheet-item ${sec === key ? 'active' : ''}" onclick="navTo('${key}')">
+            <span class="material-symbols-outlined">${s.icon}</span>${s.label}</button>`;
+        for (const item of (s.sub || [])) {
+            const click = item.ext ? `window.open('${item.ext}','_blank');closeMobileSheet()` : `switchTab('${item.tab}');closeMobileSheet()`;
+            html += `<button class="sheet-subitem" onclick="${click}">
+                <span class="material-symbols-outlined">${item.icon}</span>${item.label}</button>`;
+        }
+    }
+    el.innerHTML = html;
+}
+function openMobileSheet() {
+    renderMobileSheet();
+    document.getElementById('mobileSheet')?.classList.add('open');
+    document.getElementById('mobileSheetOverlay')?.classList.add('open');
+}
+function closeMobileSheet() {
+    document.getElementById('mobileSheet')?.classList.remove('open');
+    document.getElementById('mobileSheetOverlay')?.classList.remove('open');
+}
+
+// ── Stock search (top nav) ──
+let _navSearchTimer, _navSearchRows = [];
+function navSearchSuggest(val) {
+    clearTimeout(_navSearchTimer);
+    const box = document.getElementById('navSearchResults');
+    if (!box) return;
+    if (!val || val.trim().length < 1) { box.classList.remove('open'); box.innerHTML = ''; return; }
+    _navSearchTimer = setTimeout(async () => {
+        try {
+            const r = await fetch('/api/stocks?q=' + encodeURIComponent(val.trim()) + '&limit=8');
+            const d = await r.json();
+            _navSearchRows = d.stocks || [];
+            if (!_navSearchRows.length) {
+                box.innerHTML = '<div class="nav-search-empty">Inga träffar</div>';
+            } else {
+                box.innerHTML = _navSearchRows.map(s => `<div class="nav-search-item" onclick="navSearchPick(${s.orderbook_id})">
+                    <span class="nss-name">${FLAGS[s.country] || ''} ${escapeHtml(s.name)}</span>
+                    <span class="nss-tk">${escapeHtml(s.short_name || '')}</span></div>`).join('');
+            }
+            box.classList.add('open');
+        } catch (e) { /* tyst */ }
+    }, 200);
+}
+function navSearchPick(oid) {
+    const s = (_navSearchRows || []).find(x => String(x.orderbook_id) === String(oid));
+    const box = document.getElementById('navSearchResults');
+    if (box) box.classList.remove('open');
+    const inp = document.getElementById('navStockSearch');
+    if (inp) inp.value = '';
+    if (s && typeof openDrawer === 'function') openDrawer(s);
+}
+function navSearchKey(e) {
+    if (e.key === 'Enter') { const f = (_navSearchRows || [])[0]; if (f) navSearchPick(f.orderbook_id); }
+    else if (e.key === 'Escape') { document.getElementById('navSearchResults')?.classList.remove('open'); e.target.blur(); }
+}
+function focusNavSearch() {
+    const i = document.getElementById('navStockSearch');
+    if (i) { i.focus(); i.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
+}
+// Stäng sökresultat vid klick utanför
+document.addEventListener('click', e => {
+    if (!e.target.closest('#navSearch')) document.getElementById('navSearchResults')?.classList.remove('open');
+});
+
+// Bakåtkompatibilitet: gamla anrop till sidebarNav/toggleSidebar
+function sidebarNav(tab) { switchTab(tab); }
+function toggleSidebar() { openMobileSheet(); }
 
 // Stäng sidebar när man klickar på overlay (men EJ på sidebar/menyknapp)
 // Använder pointerdown istället för click för bättre touch-responsivitet,
@@ -7884,20 +7982,6 @@ async function renderDashboard() {
                 </div>
             </div>
 
-            <!-- v3.3 ③ DAGENS ACTION: KPI-row (agent-validerat) -->
-            <div class="dash-section" id="heroKpiWrap" style="background:linear-gradient(135deg,#fff,#f8fafc);border-radius:14px;padding:16px 20px;border:1px solid #e5e7eb">
-                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px">
-                    <h3 class="dash-heading" style="margin:0;border:none;padding:0">🎯 Dagens action <span class="dash-sub" style="font-size:11px">agent-validerade signaler</span></h3>
-                    <a href="/toplists" target="_blank" style="font-size:12px;color:#1e40af;text-decoration:none;font-weight:600">🏆 Se alla topplistor →</a>
-                </div>
-                <div id="heroKpiRow" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:8px">
-                    <div class="kpi-skel" style="height:60px;background:#f1f5f9;border-radius:8px;animation:pulse 1.5s infinite"></div>
-                    <div class="kpi-skel" style="height:60px;background:#f1f5f9;border-radius:8px;animation:pulse 1.5s infinite"></div>
-                    <div class="kpi-skel" style="height:60px;background:#f1f5f9;border-radius:8px;animation:pulse 1.5s infinite"></div>
-                    <div class="kpi-skel" style="height:60px;background:#f1f5f9;border-radius:8px;animation:pulse 1.5s infinite"></div>
-                </div>
-            </div>
-
             <!-- v3.6 ④ RAPPORTER (konsoliderat: Idag / Kommande / Senaste) -->
             <div class="dash-section" id="reportsWrap">
                 <h3 class="dash-heading" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
@@ -7918,16 +8002,6 @@ async function renderDashboard() {
                 </div>
             </div>
 
-            <!-- v3.3 ⑤ Super Confluence top-5 (förstorade kort) -->
-            <div class="dash-section" id="superConfluenceWrap">
-                <h3 class="dash-heading">⭐ TOP 5 Super Confluence
-                    <span class="dash-sub">≥3 av 4 flaggor TRUE samtidigt · agent-validerade · backtest +63%</span>
-                </h3>
-                <div id="superConfluenceCards" style="margin-top:10px;display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px">
-                    <div class="loading-wrap" style="padding:20px;grid-column:1/-1">Laddar Super Confluence-kandidater…</div>
-                </div>
-            </div>
-
             <!-- v3.5 ⑤b MACRO PULSE -->
             <div class="dash-section" id="macroPulseWrap">
                 <h3 class="dash-heading" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
@@ -7941,32 +8015,10 @@ async function renderDashboard() {
                 </div>
             </div>
 
-            <!-- v3.3 ⑥ MER DATA — allt det datatunga, hopfällt by default -->
+            <!-- ⑥ MER DATA — faktabaserad bakgrundsdata, hopfällt by default -->
             <details class="dash-more" id="dashMoreData">
-                <summary>Mer data, screens &amp; tabeller</summary>
+                <summary>Mer data &amp; makro</summary>
                 <div class="dash-more-inner">
-                    <div class="dash-section" id="dailyPicksWrap">
-                        <div id="dailyPicksBanner" class="daily-picks-skel">Hämtar dagens köp-rekommendationer...</div>
-                    </div>
-                    <div class="dash-section" id="buyZoneWatchWrap">
-                        <div id="buyZoneWatchBanner" class="daily-picks-skel">Letar köpzon-kandidater...</div>
-                    </div>
-                    <div class="dash-section" id="todaysSignalsWrap">
-                        <h3 class="dash-heading">🎯 Dagens BUY/AVOID-signaler <span class="dash-sub">empiriskt validerat från backtest 2015-2024</span></h3>
-                        <div id="todaysSignalsContent" style="margin-top:8px"><div class="loading-wrap" style="padding:24px">Laddar dagens rekommendationer…</div></div>
-                    </div>
-                    <div class="dash-section" id="forwardPeWrap">
-                        <h3 class="dash-heading">📊 Forward P/E + PEG-tabell <span class="dash-sub">aktier på BUY/BUY-LIGHT, sorterade efter PEG (lägre = bättre)</span></h3>
-                        <div id="forwardPeContent" style="margin-top:8px"><div class="loading-wrap" style="padding:24px">Laddar...</div></div>
-                    </div>
-                    <div class="dash-section" id="quantScreensWrap">
-                        <h3 class="dash-heading">🏆 Backtest-validerade screens <span class="dash-sub">+19.64% alpha för C80+GT Confluence (SE)</span></h3>
-                        <div id="quantScreensContent" style="margin-top:8px"></div>
-                    </div>
-                    <div class="dash-section" id="v2SetupsWrap" style="display:none">
-                        <h3 class="dash-heading">🎯 v2 Setup-listor <span class="dash-sub">klassificerings-baserad analys (Aktieagent v2)</span></h3>
-                        <div id="v2SetupsContent" style="margin-top:8px"></div>
-                    </div>
                     <div class="dash-section">
                         <h3 class="dash-heading">Marknadsöversikt</h3>
                         <div class="dash-top-stats" id="dashTopStats">
@@ -7981,18 +8033,6 @@ async function renderDashboard() {
                         </h3>
                         <div class="dash-macro-grid" id="dashMacroGrid"></div>
                         <div id="macroHistPanel" style="display:none;margin-top:14px"></div>
-                    </div>
-                    <div class="dash-section">
-                        <h3 class="dash-heading">Modell-signaler <span class="dash-sub">baserat på Graham, Greenblatt, Lynch, Klarman, Shiller m.fl.</span></h3>
-                        <div class="dash-model-grid" id="dashModelGrid"></div>
-                    </div>
-                    <div class="dash-section">
-                        <h3 class="dash-heading">Topplistor per bokmodell <span class="dash-sub">top 20 per strategi</span></h3>
-                        <div id="dashModelToplists" class="model-toplist-wrap"></div>
-                    </div>
-                    <div class="dash-section">
-                        <h3 class="dash-heading">Idag på marknaden</h3>
-                        <div class="dash-today" id="dashToday"></div>
                     </div>
                 </div>
             </details>
@@ -8012,8 +8052,6 @@ async function renderDashboard() {
     }
 
     // v3: Ladda hero KPI-row + Super Confluence-kort (parallellt med dashboard-data)
-    loadHeroKpiRow();
-    loadSuperConfluenceCards();
     loadReports();
     loadBullets();
     loadBulletDates();
@@ -8696,21 +8734,11 @@ function renderDashboardContent(d) {
         }
     }
 
-    // ── Köpzon-watchlist (nära köpzon idag) ──
-    loadBuyZoneWatchlist();
+    // (v3.7: borttagna sektioner — köpzon, BUY/AVOID, Forward P/E, quant-screens,
+    //  v2-setups, modell-topplistor — ej längre i DOM. Behåller endast
+    //  Marknadsöversikt + Makro-indikatorer i "Mer data".)
 
-    // ── 🎯 Dagens BUY/AVOID-signaler (empiriskt validerade) ──
-    loadTodaysSignals();
-
-    // ── 📊 Forward P/E + PEG-tabell ──
-    loadForwardPeTable();
-
-    // ── 🏆 Backtest-validerade quant-screens ──
-    loadQuantScreens();
-    // ── v2 Setup-topplistor (gömd som default — kvar för referens) ──
-    loadV2Setups();
-
-    // ── Top-listor per modell ──
+    // ── Top-listor per modell (borttagen från DOM — no-op) ──
     const toplistsEl = document.getElementById('dashModelToplists');
     if (toplistsEl) {
         const bookModels = d.book_models || [];
@@ -9245,6 +9273,10 @@ async function prefetchAllTabs() {
 // ── Init ──────────────────────────────────────────
 
 async function init() {
+    // v3.7: bygg top-nav + synka nav-state direkt
+    renderTopnavMenu();
+    _syncNav();
+
     // Start prefetching ALL tabs in background immediately
     const prefetchPromise = prefetchAllTabs();
 
