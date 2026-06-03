@@ -1456,6 +1456,8 @@ function switchTab(tab, el) {
     currentTab = tab;
     // v3.7: synka top-nav + contextual subnav + mobile-nav aktiv-states
     if (typeof _syncNav === 'function') _syncNav();
+    // v3.9: uppdatera URL-hashen
+    if (typeof _updateHash === 'function') _updateHash(tab);
     // Dölj/visa stat-kort beroende på tabb (dashboard/trending/hotmovers har egna motsv. stats)
     updateCardsVisibility();
     // Update page header title/subtitle
@@ -1517,6 +1519,33 @@ const TAB_TO_SECTION = {
     // legacy/borttagna tabbar mappar till dashboard
     trending: 'dashboard', aitoplist: 'dashboard', myportfolio: 'dashboard',
 };
+
+// ── v3.9: Hash-baserad URL-routing (delbara/bokmärkbara URL:er per vy) ──
+const TAB_HASH = {
+    agent: '/agent', dashboard: '/dashboard', hotmovers: '/agarmomentum',
+    stocks: '/aktier', metrics: '/aktier/nyckeltal', ocf: '/aktier/kassaflode',
+    insiders: '/aktier/insiders', backtest: '/aktier/utredning',
+    signals: '/edge-signals', portfolio: '/installningar/simulering',
+};
+const HASH_TAB = Object.fromEntries(Object.entries(TAB_HASH).map(([t, h]) => [h, t]));
+let _ignoreHashChange = false;
+function _updateHash(tab) {
+    const h = TAB_HASH[tab]; if (!h) return;
+    if (location.hash !== '#' + h) { _ignoreHashChange = true; location.hash = h; }
+}
+function _tabFromHash() {
+    const h = (location.hash || '').replace(/^#/, '');
+    if (!h || h === '/') return 'agent';
+    return HASH_TAB[h] || null;
+}
+function _navFromHash() {
+    const tab = _tabFromHash();
+    if (tab && tab !== currentTab) switchTab(tab);
+}
+window.addEventListener('hashchange', () => {
+    if (_ignoreHashChange) { _ignoreHashChange = false; return; }
+    _navFromHash();
+});
 
 function renderTopnavMenu() {
     const el = document.getElementById('topnavMenu');
@@ -5587,63 +5616,161 @@ async function openStockByTicker(ticker) {
 }
 
 // ── v3.6: PNG/PDF-export av aktie-drawern ──
-async function _captureStockDrawer() {
-    if (typeof html2canvas === 'undefined') { alert('Bild-biblioteket laddas än, försök strax igen.'); return null; }
-    const s = _currentDrawerStock || {};
-    const headerHtml = document.getElementById('drawerHeaderContent')?.innerHTML || '';
-    const bodyHtml = document.getElementById('drawerBody')?.innerHTML || '';
-    const exportEl = document.createElement('div');
-    exportEl.style.cssText = 'position:fixed;left:-9999px;top:0;background:#fff;padding:28px 30px;width:780px;font-family:-apple-system,BlinkMacSystemFont,Inter,sans-serif;color:#1f2937';
-    exportEl.innerHTML = `
-        <div style="border-bottom:2px solid #1e40af;padding-bottom:12px;margin-bottom:16px">
-            <div style="font-size:11px;color:#6b7280;font-weight:600;text-transform:uppercase;letter-spacing:0.6px">DAKTIER · Multi-strategy aktieanalys</div>
-            <div style="margin-top:4px">${headerHtml}</div>
-            <div style="font-size:11.5px;color:#9ca3af;margin-top:4px">Genererad ${new Date().toLocaleString('sv-SE')}</div>
+// ══ v3.9: Snygg, säljbar PDF/PNG-rapport med agent-check ══════════
+function _reportLoading(show, msg) {
+    let ov = document.getElementById('reportLoadingOverlay');
+    if (!show) { if (ov) ov.remove(); return; }
+    if (!ov) {
+        ov = document.createElement('div');
+        ov.id = 'reportLoadingOverlay';
+        ov.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,0.55);z-index:9999;display:flex;align-items:center;justify-content:center';
+        ov.innerHTML = `<div style="background:#fff;border-radius:16px;padding:28px 34px;text-align:center;max-width:340px;box-shadow:0 16px 48px rgba(0,0,0,0.25)">
+            <div style="width:42px;height:42px;border:3px solid #e5e7eb;border-top-color:#1d4ed8;border-radius:50%;margin:0 auto 14px;animation:spin 0.8s linear infinite"></div>
+            <div id="reportLoadingMsg" style="font-size:14px;font-weight:600;color:#0f172a"></div>
+            <div style="font-size:11.5px;color:#94a3b8;margin-top:6px">DAKTIER genererar rapport…</div>
+        </div>`;
+        document.body.appendChild(ov);
+    }
+    const m = document.getElementById('reportLoadingMsg'); if (m) m.textContent = msg || 'Genererar…';
+}
+
+function _repSigColors(sig) {
+    const g = ['BUY','STRONG_BUY','BUY_LIGHT'], y = ['HOLD','WATCHLIST','WAIT','TAKE_PROFIT'], r = ['AVOID','EXIT'];
+    if (g.includes(sig)) return ['#047857', '#d1fae5'];
+    if (y.includes(sig)) return ['#92400e', '#fef3c7'];
+    if (r.includes(sig)) return ['#991b1b', '#fee2e2'];
+    return ['#475569', '#f1f5f9'];
+}
+function _repScoreColor(v) { return v == null ? '#94a3b8' : (v >= 70 ? '#047857' : v >= 50 ? '#b45309' : '#b91c1c'); }
+
+function _buildReportCard(d) {
+    const el = document.createElement('div');
+    el.style.cssText = 'position:fixed;left:-9999px;top:0;width:760px;background:#fff;font-family:-apple-system,BlinkMacSystemFont,Inter,Helvetica,sans-serif;color:#0f172a';
+    const cur = d.currency || '';
+    const chg = d.price_change_pct;
+    const chgHtml = chg != null ? `<span style="font-size:14px;font-weight:700;color:${chg >= 0 ? '#34d399' : '#f87171'}">${chg >= 0 ? '+' : ''}${Number(chg).toFixed(1)}%</span>` : '';
+    const sigCard = (k, label) => {
+        const v = (d.signals || {})[k]; const [c, bg] = _repSigColors(v); const mot = (d.motivations || {})[k] || '';
+        return `<div style="flex:1;background:#fff;border:1px solid #eef0f2;border-radius:12px;padding:13px 15px">
+            <div style="font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:0.6px;color:#94a3b8">${label}</div>
+            <div style="display:inline-block;margin-top:6px;background:${bg};color:${c};font-weight:800;font-size:13px;padding:4px 11px;border-radius:8px">${v || '–'}</div>
+            ${mot ? `<div style="font-size:11px;color:#64748b;margin-top:8px;line-height:1.5">${escapeHtml(mot)}</div>` : ''}
+        </div>`;
+    };
+    const scoreBox = (label, v) => `<div style="flex:1;text-align:center;background:#f8fafc;border-radius:10px;padding:10px 6px">
+        <div style="font-size:22px;font-weight:800;color:${_repScoreColor(v)}">${v != null ? Math.round(v) : '–'}</div>
+        <div style="font-size:9.5px;color:#94a3b8;font-weight:600;text-transform:uppercase;letter-spacing:0.4px;margin-top:2px">${label}</div></div>`;
+    const km = d.key_metrics || {};
+    const mc = km.market_cap != null ? ((km.market_cap >= 1e9 ? (km.market_cap / 1e9).toFixed(1) + ' Mdr' : (km.market_cap / 1e6).toFixed(0) + ' M') + ' ' + (km.market_cap_currency || '')) : null;
+    const metric = (label, val) => (val != null && val !== '' && val !== 'null') ? `<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid #f1f5f9"><span style="color:#64748b;font-size:12px">${label}</span><span style="font-weight:700;font-size:12.5px">${val}</span></div>` : '';
+    const n = (v, dp = 1) => v != null ? Number(v).toFixed(dp) : null;
+    const rdcf = d.reverse_dcf || {};
+    const metaChips = [
+        d.classification ? `<span style="background:#eef2ff;color:#4338ca;font-size:11px;font-weight:700;padding:3px 10px;border-radius:7px">${escapeHtml(d.classification)}</span>` : '',
+        (d.cycle_position && d.cycle_position !== 'NA') ? `<span style="background:#ecfeff;color:#0e7490;font-size:11px;font-weight:700;padding:3px 10px;border-radius:7px">cykel: ${escapeHtml(d.cycle_position)}</span>` : '',
+        d.edge_action ? `<span style="background:#f0fdf4;color:#15803d;font-size:11px;font-weight:700;padding:3px 10px;border-radius:7px">Edge: ${escapeHtml(d.edge_action)}${d.edge_score != null ? ' ' + Math.round(d.edge_score) : ''}</span>` : '',
+    ].filter(Boolean).join(' ');
+
+    el.innerHTML = `
+        <!-- Header -->
+        <div style="background:linear-gradient(135deg,#0f172a 0%,#1e3a8a 60%,#3b82f6 100%);color:#fff;padding:24px 30px">
+            <div style="display:flex;justify-content:space-between;align-items:flex-start">
+                <div>
+                    <div style="display:flex;align-items:center;gap:9px;margin-bottom:10px">
+                        <div style="width:26px;height:26px;background:#fff;border-radius:7px;display:flex;align-items:center;justify-content:center;color:#1e3a8a;font-weight:800;font-size:14px">D</div>
+                        <span style="font-size:11px;font-weight:700;letter-spacing:1.5px;opacity:0.85">DAKTIER · AKTIEANALYS</span>
+                    </div>
+                    <div style="font-size:30px;font-weight:800;line-height:1.05">${escapeHtml(d.ticker || '')}</div>
+                    <div style="font-size:14px;opacity:0.8;margin-top:2px">${escapeHtml(d.name || '')}</div>
+                </div>
+                <div style="text-align:right">
+                    <div style="font-size:26px;font-weight:800">${d.price != null ? Number(d.price).toFixed(2) + ' ' + cur : '–'}</div>
+                    <div style="margin-top:2px">${chgHtml}</div>
+                    <div style="font-size:11px;opacity:0.7;margin-top:8px">Rapport ${d.report_date}</div>
+                </div>
+            </div>
         </div>
-        ${bodyHtml}
-        <div style="margin-top:22px;padding-top:10px;border-top:1px dashed #e5e7eb;font-size:10px;color:#9ca3af;text-align:center">DAKTIER v3 · agent-validerad analys</div>`;
-    document.body.appendChild(exportEl);
-    try {
-        return await html2canvas(exportEl, { scale: 2, backgroundColor: '#ffffff', logging: false, useCORS: true });
-    } finally { document.body.removeChild(exportEl); }
+        <div style="padding:22px 30px 28px">
+            ${d.has_analysis ? `
+            <!-- Verdikt -->
+            <div style="display:flex;gap:10px;margin-bottom:16px">
+                ${sigCard('swing', '🎯 Swing')}${sigCard('quality', '🏰 Quality')}${sigCard('value', '💎 Value')}
+            </div>
+            <!-- Scores -->
+            <div style="display:flex;gap:8px;margin-bottom:14px">
+                ${scoreBox('Value', d.value_score)}${scoreBox('Quality', d.quality_score)}${scoreBox('Momentum', d.momentum_score)}${scoreBox('Risk', d.risk_score)}
+                <div style="flex:1;text-align:center;background:linear-gradient(135deg,#1e3a8a,#3b82f6);border-radius:10px;padding:10px 6px;color:#fff">
+                    <div style="font-size:22px;font-weight:800">${d.composite != null ? Math.round(d.composite) : '–'}</div>
+                    <div style="font-size:9.5px;opacity:0.85;font-weight:600;text-transform:uppercase;letter-spacing:0.4px;margin-top:2px">Composite</div></div>
+            </div>
+            ${metaChips ? `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px">${metaChips}</div>` : ''}
+            ` : `<div style="background:#fef3c7;color:#92400e;border-radius:10px;padding:14px 16px;font-size:13px;margin-bottom:16px">Ingen agent-analys kunde genereras just nu — rapporten visar live nyckeltal. Försök igen om en stund.</div>`}
+
+            <!-- Nyckeltal + Reverse DCF -->
+            <div style="display:flex;gap:24px">
+                <div style="flex:1">
+                    <div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:0.6px;color:#94a3b8;margin-bottom:6px">Nyckeltal</div>
+                    ${metric('P/E', n(km.pe))}${metric('P/B', n(km.pb))}${metric('ROE', km.roe != null ? n(km.roe) + '%' : null)}
+                    ${metric('EV/EBIT', n(km.ev_ebit))}${metric('Direktavkastning', km.direct_yield != null ? n(km.direct_yield) + '%' : null)}
+                </div>
+                <div style="flex:1">
+                    <div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:0.6px;color:#94a3b8;margin-bottom:6px">Värdering & övrigt</div>
+                    ${metric('Market cap', mc)}${metric('RSI (14)', n(km.rsi, 0))}${metric('Ägare (Avanza)', km.owners != null ? Number(km.owners).toLocaleString('sv') : null)}
+                    ${rdcf.implied != null ? metric('Reverse DCF (implied)', n(rdcf.implied) + '%') : ''}
+                    ${rdcf.baseline != null ? metric('DCF-baseline', n(rdcf.baseline) + '%' + (rdcf.confidence ? ' (' + rdcf.confidence + ')' : '')) : ''}
+                    ${metric('Sektor', km.sector)}
+                </div>
+            </div>
+
+            <!-- Footer -->
+            <div style="margin-top:24px;padding-top:12px;border-top:1px solid #e5e7eb;display:flex;justify-content:space-between;align-items:center;font-size:10px;color:#94a3b8">
+                <span>Agent-validerad analys (DEL 6.99 v3.1)${d.analysis_date ? ' · analys ' + d.analysis_date : ''}${d.ran_fresh ? ' · färsk' : ''}</span>
+                <span>DAKTIER · Ej finansiell rådgivning</span>
+            </div>
+        </div>`;
+    return el;
 }
-function _stockFilename(ext) {
-    const s = _currentDrawerStock || {};
-    const name = (s.short_name || s.name || 'aktie').replace(/[^a-zA-Z0-9_-]+/g, '_').slice(0, 30);
-    return `DAKTIER_${name}_${new Date().toISOString().slice(0,10)}.${ext}`;
-}
-async function downloadStockPng() {
+
+async function generateStockReport(format) {
+    const s = _currentDrawerStock;
+    if (!s || !s.orderbook_id) { alert('Ingen aktie vald.'); return; }
+    if (typeof html2canvas === 'undefined') { alert('Bild-biblioteket laddas än, försök strax igen.'); return; }
+    _reportLoading(true, 'Hämtar data + kör agent-check…');
     try {
-        const canvas = await _captureStockDrawer(); if (!canvas) return;
-        const a = document.createElement('a'); a.download = _stockFilename('png');
-        a.href = canvas.toDataURL('image/png'); a.click();
-    } catch (e) { alert('Kunde inte skapa PNG: ' + e.message); }
-}
-async function downloadStockPdf() {
-    try {
-        if (typeof window.jspdf === 'undefined') { alert('PDF-biblioteket laddas än, försök strax igen.'); return; }
-        const canvas = await _captureStockDrawer(); if (!canvas) return;
-        const { jsPDF } = window.jspdf;
-        const pdf = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'p' });
-        const pageW = 210, pageH = 297, margin = 10, usableW = pageW - 2*margin;
-        const imgW = usableW, imgH = (canvas.height * imgW) / canvas.width;
-        const img = canvas.toDataURL('image/jpeg', 0.9);
-        if (imgH <= pageH - 2*margin) {
-            pdf.addImage(img, 'JPEG', margin, margin, imgW, imgH);
+        const r = await fetch('/api/stock/' + s.orderbook_id + '/quick-report');
+        const d = await r.json();
+        if (d.error) { _reportLoading(false); alert('Kunde ej generera rapport: ' + d.error); return; }
+        _reportLoading(true, 'Renderar rapport…');
+        const card = _buildReportCard(d);
+        document.body.appendChild(card);
+        let canvas;
+        try { canvas = await html2canvas(card, { scale: 2, backgroundColor: '#ffffff', logging: false, useCORS: true }); }
+        finally { document.body.removeChild(card); }
+        const fname = `DAKTIER_${(d.ticker || 'aktie').replace(/[^A-Za-z0-9]+/g, '_')}_${d.report_date}`;
+        if (format === 'png') {
+            const a = document.createElement('a'); a.download = fname + '.png'; a.href = canvas.toDataURL('image/png'); a.click();
         } else {
-            const contentH = pageH - 2*margin, pages = Math.ceil(imgH / contentH);
-            for (let p = 0; p < pages; p++) {
-                if (p > 0) pdf.addPage();
-                pdf.addImage(img, 'JPEG', margin, margin - p*contentH, imgW, imgH);
-                if (p === pages - 1) {
-                    const last = imgH - p*contentH;
-                    if (last < contentH) { pdf.setFillColor(255,255,255); pdf.rect(0, margin+last, pageW, pageH, 'F'); }
+            if (typeof window.jspdf === 'undefined') { _reportLoading(false); alert('PDF-biblioteket laddas än.'); return; }
+            const { jsPDF } = window.jspdf;
+            const pdf = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'p' });
+            const pw = 210, ph = 297, m = 8, iw = pw - 2 * m, ih = canvas.height * iw / canvas.width;
+            const img = canvas.toDataURL('image/jpeg', 0.95);
+            if (ih <= ph - 2 * m) { pdf.addImage(img, 'JPEG', m, m, iw, ih); }
+            else {
+                const ch = ph - 2 * m, pages = Math.ceil(ih / ch);
+                for (let p = 0; p < pages; p++) {
+                    if (p > 0) pdf.addPage();
+                    pdf.addImage(img, 'JPEG', m, m - p * ch, iw, ih);
+                    if (p === pages - 1) { const last = ih - p * ch; if (last < ch) { pdf.setFillColor(255, 255, 255); pdf.rect(0, m + last, pw, ph, 'F'); } }
                 }
             }
+            pdf.save(fname + '.pdf');
         }
-        pdf.save(_stockFilename('pdf'));
-    } catch (e) { alert('Kunde inte skapa PDF: ' + e.message); }
+        _reportLoading(false);
+    } catch (e) { _reportLoading(false); alert('Fel vid rapport: ' + e.message); }
 }
+function downloadStockPng() { generateStockReport('png'); }
+function downloadStockPdf() { generateStockReport('pdf'); }
 
 // ── Infinity Scroll ──────────────────────────────────
 
@@ -9431,6 +9558,10 @@ async function init() {
     const prefetchPromise = prefetchAllTabs();
 
     await fetchStatus();
+
+    // v3.9: läs URL-hashen → starta på rätt vy (annars agenten som default)
+    const _ht = _tabFromHash(); if (_ht) currentTab = _ht;
+    _updateHash(currentTab);
 
     // v3.8: Agenten är landningsvyn — rendera den direkt
     const meta = TAB_META[currentTab] || {title:'',sub:''};

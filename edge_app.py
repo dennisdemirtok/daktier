@@ -13492,6 +13492,106 @@ def api_analysis_single(ticker):
     return jsonify(dict(row))
 
 
+@app.route("/api/stock/<orderbook_id>/quick-report")
+def api_stock_quick_report(orderbook_id):
+    """Snabbrapport för PDF/PNG: live pris/nyckeltal + senaste agent-analys
+    (Swing/Quality/Value-verdikt, scores, reverse DCF, klassificering).
+    Kör färsk agent-FAS1-analys om ingen finns / är >7 dagar / ?fresh=1."""
+    from edge_db import _fetchone, _ph
+    from datetime import datetime, timedelta
+    db = get_db()
+    ph = _ph()
+
+    srow = _fetchone(db, f"SELECT * FROM stocks WHERE orderbook_id = {ph}", (orderbook_id,))
+    if not srow:
+        return jsonify({"error": "stock not found"}), 404
+    s = dict(srow)
+    short = s.get("short_name") or ""
+    name = s.get("name") or short
+
+    # Live nyckeltal (native market-cap-fix m.m.)
+    try:
+        full = _agent_get_full_stock(db, short) or {}
+    except Exception:
+        full = {}
+
+    def _latest_analysis():
+        bool_ok = "TRUE" if _is_postgres() else "1"
+        return _fetchone(db,
+            f"SELECT * FROM batch_analyses WHERE (UPPER(ticker)={ph} OR UPPER(short_name)={ph}) "
+            f"AND json_parse_ok = {bool_ok} ORDER BY analyzed_at DESC LIMIT 1",
+            (short.upper(), short.upper()))
+
+    analysis = None
+    try:
+        analysis = _latest_analysis()
+    except Exception:
+        analysis = None
+
+    fresh = request.args.get("fresh") == "1"
+    stale = True
+    if analysis:
+        try:
+            ad = dict(analysis).get("analyzed_at")
+            dt = (datetime.fromisoformat(str(ad).replace("T", " ").split(".")[0].replace("Z", ""))
+                  if isinstance(ad, str) else ad)
+            stale = (datetime.utcnow() - dt) > timedelta(days=7)
+        except Exception:
+            stale = True
+
+    ran_fresh = False
+    if not analysis or stale or fresh:
+        try:
+            res = _analyze_single_ticker_for_batch(short, None)
+            if res and res.get("ok"):
+                ran_fresh = True
+                analysis = _latest_analysis()
+        except Exception as e:
+            print(f"[quick-report] fresh-analys fel: {e}", file=sys.stderr)
+
+    a = dict(analysis) if analysis else {}
+
+    def _f(v):
+        try: return float(v) if v is not None else None
+        except Exception: return None
+
+    payload = {
+        "ticker": short, "name": name, "country": s.get("country"),
+        "price": _f(full.get("last_price") or s.get("last_price")),
+        "currency": full.get("currency") or s.get("currency") or "SEK",
+        "price_change_pct": _f(s.get("one_day_change_pct")),
+        "report_date": datetime.utcnow().date().isoformat(),
+        "has_analysis": bool(a),
+        "analysis_date": str(a.get("analyzed_at"))[:10] if a.get("analyzed_at") else None,
+        "ran_fresh": ran_fresh,
+        "classification": a.get("classification"),
+        "primary_lens": a.get("primary_lens"),
+        "signals": {"swing": a.get("swing_signal"), "quality": a.get("quality_signal"),
+                    "value": a.get("value_signal")},
+        "motivations": {"swing": a.get("swing_motivation"), "quality": a.get("quality_motivation"),
+                        "value": a.get("value_motivation")},
+        "composite": _f(a.get("composite_score")),
+        "value_score": _f(a.get("value_score")), "quality_score": _f(a.get("quality_score")),
+        "momentum_score": _f(a.get("momentum_score")), "risk_score": _f(a.get("risk_score")),
+        "edge_score": _f(a.get("edge_score")), "edge_action": a.get("edge_action"),
+        "cycle_position": a.get("cycle_position"),
+        "reverse_dcf": {"implied": _f(a.get("reverse_dcf_implied_growth")),
+                        "baseline": _f(a.get("reverse_dcf_baseline")),
+                        "gap": _f(a.get("reverse_dcf_gap")),
+                        "confidence": a.get("reverse_dcf_confidence")},
+        "key_metrics": {
+            "pe": _f(full.get("pe_ratio")), "pb": _f(full.get("price_book_ratio")),
+            "roe": _f(full.get("return_on_equity")), "ev_ebit": _f(full.get("ev_ebit_ratio")),
+            "direct_yield": _f(full.get("direct_yield")), "rsi": _f(full.get("rsi14")),
+            "market_cap": _f(full.get("market_cap")),
+            "market_cap_currency": full.get("market_cap_currency"),
+            "owners": full.get("number_of_owners"),
+            "sector": full.get("sector"),
+        },
+    }
+    return jsonify(payload)
+
+
 def _is_postgres():
     """Helper — kollar om aktiv DB är PostgreSQL."""
     import os
