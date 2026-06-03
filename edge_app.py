@@ -10473,6 +10473,37 @@ Detta är analysens kärna. **Ingen sizing i FAS 1.** Skarp matris-bedömning
 | Disruptor / zero-to-one | Christensen + Thiel | Fisher | S-curve, marknadsskapande, lock-in |
 | Behavioral mispricing | Kahneman | Lynch | Sentiment-extrem, narrative-divergens |
 
+**Steg 1.5 — SCORING-ROUTER (P0, ABSOLUT KRAV — kör FÖRE 4-axel-scoring)**
+
+Value-scoren får INTE genereras med fel modell. Välj mätmodell efter
+bolagstyp INNAN du sätter Value/Quality/Momentum/Risk. Felaktig siffra är
+värre än ingen siffra — en betalprodukt får inte visa "Value 84 på P/E 6.1"
+för ett investmentbolag.
+
+```
+OM investmentbolag (Investor, Latour, Industrivärden, Kinnevik, EQT m.fl.):
+   → Value = substansrabatt vs 5y/10y-snitt. IGNORERA P/E HELT.
+     Rabatt > historiskt snitt → hög Value. Premie → låg Value.
+     P/E 6 för investmentbolag är MENINGSLÖST — nämn det aldrig som värde-signal.
+
+OM net_income < 0 ELLER trailing P/E < 0 (förlustbolag / pre-profit):
+   → Value = EV/Sales (vs peers) + Rule of 40 + cash runway + dilutionstakt.
+     HÅRT TAK: Value-score FÅR INTE överstiga 30 på basis av "låg/negativ P/E".
+     Negativ P/E är inte en värde-signal.
+
+OM bank / försäkring:
+   → Value = P/B + ROE (+ utdelning). IGNORERA EV/EBIT och EV/Sales.
+
+OM net_debt < 0 (nettokassa):
+   → D/E / skuldsättning FÅR ALDRIG flaggas som skuldrisk. Markera "nettokassa".
+
+ANNARS → standard 4-axel.
+```
+
+**Klart-när-test (självkontroll innan output):** Ett förlustbolag kan aldrig
+få Value > 30 pga negativ P/E. Ett investmentbolag scoras aldrig på P/E. Ett
+nettokassa-bolag flaggas aldrig för skuldrisk.
+
 **Steg 2 — Mappa strategi → lins**
 
 - **🎯 Swing**: Owner momentum + teknisk trend. Lynch/Fisher + Kahneman.
@@ -10736,6 +10767,52 @@ konkreta triggers för "när ska jag återvända":
 - **Prisnivå för ny entry-bedömning**
 - **Catalyst-event** (kvartalsrapport, guidance, sektor-skifte)
 - **Cykel-signal** som skulle omklassificera bolaget
+
+**Steg 6a — FORWARD-VÄRDERING (P0, OBLIGATORISK när trailing P/E < 0 eller > 40)**
+
+Trailing P/E är meningslöst vid förlust eller hög tillväxt. När trailing
+P/E < 0 ELLER > 40, räkna och visa ALLTID:
+- **Forward P/E** på NTM-EPS (guidance om den finns, annars sell-side-konsensus)
+- **PEG** = forward P/E ÷ förväntad EPS-tillväxt (MRVL: "P/E 104 / forward ~30 /
+  PEG ~3" säger mer än "P/E 104")
+- **EV/NTM-Sales** (för tillväxt/pre-profit)
+- **Rule of 40** för SaaS = revenue growth % + FCF-marginal %
+
+HÅRT KRAV: Om du citerar guidance NÅGONSTANS i texten MÅSTE forward-multipeln
+räknas. Skriv ALDRIG "P/E −985" eller "P/E 104" som slutsats utan forward-tal
+bredvid.
+
+**Steg 6b — DATAVALIDERING (P0, inga interna motsägelser)**
+
+Innan output — kör dessa sanity-checks och låt ALDRIG fritext motsäga siffror:
+- **NAV-tecken programmatiskt**: pris > NAV ⇒ PREMIE (inte rabatt). pris < NAV
+  ⇒ rabatt. Räkna (pris−NAV)/NAV och sätt ordet efter tecknet — gissa aldrig.
+- **Market cap = pris × antal aktier.** Diffa mot databasens cap; > 15%
+  avvikelse ⇒ skriv "⚠️ market cap kan vara stale" och lita på pris×aktier.
+- **YTD vs 1 år**: om |YTD| >> |1-årsavkastning| utan uppenbar förklaring ⇒
+  flagga ("+148% YTD vs +35.7% 1y" är orimligt — en av siffrorna är fel).
+- **Tranch-tabeller**: belopp = antal aktier × pris; triggerpris = priset i
+  beräkningen. Generera raderna FRÅN beräknade värden, inte fritext.
+- **Skuld vs kassa**: säg aldrig "hög skuldsättning" om net_debt < 0 (nettokassa).
+
+**Steg 6c — SAKNAD DATA-DETEKTOR (P1)**
+
+Obligatoriska fält per analystyp — saknas fältet i datakällan, skriv ut
+"DATA SAKNAS: {fält}" (hoppa ALDRIG tyst):
+- Momentum-play → short interest, float, insiderköp
+- SaaS → NRR, Rule of 40
+- Investmentbolag → substansrabatt-historik (5y/10y)
+
+**Steg 6d — GRADERAD ENTRY-SCORE (P1, OBLIGATORISK i VARJE analys)**
+
+Avsluta ALLTID med en graderad entry-bedömning, inte bara BUY/AVOID:
+> "Entry **6/10 nu** · **8/10 vid $230** · 9/10 vid $210 (då P/E < 12)."
+
+Detta löser upplevelsen av att agenten "aldrig köper" och ger kunden en
+konkret handlingsregel. Aldrig utelämna den.
+
+**KOMPRIMERING (P1):** Säg slutsatsen/AVOID EN gång — inte 3–4. En betalande
+kund vill ha täthet. Upprepa inte samma poäng i flera sektioner.
 
 **Steg 7 — FAS 1 output-struktur** (OBLIGATORISK)
 
@@ -12134,6 +12211,35 @@ def _analyze_single_ticker_for_batch(ticker, run_id):
             full_text += blk.get("text", "")
 
     parsed_json, markdown, json_ok = _parse_batch_output(full_text)
+
+    # ── P0-1 GUARDRAIL: korrigera uppenbart felaktiga value-scores ──
+    # "Siffran får inte genereras" — kod-skydd utöver prompt-routern.
+    if parsed_json:
+        try:
+            ni = stock_data.get("net_profit")
+            pe = stock_data.get("pe_ratio")
+            vs = parsed_json.get("value_score")
+            capped = False
+            # Förlustbolag / negativ P/E → value_score får ej vara hög pga "låg P/E"
+            if (isinstance(vs, (int, float)) and vs > 30 and
+                    ((isinstance(ni, (int, float)) and ni < 0) or
+                     (isinstance(pe, (int, float)) and pe < 0))):
+                parsed_json["value_score"] = 30
+                parsed_json["value_score_note"] = (
+                    (parsed_json.get("value_score_note") or "")
+                    + " [auto-cap P0-1: förlustbolag/negativ P/E är ej en värde-signal]").strip()
+                capped = True
+            if capped:
+                # Räkna om composite (V×0.25 + Q×0.30 + M×0.25 + Risk×0.20)
+                def _g(k):
+                    v = parsed_json.get(k)
+                    return float(v) if isinstance(v, (int, float)) else None
+                v_, q_, m_, r_ = _g("value_score"), _g("quality_score"), _g("momentum_score"), _g("risk_score")
+                if None not in (v_, q_, m_, r_):
+                    parsed_json["composite_score"] = round(v_ * 0.25 + q_ * 0.30 + m_ * 0.25 + r_ * 0.20, 2)
+                print(f"[batch P0-1] {ticker}: value_score capped (förlustbolag)", file=sys.stderr)
+        except Exception as e:
+            print(f"[batch P0-1] guardrail fel: {e}", file=sys.stderr)
 
     # Spara i batch_analyses (även om JSON failade — för felsökning)
     try:
@@ -13601,6 +13707,50 @@ def api_stock_quick_report(orderbook_id):
         "owners_change_1m": _f(full.get("owners_change_1m")),
         "owners_change_1y": _f(full.get("owners_change_1y")),
     }
+
+    # v3.11: Nyheter + insider-transaktioner (samlar allt i rapporten)
+    import json as _qjson
+    from edge_db import _fetchall
+    news = []
+    try:
+        nr = _fetchone(db, "SELECT items_json FROM market_news ORDER BY generated_at DESC LIMIT 1")
+        if nr:
+            its = dict(nr).get("items_json")
+            if isinstance(its, str):
+                its = _qjson.loads(its)
+            for it in (its or []):
+                if (it.get("ticker") or "").upper() == short.upper():
+                    news.append({"headline": it.get("headline"), "summary": it.get("summary"),
+                                 "source": it.get("source"), "change_pct": it.get("change_pct")})
+    except Exception:
+        pass
+    try:
+        br = _fetchone(db, "SELECT sections_json FROM market_bullets ORDER BY bullet_date DESC LIMIT 1")
+        if br:
+            secs = dict(br).get("sections_json")
+            if isinstance(secs, str):
+                secs = _qjson.loads(secs)
+            for sec in (secs or []):
+                for it in (sec.get("items") or []):
+                    itk = str(it.get("ticker") or "").split(":")[-1].upper()
+                    if itk and itk == short.upper():
+                        news.append({"headline": it.get("text"), "summary": "", "source": it.get("source")})
+    except Exception:
+        pass
+    payload["news"] = news[:5]
+
+    insiders = []
+    try:
+        if s.get("isin"):
+            irows = _fetchall(db,
+                f"SELECT person, transaction_type, transaction_date, total_value, currency "
+                f"FROM insider_transactions WHERE isin = {ph} "
+                f"ORDER BY transaction_date DESC LIMIT 8", (s.get("isin"),))
+            insiders = [dict(r) for r in irows] if irows else []
+    except Exception:
+        pass
+    payload["insiders"] = insiders
+
     return jsonify(payload)
 
 

@@ -5741,7 +5741,32 @@ function _buildReportCard(d, rich) {
         catch (e) { md = escapeHtml(d.analysis_markdown).replace(/\n/g, '<br>'); }
         analysisHtml = _secTitle('Agentens analys (multi-strategi)') + `<div class="report-md" style="font-size:11.5px;line-height:1.62;color:#334155">${md}</div>`;
     }
-    const richBlock = navHtml + bookHtml + fHtml + qHtml + analysisHtml;
+    // Nyheter
+    let newsHtml = '';
+    if (d.news && d.news.length) {
+        newsHtml = _secTitle('📰 Senaste nyheter') + d.news.map(nw => `
+            <div style="padding:7px 0;border-bottom:1px solid #f1f5f9">
+                <div style="font-size:12px;font-weight:600;color:#1f2937;line-height:1.45">${escapeHtml(nw.headline || '')}${nw.change_pct != null ? ` <span style="color:${nw.change_pct >= 0 ? '#047857' : '#b91c1c'};font-weight:700">${nw.change_pct >= 0 ? '+' : ''}${Number(nw.change_pct).toFixed(1)}%</span>` : ''}</div>
+                ${nw.summary ? `<div style="font-size:11px;color:#64748b;margin-top:2px;line-height:1.5">${escapeHtml(nw.summary)}</div>` : ''}
+                ${nw.source ? `<div style="font-size:10px;color:#94a3b8;margin-top:2px">${escapeHtml(nw.source)}</div>` : ''}
+            </div>`).join('');
+    }
+    // Insider-transaktioner
+    let insHtml = '';
+    if (d.insiders && d.insiders.length) {
+        insHtml = _secTitle('👥 Insider-transaktioner (senaste)') + `<table style="width:100%;border-collapse:collapse;font-size:11.5px">
+            <thead><tr><th style="text-align:left;color:#94a3b8;font-size:10px;text-transform:uppercase;padding:4px 6px">Datum</th>
+            <th style="text-align:left;color:#94a3b8;font-size:10px;text-transform:uppercase;padding:4px 6px">Person</th>
+            <th style="text-align:left;color:#94a3b8;font-size:10px;text-transform:uppercase;padding:4px 6px">Typ</th>
+            <th style="text-align:right;color:#94a3b8;font-size:10px;text-transform:uppercase;padding:4px 6px">Belopp</th></tr></thead><tbody>
+            ${d.insiders.map(x => { const buy = /förvärv|köp|tilldel/i.test(x.transaction_type || ''); return `<tr>
+                <td style="padding:5px 6px;border-top:1px solid #f1f5f9">${escapeHtml((x.transaction_date || '').slice(0, 10))}</td>
+                <td style="padding:5px 6px;border-top:1px solid #f1f5f9">${escapeHtml((x.person || '').slice(0, 24))}</td>
+                <td style="padding:5px 6px;border-top:1px solid #f1f5f9;color:${buy ? '#047857' : '#b91c1c'};font-weight:600">${escapeHtml(x.transaction_type || '')}</td>
+                <td style="padding:5px 6px;text-align:right;border-top:1px solid #f1f5f9">${x.total_value ? (Number(x.total_value) / 1000).toFixed(0) + 'k' : '–'}</td></tr>`; }).join('')}
+            </tbody></table>`;
+    }
+    const richBlock = navHtml + bookHtml + fHtml + qHtml + newsHtml + insHtml + analysisHtml;
 
     el.innerHTML = `
         <!-- Header -->
