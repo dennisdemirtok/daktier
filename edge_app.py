@@ -10814,6 +10814,22 @@ konkret handlingsregel. Aldrig utelämna den.
 **KOMPRIMERING (P1):** Säg slutsatsen/AVOID EN gång — inte 3–4. En betalande
 kund vill ha täthet. Upprepa inte samma poäng i flera sektioner.
 
+**Steg 6e — COMPLIANCE & FRAMING (P2, MAR/MiFID II)**
+
+Ramar in analysen som **beslutsstöd**, aldrig som personlig rekommendation:
+- Formulera som *"setupen / caset"* och *"så här ser risk/reward ut"* — INTE
+  *"du bör köpa X"* eller *"köp X nu"*. Signaler (BUY/AVOID) är en bedömning av
+  bolagets attraktivitet givet strategin, inte en order till just denna läsare.
+- **Datumstämpla** alltid analysen (dagens datum) — ett case är färskvara.
+- **Metod-transparens:** nämn kort vilken lins/modell som drev slutsatsen så
+  läsaren kan ifrågasätta den.
+- **Intressekonflikt:** om data/antagande är osäkert, säg det öppet. Påstå aldrig
+  säkerhet du inte har.
+- Avsluta resonemanget med att läsaren måste väga in **egen situation/risktolerans**
+  — analysen känner inte läsarens portfölj, tidshorisont eller skattesituation.
+Detta är ett krav, inte en disclaimer-rad: hela tonen ska vara analytisk och
+icke-instruerande.
+
 **Steg 7 — FAS 1 output-struktur** (OBLIGATORISK)
 
 1. **Header**: Klassificering (1 mening med motivering)
@@ -12152,6 +12168,386 @@ def _parse_batch_output(full_text):
     return parsed_json, markdown, json_ok
 
 
+def _apply_value_guardrail(parsed_json, stock_data, ticker=""):
+    """P0-1: kod-skydd — value_score får ej vara hög för förlustbolag/negativ P/E.
+    Muterar parsed_json in-place + räknar om composite."""
+    if not parsed_json:
+        return
+    try:
+        ni = stock_data.get("net_profit")
+        pe = stock_data.get("pe_ratio")
+        vs = parsed_json.get("value_score")
+        if (isinstance(vs, (int, float)) and vs > 30 and
+                ((isinstance(ni, (int, float)) and ni < 0) or
+                 (isinstance(pe, (int, float)) and pe < 0))):
+            parsed_json["value_score"] = 30
+            parsed_json["value_score_note"] = (
+                (parsed_json.get("value_score_note") or "")
+                + " [auto-cap P0-1: förlustbolag/negativ P/E är ej en värde-signal]").strip()
+
+            def _g(k):
+                v = parsed_json.get(k)
+                return float(v) if isinstance(v, (int, float)) else None
+            v_, q_, m_, r_ = _g("value_score"), _g("quality_score"), _g("momentum_score"), _g("risk_score")
+            if None not in (v_, q_, m_, r_):
+                parsed_json["composite_score"] = round(v_ * 0.25 + q_ * 0.30 + m_ * 0.25 + r_ * 0.20, 2)
+            print(f"[batch P0-1] {ticker}: value_score capped (förlustbolag)", file=sys.stderr)
+    except Exception as e:
+        print(f"[batch P0-1] guardrail fel: {e}", file=sys.stderr)
+
+
+def _consistency_check(analysis_md, stock_data):
+    """P1-4: 2:a LLM-pass — hitta interna motsägelser/omöjliga siffror.
+    Returnerar (flags:list[str], critical:bool, cost_usd)."""
+    if not CLAUDE_API_KEY or not analysis_md or len(analysis_md) < 120:
+        return [], False, 0.0
+    import json as _cjson, re as _cre
+    ctx = []
+    for k in ("net_profit", "pe_ratio", "market_cap", "last_price",
+              "ytd_change_pct", "one_year_change_pct", "is_investment_company",
+              "debt_to_equity_ratio"):
+        v = stock_data.get(k)
+        if v is not None:
+            ctx.append(f"{k}={v}")
+    prompt = (
+        "Du är en sträng faktagranskare. Hitta ALLA interna motsägelser och "
+        "omöjliga siffror i aktieanalysen nedan. Typiska fel: pris > NAV men "
+        "texten säger 'rabatt'; orimlig YTD vs 1-årsavkastning; 'hög "
+        "skuldsättning' men nettokassa; hög value-score trots negativ P/E; "
+        "market cap som inte stämmer med pris×aktier; forward-tal saknas trots "
+        "citerad guidance.\n\n"
+        f"Kända fakta: {', '.join(ctx) if ctx else '(inga)'}\n\n"
+        "Returnera EXAKT ett JSON-block:\n"
+        "---CHECK-START---\n"
+        '{"contradictions": ["kort beskrivning per motsägelse"], "critical": true/false}\n'
+        "---CHECK-END---\n"
+        "critical=true ENDAST om en motsägelse skulle vilseleda en investerare.\n\n"
+        f"ANALYS:\n{analysis_md[:4200]}")
+    try:
+        import httpx
+        with httpx.Client(timeout=60.0) as c:
+            r = c.post("https://api.anthropic.com/v1/messages",
+                       headers={"x-api-key": CLAUDE_API_KEY,
+                                "anthropic-version": "2023-06-01",
+                                "content-type": "application/json"},
+                       json={"model": "claude-sonnet-4-20250514", "max_tokens": 700,
+                             "messages": [{"role": "user", "content": prompt}]})
+        if r.status_code != 200:
+            return [], False, 0.0
+        resp = r.json()
+    except Exception:
+        return [], False, 0.0
+    cost = 0.0
+    try: cost = _calc_sonnet_cost(resp.get("usage", {}))
+    except Exception: pass
+    txt = "".join(b.get("text", "") for b in resp.get("content", []) if b.get("type") == "text")
+    m = _cre.search(r"---CHECK-START---\s*(.*?)\s*---CHECK-END---", txt, _cre.DOTALL)
+    if not m:
+        return [], False, cost
+    try:
+        js = _cre.sub(r"^```(?:json)?\s*|\s*```$", "", m.group(1).strip())
+        d = _cjson.loads(js)
+        return (d.get("contradictions") or [])[:8], bool(d.get("critical")), cost
+    except Exception:
+        return [], False, cost
+
+
+def _parse_entry_score(md):
+    """P1-6: extrahera 'Entry 6/10 nu · 8/10 vid $230' ur markdown.
+    Returnerar (now:float|None, target_price:float|None, raw:str|None)."""
+    if not md:
+        return None, None, None
+    import re as _r
+    now = tgt = raw = None
+    m = _r.search(r"([Ee]ntry[^\n]{0,180}?\d{1,2}\s*/\s*10[^\n]{0,180})", md)
+    if m:
+        seg = m.group(1)
+        raw = _r.sub(r"\s+", " ", seg).strip()[:200]
+        mn = _r.search(r"(\d{1,2})\s*/\s*10\s*(?:nu|now|idag|today)", seg, _r.IGNORECASE)
+        if not mn:
+            mn = _r.search(r"(\d{1,2})\s*/\s*10", seg)
+        if mn:
+            try: now = float(mn.group(1))
+            except Exception: pass
+        mt = _r.search(r"(\d{1,2})\s*/\s*10\s*vid\s*\$?\s*([\d][\d\s.,]*)", seg, _r.IGNORECASE)
+        if mt:
+            num = mt.group(2).replace(" ", "").replace(",", ".").rstrip(".")
+            try: tgt = float(num)
+            except Exception: pass
+    return now, tgt, raw
+
+
+def _rec_direction(edge_action, parsed_json):
+    """P1-6: härleda riktning (bullish/bearish/neutral) ur action + signaler."""
+    def _d(s):
+        t = (s or "").upper()
+        if "🟢" in t: return 1
+        if "🔴" in t: return -1
+        if any(k in t for k in ("STARK BUY", "BUY", "KÖP", "ACCUMUL", "ACKUMUL", "ÖKA", "ADD")):
+            return 1
+        if any(k in t for k in ("AVOID", "EXIT", "SÄLJ", "SELL", "UNDVIK", "REDUCE", "TRIM", "MINSKA")):
+            return -1
+        return 0
+    score = _d(edge_action) * 2
+    for k in ("swing_signal", "quality_signal", "value_signal"):
+        score += _d((parsed_json or {}).get(k))
+    if score >= 1: return "bullish"
+    if score <= -1: return "bearish"
+    return "neutral"
+
+
+def _log_recommendation(db, ticker, short_name, stock_data, parsed_json, markdown,
+                        price_at_rec, currency):
+    """P1-6 Track record: upserta agent-rekommendation i recommendation_log.
+    Tyst no-op vid fel (får aldrig krascha analysen)."""
+    if not parsed_json:
+        return
+    try:
+        from edge_db import _upsert_sql, _ensure_recommendation_log_table
+        from datetime import datetime as _dt
+        import json as _rjson
+        _ensure_recommendation_log_table(db)
+        try:
+            rec_date = _stockanalysis_today().isoformat()
+        except Exception:
+            rec_date = _dt.utcnow().date().isoformat()
+        edge = parsed_json.get("edge_signal", {}) or {}
+        edge_action = edge.get("action")
+        direction = _rec_direction(edge_action, parsed_json)
+        e_now, e_tgt, e_raw = _parse_entry_score(markdown)
+        cats = parsed_json.get("catalysts")
+        cols = ["ticker", "short_name", "orderbook_id", "isin", "country", "sector",
+                "rec_date", "price_at_rec", "currency", "primary_lens", "classification",
+                "direction", "edge_action", "edge_score", "composite_score", "value_score",
+                "quality_score", "momentum_score", "risk_score", "swing_signal",
+                "quality_signal", "value_signal", "entry_score_now", "entry_score_target",
+                "entry_score_raw", "triggers_json", "last_price", "last_checked",
+                "return_pct", "outcome_status"]
+        vals = [
+            (ticker or "").upper(), short_name,
+            stock_data.get("orderbook_id"), stock_data.get("isin"),
+            stock_data.get("country"), stock_data.get("sector"),
+            rec_date, price_at_rec, currency,
+            parsed_json.get("primary_lens"), parsed_json.get("classification"),
+            direction, edge_action, edge.get("score"),
+            parsed_json.get("composite_score"), parsed_json.get("value_score"),
+            parsed_json.get("quality_score"), parsed_json.get("momentum_score"),
+            parsed_json.get("risk_score"), parsed_json.get("swing_signal"),
+            parsed_json.get("quality_signal"), parsed_json.get("value_signal"),
+            e_now, e_tgt, e_raw,
+            _rjson.dumps(cats, ensure_ascii=False) if cats else None,
+            price_at_rec, _dt.utcnow().isoformat(), 0.0, "open",
+        ]
+        sql = _upsert_sql("recommendation_log", cols, ["ticker", "rec_date"])
+        db.execute(sql, tuple(vals))
+        db.commit()
+        print(f"[P1-6 reclog] {ticker}: {direction} @ {price_at_rec} {currency}", file=sys.stderr)
+    except Exception as e:
+        try: db.rollback()
+        except Exception: pass
+        print(f"[P1-6 reclog] {ticker} fel: {e}", file=sys.stderr)
+
+
+def _update_recommendation_outcomes(db=None):
+    """P1-6: mät utfall för loggade rekommendationer.
+    - live: uppdatera last_price + return_pct (sedan rek) från stocks-tabellen
+    - milstolpar: fyll price_1m/3m/6m/12m + return_Xm från borsdata_prices när
+      datumet passerat (oåterkalleligt — fryser utfallet på milstolpe-datumet)
+    Körs periodiskt i bakgrundsloopen."""
+    from edge_db import _ph as _phf, _fetchall, _fetchone, _ensure_recommendation_log_table
+    from datetime import datetime as _dt, timedelta as _td
+    own = False
+    if db is None:
+        db = get_db(); own = True
+    ph = _phf()
+    _ensure_recommendation_log_table(db)
+    updated = 0
+    closed = 0
+    try:
+        rows = _fetchall(db,
+            "SELECT id, ticker, short_name, isin, rec_date, price_at_rec, "
+            "return_12m FROM recommendation_log WHERE outcome_status = 'open'")
+        try: today = _stockanalysis_today()
+        except Exception: today = _dt.utcnow().date()
+        for r in rows:
+            rd = dict(r)
+            p0 = rd.get("price_at_rec")
+            if not p0:
+                continue
+            # rec_date -> date
+            try:
+                rdt = _dt.fromisoformat(str(rd["rec_date"])[:10]).date()
+            except Exception:
+                continue
+            days_since = (today - rdt).days
+            # ── Live last_price + return_pct (från stocks) ──
+            lp = None
+            try:
+                srow = _fetchone(db,
+                    f"SELECT last_price FROM stocks WHERE UPPER(ticker)={ph} "
+                    f"OR UPPER(short_name)={ph} ORDER BY number_of_owners DESC LIMIT 1",
+                    ((rd.get("ticker") or "").upper(), (rd.get("short_name") or rd.get("ticker") or "").upper()))
+                if srow:
+                    lp = dict(srow).get("last_price")
+            except Exception:
+                lp = None
+            set_parts = []
+            set_vals = []
+            if lp:
+                ret_live = round((lp / p0 - 1) * 100, 2)
+                set_parts += [f"last_price = {ph}", f"return_pct = {ph}", f"last_checked = {ph}"]
+                set_vals += [lp, ret_live, _dt.utcnow().isoformat()]
+            # ── Milstolpar via borsdata_prices (isin) ──
+            isin = rd.get("isin")
+            milestones = [("1m", 30, "price_1m", "return_1m"),
+                          ("3m", 91, "price_3m", "return_3m"),
+                          ("6m", 182, "price_6m", "return_6m"),
+                          ("12m", 365, "price_12m", "return_12m")]
+            if isin:
+                for _lbl, days, pcol, rcol in milestones:
+                    if days_since < days:
+                        continue
+                    # redan satt?
+                    cur = _fetchone(db,
+                        f"SELECT {pcol} AS p FROM recommendation_log WHERE id = {ph}", (rd["id"],))
+                    if cur and dict(cur).get("p") is not None:
+                        continue
+                    target_date = (rdt + _td(days=days)).isoformat()
+                    prow = _fetchall(db,
+                        f"SELECT close FROM borsdata_prices WHERE isin = {ph} "
+                        f"AND date <= {ph} ORDER BY date DESC LIMIT 1",
+                        (isin, target_date))
+                    if not prow:
+                        continue
+                    fp = dict(prow[0]).get("close")
+                    if not fp:
+                        continue
+                    set_parts += [f"{pcol} = {ph}", f"{rcol} = {ph}"]
+                    set_vals += [fp, round((fp / p0 - 1) * 100, 2)]
+            # ── Stäng efter 12m ──
+            if days_since >= 365:
+                set_parts += [f"outcome_status = {ph}"]
+                set_vals += ["closed"]
+                closed += 1
+            if set_parts:
+                set_vals.append(rd["id"])
+                try:
+                    db.execute(f"UPDATE recommendation_log SET {', '.join(set_parts)} WHERE id = {ph}",
+                               tuple(set_vals))
+                    db.commit()
+                    updated += 1
+                except Exception:
+                    try: db.rollback()
+                    except Exception: pass
+        print(f"[P1-6 outcomes] uppdaterade {updated}, stängde {closed}", file=sys.stderr)
+    except Exception as e:
+        print(f"[P1-6 outcomes] fel: {e}", file=sys.stderr)
+    finally:
+        if own:
+            try: db.close()
+            except Exception: pass
+    return {"updated": updated, "closed": closed}
+
+
+def _compute_track_record(db, lens=None, direction=None, days=None):
+    """P1-6: aggregera hit-rate + snittavkastning per horisont.
+    Returnerar dict med summary + breakdowns + recent."""
+    from edge_db import _ph as _phf, _fetchall
+    from datetime import datetime as _dt, timedelta as _td
+    ph = _phf()
+    where = []
+    params = []
+    if lens:
+        where.append(f"primary_lens = {ph}"); params.append(lens)
+    if direction:
+        where.append(f"direction = {ph}"); params.append(direction)
+    if days:
+        try:
+            cutoff = (_dt.utcnow().date() - _td(days=int(days))).isoformat()
+            where.append(f"rec_date >= {ph}"); params.append(cutoff)
+        except Exception:
+            pass
+    wsql = (" WHERE " + " AND ".join(where)) if where else ""
+    rows = [dict(r) for r in _fetchall(db,
+        f"SELECT * FROM recommendation_log{wsql} ORDER BY rec_date DESC", tuple(params))]
+
+    def _hit(direction, ret):
+        if ret is None:
+            return None
+        if direction == "bullish":
+            return ret > 0
+        if direction == "bearish":
+            return ret < 0
+        return abs(ret) < 5  # neutral = "höll sig" ±5%
+
+    horizons = [("1m", "return_1m"), ("3m", "return_3m"),
+                ("6m", "return_6m"), ("12m", "return_12m")]
+    summary = {"total": len(rows), "open": 0, "closed": 0}
+    by_h = {}
+    for hl, col in horizons:
+        rets = [r.get(col) for r in rows if r.get(col) is not None]
+        hits = [_hit(r.get("direction"), r.get(col)) for r in rows if r.get(col) is not None]
+        hits = [h for h in hits if h is not None]
+        n = len(rets)
+        by_h[hl] = {
+            "n": n,
+            "hit_rate": round(100 * sum(1 for h in hits if h) / len(hits), 1) if hits else None,
+            "avg_return": round(sum(rets) / n, 2) if n else None,
+            "median_return": round(sorted(rets)[n // 2], 2) if n else None,
+            "best": round(max(rets), 2) if n else None,
+            "worst": round(min(rets), 2) if n else None,
+        }
+    # live (return_pct) hit-rate som proxy innan milstolpar finns
+    live_rets = [r.get("return_pct") for r in rows if r.get("return_pct") not in (None, 0)]
+    live_hits = [_hit(r.get("direction"), r.get("return_pct")) for r in rows
+                 if r.get("return_pct") not in (None, 0)]
+    live_hits = [h for h in live_hits if h is not None]
+    by_h["live"] = {
+        "n": len(live_rets),
+        "hit_rate": round(100 * sum(1 for h in live_hits if h) / len(live_hits), 1) if live_hits else None,
+        "avg_return": round(sum(live_rets) / len(live_rets), 2) if live_rets else None,
+        "best": round(max(live_rets), 2) if live_rets else None,
+        "worst": round(min(live_rets), 2) if live_rets else None,
+    }
+    for r in rows:
+        if r.get("outcome_status") == "closed":
+            summary["closed"] += 1
+        else:
+            summary["open"] += 1
+    # breakdown per lins
+    by_lens = {}
+    for r in rows:
+        L = r.get("primary_lens") or "okänd"
+        d = by_lens.setdefault(L, {"n": 0, "hits": 0, "scored": 0})
+        d["n"] += 1
+        # bästa tillgängliga horisont
+        best_ret = None
+        for _hl, col in [("12m", "return_12m"), ("6m", "return_6m"),
+                         ("3m", "return_3m"), ("1m", "return_1m")]:
+            if r.get(col) is not None:
+                best_ret = r.get(col); break
+        if best_ret is None:
+            best_ret = r.get("return_pct") if r.get("return_pct") not in (None, 0) else None
+        h = _hit(r.get("direction"), best_ret)
+        if h is not None:
+            d["scored"] += 1
+            if h: d["hits"] += 1
+    for L, d in by_lens.items():
+        d["hit_rate"] = round(100 * d["hits"] / d["scored"], 1) if d["scored"] else None
+    recent = [{
+        "ticker": r.get("ticker"), "rec_date": str(r.get("rec_date"))[:10],
+        "direction": r.get("direction"), "primary_lens": r.get("primary_lens"),
+        "edge_action": r.get("edge_action"), "composite_score": r.get("composite_score"),
+        "entry_score_now": r.get("entry_score_now"),
+        "price_at_rec": r.get("price_at_rec"), "currency": r.get("currency"),
+        "return_pct": r.get("return_pct"),
+        "return_1m": r.get("return_1m"), "return_3m": r.get("return_3m"),
+        "return_6m": r.get("return_6m"), "return_12m": r.get("return_12m"),
+        "outcome_status": r.get("outcome_status"),
+    } for r in rows[:120]]
+    return {"summary": summary, "by_horizon": by_h, "by_lens": by_lens, "recent": recent}
+
+
 def _analyze_single_ticker_for_batch(ticker, run_id):
     """Kör DAKTIER FAS 1 på en ticker och spara i batch_analyses."""
     import httpx, json as _json
@@ -12212,34 +12608,48 @@ def _analyze_single_ticker_for_batch(ticker, run_id):
 
     parsed_json, markdown, json_ok = _parse_batch_output(full_text)
 
-    # ── P0-1 GUARDRAIL: korrigera uppenbart felaktiga value-scores ──
-    # "Siffran får inte genereras" — kod-skydd utöver prompt-routern.
-    if parsed_json:
-        try:
-            ni = stock_data.get("net_profit")
-            pe = stock_data.get("pe_ratio")
-            vs = parsed_json.get("value_score")
-            capped = False
-            # Förlustbolag / negativ P/E → value_score får ej vara hög pga "låg P/E"
-            if (isinstance(vs, (int, float)) and vs > 30 and
-                    ((isinstance(ni, (int, float)) and ni < 0) or
-                     (isinstance(pe, (int, float)) and pe < 0))):
-                parsed_json["value_score"] = 30
-                parsed_json["value_score_note"] = (
-                    (parsed_json.get("value_score_note") or "")
-                    + " [auto-cap P0-1: förlustbolag/negativ P/E är ej en värde-signal]").strip()
-                capped = True
-            if capped:
-                # Räkna om composite (V×0.25 + Q×0.30 + M×0.25 + Risk×0.20)
-                def _g(k):
-                    v = parsed_json.get(k)
-                    return float(v) if isinstance(v, (int, float)) else None
-                v_, q_, m_, r_ = _g("value_score"), _g("quality_score"), _g("momentum_score"), _g("risk_score")
-                if None not in (v_, q_, m_, r_):
-                    parsed_json["composite_score"] = round(v_ * 0.25 + q_ * 0.30 + m_ * 0.25 + r_ * 0.20, 2)
-                print(f"[batch P0-1] {ticker}: value_score capped (förlustbolag)", file=sys.stderr)
-        except Exception as e:
-            print(f"[batch P0-1] guardrail fel: {e}", file=sys.stderr)
+    # ── P0-1 GUARDRAIL (kod-skydd utöver prompt-routern) ──
+    _apply_value_guardrail(parsed_json, stock_data, ticker)
+
+    # ── P1-4 KONSISTENS-PASS: 2:a LLM letar interna motsägelser ──
+    consistency_flags = []
+    try:
+        flags, critical, ccost = _consistency_check(markdown, stock_data)
+        cost += ccost
+        consistency_flags = flags
+        if critical and parsed_json:
+            # Regenerera EN gång med motsägelserna som feedback
+            corr = ("⛔ KONSISTENS-GRANSKNING hittade motsägelser som MÅSTE rättas:\n"
+                    + "\n".join(f"- {f}" for f in flags)
+                    + "\n\nGenerera om HELA analysen (JSON-block + markdown) utan dessa "
+                      "motsägelser. Räkna NAV-tecken (pris>NAV=premie), market cap "
+                      "(pris×aktier) och forward-multiplar korrekt. Behåll samma format.")
+            try:
+                payload2 = dict(payload)
+                payload2["messages"] = [
+                    {"role": "user", "content": user_msg},
+                    {"role": "assistant", "content": full_text},
+                    {"role": "user", "content": corr},
+                ]
+                with httpx.Client(timeout=180.0) as c2:
+                    r2 = c2.post("https://api.anthropic.com/v1/messages", headers=headers, json=payload2)
+                if r2.status_code == 200:
+                    resp2 = r2.json()
+                    try: cost += _calc_sonnet_cost(resp2.get("usage", {}))
+                    except Exception: pass
+                    ft2 = "".join(b.get("text", "") for b in resp2.get("content", []) if b.get("type") == "text")
+                    pj2, md2, ok2 = _parse_batch_output(ft2)
+                    if pj2:
+                        parsed_json, markdown, json_ok, full_text = pj2, md2, ok2, ft2
+                        _apply_value_guardrail(parsed_json, stock_data, ticker)
+                        flags2, _crit2, ccost2 = _consistency_check(markdown, stock_data)
+                        cost += ccost2
+                        consistency_flags = flags2  # kvarvarande efter regen
+                        print(f"[batch P1-4] {ticker}: regenererad efter konsistens-flagg", file=sys.stderr)
+            except Exception as e:
+                print(f"[batch P1-4] regen fel: {e}", file=sys.stderr)
+    except Exception as e:
+        print(f"[batch P1-4] consistency fel: {e}", file=sys.stderr)
 
     # Spara i batch_analyses (även om JSON failade — för felsökning)
     try:
@@ -12312,6 +12722,7 @@ def _analyze_single_ticker_for_batch(ticker, run_id):
                 bool(parsed_json.get("awaiting_report", False)),
                 parsed_json.get("report_date"),
                 parsed_json.get("post_report_thesis_change"),
+                _json.dumps(consistency_flags, ensure_ascii=False) if consistency_flags else None,
             ]
         else:
             cols = [ticker, short_name, country, "manual",
@@ -12329,7 +12740,8 @@ def _analyze_single_ticker_for_batch(ticker, run_id):
                     None, None, None, None, None, False, None,
                     # v3 dashboard-validering — failad parsing = inte säker
                     False, "JSON-parsing failed — kan inte validera", None,
-                    "stale", False, None, None]
+                    "stale", False, None, None,
+                    None]  # consistency_flags
         all_col_names = [
             "ticker", "short_name", "country", "trigger_type",
             "classification", "primary_lens", "swing_signal", "quality_signal",
@@ -12346,6 +12758,7 @@ def _analyze_single_ticker_for_batch(ticker, run_id):
             "stop_thesis_triggered", "reverse_dcf_baseline_source",
             "dashboard_safe", "dashboard_safe_reason", "dashboard_primary_concern",
             "data_freshness", "awaiting_report", "report_date", "post_report_thesis_change",
+            "consistency_flags",
         ]
         # Defensiv: filtrera bort kolumner som inte finns i DB (om migrationen inte kört)
         valid_pairs = [(name, val) for name, val in zip(all_col_names, cols)
@@ -12364,6 +12777,14 @@ def _analyze_single_ticker_for_batch(ticker, run_id):
     except Exception as e:
         import traceback; traceback.print_exc()
         return {"ticker": ticker, "ok": False, "error": f"db insert: {e}", "cost": cost}
+
+    # ── P1-6 TRACK RECORD: logga rekommendationen för hit-rate-mätning ──
+    if json_ok and parsed_json:
+        try:
+            _log_recommendation(db, ticker, short_name, stock_data, parsed_json,
+                                markdown, price_at_analysis, price_currency)
+        except Exception as e:
+            print(f"[P1-6] log fel: {e}", file=sys.stderr)
 
     return {"ticker": ticker, "ok": json_ok, "cost": cost,
             "cached_tokens": usage.get("cache_read_input_tokens", 0)}
@@ -13352,6 +13773,13 @@ def _price_update_loop():
                 print(f"[se-news] auto-gen klar", file=sys.stderr)
         except Exception as e:
             print(f"[se-news loop] {e}", file=sys.stderr)
+        # P1-6 Track record — mät utfall för loggade rekommendationer var ~12h
+        try:
+            if time.time() - _LAST_TRACKREC_SYNC[0] > 43200:  # 12h
+                _update_recommendation_outcomes(get_db())
+                _LAST_TRACKREC_SYNC[0] = time.time()
+        except Exception as e:
+            print(f"[track-record loop] {e}", file=sys.stderr)
         time.sleep(PRICE_UPDATE_INTERVAL_SEC)
 
 
@@ -13359,6 +13787,7 @@ _LAST_TRENDING_SYNC = [0.0]
 _LAST_BULLETS_SYNC = [0.0]
 _LAST_MACRO_PULSE_SYNC = [0.0]
 _LAST_SE_NEWS_SYNC = [0.0]
+_LAST_TRACKREC_SYNC = [0.0]
 
 
 @app.route("/api/price-cache/update", methods=["POST"])
@@ -13366,6 +13795,39 @@ def api_price_cache_update():
     """Manuell trigger av price-update (för admin/debugging)."""
     result = _price_update_tick()
     return jsonify(result)
+
+
+@app.route("/api/track-record")
+def api_track_record():
+    """P1-6: aggregerad träffsäkerhet/hit-rate + avkastning per horisont.
+    Query: ?lens=, ?direction=bullish|bearish, ?days=, ?refresh=1"""
+    db = get_db()
+    try:
+        if request.args.get("refresh") == "1":
+            try: _update_recommendation_outcomes(db)
+            except Exception as e: print(f"[track-record] refresh: {e}", file=sys.stderr)
+        data = _compute_track_record(
+            db,
+            lens=request.args.get("lens"),
+            direction=request.args.get("direction"),
+            days=request.args.get("days"))
+        return jsonify(data)
+    except Exception as e:
+        import traceback
+        return jsonify({"error": str(e), "tb": traceback.format_exc()[:600]}), 500
+
+
+@app.route("/api/track-record/update", methods=["POST", "GET"])
+def api_track_record_update():
+    """P1-6: manuell trigger av utfalls-mätning."""
+    res = _update_recommendation_outcomes(get_db())
+    return jsonify(res)
+
+
+@app.route("/track-record")
+def track_record_page():
+    """P1-6: track record-sida (träffsäkerhet för försäljning)."""
+    return render_template("track_record.html")
 
 
 @app.route("/api/price-cache/status")
@@ -13698,6 +14160,7 @@ def api_stock_quick_report(orderbook_id):
             "debt_eq": _f(full.get("debt_to_equity_ratio")),
             "net_profit": _f(full.get("net_profit")), "sales": _f(full.get("sales")),
             "eps": _f(full.get("eps")),
+            "short_selling_ratio": _f(full.get("short_selling_ratio")),
         },
         # v3.10: agentens FULLA skrivna analys + bokmodeller (unik data)
         "analysis_markdown": (a.get("full_analysis_markdown") or "")[:5000],
@@ -13711,6 +14174,56 @@ def api_stock_quick_report(orderbook_id):
     # v3.11: Nyheter + insider-transaktioner (samlar allt i rapporten)
     import json as _qjson
     from edge_db import _fetchall
+
+    # P1-4: konsistens-flaggor från analysen
+    cf = a.get("consistency_flags")
+    if isinstance(cf, str):
+        try: cf = _qjson.loads(cf)
+        except Exception: cf = []
+    payload["consistency_flags"] = cf or []
+
+    # P0-3: programmatisk market cap-rimlighet (kod, ej LLM).
+    # Härled aktier ur net_profit/eps och jämför implied mcap (aktier×pris)
+    # mot lagrat börsvärde. >15% avvikelse → flagga ev. inaktuell data.
+    try:
+        km = payload["key_metrics"]
+        eps = km.get("eps"); npf = km.get("net_profit")
+        price = payload.get("price"); mcap = km.get("market_cap")
+        chk = None
+        if eps and abs(eps) > 0.01 and npf and price and mcap and mcap > 0:
+            shares_implied = npf / eps
+            if shares_implied > 0:
+                mcap_implied = shares_implied * price
+                diff_pct = (mcap_implied / mcap - 1) * 100
+                chk = {
+                    "shares_implied": round(shares_implied),
+                    "mcap_implied": round(mcap_implied),
+                    "stored_mcap": round(mcap),
+                    "diff_pct": round(diff_pct, 1),
+                    "flag": abs(diff_pct) > 15,
+                }
+        payload["market_cap_check"] = chk
+    except Exception:
+        payload["market_cap_check"] = None
+
+    # P1-6: aggregerad track record (säljbar trovärdighet i rapportfoten)
+    try:
+        tr = _compute_track_record(db)
+        bh = tr.get("by_horizon", {})
+        pick = None
+        for h in ("12m", "6m", "3m", "1m", "live"):
+            if bh.get(h, {}).get("n"):
+                pick = (h, bh[h]); break
+        payload["track_record"] = {
+            "total": tr.get("summary", {}).get("total", 0),
+            "horizon": pick[0] if pick else None,
+            "hit_rate": pick[1].get("hit_rate") if pick else None,
+            "avg_return": pick[1].get("avg_return") if pick else None,
+            "n": pick[1].get("n") if pick else 0,
+        } if tr.get("summary", {}).get("total", 0) else None
+    except Exception:
+        payload["track_record"] = None
+
     news = []
     try:
         nr = _fetchone(db, "SELECT items_json FROM market_news ORDER BY generated_at DESC LIMIT 1")

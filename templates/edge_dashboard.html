@@ -1517,6 +1517,7 @@ const NAV_SECTIONS = {
                 ] },
     edge:      { label: 'Edge Signals',  icon: 'electric_bolt',         tab: 'signals',   sub: [] },
     settings:  { label: 'Inställningar',  icon: 'settings',             tab: null,        sub: [
+                    { label: 'Track record',     icon: 'query_stats', ext: '/track-record' },
                     { label: 'Simulering',       icon: 'monitoring',  tab: 'portfolio' },
                     { label: 'Backtest-rapport', icon: 'description', ext: '/backtest-report' },
                     { label: 'Live Tracker',     icon: 'visibility',  ext: '/live-tracker' },
@@ -5766,7 +5767,18 @@ function _buildReportCard(d, rich) {
                 <td style="padding:5px 6px;text-align:right;border-top:1px solid #f1f5f9">${x.total_value ? (Number(x.total_value) / 1000).toFixed(0) + 'k' : '–'}</td></tr>`; }).join('')}
             </tbody></table>`;
     }
-    const richBlock = navHtml + bookHtml + fHtml + qHtml + newsHtml + insHtml + analysisHtml;
+    // P1-4: konsistens-flaggor (kvarvarande motsägelser efter automatisk granskning)
+    let flagsHtml = '';
+    if (d.consistency_flags && d.consistency_flags.length) {
+        flagsHtml = `<div style="margin-top:18px;background:#fffbeb;border:1px solid #fde68a;border-radius:11px;padding:13px 16px">
+            <div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:0.5px;color:#b45309;margin-bottom:7px">⚠️ Konsistens-noteringar</div>
+            <ul style="margin:0;padding-left:18px;font-size:11.5px;line-height:1.6;color:#92400e">
+                ${d.consistency_flags.map(f => `<li>${escapeHtml(String(f))}</li>`).join('')}
+            </ul>
+            <div style="font-size:10px;color:#b45309;margin-top:7px;opacity:0.85">Automatisk faktagranskning flaggade detta för manuell kontroll innan beslut.</div>
+        </div>`;
+    }
+    const richBlock = navHtml + bookHtml + fHtml + qHtml + newsHtml + insHtml + analysisHtml + flagsHtml;
 
     el.innerHTML = `
         <!-- Header -->
@@ -5813,18 +5825,48 @@ function _buildReportCard(d, rich) {
                 <div style="flex:1">
                     <div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:0.6px;color:#94a3b8;margin-bottom:6px">Värdering & övrigt</div>
                     ${metric('Market cap', mc)}${metric('RSI (14)', n(km.rsi, 0))}${metric('Ägare (Avanza)', km.owners != null ? Number(km.owners).toLocaleString('sv') : null)}
+                    ${km.short_selling_ratio != null && km.short_selling_ratio > 0 ? metric('Blankningsandel', n(km.short_selling_ratio) + '%') : ''}
                     ${rdcf.implied != null ? metric('Reverse DCF (implied)', n(rdcf.implied) + '%') : ''}
                     ${rdcf.baseline != null ? metric('DCF-baseline', n(rdcf.baseline) + '%' + (rdcf.confidence ? ' (' + rdcf.confidence + ')' : '')) : ''}
                     ${metric('Sektor', km.sector)}
                 </div>
             </div>
+            ${(d.market_cap_check && d.market_cap_check.flag) ? `
+            <div style="margin-top:10px;background:#fff7ed;border:1px solid #fed7aa;border-radius:9px;padding:8px 12px;font-size:10.5px;color:#9a3412">
+                ⚠️ Datakontroll: lagrat börsvärde avviker ${Math.abs(d.market_cap_check.diff_pct).toFixed(0)}% från pris×härledda aktier — börsvärdet kan vara inaktuellt. Verifiera mot senaste rapport.
+            </div>` : ''}
 
             ${richBlock}
 
+            ${(d.track_record && d.track_record.hit_rate != null && d.track_record.n >= 5) ? `
+            <!-- Track record (säljbar trovärdighet) -->
+            <div style="margin-top:18px;background:#f0f9ff;border:1px solid #bae6fd;border-radius:11px;padding:11px 16px;display:flex;justify-content:space-between;align-items:center">
+                <div>
+                    <div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:0.5px;color:#0369a1">📊 Agentens track record</div>
+                    <div style="font-size:10.5px;color:#0c4a6e;margin-top:2px;opacity:0.85">${d.track_record.n} mätta rekommendationer · ${d.track_record.horizon === 'live' ? 'löpande' : d.track_record.horizon} horisont</div>
+                </div>
+                <div style="text-align:right">
+                    <div style="font-size:20px;font-weight:800;color:#0369a1">${Number(d.track_record.hit_rate).toFixed(0)}%<span style="font-size:11px;font-weight:600;opacity:0.7"> träff</span></div>
+                    ${d.track_record.avg_return != null ? `<div style="font-size:11px;font-weight:700;color:${d.track_record.avg_return >= 0 ? '#047857' : '#b91c1c'}">${d.track_record.avg_return >= 0 ? '+' : ''}${Number(d.track_record.avg_return).toFixed(1)}% snitt</div>` : ''}
+                </div>
+            </div>` : ''}
+
+            <!-- Metod & compliance (MAR/MiFID-ram) -->
+            <div style="margin-top:20px;background:#f8fafc;border:1px solid #eef2f7;border-radius:11px;padding:13px 16px">
+                <div style="font-size:10.5px;font-weight:800;text-transform:uppercase;letter-spacing:0.5px;color:#64748b;margin-bottom:6px">Metod & transparens</div>
+                <div style="font-size:10.5px;line-height:1.6;color:#64748b">
+                    <strong style="color:#475569">Metod:</strong> Multi-strategi-ramverk (Swing/Quality/Value) med klassificerings-router, 4-axlad scoring (Value·Quality·Momentum·Risk), reverse-DCF mot baseline och automatisk konsistens-granskning.
+                    <strong style="color:#475569">Datakällor:</strong> Börsdata &amp; Avanza, daterat ${d.report_date}.
+                    <strong style="color:#475569">Karaktär:</strong> Detta är ett <em>investeringsanalytiskt beslutsstöd</em> — inte en personlig investeringsrekommendation enligt MAR/MiFID II och inte en uppmaning att köpa eller sälja ett specifikt instrument.
+                    <strong style="color:#475569">Intressekonflikt:</strong> Analysen genereras maskinellt; DAKTIER innehar inga positioner i analyserade bolag och ersätts inte av emittenten.
+                    Gör alltid en egen bedömning utifrån din situation, eller rådgör med en licensierad rådgivare.
+                </div>
+            </div>
+
             <!-- Footer -->
-            <div style="margin-top:24px;padding-top:12px;border-top:1px solid #e5e7eb;display:flex;justify-content:space-between;align-items:center;font-size:10px;color:#94a3b8">
-                <span>Agent-validerad analys (DEL 6.99 v3.1)${d.analysis_date ? ' · analys ' + d.analysis_date : ''}${d.ran_fresh ? ' · färsk' : ''}</span>
-                <span>DAKTIER · Ej finansiell rådgivning</span>
+            <div style="margin-top:14px;padding-top:12px;border-top:1px solid #e5e7eb;display:flex;justify-content:space-between;align-items:center;font-size:10px;color:#94a3b8">
+                <span>Agent-validerad analys (DEL 6.99 v3.1)${d.analysis_date ? ' · analys ' + d.analysis_date : ''}${d.ran_fresh ? ' · färsk' : ''}${d.has_analysis ? (d.consistency_flags && d.consistency_flags.length ? ' · ⚠️ ' + d.consistency_flags.length + ' konsistens-flagg' : ' · ✓ konsistens-granskad') : ''}</span>
+                <span>DAKTIER · Beslutsstöd, ej finansiell rådgivning</span>
             </div>
         </div>`;
     return el;

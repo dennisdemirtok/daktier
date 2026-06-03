@@ -1312,6 +1312,7 @@ def _create_tables(db):
             print(f"[migration] yahoo_ticker idx: {e}")
         _ensure_smart_score_columns(db)
         _ensure_batch_analyses_columns(db)
+        _ensure_recommendation_log_table(db)  # P1-6 track record
 
 
 def _list_batch_analyses_columns(db):
@@ -1361,6 +1362,7 @@ def _ensure_batch_analyses_columns(db):
         ("awaiting_report", "BOOLEAN DEFAULT FALSE"),
         ("report_date", "DATE"),
         ("post_report_thesis_change", "TEXT"),  # thesis_confirmed/strengthened/weakened/invalidated
+        ("consistency_flags", "JSONB"),  # P1-4 konsistens-granskning
     ]
     new_cols_sqlite = [
         ("price_at_analysis", "REAL"),
@@ -1381,6 +1383,7 @@ def _ensure_batch_analyses_columns(db):
         ("awaiting_report", "INTEGER DEFAULT 0"),
         ("report_date", "TEXT"),
         ("post_report_thesis_change", "TEXT"),
+        ("consistency_flags", "TEXT"),
     ]
     cols = new_cols_pg if _use_postgres() else new_cols_sqlite
     added = 0
@@ -1428,6 +1431,111 @@ def _ensure_batch_analyses_columns(db):
             try: db.rollback()
             except Exception: pass
     return {"added": added, "skipped": skipped, "failed": failed}
+
+
+def _ensure_recommendation_log_table(db):
+    """P1-6 Track record: logga varje agent-rekommendation + mät utfall över
+    1/3/6/12 månader. Idempotent CREATE TABLE IF NOT EXISTS (PG + SQLite).
+    Detta är grunden för säljbar träffsäkerhet/hit-rate."""
+    import sys as _sys
+    try:
+        if _use_postgres():
+            db.execute("""
+                CREATE TABLE IF NOT EXISTS recommendation_log (
+                    id SERIAL PRIMARY KEY,
+                    ticker TEXT NOT NULL,
+                    short_name TEXT,
+                    orderbook_id TEXT,
+                    isin TEXT,
+                    country TEXT,
+                    sector TEXT,
+                    rec_date TEXT NOT NULL,
+                    rec_timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    price_at_rec DOUBLE PRECISION,
+                    currency TEXT,
+                    primary_lens TEXT,
+                    classification TEXT,
+                    direction TEXT,                 -- bullish/bearish/neutral
+                    edge_action TEXT,
+                    edge_score DOUBLE PRECISION,
+                    composite_score DOUBLE PRECISION,
+                    value_score DOUBLE PRECISION,
+                    quality_score DOUBLE PRECISION,
+                    momentum_score DOUBLE PRECISION,
+                    risk_score DOUBLE PRECISION,
+                    swing_signal TEXT,
+                    quality_signal TEXT,
+                    value_signal TEXT,
+                    entry_score_now DOUBLE PRECISION,
+                    entry_score_target DOUBLE PRECISION,
+                    entry_score_raw TEXT,
+                    triggers_json JSONB,
+                    last_price DOUBLE PRECISION,
+                    last_checked TIMESTAMP,
+                    return_pct DOUBLE PRECISION,     -- live sedan rek
+                    price_1m DOUBLE PRECISION,  return_1m DOUBLE PRECISION,
+                    price_3m DOUBLE PRECISION,  return_3m DOUBLE PRECISION,
+                    price_6m DOUBLE PRECISION,  return_6m DOUBLE PRECISION,
+                    price_12m DOUBLE PRECISION, return_12m DOUBLE PRECISION,
+                    outcome_status TEXT DEFAULT 'open',
+                    UNIQUE(ticker, rec_date)
+                );
+                CREATE INDEX IF NOT EXISTS idx_reclog_ticker ON recommendation_log(ticker);
+                CREATE INDEX IF NOT EXISTS idx_reclog_date ON recommendation_log(rec_date DESC);
+                CREATE INDEX IF NOT EXISTS idx_reclog_status ON recommendation_log(outcome_status);
+            """)
+        else:
+            db.execute("""
+                CREATE TABLE IF NOT EXISTS recommendation_log (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    ticker TEXT NOT NULL,
+                    short_name TEXT,
+                    orderbook_id TEXT,
+                    isin TEXT,
+                    country TEXT,
+                    sector TEXT,
+                    rec_date TEXT NOT NULL,
+                    rec_timestamp TEXT DEFAULT CURRENT_TIMESTAMP,
+                    price_at_rec REAL,
+                    currency TEXT,
+                    primary_lens TEXT,
+                    classification TEXT,
+                    direction TEXT,
+                    edge_action TEXT,
+                    edge_score REAL,
+                    composite_score REAL,
+                    value_score REAL,
+                    quality_score REAL,
+                    momentum_score REAL,
+                    risk_score REAL,
+                    swing_signal TEXT,
+                    quality_signal TEXT,
+                    value_signal TEXT,
+                    entry_score_now REAL,
+                    entry_score_target REAL,
+                    entry_score_raw TEXT,
+                    triggers_json TEXT,
+                    last_price REAL,
+                    last_checked TEXT,
+                    return_pct REAL,
+                    price_1m REAL,  return_1m REAL,
+                    price_3m REAL,  return_3m REAL,
+                    price_6m REAL,  return_6m REAL,
+                    price_12m REAL, return_12m REAL,
+                    outcome_status TEXT DEFAULT 'open',
+                    UNIQUE(ticker, rec_date)
+                );
+            """)
+            db.execute("CREATE INDEX IF NOT EXISTS idx_reclog_ticker ON recommendation_log(ticker)")
+            db.execute("CREATE INDEX IF NOT EXISTS idx_reclog_date ON recommendation_log(rec_date DESC)")
+            db.execute("CREATE INDEX IF NOT EXISTS idx_reclog_status ON recommendation_log(outcome_status)")
+        db.commit()
+        return True
+    except Exception as e:
+        try: db.rollback()
+        except Exception: pass
+        print(f"[migration] _ensure_recommendation_log_table failed: {e}", file=_sys.stderr)
+        return False
 
 
 def _ensure_borsdata_columns(db):
