@@ -12452,8 +12452,9 @@ def _update_recommendation_outcomes(db=None):
 def _compute_track_record(db, lens=None, direction=None, days=None):
     """P1-6: aggregera hit-rate + snittavkastning per horisont.
     Returnerar dict med summary + breakdowns + recent."""
-    from edge_db import _ph as _phf, _fetchall
+    from edge_db import _ph as _phf, _fetchall, _ensure_recommendation_log_table
     from datetime import datetime as _dt, timedelta as _td
+    _ensure_recommendation_log_table(db)  # självläkande: tabellen finns alltid
     ph = _phf()
     where = []
     params = []
@@ -12866,7 +12867,7 @@ def api_batch_run():
     Body: {"tickers": ["HEXPOL B", "MU", "NVDA", ...]}
     Returnerar omedelbart med run_id; worker körs i bakgrundstråd.
     """
-    from edge_db import _ph, _ensure_batch_analyses_columns
+    from edge_db import _ph, _ensure_batch_analyses_columns, _ensure_recommendation_log_table
 
     # KRITISK: kör migrationen explicit innan batch startar.
     # Detta säkerställer att alla v3-kolumner finns i DB innan workern
@@ -12874,6 +12875,7 @@ def api_batch_run():
     try:
         db_mig = get_db()
         mig_result = _ensure_batch_analyses_columns(db_mig)
+        _ensure_recommendation_log_table(db_mig)  # P1-6 track record-tabell
         print(f"[batch] pre-flight migration: {mig_result}", file=sys.stderr)
     except Exception as mig_err:
         print(f"[batch] pre-flight migration FAILED: {mig_err}", file=sys.stderr)
@@ -15102,6 +15104,12 @@ DEL 9 — DAGENS DB-SNAPSHOT (uppdateras var 5 min)
 
 def _startup():
     db = get_db()
+    # P1-6: säkerställ track record-tabellen på PG (skapas annars bara lazy)
+    try:
+        from edge_db import _ensure_recommendation_log_table
+        _ensure_recommendation_log_table(db)
+    except Exception as e:
+        print(f"[STARTUP] recommendation_log migration: {e}", file=sys.stderr)
     stats = get_stats(db)
 
     # ISIN-backfill: stocks.isin saknas för många SE-bolag, eller har YAHOO_-
