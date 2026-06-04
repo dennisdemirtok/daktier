@@ -10632,6 +10632,33 @@ Hoppa ALDRIG över tyst.
 6. Är alla obligatoriska fält för bolagstypen ifyllda eller märkta "DATA SAKNAS"? → Regel 6
 ═══════════════════════════════════════════════════════════════════
 
+═══════════════════════════════════════════════════════════════════
+**DEL 6.99 v3.3 — FRYSTA MEKANISKA SIGNALER (commit 5b37fd6) — AUKTORITATIVA**
+═══════════════════════════════════════════════════════════════════
+I bolagskontexten finns ett `v33`-block med MEKANISKT beräknade signaler från den
+frysta, out-of-sample-validerade regeluppsättningen (typ-routing, peak-detektor,
+datavaliditetsgrind, karantänlista). Dessa har FÖRETRÄDE framför din egen
+lins-bedömning. Din uppgift är att PRESENTERA dem och ge narrativ runt — inte
+åsidosätta dem.
+
+I VARJE analys, skriv ut:
+- Klassificering (v33.classification) + metod (v33.classification_method).
+- Per lins (Value/Quality/Swing): signal + regelhänvisning (v33.*.rule) + PROFIL
+  (riskreducerande / uppsidesökande / avstår) ur v33.*.profile.
+- Cyklisk fas + op-marginal vs median om v33.cyclical_phase finns.
+- Regelversion i analysens fot: "DEL 6.99 v3.3 (commit 5b37fd6)".
+
+OBLIGATORISK PROFIL-MARKERING: ange tydligt om den samlade hållningen är
+RISKREDUCERANDE (TA PROFIT/UNDVIK/avstår) eller UPPSIDESÖKANDE (KÖP). Out-of-
+sample visade att v3.3 byter uppsida mot blow-up-skydd (avstod +38.6pe på
+compounders) — användaren ska kunna välja defensiv/offensiv tolkning medvetet.
+
+Om din kvalitativa bedömning AVVIKER från v33-signalen: notera det öppet som en
+"avvikelse mot frysta reglerna", men ÄNDRA ALDRIG v33-signalen. Reglerna är frysta
+tills forward-loggen utvärderats (≥12 mån). Saknas v33-blocket (ingen Börsdata-
+data): skriv "v3.3-signal: DATA SAKNAS".
+═══════════════════════════════════════════════════════════════════
+
 **Steg 2 — Mappa strategi → lins**
 
 - **🎯 Swing**: Owner momentum + teknisk trend. Lynch/Fisher + Kahneman.
@@ -12012,6 +12039,69 @@ def _validate_price_freshness(db, stock_data, threshold_pct=5.0):
         print(f"[price-verify] fel: {e}", file=sys.stderr)
 
 
+def _v33_signals_for_stock(db, stock_data):
+    """Step a: beräkna FRYSTA v3.3-signaler (commit 5b37fd6) för live-analys.
+    TTM-P/E ur senaste 4 publicerade kvartal, op-marginal-historik ur årsbokslut,
+    ROE, prior-12m momentum → v33_live.compute (typ-routing + peak-detektor +
+    datavaliditetsgrind). Returneras i agentens kontext som auktoritativa signaler."""
+    try:
+        from edge_db import _ph as _phf, _fetchall
+        import v33_live
+        ph = _phf()
+        isin = stock_data.get("isin")
+        if not isin:
+            return None
+        cols = "period_year,period_q,revenues,operating_income,net_profit,eps,total_equity"
+        annuals = [dict(r) for r in (_fetchall(db, f"SELECT {cols} FROM borsdata_reports "
+            f"WHERE isin={ph} AND report_type='year' ORDER BY period_year DESC LIMIT 8", (isin,)) or [])]
+        quarters = [dict(r) for r in (_fetchall(db, f"SELECT {cols} FROM borsdata_reports "
+            f"WHERE isin={ph} AND report_type='quarter' ORDER BY period_year DESC, period_q DESC LIMIT 4", (isin,)) or [])]
+
+        def _f(x):
+            try: return float(x) if x is not None else None
+            except Exception: return None
+        opm_hist = []
+        for a in annuals:
+            rev = _f(a.get("revenues")); op = _f(a.get("operating_income"))
+            opm_hist.append(round(op / rev * 100, 1) if op is not None and rev else None)
+
+        price = _f(stock_data.get("last_price"))
+        ttm_pe = op_margin = roe = None
+        if len(quarters) >= 4:
+            q4 = quarters[:4]
+            def _s(k):
+                vs = [_f(x.get(k)) for x in q4]
+                return sum(v for v in vs if v is not None) if all(v is not None for v in vs) else None
+            eps = _s("eps"); rev = _s("revenues"); op = _s("operating_income"); npf = _s("net_profit")
+            if price and eps and eps != 0: ttm_pe = round(price / eps, 1)
+            if op is not None and rev: op_margin = round(op / rev * 100, 1)
+            eq = _f((q4[0] or {}).get("total_equity"))
+            if npf is not None and eq and eq != 0: roe = round(npf / eq * 100, 1)
+        if ttm_pe is None and annuals:
+            eps = _f(annuals[0].get("eps"))
+            if price and eps and eps != 0: ttm_pe = round(price / eps, 1)
+        if op_margin is None and opm_hist:
+            op_margin = opm_hist[0]
+        if roe is None:
+            roe = _f(stock_data.get("return_on_equity"))
+
+        mom = None
+        try:
+            from datetime import datetime as _dt, timedelta as _td
+            d1 = (_dt.utcnow().date() - _td(days=365)).isoformat()
+            pr = _fetchall(db, f"SELECT close FROM borsdata_prices WHERE isin={ph} AND date <= {ph} "
+                               f"ORDER BY date DESC LIMIT 1", (isin, d1))
+            if pr and price:
+                p1 = _f(dict(pr[0]).get("close"))
+                if p1 and p1 > 0: mom = (price / p1 - 1) * 100
+        except Exception:
+            pass
+        return v33_live.compute(stock_data, ttm_pe, op_margin, opm_hist, roe, mom)
+    except Exception as e:
+        print(f"[v33] signal-fel: {e}", file=sys.stderr)
+        return None
+
+
 def _agent_get_full_stock(db, query):
     """Hämtar ALLA tillgängliga nyckeltal för EN aktie + composite + book-modeller.
     Bättre än search_stocks när Claude vill djupanalysera ETT bolag.
@@ -12165,6 +12255,12 @@ def _agent_get_full_stock(db, query):
         _validate_price_freshness(db, out)
     except Exception as _pe:
         print(f"[price-verify] wrapper fel: {_pe}", file=sys.stderr)
+
+    # ── Step a: FRYSTA v3.3-signaler (commit 5b37fd6) — auktoritativa ──
+    try:
+        out["v33"] = _v33_signals_for_stock(db, out)
+    except Exception as _ve:
+        print(f"[v33] wrapper fel: {_ve}", file=sys.stderr)
 
     # ── NYTT: Kvant-screen-data (Q/V/M, recommendation, overheat etc) ──
     # Hämta från _QUANT_CACHE eller beräkna direkt
