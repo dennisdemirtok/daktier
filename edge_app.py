@@ -11800,6 +11800,8 @@ def _agent_get_full_stock(db, query):
     if not row:
         return {"error": f"Ingen aktie hittad för '{query}'"}
     d = dict(row)
+    sc = {}  # FIX: init före try — annars UnboundLocalError i v2-blocket nedan
+             # om _attach_hist/_score_book_models kastar (kraschade hela analysen).
     try:
         _attach_hist(db, d)
         sc = _score_book_models(d)
