@@ -14425,6 +14425,7 @@ def api_diag_price_check():
             "market_cap": full.get("market_cap"),
             "market_cap_source": full.get("market_cap_source"),
             "shares_outstanding": full.get("shares_outstanding"),
+            "v33": full.get("v33"),
         })
     except Exception as e:
         import traceback
