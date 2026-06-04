@@ -10490,9 +10490,17 @@ OM net_income < 0 ELLER trailing P/E < 0 (förlustbolag / pre-profit):
    → Value = EV/Sales (vs peers) + Rule of 40 + cash runway + dilutionstakt.
      HÅRT TAK: Value-score FÅR INTE överstiga 30 på basis av "låg/negativ P/E".
      Negativ P/E är inte en värde-signal.
+   → QUALITY för pre-profit/SaaS/hypergrowth = Rule of 40 (revenue growth %
+     + FCF-marginal %), bruttomarginal, NRR/retention, FCF-marginal-trend.
+     GAAP-ROE/ROA IGNORERAS HELT — de är mekaniskt negativa under
+     tillväxt-investeringsfas och säger INGET om affärskvalitet.
+     ⛔ FÖRBJUDET: låg Quality-score driven av negativ GAAP-ROE när Rule of 40
+     ≥ 40 % och bruttomarginal stark. Rule of 40 = 47 % + stark FCF-marginal är
+     HÖG kvalitet (≈ 80+), inte 🔴. Scoren MÅSTE matcha din egen motivering.
 
 OM bank / försäkring:
    → Value = P/B + ROE (+ utdelning). IGNORERA EV/EBIT och EV/Sales.
+     Quality = ROE + ROA + K/I-tal + kreditkvalitet (inte industri-marginaler).
 
 OM net_debt < 0 (nettokassa):
    → D/E / skuldsättning FÅR ALDRIG flaggas som skuldrisk. Markera "nettokassa".
@@ -10502,7 +10510,10 @@ ANNARS → standard 4-axel.
 
 **Klart-när-test (självkontroll innan output):** Ett förlustbolag kan aldrig
 få Value > 30 pga negativ P/E. Ett investmentbolag scoras aldrig på P/E. Ett
-nettokassa-bolag flaggas aldrig för skuldrisk.
+nettokassa-bolag flaggas aldrig för skuldrisk. **En score får ALDRIG motsäga sin
+egen motivering** — om texten konstaterar Rule of 40 = 47 % och stark FCF-marginal
+men Quality-scoren är 🔴/låg, är det ett FEL: räkna om Quality med rätt modell
+INNAN output. Läs varje score mot dess egen motiveringstext före leverans.
 
 **Steg 2 — Mappa strategi → lins**
 
@@ -10785,6 +10796,22 @@ bredvid.
 **Steg 6b — DATAVALIDERING (P0, inga interna motsägelser)**
 
 Innan output — kör dessa sanity-checks och låt ALDRIG fritext motsäga siffror:
+- **PRIS-AUKTORITET (KRITISKT)**: Om context innehåller ett `price_verification`-
+  block eller en "VERIFIERAT AKTUELLT PRIS"-rad är DET priset definitionen av
+  NUVARANDE pris. Om web search visar ett ANNAT pris: anta INTE att det högre
+  talet är "aktuellt" och det lägre "gammalt". På rapportdag faller/stiger
+  aktier kraftigt — det FÄRSKASTE priset (senaste timestamp / post-rapport) är
+  NU. Invertera ALDRIG tidslinjen. Skriv ut vilket pris du behandlar som aktuellt
+  och varför. En handlingsplan byggd på fel pris ("ta profit vid X" när X inte
+  är aktuellt pris) är det dyraste felet som finns.
+- **52-veckors range**: nuvarande pris MÅSTE ligga inom [lowest_price,
+  highest_price]. Ligger priset utanför sitt eget intervall ⇒ antingen är
+  priset eller intervallet stale: skriv "⚠️ pris utanför 52v-range, data stale"
+  och citera ALDRIG ett intervall som motsäger priset.
+- **Beta-tolkning**: beta > 1 = MER marknadskänslig/volatil (beta 2.1 ≈ dubbel
+  marknadsrörelse — aggressiv, INTE defensiv). beta < 1 = defensiv. Blanda aldrig.
+- **FCF-yield = FCF / market cap.** Räkna det, gissa inte. ~$30B FCF på $2.3T cap
+  ≈ 1.3 %, inte 0.5 %. Diffa din siffra mot FCF/cap före output.
 - **NAV-tecken programmatiskt**: pris > NAV ⇒ PREMIE (inte rabatt). pris < NAV
   ⇒ rabatt. Räkna (pris−NAV)/NAV och sätt ordet efter tecknet — gissa aldrig.
 - **Market cap = pris × antal aktier.** Diffa mot databasens cap; > 15%
@@ -10794,6 +10821,13 @@ Innan output — kör dessa sanity-checks och låt ALDRIG fritext motsäga siffr
 - **Tranch-tabeller**: belopp = antal aktier × pris; triggerpris = priset i
   beräkningen. Generera raderna FRÅN beräknade värden, inte fritext.
 - **Skuld vs kassa**: säg aldrig "hög skuldsättning" om net_debt < 0 (nettokassa).
+
+**⛔ INGEN SJÄLVRÄTTNING I SLUTDOKUMENTET (P0):** Om du under analysen upptäcker
+ett räknefel eller stale data — RÄTTA det och generera om det avsnittet. Lämna
+ALDRIG kvar spår som "detta är INTE rimligt, låt mig korrigera", "obs! data
+verkar dated", "uppdaterad data:" eller en felräkning bredvid sin korrigering.
+Kunden ska se ENBART det färdiga, korrekta resultatet. Tankeprocessen stannar
+internt; leveransen är ren.
 
 **Steg 6c — SAKNAD DATA-DETEKTOR (P1)**
 
@@ -11646,6 +11680,123 @@ def _agent_mcap_native_safe(d):
     return d.get("market_cap")
 
 
+_LIVE_PRICE_CACHE = {}     # yahoo_ticker -> (price, ts_iso, fetched_epoch)
+_LIVE_PRICE_TTL = 600      # 10 min
+
+
+def _resolve_yahoo_ticker(db, stock_data):
+    """P0-3: härled Yahoo-ticker för realtids-prisverifiering."""
+    isin = stock_data.get("isin")
+    ticker = (stock_data.get("ticker") or stock_data.get("short_name") or "").strip()
+    country = (stock_data.get("country") or "").upper()
+    cur = (stock_data.get("currency") or "").upper()
+    # 1) explicit mappning från Börsdata
+    try:
+        from edge_db import _ph as _phf, _fetchone
+        ph = _phf()
+        row = None
+        if isin:
+            row = _fetchone(db, f"SELECT yahoo_ticker FROM borsdata_instrument_map WHERE isin = {ph} LIMIT 1", (isin,))
+        if (not row or not (dict(row).get("yahoo_ticker") if row else None)) and ticker:
+            row = _fetchone(db, f"SELECT yahoo_ticker FROM borsdata_instrument_map WHERE UPPER(ticker) = UPPER({ph}) LIMIT 1", (ticker,))
+        if row:
+            yt = dict(row).get("yahoo_ticker")
+            if yt and not str(yt).upper().startswith("YAHOO_"):
+                return yt
+    except Exception:
+        pass
+    # 2) heuristik
+    if not ticker:
+        return None
+    t = ticker.upper().replace(" ", "-")
+    if country in ("US", "USA") or cur == "USD":
+        return t
+    if country in ("SE", "SWEDEN"):
+        return t + ".ST"
+    suffix = {"FI": ".HE", "NO": ".OL", "DK": ".CO", "DE": ".DE", "GB": ".L",
+              "UK": ".L", "FR": ".PA", "NL": ".AS", "CA": ".TO"}.get(country)
+    return (t + suffix) if suffix else t
+
+
+def _fetch_live_price(yahoo_ticker):
+    """P0-3: hämta realtids-/senaste pris via yfinance. TTL-cachat, fail-safe.
+    Returnerar (price:float, ts_iso:str) eller None."""
+    if not yahoo_ticker:
+        return None
+    import time as _t
+    now = _t.time()
+    c = _LIVE_PRICE_CACHE.get(yahoo_ticker)
+    if c and (now - c[2]) < _LIVE_PRICE_TTL:
+        return (c[0], c[1])
+    try:
+        import yfinance as yf
+        tk = yf.Ticker(yahoo_ticker)
+        price = None
+        for getter in (lambda: tk.fast_info["lastPrice"],
+                       lambda: tk.fast_info.last_price,
+                       lambda: tk.fast_info["last_price"]):
+            try:
+                v = getter()
+                if v: price = float(v); break
+            except Exception:
+                pass
+        if not price:
+            try:
+                h = tk.history(period="2d")
+                if h is not None and len(h):
+                    price = float(h["Close"].iloc[-1])
+            except Exception:
+                price = None
+        if not price or price <= 0:
+            return None
+        ts = datetime.utcnow().isoformat()
+        _LIVE_PRICE_CACHE[yahoo_ticker] = (float(price), ts, now)
+        return (float(price), ts)
+    except Exception as e:
+        print(f"[price-verify] yfinance fel {yahoo_ticker}: {e}", file=sys.stderr)
+        return None
+
+
+def _validate_price_freshness(db, stock_data, threshold_pct=5.0):
+    """P0-3 (KRITISK): diffa DB-pris mot realtidskälla. >threshold% avvikelse →
+    override med realtidspriset + tydlig flagga. Detta är koden som fångar
+    AVGO-typfelet (stale pre-rapport-pris behandlat som aktuellt). Muterar
+    stock_data in-place; får aldrig krascha analysen."""
+    try:
+        db_price = stock_data.get("last_price")
+        if not db_price or db_price <= 0:
+            return
+        yt = _resolve_yahoo_ticker(db, stock_data)
+        live = _fetch_live_price(yt)
+        if not live:
+            stock_data["price_verification"] = {
+                "status": "unverified", "db_price": round(db_price, 4),
+                "yahoo_ticker": yt,
+                "note": "Realtidskälla ej tillgänglig — DB-pris EJ verifierat. "
+                        "Behandla priset med försiktighet och kontrollera mot live-källa.",
+            }
+            return
+        live_price, ts = live
+        diff_pct = (live_price / db_price - 1) * 100
+        ver = {"db_price": round(db_price, 4), "live_price": round(live_price, 4),
+               "diff_pct": round(diff_pct, 2), "source": "yfinance",
+               "yahoo_ticker": yt, "fetched_at": ts}
+        if abs(diff_pct) > threshold_pct:
+            stock_data["last_price"] = round(live_price, 4)
+            stock_data["last_price_db_stale"] = round(db_price, 4)
+            ver["status"] = "overridden"
+            ver["note"] = (f"DB-priset ({db_price:.2f}) avvek {diff_pct:+.1f}% från realtid "
+                           f"({live_price:.2f}). Realtidspriset {live_price:.2f} ÄR det aktuella "
+                           f"priset — använd det. DB-priset var inaktuellt (t.ex. pre-rapport).")
+            print(f"[price-verify] {stock_data.get('short_name')}: OVERRIDE {db_price}->{live_price} ({diff_pct:+.1f}%)", file=sys.stderr)
+        else:
+            ver["status"] = "verified"
+            ver["note"] = f"DB-pris verifierat mot realtid (avvikelse {diff_pct:+.1f}%)."
+        stock_data["price_verification"] = ver
+    except Exception as e:
+        print(f"[price-verify] fel: {e}", file=sys.stderr)
+
+
 def _agent_get_full_stock(db, query):
     """Hämtar ALLA tillgängliga nyckeltal för EN aktie + composite + book-modeller.
     Bättre än search_stocks när Claude vill djupanalysera ETT bolag.
@@ -11720,8 +11871,9 @@ def _agent_get_full_stock(db, query):
     }
     keep = {
         # ── Grunddata ──
-        "name", "short_name", "ticker", "country", "currency", "orderbook_id",
-        "last_price", "market_cap", "market_cap_native", "market_cap_currency",
+        "name", "short_name", "ticker", "isin", "country", "currency", "orderbook_id",
+        "last_price", "highest_price", "lowest_price",  # highest/lowest = 52v-range
+        "market_cap", "market_cap_native", "market_cap_currency",
         "market_cap_sek_original", "number_of_owners", "sector",
         # ── Värdering ──
         "pe_ratio", "price_book_ratio", "ev_ebit_ratio", "ps_ratio",
@@ -11761,6 +11913,14 @@ def _agent_get_full_stock(db, query):
     }
     out = {k: d.get(k) for k in keep if k in d}
     out["v2"] = v2
+
+    # ── P0-3 (KRITISK): verifiera priset mot realtidskälla innan analys ──
+    # Fångar stale pre-rapport-pris (AVGO-typfelet). Muterar out["last_price"]
+    # + lägger till out["price_verification"].
+    try:
+        _validate_price_freshness(db, out)
+    except Exception as _pe:
+        print(f"[price-verify] wrapper fel: {_pe}", file=sys.stderr)
 
     # ── NYTT: Kvant-screen-data (Q/V/M, recommendation, overheat etc) ──
     # Hämta från _QUANT_CACHE eller beräkna direkt
@@ -12126,6 +12286,30 @@ def _build_batch_user_message(ticker, stock_data):
     import json as _json
     hash_ = _stable_fundamentals_hash(stock_data)
     short_name = stock_data.get("short_name") or ticker
+    cur = stock_data.get("currency") or ""
+
+    # ── P0-3: tydligt VERIFIERAT pris högst upp (inte begravt i JSON) ──
+    price_banner = ""
+    pv = stock_data.get("price_verification") or {}
+    lp = stock_data.get("last_price")
+    if pv.get("status") == "overridden":
+        price_banner = (
+            f"🔴 PRIS-VARNING (rapportdag/stale data): DB-priset "
+            f"{pv.get('db_price')} {cur} var INAKTUELLT. VERIFIERAT AKTUELLT PRIS = "
+            f"**{pv.get('live_price')} {cur}** (realtid {pv.get('source')}, {pv.get('fetched_at')}). "
+            f"Avvikelse {pv.get('diff_pct')}%.\n"
+            f"➡️ ANVÄND {pv.get('live_price')} {cur} SOM NUVARANDE PRIS. Behandla ALDRIG "
+            f"det högre/äldre DB-priset eller ett äldre web-search-pris som 'aktuellt'. "
+            f"Tidslinjen: lägre post-rapport-pris = NU; högre pre-rapport-pris = GAMMALT.\n\n")
+    elif pv.get("status") == "verified":
+        price_banner = (f"✅ VERIFIERAT AKTUELLT PRIS: **{lp} {cur}** "
+                        f"(realtids-verifierat, avvikelse {pv.get('diff_pct')}%). "
+                        f"Använd detta som nuvarande pris.\n\n")
+    elif pv.get("status") == "unverified":
+        price_banner = (f"⚠️ PRIS EJ REALTIDS-VERIFIERAT: {lp} {cur} (DB). "
+                        f"Realtidskälla otillgänglig — om web search visar ett tydligt "
+                        f"färskare pris, lita på det och skriv 'DATA SAKNAS: realtidspris'.\n\n")
+
     # Truncate context för att hålla payload rimlig
     safe_data = {k: v for k, v in stock_data.items()
                  if k not in ("kpi_history", "quarterly_full")}
@@ -12135,6 +12319,7 @@ def _build_batch_user_message(ticker, stock_data):
         f"active_strategy=🔭 Alla tre parallellt\n"
         f"portfolio_size=100000 SEK\n"
         f"target_positions=10\n\n"
+        f"{price_banner}"
         f"Analysera **{short_name}** ({ticker}) enligt DEL 6.99 v3.1 FAS 1.\n"
         f"Returnera JSON-block FÖRST mellan ---JSON-START--- och ---JSON-END---, "
         f"sedan markdown-analysen.\n\n"
@@ -12204,24 +12389,41 @@ def _consistency_check(analysis_md, stock_data):
     import json as _cjson, re as _cre
     ctx = []
     for k in ("net_profit", "pe_ratio", "market_cap", "last_price",
-              "ytd_change_pct", "one_year_change_pct", "is_investment_company",
-              "debt_to_equity_ratio"):
+              "highest_price", "lowest_price", "beta", "operating_cash_flow",
+              "sales", "ytd_change_pct", "one_year_change_pct",
+              "is_investment_company", "debt_to_equity_ratio"):
         v = stock_data.get(k)
         if v is not None:
             ctx.append(f"{k}={v}")
+    pv = stock_data.get("price_verification") or {}
+    if pv:
+        ctx.append(f"price_verification_status={pv.get('status')}")
+        if pv.get("status") == "overridden":
+            ctx.append(f"VERIFIERAT_AKTUELLT_PRIS={pv.get('live_price')}")
+            ctx.append(f"stale_db_price={pv.get('db_price')}")
     prompt = (
-        "Du är en sträng faktagranskare. Hitta ALLA interna motsägelser och "
-        "omöjliga siffror i aktieanalysen nedan. Typiska fel: pris > NAV men "
-        "texten säger 'rabatt'; orimlig YTD vs 1-årsavkastning; 'hög "
-        "skuldsättning' men nettokassa; hög value-score trots negativ P/E; "
-        "market cap som inte stämmer med pris×aktier; forward-tal saknas trots "
-        "citerad guidance.\n\n"
+        "Du är en sträng faktagranskare för en betald aktieanalys. Hitta ALLA "
+        "interna motsägelser, omöjliga siffror och tolkningsfel. Leta särskilt:\n"
+        "1) PRIS/TIDSLINJE: behandlas ett stale/äldre pris som 'aktuellt'? Om "
+        "VERIFIERAT_AKTUELLT_PRIS finns men texten bygger handlingsplan på ett "
+        "annat pris ⇒ KRITISKT. 'Ta profit vid X' där X inte är aktuellt pris ⇒ KRITISKT.\n"
+        "2) 52v-RANGE: ligger nuvarande pris utanför [lowest_price, highest_price]?\n"
+        "3) BETA: beta > 1 beskrivet som 'defensiv' (fel — det är mer marknadskänsligt)?\n"
+        "4) FCF-YIELD: stämmer den mot operating_cash_flow/market_cap (grovt)?\n"
+        "5) SCORE vs MOTIVERING: en score som motsäger sin egen text (t.ex. låg "
+        "Quality 🔴 men texten säger Rule of 40 = 47 % och stark FCF-marginal)?\n"
+        "6) SJÄLVRÄTTNING I TEXTEN: fraser som 'låt mig korrigera', 'detta är inte "
+        "rimligt', 'obs! data verkar dated', 'uppdaterad data:' kvar i leveransen ⇒ KRITISKT.\n"
+        "7) Klassiska: pris>NAV men 'rabatt'; orimlig YTD vs 1y; 'hög skuld' men "
+        "nettokassa; hög value-score trots negativ P/E; market cap ≠ pris×aktier; "
+        "forward-tal saknas trots citerad guidance; data_freshness 'fresh' trots stale pris.\n\n"
         f"Kända fakta: {', '.join(ctx) if ctx else '(inga)'}\n\n"
         "Returnera EXAKT ett JSON-block:\n"
         "---CHECK-START---\n"
         '{"contradictions": ["kort beskrivning per motsägelse"], "critical": true/false}\n'
         "---CHECK-END---\n"
-        "critical=true ENDAST om en motsägelse skulle vilseleda en investerare.\n\n"
+        "critical=true om NÅGON av punkt 1–6 träffar, eller om en motsägelse skulle "
+        "vilseleda en investerare operativt.\n\n"
         f"ANALYS:\n{analysis_md[:4200]}")
     try:
         import httpx
@@ -12672,6 +12874,12 @@ def _analyze_single_ticker_for_batch(ticker, run_id):
             dashboard_safe_reason = dash_val.get("dashboard_safe_reason")
             dashboard_primary_concern = dash_val.get("primary_concern")
             data_freshness = dash_val.get("data_freshness") or "fresh"  # analys-stund = fresh
+            # P0-3: om DB-priset överskreds av realtid får data ALDRIG kallas "fresh"
+            _pv = (stock_data.get("price_verification") or {})
+            if _pv.get("status") == "overridden":
+                data_freshness = "price_corrected"
+            elif _pv.get("status") == "unverified" and data_freshness == "fresh":
+                data_freshness = "aging"
             cols = [
                 ticker, short_name, country, "manual",
                 parsed_json.get("classification"),
@@ -14130,6 +14338,7 @@ def api_stock_quick_report(orderbook_id):
         "price": _f(full.get("last_price") or s.get("last_price")),
         "currency": full.get("currency") or s.get("currency") or "SEK",
         "price_change_pct": _f(s.get("one_day_change_pct")),
+        "price_verification": full.get("price_verification"),  # P0-3 realtidsverifiering
         "report_date": datetime.utcnow().date().isoformat(),
         "has_analysis": bool(a),
         "analysis_date": str(a.get("analyzed_at"))[:10] if a.get("analyzed_at") else None,

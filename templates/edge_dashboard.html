@@ -5795,6 +5795,10 @@ function _buildReportCard(d, rich) {
                 <div style="text-align:right">
                     <div style="font-size:26px;font-weight:800">${d.price != null ? Number(d.price).toFixed(2) + ' ' + cur : '–'}</div>
                     <div style="margin-top:2px">${chgHtml}</div>
+                    ${(function(){ const pv=d.price_verification; if(!pv) return '';
+                        if(pv.status==='overridden') return `<div style="font-size:9.5px;font-weight:700;margin-top:6px;background:rgba(248,113,113,0.22);color:#fecaca;padding:2px 8px;border-radius:6px;display:inline-block">⚠ DB-pris korrigerat mot realtid</div>`;
+                        if(pv.status==='verified') return `<div style="font-size:9.5px;font-weight:700;margin-top:6px;background:rgba(52,211,153,0.22);color:#bbf7d0;padding:2px 8px;border-radius:6px;display:inline-block">✓ Realtidsverifierat pris</div>`;
+                        return ''; })()}
                     <div style="font-size:11px;opacity:0.7;margin-top:8px">Rapport ${d.report_date}</div>
                 </div>
             </div>
