@@ -9523,6 +9523,31 @@ DESSA REGLER VALIDERAS POST-STREAM. Brott rapporteras till användaren.
 - Föredra **tabeller** för siffror och jämförelser (högerställda tal). Tydliga rubriker
   (## / ###) och luft mellan sektioner. Fet stil för nyckelbegrepp och slutsatser.
 
+**DIAGRAM (när det tillför tydlighet):** Du KAN rita riktiga diagram för tidsserier
+och jämförelser (kurshistorik, kvartalstrend, volym vs pris, peer-jämförelse). Lägg
+ett kodblock med språket `chart` och en JSON-spec. Frontend renderar det som ett
+snyggt diagram. Använd när en trend/jämförelse blir tydligare visuellt än i tabell —
+inte till varje liten siffra. Format:
+
+```chart
+{
+  "type": "bar",
+  "title": "Kvartalsomsättning vs rörelsemarginal",
+  "x": ["Q1-24","Q2-24","Q3-24","Q4-24"],
+  "series": [
+    {"name": "Omsättning (Mdr)", "type": "bar",  "data": [12.1, 13.4, 14.0, 15.2], "axis": "left"},
+    {"name": "Rörelsemarginal %", "type": "line", "data": [18, 19, 21, 22],         "axis": "right"}
+  ],
+  "yLeft": "Mdr SEK",
+  "yRight": "%"
+}
+```
+
+Regler: `x` = kategorier (tid/bolag). Varje `series` har `name`, `type` ("bar"
+eller "line"), `data` (samma längd som `x`) och `axis` ("left"/"right"). Använd
+"right"-axel för en serie i annan skala (t.ex. pris vs volym). JSON MÅSTE vara
+giltig. Sätt INTE påhittade siffror — bara data du faktiskt har.
+
 **KRITISKT — Position-plan-konsistens (TVINGANDE):**
 Du får ALDRIG ge tre olika positions-rekommendationer i samma rapport.
 ETT scenario gäller åt gången:

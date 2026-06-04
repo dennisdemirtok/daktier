@@ -11,6 +11,8 @@
     <!-- v3.6: PNG/PDF-export av aktie-drawern -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <!-- Diagram i agent-svar -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
     <style>
         :root {
             --green: #00C281;
@@ -5900,7 +5902,16 @@ async function _cardToFile(card, fname, format) {
     if (typeof html2canvas === 'undefined') { alert('Bild-biblioteket laddas än, försök strax igen.'); return; }
     document.body.appendChild(card);
     let canvas;
-    try { canvas = await html2canvas(card, { scale: 2, backgroundColor: '#ffffff', logging: false, useCORS: true }); }
+    try {
+        // Bearbeta innehållet: tabeller + signal-färger + diagram (utan animation
+        // så de hinner ritas innan html2canvas fångar bilden).
+        try {
+            _enhanceAgentTables(card); _colorizeSignals(card);
+            if (typeof _renderAgentCharts === 'function') _renderAgentCharts(card, { noAnim: true });
+            if (card.querySelector('.agent-chart canvas')) await new Promise(r => setTimeout(r, 320));
+        } catch (e) { /* tyst */ }
+        canvas = await html2canvas(card, { scale: 2, backgroundColor: '#ffffff', logging: false, useCORS: true });
+    }
     finally { document.body.removeChild(card); }
     if (format === 'png') {
         const a = document.createElement('a'); a.download = fname + '.png'; a.href = canvas.toDataURL('image/png'); a.click();
@@ -6772,6 +6783,16 @@ function renderAgent() {
         .agent-msg.ai .agent-msg-bubble tbody tr:last-child td { border-bottom:none; }
         .agent-msg.ai .agent-msg-bubble tbody tr:hover td { background:#fafbfc; }
         .agent-msg.ai .agent-msg-bubble hr { border:none; border-top:1px solid #eceef1; margin:18px 0; }
+        /* Subtila, dämpade signal-chips (chat + PDF) */
+        .agent-md .sig, .report-md .sig { display:inline-block; padding:0.5px 7px; border-radius:5px; font-weight:600; font-size:0.93em; line-height:1.55; white-space:nowrap; letter-spacing:0.01em; }
+        .agent-md .sig-buy, .report-md .sig-buy { color:#047857; background:rgba(5,150,105,0.10); }
+        .agent-md .sig-light, .report-md .sig-light { color:#0e7490; background:rgba(14,116,144,0.10); }
+        .agent-md .sig-hold, .report-md .sig-hold { color:#b45309; background:rgba(180,83,9,0.10); }
+        .agent-md .sig-avoid, .report-md .sig-avoid { color:#b91c1c; background:rgba(185,28,28,0.10); }
+        /* Diagram-container (chat + PDF) */
+        .agent-md .agent-chart, .report-md .agent-chart { background:#fff; border:1px solid #e8eaed; border-radius:12px; padding:14px 16px 12px; margin:16px 0; }
+        .agent-md .agent-chart-title, .report-md .agent-chart-title { font-size:13px; font-weight:600; color:#1f2937; margin-bottom:12px; letter-spacing:-0.01em; }
+        .agent-md .agent-chart-canvas, .report-md .agent-chart-canvas { position:relative; height:300px; width:100%; }
         .agent-msg-bubble.streaming { background:linear-gradient(120deg,white 0%,#f8fafc 50%,white 100%); background-size:200% 100%; animation:agent-shimmer 2s linear infinite; }
         @keyframes agent-shimmer { 0%{background-position:-200% 0;} 100%{background-position:200% 0;} }
         .agent-msg-img { max-width:280px; max-height:200px; display:block; border-radius:8px; margin-bottom:8px; }
@@ -6944,7 +6965,7 @@ function renderAgent() {
     setTimeout(() => {
         const m = document.getElementById('agentMsgs');
         if (m) m.scrollTop = m.scrollHeight;
-        _enhanceAgentTables(m);  // höger-justera numeriska tabellkolumner
+        _postRenderAgent(m);  // tabeller + signal-färger + diagram
     }, 50);
 }
 
@@ -7117,7 +7138,7 @@ function formatAgentText(s) {
 // render (en gång per tabell via data-flagga), inte per stream-frame.
 function _enhanceAgentTables(root) {
     try {
-        (root || document).querySelectorAll('.agent-md table').forEach(tbl => {
+        (root || document).querySelectorAll('.agent-md table, .report-md table').forEach(tbl => {
             if (tbl.dataset.enhanced) return;
             tbl.dataset.enhanced = '1';
             const rows = Array.from(tbl.querySelectorAll('tr'));
@@ -7142,6 +7163,118 @@ function _enhanceAgentTables(root) {
             }
         });
     } catch (e) { /* tyst */ }
+}
+
+// ── Subtil, dämpad färg på signal-ord (versaler, exakt match) ──
+const _SIGNAL_DEFS = [
+    ['STARK KÖP','buy'], ['STARK BUY','buy'], ['STRONG BUY','buy'],
+    ['KÖP-LIGHT','light'], ['BUY-LIGHT','light'], ['KÖP LIGHT','light'],
+    ['ACKUMULERA','buy'], ['ACCUMULATE','buy'], ['KÖP','buy'], ['BUY','buy'],
+    ['TA PROFIT','hold'], ['TAKE PROFIT','hold'], ['WATCHLIST','hold'],
+    ['HÅLL','hold'], ['HOLD','hold'], ['AVVAKTA','hold'], ['NEUTRAL','hold'],
+    ['UNDVIK','avoid'], ['AVOID','avoid'], ['SÄLJ','avoid'], ['SELL','avoid'],
+    ['EXIT','avoid'], ['MINSKA','avoid'], ['REDUCE','avoid'],
+];
+function _colorizeSignals(root) {
+    try {
+        const phrases = _SIGNAL_DEFS.map(d => d[0]).sort((a, b) => b.length - a.length)
+            .map(p => p.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&'));
+        const re = new RegExp('(?<![\\wÅÄÖåäö])(' + phrases.join('|') + ')(?![\\wÅÄÖåäö])');
+        const clsOf = ph => { const f = _SIGNAL_DEFS.find(d => d[0] === ph); return f ? f[1] : 'hold'; };
+        (root || document).querySelectorAll('.agent-md, .report-md').forEach(md => {
+            if (md.dataset.sigDone) return;
+            md.dataset.sigDone = '1';
+            const walker = document.createTreeWalker(md, NodeFilter.SHOW_TEXT, {
+                acceptNode(n) {
+                    const p = n.parentElement;
+                    if (!p) return NodeFilter.FILTER_REJECT;
+                    if (['CODE', 'PRE', 'A', 'SCRIPT', 'STYLE'].includes(p.tagName) || p.classList.contains('sig'))
+                        return NodeFilter.FILTER_REJECT;
+                    return re.test(n.nodeValue) ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT;
+                }
+            });
+            const targets = []; while (walker.nextNode()) targets.push(walker.currentNode);
+            targets.forEach(node => {
+                const parts = node.nodeValue.split(re);
+                if (parts.length < 2) return;
+                const frag = document.createDocumentFragment();
+                parts.forEach((part, idx) => {
+                    if (idx % 2 === 1) {
+                        const span = document.createElement('span');
+                        span.className = 'sig sig-' + clsOf(part);
+                        span.textContent = part;
+                        frag.appendChild(span);
+                    } else if (part) {
+                        frag.appendChild(document.createTextNode(part));
+                    }
+                });
+                node.parentNode.replaceChild(frag, node);
+            });
+        });
+    } catch (e) { /* tyst */ }
+}
+
+// ── Riktiga diagram från ```chart-block (JSON-spec) ──
+const _CHART_PALETTE = ['#2563eb', '#7c3aed', '#059669', '#d97706', '#dc2626', '#0891b2'];
+function _buildChart(canvas, spec, opts) {
+    opts = opts || {};
+    const series = spec.series || [];
+    const hasRight = series.some(s => s.axis === 'right');
+    const datasets = series.map((s, i) => {
+        const color = s.color || _CHART_PALETTE[i % _CHART_PALETTE.length];
+        const isLine = (s.type || spec.type) === 'line';
+        return {
+            label: s.name || ('Serie ' + (i + 1)), data: s.data || [],
+            type: isLine ? 'line' : 'bar',
+            backgroundColor: isLine ? 'transparent' : color,
+            borderColor: color, borderWidth: isLine ? 2 : 0,
+            pointRadius: isLine ? 2.5 : 0, pointBackgroundColor: color,
+            tension: 0.25, borderRadius: isLine ? 0 : 4,
+            yAxisID: s.axis === 'right' ? 'y1' : 'y', order: isLine ? 0 : 1,
+        };
+    });
+    const ax = (title) => ({ font: { size: 11 }, color: '#64748b' });
+    const scales = {
+        x: { grid: { display: false }, ticks: ax(), border: { color: '#e8eaed' } },
+        y: { position: 'left', grid: { color: '#eef0f2' }, ticks: ax(), border: { display: false },
+             title: spec.yLeft ? { display: true, text: spec.yLeft, font: { size: 11 }, color: '#94a3b8' } : undefined },
+    };
+    if (hasRight) scales.y1 = { position: 'right', grid: { display: false }, ticks: ax(), border: { display: false },
+        title: spec.yRight ? { display: true, text: spec.yRight, font: { size: 11 }, color: '#94a3b8' } : undefined };
+    return new Chart(canvas.getContext('2d'), {
+        data: { labels: spec.x || [], datasets },
+        options: {
+            responsive: true, maintainAspectRatio: false,
+            animation: opts.noAnim ? false : { duration: 350 },
+            interaction: { intersect: false, mode: 'index' },
+            plugins: { legend: { position: 'bottom', labels: { font: { size: 11 }, color: '#475569', boxWidth: 12, boxHeight: 12, padding: 14, usePointStyle: true } } },
+            scales,
+        },
+    });
+}
+function _renderAgentCharts(root, opts) {
+    if (typeof Chart === 'undefined') return;
+    (root || document).querySelectorAll('.agent-md code.language-chart, .agent-md code.language-daktier-chart, .report-md code.language-chart, .report-md code.language-daktier-chart').forEach(code => {
+        const holder = code.closest('pre') || code;
+        if (holder.dataset.chartDone) return;
+        let spec;
+        try { spec = JSON.parse(code.textContent.trim()); } catch (e) { return; }  // ofullständig (streaming) → vänta
+        if (!spec || !spec.series) return;
+        holder.dataset.chartDone = '1';
+        const wrap = document.createElement('div'); wrap.className = 'agent-chart';
+        if (spec.title) { const h = document.createElement('div'); h.className = 'agent-chart-title'; h.textContent = spec.title; wrap.appendChild(h); }
+        const cv = document.createElement('div'); cv.className = 'agent-chart-canvas';
+        const canvas = document.createElement('canvas'); cv.appendChild(canvas); wrap.appendChild(cv);
+        holder.replaceWith(wrap);
+        try { _buildChart(canvas, spec, opts); }
+        catch (e) { wrap.innerHTML = '<div style="color:#94a3b8;font-size:12px;padding:8px">Diagram kunde inte ritas.</div>'; }
+    });
+}
+// Samlad efter-rendering: tabeller + signaler + diagram
+function _postRenderAgent(root) {
+    _enhanceAgentTables(root);
+    _colorizeSignals(root);
+    _renderAgentCharts(root);
 }
 
 function agentSendExample(q) {
