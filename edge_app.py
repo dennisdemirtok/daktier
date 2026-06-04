@@ -12039,67 +12039,282 @@ def _validate_price_freshness(db, stock_data, threshold_pct=5.0):
         print(f"[price-verify] fel: {e}", file=sys.stderr)
 
 
+def _v33_metrics_from_reports(db, isin, price, roe_fallback=None):
+    """Delad metrik-extraktion (live-agent + forward-log → IDENTISK beräkning).
+    Returnerar dict: ttm_pe, op_margin, opm_hist, roe, mom (prior-12m %)."""
+    from edge_db import _ph as _phf, _fetchall
+    ph = _phf()
+
+    def _f(x):
+        try:
+            return float(x) if x is not None else None
+        except Exception:
+            return None
+    cols = "period_year,period_q,revenues,operating_income,net_profit,eps,total_equity"
+    annuals = [dict(r) for r in (_fetchall(db, f"SELECT {cols} FROM borsdata_reports "
+        f"WHERE isin={ph} AND report_type='year' ORDER BY period_year DESC LIMIT 8", (isin,)) or [])]
+    quarters = [dict(r) for r in (_fetchall(db, f"SELECT {cols} FROM borsdata_reports "
+        f"WHERE isin={ph} AND report_type='quarter' ORDER BY period_year DESC, period_q DESC LIMIT 4", (isin,)) or [])]
+    opm_hist = []
+    for a in annuals:
+        rev = _f(a.get("revenues")); op = _f(a.get("operating_income"))
+        opm_hist.append(round(op / rev * 100, 1) if op is not None and rev else None)
+    price = _f(price)
+    ttm_pe = op_margin = roe = None
+    if len(quarters) >= 4:
+        q4 = quarters[:4]
+
+        def _s(k):
+            vs = [_f(x.get(k)) for x in q4]
+            return sum(v for v in vs if v is not None) if all(v is not None for v in vs) else None
+        eps = _s("eps"); rev = _s("revenues"); op = _s("operating_income"); npf = _s("net_profit")
+        if price and eps and eps != 0: ttm_pe = round(price / eps, 1)
+        if op is not None and rev: op_margin = round(op / rev * 100, 1)
+        eq = _f((q4[0] or {}).get("total_equity"))
+        if npf is not None and eq and eq != 0: roe = round(npf / eq * 100, 1)
+    if ttm_pe is None and annuals:
+        eps = _f(annuals[0].get("eps"))
+        if price and eps and eps != 0: ttm_pe = round(price / eps, 1)
+    if op_margin is None and opm_hist:
+        op_margin = opm_hist[0]
+    if roe is None:
+        roe = _f(roe_fallback)
+    mom = None
+    try:
+        from datetime import datetime as _dt, timedelta as _td
+        d1 = (_dt.utcnow().date() - _td(days=365)).isoformat()
+        pr = _fetchall(db, f"SELECT close FROM borsdata_prices WHERE isin={ph} AND date <= {ph} "
+                           f"ORDER BY date DESC LIMIT 1", (isin, d1))
+        if pr and price:
+            p1 = _f(dict(pr[0]).get("close"))
+            if p1 and p1 > 0: mom = (price / p1 - 1) * 100
+    except Exception:
+        pass
+    return {"ttm_pe": ttm_pe, "op_margin": op_margin, "opm_hist": opm_hist,
+            "roe": roe, "mom": mom, "n_annuals": len(annuals), "n_quarters": len(quarters)}
+
+
 def _v33_signals_for_stock(db, stock_data):
     """Step a: beräkna FRYSTA v3.3-signaler (commit 5b37fd6) för live-analys.
     TTM-P/E ur senaste 4 publicerade kvartal, op-marginal-historik ur årsbokslut,
     ROE, prior-12m momentum → v33_live.compute (typ-routing + peak-detektor +
     datavaliditetsgrind). Returneras i agentens kontext som auktoritativa signaler."""
     try:
-        from edge_db import _ph as _phf, _fetchall
         import v33_live
-        ph = _phf()
         isin = stock_data.get("isin")
         if not isin:
             return None
-        cols = "period_year,period_q,revenues,operating_income,net_profit,eps,total_equity"
-        annuals = [dict(r) for r in (_fetchall(db, f"SELECT {cols} FROM borsdata_reports "
-            f"WHERE isin={ph} AND report_type='year' ORDER BY period_year DESC LIMIT 8", (isin,)) or [])]
-        quarters = [dict(r) for r in (_fetchall(db, f"SELECT {cols} FROM borsdata_reports "
-            f"WHERE isin={ph} AND report_type='quarter' ORDER BY period_year DESC, period_q DESC LIMIT 4", (isin,)) or [])]
-
-        def _f(x):
-            try: return float(x) if x is not None else None
-            except Exception: return None
-        opm_hist = []
-        for a in annuals:
-            rev = _f(a.get("revenues")); op = _f(a.get("operating_income"))
-            opm_hist.append(round(op / rev * 100, 1) if op is not None and rev else None)
-
-        price = _f(stock_data.get("last_price"))
-        ttm_pe = op_margin = roe = None
-        if len(quarters) >= 4:
-            q4 = quarters[:4]
-            def _s(k):
-                vs = [_f(x.get(k)) for x in q4]
-                return sum(v for v in vs if v is not None) if all(v is not None for v in vs) else None
-            eps = _s("eps"); rev = _s("revenues"); op = _s("operating_income"); npf = _s("net_profit")
-            if price and eps and eps != 0: ttm_pe = round(price / eps, 1)
-            if op is not None and rev: op_margin = round(op / rev * 100, 1)
-            eq = _f((q4[0] or {}).get("total_equity"))
-            if npf is not None and eq and eq != 0: roe = round(npf / eq * 100, 1)
-        if ttm_pe is None and annuals:
-            eps = _f(annuals[0].get("eps"))
-            if price and eps and eps != 0: ttm_pe = round(price / eps, 1)
-        if op_margin is None and opm_hist:
-            op_margin = opm_hist[0]
-        if roe is None:
-            roe = _f(stock_data.get("return_on_equity"))
-
-        mom = None
-        try:
-            from datetime import datetime as _dt, timedelta as _td
-            d1 = (_dt.utcnow().date() - _td(days=365)).isoformat()
-            pr = _fetchall(db, f"SELECT close FROM borsdata_prices WHERE isin={ph} AND date <= {ph} "
-                               f"ORDER BY date DESC LIMIT 1", (isin, d1))
-            if pr and price:
-                p1 = _f(dict(pr[0]).get("close"))
-                if p1 and p1 > 0: mom = (price / p1 - 1) * 100
-        except Exception:
-            pass
-        return v33_live.compute(stock_data, ttm_pe, op_margin, opm_hist, roe, mom)
+        m = _v33_metrics_from_reports(db, isin, stock_data.get("last_price"),
+                                      roe_fallback=stock_data.get("return_on_equity"))
+        return v33_live.compute(stock_data, m["ttm_pe"], m["op_margin"], m["opm_hist"],
+                                m["roe"], m["mom"])
     except Exception as e:
         print(f"[v33] signal-fel: {e}", file=sys.stderr)
         return None
+
+
+# ════════════════════════════════════════════════════════════════════════
+#  STEG b — PRE-REGISTRERAD FORWARD-LOGG (append-only, pinnad v3.3 5b37fd6)
+#  Månatlig körning första handelsdagen på ett FRYST universum. Varje rad:
+#  datum/tidsstämpel, bolag (pinnat ins_id+ISIN), per-lins-signaler + M2-citat,
+#  commit-hash, rådata-snapshot. v3.4-kandidater loggas som SKUGGOR parallellt.
+#  M3-utvärdering tidigast efter 12 mån. Inga retroaktiva signal-korrigeringar.
+# ════════════════════════════════════════════════════════════════════════
+
+def _forward_ensure_table(db):
+    """Skapar forward_log-tabellen (dialekt-medveten) om den saknas."""
+    from edge_db import _use_postgres
+    if _use_postgres():
+        pk = "id SERIAL PRIMARY KEY"
+        dp = "DOUBLE PRECISION"
+    else:
+        pk = "id INTEGER PRIMARY KEY AUTOINCREMENT"
+        dp = "REAL"
+    db.execute(f"""
+        CREATE TABLE IF NOT EXISTS forward_log (
+            {pk},
+            run_date TEXT NOT NULL,
+            run_timestamp TEXT NOT NULL,
+            universe_version TEXT,
+            rule_commit TEXT,
+            query TEXT,
+            short_name TEXT,
+            ins_id INTEGER,
+            isin TEXT,
+            category TEXT,
+            value_signal TEXT, value_rule TEXT, value_profile TEXT,
+            quality_signal TEXT, quality_rule TEXT, quality_profile TEXT,
+            swing_signal TEXT, swing_rule TEXT, swing_profile TEXT,
+            cyclical_phase TEXT, op_margin_median {dp},
+            price {dp}, price_date TEXT,
+            ttm_pe {dp}, op_margin_pct {dp}, roe_pct {dp}, prior_mom_pct {dp},
+            n_annuals INTEGER, n_quarters INTEGER,
+            shadow_momentum_downweight TEXT,
+            shadow_quality_pe_cap TEXT,
+            eval_price {dp}, eval_date TEXT,
+            return_12m_pct {dp}, index_return_12m_pct {dp}, rel_12m_pct {dp},
+            evaluated_at TEXT,
+            is_correction INTEGER DEFAULT 0,
+            correction_of INTEGER,
+            note TEXT
+        )""")
+    db.commit()
+
+
+def _forward_ensure_data(db, ins_id, isin, is_global=False):
+    """Drar FÄRSK Börsdata-data (rapporter år+kvartal, ~14mån priser) på ins_id
+    och upsertar i lokala borsdata_reports/borsdata_prices. Returnerar
+    (last_close, last_date). Auktoritativ källa = Börsdata (det vi betalar för)."""
+    from edge_db import _ph as _phf, _upsert_sql
+    from borsdata_fetcher import (fetch_reports, fetch_global_reports,
+                                  extract_v21_metrics, fetch_stock_prices)
+    from datetime import datetime as _dt, timedelta as _td
+    ph = _phf()
+    now_iso = _dt.utcnow().isoformat()
+    # ── Rapporter (samma kolumn-mappning som backfill-quarters) ──
+    rcols = ["isin", "ins_id", "report_type", "period_year", "period_q", "report_end_date", "currency",
+             "revenues", "gross_income", "operating_income", "profit_before_tax", "net_profit", "eps",
+             "operating_cash_flow", "investing_cash_flow", "financing_cash_flow", "free_cash_flow", "cash_flow_year",
+             "total_assets", "current_assets", "non_current_assets", "tangible_assets", "intangible_assets",
+             "financial_assets", "total_equity", "total_liabilities", "current_liabilities", "non_current_liabilities",
+             "cash_and_equivalents", "net_debt", "shares_outstanding", "dividend", "stock_price_avg",
+             "stock_price_high", "stock_price_low", "broken_fiscal_year", "fetched_at"]
+    rsql = _upsert_sql("borsdata_reports", rcols, ["isin", "report_type", "period_year", "period_q"])
+    for rt, mc in (("quarter", 8), ("year", 12)):
+        try:
+            reports = (fetch_global_reports(ins_id, rt, max_count=mc) if is_global
+                       else fetch_reports(ins_id, rt, max_count=mc)) or []
+        except Exception:
+            reports = []
+        for r in reports:
+            mm = extract_v21_metrics(r)
+            py = r.get("year"); pq = r.get("period") if rt == "quarter" else 0
+            if rt == "quarter" and pq in (None, 0, 5):
+                continue
+            try:
+                db.execute(rsql, (isin, ins_id, rt, py, pq, mm.get("report_end_date"), mm.get("currency"),
+                    mm.get("revenues"), mm.get("gross_income"), mm.get("operating_income"), mm.get("profit_before_tax"),
+                    mm.get("net_profit"), mm.get("earnings_per_share"), mm.get("operating_cash_flow"),
+                    mm.get("investing_cash_flow"), mm.get("financing_cash_flow"), mm.get("free_cash_flow"),
+                    mm.get("cash_flow_year"), mm.get("total_assets"), mm.get("current_assets"),
+                    mm.get("non_current_assets"), mm.get("tangible_assets"), mm.get("intangible_assets"),
+                    mm.get("financial_assets"), mm.get("total_equity"), mm.get("total_liabilities"),
+                    mm.get("current_liabilities"), mm.get("non_current_liabilities"), mm.get("cash_and_equivalents"),
+                    mm.get("net_debt"), mm.get("shares_outstanding"), mm.get("dividend"), mm.get("stock_price_avg"),
+                    mm.get("stock_price_high"), mm.get("stock_price_low"),
+                    (int(mm.get("broken_fiscal_year")) if isinstance(mm.get("broken_fiscal_year"), bool)
+                     else mm.get("broken_fiscal_year")), now_iso))
+            except Exception:
+                try: db.rollback()
+                except Exception: pass
+    db.commit()
+    # ── Priser (~14 mån för momentum-baslinje) ──
+    last_close = last_date = None
+    try:
+        frm = (_dt.utcnow().date() - _td(days=430)).isoformat()
+        prices = fetch_stock_prices(ins_id, is_global=is_global, from_date=frm) or []
+        psql = _upsert_sql("borsdata_prices", ["isin", "date", "open", "high", "low", "close", "volume"],
+                           ["isin", "date"])
+        for p in prices:
+            ds = (p.get("d") or "")[:10]
+            if not ds:
+                continue
+            try:
+                db.execute(psql, (isin, ds, p.get("o"), p.get("h"), p.get("l"), p.get("c"), p.get("v")))
+            except Exception:
+                try: db.rollback()
+                except Exception: pass
+        db.commit()
+        if prices:
+            last = prices[-1]
+            last_close = last.get("c"); last_date = (last.get("d") or "")[:10]
+    except Exception as e:
+        print(f"[forward] pris-fetch fel ins_id={ins_id}: {e}", file=sys.stderr)
+    return last_close, last_date
+
+
+def _forward_shadows(value_sig, quality_sig, ttm_pe, mom):
+    """v3.4-KANDIDATER som skuggor (påverkar ALDRIG primärsignalen). Definierade
+    i forward_log_universe.SHADOW_RULES, frysta med universumet."""
+    try:
+        from forward_log_universe import SHADOW_RULES
+    except Exception:
+        SHADOW_RULES = {"momentum_downweight": {"threshold_pct": -25.0},
+                        "quality_pe_cap": {"pe_cap": 50.0}}
+    mthr = SHADOW_RULES.get("momentum_downweight", {}).get("threshold_pct", -25.0)
+    pecap = SHADOW_RULES.get("quality_pe_cap", {}).get("pe_cap", 50.0)
+    # Primär riktad signal = Value om riktad, annars Quality
+    primary = value_sig if value_sig in ("KÖP", "STARK KÖP", "UNDVIK", "TA PROFIT", "SÄLJ") else quality_sig
+    sm = primary
+    if primary in ("KÖP", "STARK KÖP") and mom is not None and mom < mthr:
+        sm = f"HÅLL (mom-nedviktad {mom:.0f}% < {mthr:.0f}%)"
+    sq = quality_sig
+    if quality_sig in ("KÖP", "STARK KÖP") and ttm_pe is not None and abs(ttm_pe) <= 200 and ttm_pe > pecap:
+        sq = f"HÅLL (P/E-tak {ttm_pe:.0f} > {pecap:.0f})"
+    return sm, sq
+
+
+def _forward_log_run(db, reason="manual", run_date=None):
+    """Kör frysta v3.3 på det pre-registrerade universumet och APPENDAR rader.
+    Idempotent per (run_date, isin): hoppar över om raden redan finns för dagen."""
+    import v33_live
+    from edge_db import _ph as _phf, _fetchone, _upsert_sql
+    from forward_log_universe import (FORWARD_UNIVERSE, FORWARD_UNIVERSE_VERSION,
+                                      FORWARD_RULE_COMMIT)
+    from datetime import datetime as _dt
+    _forward_ensure_table(db)
+    ph = _phf()
+    rd = run_date or _dt.utcnow().date().isoformat()
+    ts = _dt.utcnow().isoformat()
+    cols = ["run_date", "run_timestamp", "universe_version", "rule_commit", "query", "short_name",
+            "ins_id", "isin", "category", "value_signal", "value_rule", "value_profile",
+            "quality_signal", "quality_rule", "quality_profile", "swing_signal", "swing_rule",
+            "swing_profile", "cyclical_phase", "op_margin_median", "price", "price_date",
+            "ttm_pe", "op_margin_pct", "roe_pct", "prior_mom_pct", "n_annuals", "n_quarters",
+            "shadow_momentum_downweight", "shadow_quality_pe_cap", "note"]
+    isql = f"INSERT INTO forward_log ({','.join(cols)}) VALUES ({_phf(len(cols))})"
+    summary = {"run_date": rd, "reason": reason, "version": FORWARD_UNIVERSE_VERSION,
+               "commit": FORWARD_RULE_COMMIT, "inserted": 0, "skipped": 0, "errors": [], "rows": []}
+    for (query, ticker, ins_id, isin, cat) in FORWARD_UNIVERSE:
+        try:
+            # idempotens: en rad per bolag och körning-datum
+            ex = _fetchone(db, f"SELECT id FROM forward_log WHERE run_date={ph} AND isin={ph} "
+                               f"AND is_correction=0 LIMIT 1", (rd, isin))
+            if ex:
+                summary["skipped"] += 1
+                continue
+            last_close, last_date = _forward_ensure_data(db, ins_id, isin)
+            m = _v33_metrics_from_reports(db, isin, last_close)
+            sig = v33_live.compute_pinned(cat, m["ttm_pe"], m["op_margin"], m["opm_hist"],
+                                          m["roe"], m["mom"])
+            sm, sq = _forward_shadows(sig["value"]["signal"], sig["quality"]["signal"],
+                                      m["ttm_pe"], m["mom"])
+            db.execute(isql, (rd, ts, FORWARD_UNIVERSE_VERSION, FORWARD_RULE_COMMIT, query, ticker,
+                ins_id, isin, cat,
+                sig["value"]["signal"], sig["value"]["rule"], sig["value"]["profile"],
+                sig["quality"]["signal"], sig["quality"]["rule"], sig["quality"]["profile"],
+                sig["swing"]["signal"], sig["swing"]["rule"], sig["swing"]["profile"],
+                sig["cyclical_phase"], sig["op_margin_median"], last_close, last_date,
+                m["ttm_pe"], m["op_margin"], m["roe"], (round(m["mom"], 1) if m["mom"] is not None else None),
+                m["n_annuals"], m["n_quarters"], sm, sq, reason))
+            db.commit()
+            summary["inserted"] += 1
+            summary["rows"].append({"company": query, "category": cat,
+                "value": sig["value"]["signal"], "quality": sig["quality"]["signal"],
+                "swing": sig["swing"]["signal"], "price": last_close, "ttm_pe": m["ttm_pe"],
+                "shadow_mom": sm, "shadow_pe": sq})
+        except Exception as e:
+            try: db.rollback()
+            except Exception: pass
+            summary["errors"].append({"company": query, "error": str(e)[:160]})
+    # uppdatera meta-stämpel
+    try:
+        msql = _upsert_sql("meta", ["key", "value"], ["key"])
+        db.execute(msql, ("forward_log_last_run_month", rd[:7]))
+        db.commit()
+    except Exception:
+        pass
+    return summary
 
 
 def _agent_get_full_stock(db, query):
@@ -14425,6 +14640,79 @@ def api_price_cache_status():
     })
 
 
+_FORWARD_LAST_RUN = {"summary": None, "running": False}
+
+
+@app.route("/api/forward-log/run", methods=["GET", "POST"])
+def api_forward_log_run():
+    """Kör den pre-registrerade forward-loggen (append-only). ?sync=1 = inline
+    (returnerar summering), annars bakgrundstråd. Valfri ?token= om FORWARD_LOG_TOKEN
+    är satt i miljön. Idempotent per (datum, bolag)."""
+    import os as _os
+    need = _os.environ.get("FORWARD_LOG_TOKEN")
+    if need and (request.args.get("token") or "") != need:
+        return jsonify({"error": "ogiltig token"}), 403
+    run_date = request.args.get("run_date")  # valfritt: backdatera/pin (YYYY-MM-DD)
+    if request.args.get("sync") == "1":
+        db = get_db()
+        try:
+            s = _forward_log_run(db, reason=request.args.get("reason") or "manual-sync", run_date=run_date)
+            _FORWARD_LAST_RUN["summary"] = s
+            return jsonify(s)
+        finally:
+            db.close()
+    if _FORWARD_LAST_RUN["running"]:
+        return jsonify({"status": "already_running", "last": _FORWARD_LAST_RUN["summary"]})
+
+    def _run():
+        _FORWARD_LAST_RUN["running"] = True
+        dbb = get_db()
+        try:
+            _FORWARD_LAST_RUN["summary"] = _forward_log_run(
+                dbb, reason=request.args.get("reason") or "manual-bg", run_date=run_date)
+        except Exception as e:
+            _FORWARD_LAST_RUN["summary"] = {"error": str(e)}
+        finally:
+            dbb.close()
+            _FORWARD_LAST_RUN["running"] = False
+    threading.Thread(target=_run, daemon=True).start()
+    return jsonify({"status": "started", "note": "kör i bakgrunden — hämta /api/forward-log"})
+
+
+@app.route("/api/forward-log")
+def api_forward_log():
+    """Visar forward-loggen (append-only). ?run_date=YYYY-MM-DD filtrerar; annars
+    senaste körningen. ?all=1 = alla rader. Returnerar rader + körnings-status."""
+    db = get_db()
+    from edge_db import _ph as _phf, _fetchall, _fetchone
+    ph = _phf()
+    try:
+        _forward_ensure_table(db)
+        rd = request.args.get("run_date")
+        if request.args.get("all") == "1":
+            rows = _fetchall(db, "SELECT * FROM forward_log ORDER BY run_date DESC, category, query")
+        else:
+            if not rd:
+                latest = _fetchone(db, "SELECT MAX(run_date) as d FROM forward_log")
+                rd = (dict(latest).get("d") if latest else None)
+            rows = _fetchall(db, f"SELECT * FROM forward_log WHERE run_date={ph} "
+                                 f"ORDER BY category, query", (rd,)) if rd else []
+        runs = _fetchall(db, "SELECT run_date, COUNT(*) as n, MIN(rule_commit) as commit "
+                             "FROM forward_log GROUP BY run_date ORDER BY run_date DESC")
+        out = [dict(r) for r in (rows or [])]
+        return jsonify({
+            "run_date": rd,
+            "rule_commit": (out[0].get("rule_commit") if out else None),
+            "universe_version": (out[0].get("universe_version") if out else None),
+            "count": len(out),
+            "rows": out,
+            "all_runs": [dict(r) for r in (runs or [])],
+            "running": _FORWARD_LAST_RUN["running"],
+        })
+    finally:
+        db.close()
+
+
 @app.route("/api/diag/resolve-candidates")
 def api_diag_resolve_candidates():
     """Visar EXAKT vilka rader resolvern väljer mellan (felsökning av Step 1).
@@ -16211,6 +16499,37 @@ def _startup():
                 print(f"[AUTO] Insider-sync fel: {e}")
 
         scheduler.add_job(scheduled_insider_sync, 'cron', hour=6, minute=30, id='insider_daily')
+
+        # Forward-logg: kör FÖRSTA HANDELSDAGEN varje månad (pre-registrerat
+        # universum, fryst v3.3 5b37fd6). Daglig 08:10-koll; kör bara om idag är
+        # månadens första vardag OCH loggen inte redan körts denna månad.
+        def scheduled_forward_log_check():
+            try:
+                from datetime import timedelta as _td
+                from edge_db import _fetchone
+                today = datetime.now().date()
+                first = today.replace(day=1)
+                while first.weekday() >= 5:  # hoppa lör/sön → första vardag
+                    first += _td(days=1)
+                if today != first:
+                    return
+                dbf = get_db()
+                try:
+                    mk = _fetchone(dbf, f"SELECT value FROM meta WHERE key={_ph()}",
+                                   ("forward_log_last_run_month",))
+                    if mk and dict(mk).get("value") == today.strftime("%Y-%m"):
+                        return  # redan kört denna månad
+                    print(f"[AUTO] Forward-logg månadskörning {today.isoformat()}")
+                    s = _forward_log_run(dbf, reason="scheduled-monthly")
+                    print(f"[AUTO] Forward-logg klar: {s.get('inserted')} rader, "
+                          f"{len(s.get('errors', []))} fel")
+                finally:
+                    dbf.close()
+            except Exception as e:
+                print(f"[AUTO] Forward-logg fel: {e}")
+
+        scheduler.add_job(scheduled_forward_log_check, 'cron', hour=8, minute=10,
+                          id='forward_log_monthly')
 
         # Dagligt screen-snapshot (kl 17:00 lokal, efter US-marknad har öppnat)
         # Sparar live-träffar för Confluence/Trifecta/Dual-Screen för

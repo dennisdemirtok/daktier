@@ -89,6 +89,30 @@ def signal_profile(sig):
     return "neutral"
 
 
+def _assemble(cat, cat_method, ttm_pe, op_margin, opm_history, roe, prior_mom_pct, rev_growth):
+    vs, vc = value_signal(cat, ttm_pe, op_margin, opm_history, rev_growth)
+    qs, qc = quality_signal(cat, roe, op_margin, opm_history)
+    ss, sc = swing_signal(prior_mom_pct)
+    phase, med = cyclical_phase(op_margin, opm_history) if cat == "cyclical" else (None, None)
+    return {
+        "version": V33_VERSION, "commit": V33_COMMIT,
+        "classification": cat, "classification_method": cat_method,
+        "cyclical_phase": phase, "op_margin_median": (round(med, 1) if med else None),
+        "ttm_pe": ttm_pe, "op_margin_pct": op_margin, "roe_pct": roe,
+        "prior_12m_momentum_pct": (round(prior_mom_pct, 1) if prior_mom_pct is not None else None),
+        "value": {"signal": vs, "rule": vc, "profile": signal_profile(vs)},
+        "quality": {"signal": qs, "rule": qc, "profile": signal_profile(qs)},
+        "swing": {"signal": ss, "rule": sc, "profile": signal_profile(ss)},
+    }
+
+
+def compute_pinned(cat, ttm_pe, op_margin, opm_history, roe, prior_mom_pct, rev_growth=None):
+    """Forward-log: kör frysta v3.3-regler med en PRE-REGISTRERAD kategori
+    (hoppar över klassificeringsheuristiken — kategorin är pinnad i universumet)."""
+    return _assemble(cat, "pre-registrerad (forward-universum)", ttm_pe, op_margin,
+                     opm_history, roe, prior_mom_pct, rev_growth)
+
+
 def compute(stock_data, ttm_pe, op_margin, opm_history, roe, prior_mom_pct, rev_growth=None):
     """Kör fryst v3.3 → per-lins signal + citat + profil + klassning + commit-hash."""
     cat, cat_method = classify(stock_data, opm_history)
