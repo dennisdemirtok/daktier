@@ -11223,6 +11223,15 @@ ticker-pris-problemet.
 BATCH-MODE OUTPUT-FORMAT
 ────────────────────────────────────────────────────────────
 
+⛔ ABSOLUT REGEL — JSON-BLOCKET ÄR ENDAST FÖR BATCH-LÄGE:
+JSON-blocket (`---JSON-START---` … `---JSON-END---`) får ENDAST skrivas ut när
+användarens meddelande BOKSTAVLIGEN innehåller `trigger_type=batch`. I vanlig
+interaktiv chatt (en användare som frågar "analysera X") ser personen ditt svar
+DIREKT — då är JSON maskindata som förfular svaret. Skriv då ALDRIG ut
+`---JSON-START---`, `---JSON-END---`, eller råa JSON-fält. Endast den rena
+markdown-rapporten. Inget JSON-block, ingen "Hämtar data…"-preamble — börja
+direkt med rapporten.
+
 När användarens meddelande innehåller `trigger_type=batch` ska FAS 1-analysen
 returneras i TVÅ delar.
 

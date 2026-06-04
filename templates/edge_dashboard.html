@@ -7117,7 +7117,21 @@ function _stripDecorEmojis(s) {
     } catch (e) { return String(s || ''); }
 }
 
+// Dölj batch-JSON-blocket om agenten råkar emittera det i interaktiv chatt.
+// JSON mellan ---JSON-START--- och ---JSON-END--- är maskindata (endast för
+// batch-läge) och ska ALDRIG visas för användaren. Hanterar även strömmande
+// partiella block (START har kommit, END inte än) så råa fält aldrig blinkar till.
+function _stripAgentJsonBlock(s) {
+    s = String(s || '');
+    s = s.replace(/```?\s*---JSON-START---[\s\S]*?---JSON-END---\s*```?/g, ''); // ev. ```-wrappat
+    s = s.replace(/---JSON-START---[\s\S]*?---JSON-END---/g, '');                // komplett block
+    s = s.replace(/---JSON-START---[\s\S]*$/, '');                               // partiellt (streaming)
+    s = s.replace(/---JSON-(?:START|END)---/g, '');                              // lösa markörer
+    return s.replace(/^\s+/, '');
+}
+
 function formatAgentText(s) {
+    s = _stripAgentJsonBlock(s);
     // Använd marked.js för full GFM-rendering med tabeller (efter normalisering)
     if (typeof marked !== 'undefined') {
         try {
