@@ -121,13 +121,20 @@ def swing_signal(prior_mom_pct):
 
 
 def evaluate(sig, rel):
-    """M3-kriterium (fryst)."""
-    if sig == "N/A" or rel is None:
+    """M3-kriterium (fryst). PRE-C-FÖRTYDLIGANDE: N/A OCH VÄNTA är ALLTID utanför
+    utvärderingen — aldrig RÄTT, aldrig FEL. (Förhindrar N/A-inflation där en lins
+    som avstår på svåra celler annars skulle få konstgjort fin hit rate.)"""
+    if sig in ("N/A", "VÄNTA") or rel is None:
         return "N/A"
     if sig in ("KÖP", "STARK KÖP"):
         return "RÄTT" if rel >= 5 else ("FEL" if rel <= -5 else "TVEKAN")
     if sig in ("UNDVIK", "TA PROFIT", "SÄLJ"):
         return "RÄTT" if rel <= -5 else ("FEL" if rel >= 5 else "TVEKAN")
-    if sig in ("HÅLL", "VÄNTA", "NEUTRAL", "AVVAKTA"):
+    if sig in ("HÅLL", "NEUTRAL", "AVVAKTA"):
         return "RÄTT" if abs(rel) <= 15 else "FEL"
     return "TVEKAN"
+
+
+def is_directional(sig):
+    """Riktad signal (för matchad-cell-jämförelse mot baselines i C3)."""
+    return sig in ("KÖP", "STARK KÖP", "UNDVIK", "TA PROFIT", "SÄLJ")
