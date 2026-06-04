@@ -32,6 +32,16 @@ QUARANTINED_ISINS = {
     "NO0010927288": "LUMI — Börsdata-pris 19.00 vs Avanza 280.60",
     # ── Teckenfel i senaste årsbokslut ──
     "ERMA_REVNEG": "ERMA — omsättning < 0 i FY2025 (verifiera ISIN)",
+    # ── Korrupt lokal mappning / namn-kollision (Step 1 felfall) ──
+    # Sandvik-raden i lokala stocks bär kanadensisk ISIN + fel orderbook
+    # (pris 382 + TTM-EPS ~0 → P/E -38000). Kanonisk Sandvik = SE0000667891
+    # (ins_id 195). Karantänera den korrupta raden → resolvern vägrar hellre
+    # än rapporterar fel bolag. (Forward-loggen drar Sandvik korrekt via ins_id.)
+    "CA8281221017": "Sandvik (korrupt lokal rad) — kanadensisk ISIN, fel pris/orderbook; kanonisk = SE0000667891",
+    # 'VSSAB B' = Viking Supply, ETT ANNAT BOLAG som fuzzy-matchade 'SSAB B'
+    # (SSAB självt är karantänerat → fuzzy föll igenom hit). Karantänera så
+    # 'SSAB B' returnerar karantänfel, inte Viking Supply.
+    "SE0010820613": "Viking Supply (VSSAB B) — kolliderar med 'SSAB B'-sökning; annat bolag",
 }
 
 # Namn som flaggats men EJ karantänerats (kräver försiktighet, ej uteslutning):
