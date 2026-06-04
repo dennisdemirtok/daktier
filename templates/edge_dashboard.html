@@ -5738,7 +5738,7 @@ function _buildReportCard(d, rich) {
     let analysisHtml = '';
     if (d.analysis_markdown && d.analysis_markdown.trim()) {
         let md;
-        try { md = (typeof marked !== 'undefined') ? marked.parse(d.analysis_markdown) : escapeHtml(d.analysis_markdown).replace(/\n/g, '<br>'); }
+        try { md = (typeof marked !== 'undefined') ? formatAgentText(d.analysis_markdown) : escapeHtml(d.analysis_markdown).replace(/\n/g, '<br>'); }
         catch (e) { md = escapeHtml(d.analysis_markdown).replace(/\n/g, '<br>'); }
         analysisHtml = _secTitle('Agentens analys (multi-strategi)') + `<div class="report-md" style="font-size:11.5px;line-height:1.62;color:#334155">${md}</div>`;
     }
@@ -5943,7 +5943,7 @@ function _buildAgentAnalysisCard(text, meta) {
     const el = document.createElement('div');
     el.style.cssText = 'position:fixed;left:-9999px;top:0;width:760px;background:#fff;font-family:-apple-system,BlinkMacSystemFont,Inter,Helvetica,sans-serif;color:#0f172a';
     let bodyHtml;
-    try { bodyHtml = (typeof marked !== 'undefined') ? marked.parse(text) : escapeHtml(text).replace(/\n/g, '<br>'); }
+    try { bodyHtml = (typeof marked !== 'undefined') ? formatAgentText(text) : escapeHtml(text).replace(/\n/g, '<br>'); }
     catch (e) { bodyHtml = escapeHtml(text).replace(/\n/g, '<br>'); }
     el.innerHTML = `
         <div style="background:linear-gradient(135deg,#0f172a 0%,#1e3a8a 60%,#3b82f6 100%);color:#fff;padding:24px 30px">
@@ -6735,39 +6735,43 @@ function renderAgent() {
         .agent-avatar.user { background:#e5e7eb; color:#374151; order:2; }
         .agent-msg-bubble { max-width:78%; padding:13px 17px; border-radius:14px; font-size:14px; line-height:1.55; box-shadow:0 1px 3px rgba(0,0,0,0.05); }
         .agent-msg.user .agent-msg-bubble { background:linear-gradient(135deg,#1d4ed8,#3b82f6); color:white; border-bottom-right-radius:4px; }
-        .agent-msg.ai .agent-msg-bubble { background:white; border:1px solid var(--border); border-bottom-left-radius:4px; }
+        /* AI-svar: bredare, dokument-likt (inte trång bubbla) så tabeller får plats */
+        .agent-msg.ai { align-items:flex-start; }
+        .agent-msg.ai .agent-msg-bubble { background:white; border:1px solid #e8eaed; border-radius:14px; border-top-left-radius:4px; max-width:none; flex:1 1 auto; min-width:0; padding:16px 20px; box-shadow:0 1px 2px rgba(16,24,40,0.04); color:#1f2937; font-size:14px; line-height:1.62; }
         .agent-msg.ai .agent-msg-bubble h1,
-        .agent-msg.ai .agent-msg-bubble h2 { font-size:16px; font-weight:700; color:#0f172a; margin:14px 0 6px; padding-bottom:6px; border-bottom:1px solid #e5e7eb; line-height:1.3; }
+        .agent-msg.ai .agent-msg-bubble h2 { font-size:17px; font-weight:700; color:#0f172a; margin:20px 0 8px; line-height:1.35; letter-spacing:-0.01em; }
         .agent-msg.ai .agent-msg-bubble h2:first-child,
         .agent-msg.ai .agent-msg-bubble h1:first-child { margin-top:0; }
-        .agent-msg.ai .agent-msg-bubble h3 { font-size:14px; font-weight:700; color:#1e3a8a; margin:14px 0 6px; line-height:1.3; }
-        .agent-msg.ai .agent-msg-bubble h4 { font-size:13px; font-weight:700; color:#334155; margin:10px 0 4px; }
-        .agent-msg.ai .agent-msg-bubble p { margin:6px 0; }
+        .agent-msg.ai .agent-msg-bubble h3 { font-size:14.5px; font-weight:700; color:#1f2937; margin:18px 0 6px; line-height:1.35; }
+        .agent-msg.ai .agent-msg-bubble h4 { font-size:12.5px; font-weight:700; color:#5b6573; margin:14px 0 4px; text-transform:uppercase; letter-spacing:0.04em; }
+        .agent-msg.ai .agent-msg-bubble p { margin:9px 0; }
         .agent-msg.ai .agent-msg-bubble ul,
-        .agent-msg.ai .agent-msg-bubble ol { margin:4px 0 8px; padding-left:20px; }
-        .agent-msg.ai .agent-msg-bubble li { margin:2px 0; }
-        .agent-msg.ai .agent-msg-bubble strong { color:#0f172a; font-weight:700; }
-        .agent-msg.ai .agent-msg-bubble code { background:#f1f5f9; color:#1e293b; padding:1px 5px; border-radius:4px; font-size:12px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
-        .agent-msg.ai .agent-msg-bubble blockquote { border-left:3px solid #3b82f6; padding:6px 12px; margin:8px 0; background:#eff6ff; color:#1e40af; border-radius:0 6px 6px 0; font-size:13px; }
-        .agent-msg.ai .agent-msg-bubble blockquote p { margin:2px 0; }
+        .agent-msg.ai .agent-msg-bubble ol { margin:8px 0 10px; padding-left:20px; }
+        .agent-msg.ai .agent-msg-bubble li { margin:4px 0; }
+        .agent-msg.ai .agent-msg-bubble li::marker { color:#9aa3af; }
+        .agent-msg.ai .agent-msg-bubble strong { color:#0f172a; font-weight:650; }
+        .agent-msg.ai .agent-msg-bubble code { background:#f4f5f7; color:#3730a3; padding:1.5px 6px; border-radius:5px; font-size:12.5px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+        .agent-msg.ai .agent-msg-bubble blockquote { border-left:3px solid #cbd5e1; padding:2px 14px; margin:12px 0; color:#475569; font-style:normal; }
+        .agent-msg.ai .agent-msg-bubble blockquote p { margin:4px 0; }
         .agent-msg.ai .agent-msg-bubble table {
-            width:100%; border-collapse:collapse; margin:10px 0;
-            font-size:12.5px; background:white;
-            border:1px solid #e5e7eb; border-radius:8px; overflow:hidden;
+            width:100%; border-collapse:separate; border-spacing:0; margin:14px 0;
+            font-size:13px; background:white; border:1px solid #e8eaed;
+            border-radius:10px; overflow:hidden;
         }
+        .agent-msg.ai .agent-msg-bubble thead th { position:relative; }
         .agent-msg.ai .agent-msg-bubble th {
-            background:linear-gradient(135deg,#f8fafc,#f1f5f9);
-            color:#0f172a; font-weight:700; text-align:left;
-            padding:8px 10px; font-size:11.5px; text-transform:uppercase;
-            letter-spacing:0.3px; border-bottom:1px solid #e5e7eb;
+            background:#f7f8fa; color:#5b6573; font-weight:600; text-align:left;
+            padding:10px 14px; font-size:12px; border-bottom:1px solid #e8eaed;
+            white-space:nowrap; letter-spacing:0.01em; text-transform:none;
         }
         .agent-msg.ai .agent-msg-bubble td {
-            padding:7px 10px; border-bottom:1px solid #f1f5f9;
-            color:#1e293b; line-height:1.45; vertical-align:top;
+            padding:10px 14px; border-bottom:1px solid #f1f3f5;
+            color:#1f2937; line-height:1.45; vertical-align:top;
+            font-variant-numeric:tabular-nums;
         }
-        .agent-msg.ai .agent-msg-bubble tr:last-child td { border-bottom:none; }
-        .agent-msg.ai .agent-msg-bubble tr:nth-child(even) td { background:#fafbfc; }
-        .agent-msg.ai .agent-msg-bubble hr { border:none; border-top:1px solid #e5e7eb; margin:14px 0; }
+        .agent-msg.ai .agent-msg-bubble tbody tr:last-child td { border-bottom:none; }
+        .agent-msg.ai .agent-msg-bubble tbody tr:hover td { background:#fafbfc; }
+        .agent-msg.ai .agent-msg-bubble hr { border:none; border-top:1px solid #eceef1; margin:18px 0; }
         .agent-msg-bubble.streaming { background:linear-gradient(120deg,white 0%,#f8fafc 50%,white 100%); background-size:200% 100%; animation:agent-shimmer 2s linear infinite; }
         @keyframes agent-shimmer { 0%{background-position:-200% 0;} 100%{background-position:200% 0;} }
         .agent-msg-img { max-width:280px; max-height:200px; display:block; border-radius:8px; margin-bottom:8px; }
@@ -6940,6 +6944,7 @@ function renderAgent() {
     setTimeout(() => {
         const m = document.getElementById('agentMsgs');
         if (m) m.scrollTop = m.scrollHeight;
+        _enhanceAgentTables(m);  // höger-justera numeriska tabellkolumner
     }, 50);
 }
 
@@ -7048,11 +7053,54 @@ function escapeHtml(s) {
     return String(s||'').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
 
+// Normalisera markdown-tabeller: LLM:er råkar ofta ge fel antal kolumner i
+// separator-raden (t.ex. 7 rubriker men 6 "---"), vilket gör att marked.js
+// renderar tabellen som rå pipe-text. Vi tvingar separator + rader till samma
+// kolumnantal som rubriken så tabellen alltid renderas korrekt.
+function _normalizeMdTables(src) {
+    const lines = String(src || '').split('\n');
+    const out = [];
+    const isRow = l => /^\s*\|.*\|\s*$/.test(l);
+    const isSep = l => /-/.test(l) && /^\s*\|?[\s:|-]+\|?\s*$/.test(l);
+    const cellsOf = l => { let p = l.trim(); if (p.startsWith('|')) p = p.slice(1); if (p.endsWith('|')) p = p.slice(0, -1); return p.split('|'); };
+    let i = 0;
+    while (i < lines.length) {
+        if (isRow(lines[i]) && i + 1 < lines.length && isSep(lines[i + 1])) {
+            const cols = cellsOf(lines[i]).length;
+            out.push('| ' + cellsOf(lines[i]).map(c => c.trim()).join(' | ') + ' |');
+            out.push('|' + Array.from({ length: cols }, () => '---').join('|') + '|');
+            i += 2;
+            while (i < lines.length && isRow(lines[i])) {
+                let cells = cellsOf(lines[i]).map(c => c.trim());
+                if (cells.length < cols) while (cells.length < cols) cells.push(' ');
+                else if (cells.length > cols) cells = cells.slice(0, cols - 1).concat([cells.slice(cols - 1).join(' ')]);
+                out.push('| ' + cells.map(c => c || ' ').join(' | ') + ' |');
+                i++;
+            }
+        } else {
+            out.push(lines[i]); i++;
+        }
+    }
+    return out.join('\n');
+}
+
+// Ta bort färgglada dekorativa emojis (signal-cirklar, rubrik-emojis) för en
+// ren, professionell look. Behåller monokroma tecken som ✓ ✗ → – (Dingbats/
+// pilar) som kan öka läsbarheten. Säkerhetsnät utöver prompt-regeln.
+function _stripDecorEmojis(s) {
+    try {
+        return String(s || '')
+            .replace(/[\u{1F000}-\u{1FAFF}\u{2600}-\u{26FF}\u{2B00}-\u{2BFF}\u{FE0F}\u{200D}]/gu, '')
+            .replace(/[ \t]{2,}/g, ' ')
+            .replace(/^[ \t]+$/gm, '');
+    } catch (e) { return String(s || ''); }
+}
+
 function formatAgentText(s) {
-    // Använd marked.js för full GFM-rendering med tabeller
+    // Använd marked.js för full GFM-rendering med tabeller (efter normalisering)
     if (typeof marked !== 'undefined') {
         try {
-            return marked.parse(String(s || ''));
+            return marked.parse(_normalizeMdTables(_stripDecorEmojis(String(s || ''))));
         } catch (e) {
             console.warn('marked parse failed', e);
         }
@@ -7063,6 +7111,37 @@ function formatAgentText(s) {
     t = t.replace(/`([^`]+)`/g, '<code>$1</code>');
     t = t.replace(/\n\n/g, '</p><p>');
     return '<p>' + t + '</p>';
+}
+
+// Auto-höger-justera numeriska tabellkolumner + subtil zebra. Körs efter full
+// render (en gång per tabell via data-flagga), inte per stream-frame.
+function _enhanceAgentTables(root) {
+    try {
+        (root || document).querySelectorAll('.agent-md table').forEach(tbl => {
+            if (tbl.dataset.enhanced) return;
+            tbl.dataset.enhanced = '1';
+            const rows = Array.from(tbl.querySelectorAll('tr'));
+            const bodyRows = rows.filter(r => r.querySelector('td'));
+            if (!bodyRows.length) return;
+            const headRow = tbl.querySelector('thead tr') || rows[0];
+            const colCount = Math.max(...bodyRows.map(r => r.children.length));
+            for (let c = 0; c < colCount; c++) {
+                let numeric = 0, total = 0;
+                bodyRows.forEach(r => {
+                    const cell = r.children[c]; if (!cell) return; total++;
+                    const txt = cell.textContent.trim()
+                        .replace(/^(sek|usd|eur|nok|dkk|gbp|kr|\$|£|€)\s*/i, '')  // ledande valuta
+                        .replace(/[\s%+,$£€×x]/g, '').replace(/−/g, '-')
+                        .replace(/(kr|sek|usd|eur|mdr|md|bn|m|k|b|t)$/i, '');
+                    if (txt && /\d/.test(txt) && !isNaN(parseFloat(txt))) numeric++;
+                });
+                if (total && numeric / total >= 0.6) {
+                    bodyRows.forEach(r => { if (r.children[c]) r.children[c].style.textAlign = 'right'; });
+                    if (headRow && headRow.children[c]) headRow.children[c].style.textAlign = 'right';
+                }
+            }
+        });
+    } catch (e) { /* tyst */ }
 }
 
 function agentSendExample(q) {
@@ -7163,31 +7242,39 @@ async function agentSend() {
     }
     let { md: streamingMd, bubble: streamingBubble, tools: streamingToolsContainer } = _resolveStreamRefs();
 
+    // PERF: marked.parse() på HELA (växande) innehållet varje frame är O(n²) och
+    // gör lång text hackig. Throttla markdown-omparsningen till ~120ms; tool-pills
+    // + scroll får ske oftare (billigt). Avslutande render fångar sista chunken.
     let scheduledRaf = null;
+    let lastMdRender = 0;
+    let trailingTimer = null;
+    const MD_THROTTLE_MS = 120;
+    function _doStreamRender() {
+        lastMdRender = performance.now();
+        if (streamingMd && assistantTurn.content) {
+            const newHtml = formatAgentText(assistantTurn.content);
+            if (streamingMd.innerHTML !== newHtml) streamingMd.innerHTML = newHtml;
+        }
+        if (streamingToolsContainer) {
+            const html = renderToolPills(assistantTurn.tools || []);
+            if (streamingToolsContainer.innerHTML !== html) streamingToolsContainer.innerHTML = html;
+        }
+        if (msgsEl) {
+            const distFromBottom = msgsEl.scrollHeight - (msgsEl.scrollTop + msgsEl.clientHeight);
+            if (distFromBottom < 120) msgsEl.scrollTop = msgsEl.scrollHeight;
+        }
+    }
     function scheduleStreamRender() {
         if (scheduledRaf) return;
         scheduledRaf = requestAnimationFrame(() => {
             scheduledRaf = null;
-            // 1) Markdown — bara skriv om om innehållet ändrats
-            if (streamingMd && assistantTurn.content) {
-                const newHtml = formatAgentText(assistantTurn.content);
-                if (streamingMd.innerHTML !== newHtml) {
-                    streamingMd.innerHTML = newHtml;
-                }
-            }
-            // 2) Tool-pills (grupperade)
-            if (streamingToolsContainer) {
-                const html = renderToolPills(assistantTurn.tools || []);
-                if (streamingToolsContainer.innerHTML !== html) {
-                    streamingToolsContainer.innerHTML = html;
-                }
-            }
-            // 3) Smart scroll: bara om vi är nära botten (annars stör vi läsaren som scrollat upp)
-            if (msgsEl) {
-                const distFromBottom = msgsEl.scrollHeight - (msgsEl.scrollTop + msgsEl.clientHeight);
-                if (distFromBottom < 100) {
-                    msgsEl.scrollTop = msgsEl.scrollHeight;
-                }
+            const since = performance.now() - lastMdRender;
+            if (since >= MD_THROTTLE_MS) {
+                if (trailingTimer) { clearTimeout(trailingTimer); trailingTimer = null; }
+                _doStreamRender();
+            } else if (!trailingTimer) {
+                trailingTimer = setTimeout(() => { trailingTimer = null; _doStreamRender(); },
+                                          MD_THROTTLE_MS - since);
             }
         });
     }
@@ -7237,6 +7324,7 @@ async function agentSend() {
         }
     } finally {
         if (scheduledRaf) { cancelAnimationFrame(scheduledRaf); scheduledRaf = null; }
+        if (trailingTimer) { clearTimeout(trailingTimer); trailingTimer = null; }
         assistantTurn.streaming = false;
         _agentLoading = false;
         _agentAbortController = null;
