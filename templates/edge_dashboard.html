@@ -5883,35 +5883,122 @@ async function generateStockReport(format) {
         if (d.error) { _reportLoading(false); alert('Kunde ej generera rapport: ' + d.error); return; }
         _reportLoading(true, 'Renderar rapport…');
         const card = _buildReportCard(d, _currentDrawerStock || {});
-        document.body.appendChild(card);
-        let canvas;
-        try { canvas = await html2canvas(card, { scale: 2, backgroundColor: '#ffffff', logging: false, useCORS: true }); }
-        finally { document.body.removeChild(card); }
         const fname = `DAKTIER_${(d.ticker || 'aktie').replace(/[^A-Za-z0-9]+/g, '_')}_${d.report_date}`;
-        if (format === 'png') {
-            const a = document.createElement('a'); a.download = fname + '.png'; a.href = canvas.toDataURL('image/png'); a.click();
-        } else {
-            if (typeof window.jspdf === 'undefined') { _reportLoading(false); alert('PDF-biblioteket laddas än.'); return; }
-            const { jsPDF } = window.jspdf;
-            const pdf = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'p' });
-            const pw = 210, ph = 297, m = 8, iw = pw - 2 * m, ih = canvas.height * iw / canvas.width;
-            const img = canvas.toDataURL('image/jpeg', 0.95);
-            if (ih <= ph - 2 * m) { pdf.addImage(img, 'JPEG', m, m, iw, ih); }
-            else {
-                const ch = ph - 2 * m, pages = Math.ceil(ih / ch);
-                for (let p = 0; p < pages; p++) {
-                    if (p > 0) pdf.addPage();
-                    pdf.addImage(img, 'JPEG', m, m - p * ch, iw, ih);
-                    if (p === pages - 1) { const last = ih - p * ch; if (last < ch) { pdf.setFillColor(255, 255, 255); pdf.rect(0, m + last, pw, ph, 'F'); } }
-                }
-            }
-            pdf.save(fname + '.pdf');
-        }
+        await _cardToFile(card, fname, format);
         _reportLoading(false);
     } catch (e) { _reportLoading(false); alert('Fel vid rapport: ' + e.message); }
 }
+
+// Delad renderare: kort-element → PDF (A4, flersidig) eller PNG. Kortet
+// renderas off-screen, fångas med html2canvas och tas bort igen.
+async function _cardToFile(card, fname, format) {
+    if (typeof html2canvas === 'undefined') { alert('Bild-biblioteket laddas än, försök strax igen.'); return; }
+    document.body.appendChild(card);
+    let canvas;
+    try { canvas = await html2canvas(card, { scale: 2, backgroundColor: '#ffffff', logging: false, useCORS: true }); }
+    finally { document.body.removeChild(card); }
+    if (format === 'png') {
+        const a = document.createElement('a'); a.download = fname + '.png'; a.href = canvas.toDataURL('image/png'); a.click();
+        return;
+    }
+    if (typeof window.jspdf === 'undefined') { alert('PDF-biblioteket laddas än.'); return; }
+    const { jsPDF } = window.jspdf;
+    const pdf = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'p' });
+    const pw = 210, ph = 297, m = 8, iw = pw - 2 * m, ih = canvas.height * iw / canvas.width;
+    const img = canvas.toDataURL('image/jpeg', 0.95);
+    if (ih <= ph - 2 * m) { pdf.addImage(img, 'JPEG', m, m, iw, ih); }
+    else {
+        const ch = ph - 2 * m, pages = Math.ceil(ih / ch);
+        for (let p = 0; p < pages; p++) {
+            if (p > 0) pdf.addPage();
+            pdf.addImage(img, 'JPEG', m, m - p * ch, iw, ih);
+            if (p === pages - 1) { const last = ih - p * ch; if (last < ch) { pdf.setFillColor(255, 255, 255); pdf.rect(0, m + last, pw, ph, 'F'); } }
+        }
+    }
+    pdf.save(fname + '.pdf');
+}
 function downloadStockPng() { generateStockReport('png'); }
 function downloadStockPdf() { generateStockReport('pdf'); }
+
+// ── Agent-chatt → snygg PDF av agentens skrivna analys ──
+function _agentAnalysisMeta(text, h) {
+    let title = '';
+    const mh = text.match(/^\s{0,3}#{1,3}\s+(.+?)\s*$/m);
+    if (mh) title = mh[1];
+    else { const mb = text.match(/\*\*([^*\n]{2,48})\*\*/); if (mb) title = mb[1]; }
+    title = (title || 'Aktieanalys').replace(/[*_`#>|]/g, '').replace(/\s+/g, ' ').trim().slice(0, 72);
+    const slug = (title.replace(/[^A-Za-z0-9åäöÅÄÖ]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 40)) || 'analys';
+    const date = new Date().toISOString().slice(0, 10);
+    const mdl = (h && h.model_used && AGENT_MODELS[h.model_used]) ? AGENT_MODELS[h.model_used] : null;
+    return { title, fileslug: slug, date, modelLabel: mdl ? (mdl.emoji + ' ' + mdl.label) : '' };
+}
+
+function _buildAgentAnalysisCard(text, meta) {
+    meta = meta || {};
+    const el = document.createElement('div');
+    el.style.cssText = 'position:fixed;left:-9999px;top:0;width:760px;background:#fff;font-family:-apple-system,BlinkMacSystemFont,Inter,Helvetica,sans-serif;color:#0f172a';
+    let bodyHtml;
+    try { bodyHtml = (typeof marked !== 'undefined') ? marked.parse(text) : escapeHtml(text).replace(/\n/g, '<br>'); }
+    catch (e) { bodyHtml = escapeHtml(text).replace(/\n/g, '<br>'); }
+    el.innerHTML = `
+        <div style="background:linear-gradient(135deg,#0f172a 0%,#1e3a8a 60%,#3b82f6 100%);color:#fff;padding:24px 30px">
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:16px">
+                <div>
+                    <div style="display:flex;align-items:center;gap:9px;margin-bottom:10px">
+                        <div style="width:26px;height:26px;background:#fff;border-radius:7px;display:flex;align-items:center;justify-content:center;color:#1e3a8a;font-weight:800;font-size:14px">D</div>
+                        <span style="font-size:11px;font-weight:700;letter-spacing:1.5px;opacity:0.85">DAKTIER · AGENT-ANALYS</span>
+                    </div>
+                    <div style="font-size:24px;font-weight:800;line-height:1.12">${escapeHtml(meta.title || 'Aktieanalys')}</div>
+                </div>
+                <div style="text-align:right;white-space:nowrap">
+                    <div style="font-size:11px;opacity:0.75">Genererad ${meta.date || ''}</div>
+                    ${meta.modelLabel ? `<div style="font-size:11px;opacity:0.85;margin-top:4px">${escapeHtml(meta.modelLabel)}</div>` : ''}
+                </div>
+            </div>
+        </div>
+        <div style="padding:22px 30px 26px">
+            <div class="report-md" style="font-size:12px;line-height:1.62;color:#1e293b">${bodyHtml}</div>
+
+            <div style="margin-top:20px;background:#f8fafc;border:1px solid #eef2f7;border-radius:11px;padding:13px 16px">
+                <div style="font-size:10.5px;font-weight:800;text-transform:uppercase;letter-spacing:0.5px;color:#64748b;margin-bottom:6px">Metod &amp; transparens</div>
+                <div style="font-size:10.5px;line-height:1.6;color:#64748b">
+                    <strong style="color:#475569">Metod:</strong> Multi-strategi-ramverk (Swing/Quality/Value) med klassificerings-router, 4-axlad scoring och reverse-DCF.
+                    <strong style="color:#475569">Datakällor:</strong> Börsdata &amp; Avanza, daterat ${meta.date || ''}.
+                    <strong style="color:#475569">Karaktär:</strong> Investeringsanalytiskt <em>beslutsstöd</em> — inte en personlig investeringsrekommendation enligt MAR/MiFID II och inte en uppmaning att köpa eller sälja ett specifikt instrument.
+                    <strong style="color:#475569">Intressekonflikt:</strong> Analysen genereras maskinellt; DAKTIER innehar inga positioner i analyserade bolag.
+                    Gör alltid en egen bedömning utifrån din situation, eller rådgör med en licensierad rådgivare.
+                </div>
+            </div>
+            <div style="margin-top:14px;padding-top:12px;border-top:1px solid #e5e7eb;display:flex;justify-content:space-between;align-items:center;font-size:10px;color:#94a3b8">
+                <span>DAKTIER Edge Agent (DEL 6.99 v3.1)${meta.modelLabel ? ' · ' + escapeHtml(meta.modelLabel) : ''}</span>
+                <span>DAKTIER · Beslutsstöd, ej finansiell rådgivning</span>
+            </div>
+        </div>`;
+    return el;
+}
+
+async function downloadAgentAnalysisPdf(idx, format) {
+    const h = _agentHistory[idx];
+    if (!h || h.role !== 'assistant') return;
+    const text = typeof h.content === 'string' ? h.content : '';
+    if (!text.trim()) { alert('Inget innehåll att exportera ännu.'); return; }
+    if (typeof html2canvas === 'undefined') { alert('Bild-biblioteket laddas än, försök strax igen.'); return; }
+    // Hitta knappen för loading-state
+    let btn = null;
+    try { btn = document.querySelector(`.agent-dl-btn[onclick*="downloadAgentAnalysisPdf(${idx},"][onclick*="'${format}'"]`); } catch (e) {}
+    const orig = btn ? btn.innerHTML : '';
+    if (btn) { btn.disabled = true; btn.innerHTML = '<span class="material-symbols-outlined">hourglass_top</span>Renderar…'; }
+    try {
+        const meta = _agentAnalysisMeta(text, h);
+        const card = _buildAgentAnalysisCard(text, meta);
+        const fname = `DAKTIER_${meta.fileslug}_${meta.date}`;
+        await _cardToFile(card, fname, format || 'pdf');
+    } catch (e) {
+        alert('Fel vid nedladdning: ' + (e && e.message ? e.message : e));
+    } finally {
+        if (btn) { btn.disabled = false; btn.innerHTML = orig; }
+    }
+}
 
 // ── Infinity Scroll ──────────────────────────────────
 
@@ -6751,7 +6838,13 @@ function renderAgent() {
         .agent-md hr { border:none; border-top:1px solid #e5e7eb; margin:14px 0; }
         .agent-md a { color:#2563eb; text-decoration:underline; }
         .agent-md em { font-style:italic; color:#6b7280; }
-        .agent-foot { font-size:10.5px; color:var(--text-muted); margin-top:10px; padding-top:8px; border-top:1px dashed #e5e7eb; display:flex; gap:10px; flex-wrap:wrap; }
+        .agent-foot { font-size:10.5px; color:var(--text-muted); margin-top:10px; padding-top:8px; border-top:1px dashed #e5e7eb; display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
+        .agent-dl-btn { display:inline-flex; align-items:center; gap:5px; background:#0f172a; color:#fff; border:none; border-radius:8px; padding:5px 11px; font-size:11px; font-weight:600; font-family:inherit; cursor:pointer; transition:background .15s, opacity .15s; }
+        .agent-dl-btn:hover { background:#1e3a8a; }
+        .agent-dl-btn.secondary { background:#fff; color:#334155; border:1px solid #e2e8f0; }
+        .agent-dl-btn.secondary:hover { background:#f1f5f9; }
+        .agent-dl-btn:disabled { opacity:0.55; cursor:default; }
+        .agent-dl-btn .material-symbols-outlined { font-size:15px; }
         .agent-cancel-btn { background:#fee2e2; border:none; color:#991b1b; padding:8px 14px; border-radius:8px; cursor:pointer; font-size:12px; font-family:inherit; }`;
         document.head.appendChild(styleEl);
     }
@@ -6912,6 +7005,17 @@ function renderAgentTurn(h, idx) {
         if (h.model && !h.v22_violations && !h.validation_retry && !h.validation_blocked && h.validated !== false) {
             // Subtil — kan tas bort om för noisy
             // footer += `<div style="font-size:10px;color:#059669;margin-top:6px">✓ Sentiment-validatorn passerade</div>`;
+        }
+
+        // Ladda ner-knappar: färdig analys → snygg PDF/PNG av agentens svar.
+        // Visas bara på avslutade, innehållsrika svar (inte småprat/streaming).
+        if (!isStreaming && text && text.trim().length > 350) {
+            footer += `<div class="agent-foot" style="border-top:none;padding-top:0;margin-top:8px">
+                <button class="agent-dl-btn" onclick="downloadAgentAnalysisPdf(${idx},'pdf')" title="Ladda ner analysen som snygg PDF">
+                    <span class="material-symbols-outlined">picture_as_pdf</span>Ladda ner PDF</button>
+                <button class="agent-dl-btn secondary" onclick="downloadAgentAnalysisPdf(${idx},'png')" title="Ladda ner som bild">
+                    <span class="material-symbols-outlined">image</span>PNG</button>
+            </div>`;
         }
 
         // Header-banner (ovanför markdown) — legacy retry-indicator för
