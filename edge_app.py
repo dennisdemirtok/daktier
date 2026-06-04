@@ -14337,7 +14337,10 @@ def api_diag_pit():
         d0 = _dt.fromisoformat(ds[:10]).date()
     except Exception:
         return jsonify({"error": "ogiltigt datum"}), 400
-    cutoff = (d0 - _td(days=lag)).isoformat()
+    ylag = int(request.args.get("ylag") or request.args.get("lag") or 90)  # årsbokslut publ.lag
+    qlag = int(request.args.get("qlag") or 60)            # kvartal publ.lag
+    acut = (d0 - _td(days=ylag)).isoformat()
+    qcut = (d0 - _td(days=qlag)).isoformat()
     fwd = (d0 + _td(days=365)).isoformat()
     fwd_max = (d0 + _td(days=400)).isoformat()
     try:
@@ -14373,10 +14376,10 @@ def api_diag_pit():
                 "cash_and_equivalents,net_debt,shares_outstanding,dividend")
         annuals = [dict(r) for r in (_fetchall(db,
             f"SELECT {cols} FROM borsdata_reports WHERE isin={ph} AND report_type='year' "
-            f"AND report_end_date <= {ph} ORDER BY report_end_date DESC LIMIT 5", (isin, cutoff)) or [])]
+            f"AND report_end_date <= {ph} ORDER BY report_end_date DESC LIMIT 6", (isin, acut)) or [])]
         quarters = [dict(r) for r in (_fetchall(db,
             f"SELECT {cols} FROM borsdata_reports WHERE isin={ph} AND report_type='quarter' "
-            f"AND report_end_date <= {ph} ORDER BY report_end_date DESC LIMIT 6", (isin, cutoff)) or [])]
+            f"AND report_end_date <= {ph} ORDER BY report_end_date DESC LIMIT 9", (isin, qcut)) or [])]
 
         def _f(x):
             try: return float(x) if x is not None else None
@@ -14385,30 +14388,63 @@ def api_diag_pit():
         a0 = annuals[0] if annuals else None
         a1 = annuals[1] if len(annuals) > 1 else None
         price = _f(p_at.get("close")) if p_at else None
+
+        # ── TTM från senast PUBLICERADE 4 kvartal (A2: fixar TTM-läckan) ──
+        ttm = None
+        if len(quarters) >= 4:
+            q4 = quarters[:4]
+            def _sum(k):
+                vs = [_f(x.get(k)) for x in q4]
+                return sum(v for v in vs if v is not None) if all(v is not None for v in vs) else None
+            ttm = {"eps": _sum("eps"), "rev": _sum("revenues"), "op": _sum("operating_income"),
+                   "np": _sum("net_profit"), "ocf": _sum("operating_cash_flow"), "fcf": _sum("free_cash_flow"),
+                   "through": "%sQ%s" % (q4[0].get("period_year"), q4[0].get("period_q"))}
+
         if a0:
             rev = _f(a0.get("revenues")); op = _f(a0.get("operating_income")); gi = _f(a0.get("gross_income"))
             npf = _f(a0.get("net_profit")); eps = _f(a0.get("eps")); fcf = _f(a0.get("free_cash_flow"))
             ocf = _f(a0.get("operating_cash_flow")); nd = _f(a0.get("net_debt")); eq = _f(a0.get("total_equity"))
             sh = _f(a0.get("shares_outstanding"))
             m["latest_annual_year"] = a0.get("period_year"); m["latest_annual_end"] = a0.get("report_end_date")
-            if not eps: m["data_saknas"].append("eps")
             m["pe_annual"] = round(price / eps, 1) if (price and eps and eps != 0) else None
-            m["op_margin_pct"] = round(op / rev * 100, 1) if op is not None and rev else None
             m["gross_margin_pct"] = round(gi / rev * 100, 1) if gi is not None and rev else None
-            m["net_margin_pct"] = round(npf / rev * 100, 1) if npf is not None and rev else None
-            m["fcf"] = fcf; m["ocf"] = ocf; m["net_profit"] = npf
-            m["fcf_to_netprofit"] = round(fcf / npf, 2) if fcf is not None and npf else None  # Wirecard-test
-            m["net_debt"] = nd
+            m["fcf"] = fcf; m["ocf"] = ocf; m["net_debt"] = nd
             m["nd_to_ebit"] = round(nd / op, 1) if nd is not None and op and op != 0 else None  # EBITDA ej lagrad → EBIT-proxy
-            m["roe_pct"] = round(npf / eq * 100, 1) if npf is not None and eq and eq != 0 else None
-            m["rev_growth_yoy_pct"] = (round((rev / _f(a1.get("revenues")) - 1) * 100, 1)
-                                       if a1 and rev and _f(a1.get("revenues")) else None)
-            m["market_cap_m"] = round(price * sh, 0) if price and sh else None  # shares i miljoner → cap i miljoner
+            m["market_cap_m"] = round(price * sh, 0) if price and sh else None  # shares i miljoner
+
+            use_ttm = bool(ttm and ttm.get("eps") not in (None, 0))
+            if use_ttm:
+                m["pe"] = round(price / ttm["eps"], 1) if price else None
+                m["pe_ttm"] = m["pe"]; m["pe_source"] = "TTM (4q t.o.m %s)" % ttm["through"]
+                m["op_margin_pct"] = (round(ttm["op"] / ttm["rev"] * 100, 1) if ttm["op"] is not None and ttm["rev"]
+                                      else (round(op / rev * 100, 1) if op is not None and rev else None))
+                m["net_margin_pct"] = round(ttm["np"] / ttm["rev"] * 100, 1) if ttm["np"] is not None and ttm["rev"] else None
+                m["net_profit"] = ttm["np"]; m["fcf_ttm"] = ttm["fcf"]
+                m["fcf_to_netprofit"] = round(ttm["fcf"] / ttm["np"], 2) if ttm.get("fcf") is not None and ttm.get("np") else None
+                m["roe_pct"] = round(ttm["np"] / eq * 100, 1) if ttm["np"] is not None and eq and eq != 0 else None
+                if len(quarters) >= 8:
+                    pv = [_f(x.get("revenues")) for x in quarters[4:8]]
+                    prsum = sum(v for v in pv if v is not None) if all(v is not None for v in pv) else None
+                    m["rev_growth_yoy_pct"] = round((ttm["rev"] / prsum - 1) * 100, 1) if prsum and ttm["rev"] else None
+                else:
+                    m["rev_growth_yoy_pct"] = (round((rev / _f(a1.get("revenues")) - 1) * 100, 1)
+                                               if a1 and rev and _f(a1.get("revenues")) else None)
+            else:
+                if not eps: m["data_saknas"].append("eps")
+                m["pe"] = m["pe_annual"]; m["pe_source"] = "FY%s årsbokslut (<4 kvartal)" % a0.get("period_year")
+                m["op_margin_pct"] = round(op / rev * 100, 1) if op is not None and rev else None
+                m["net_margin_pct"] = round(npf / rev * 100, 1) if npf is not None and rev else None
+                m["net_profit"] = npf
+                m["fcf_to_netprofit"] = round(fcf / npf, 2) if fcf is not None and npf else None  # Wirecard-test
+                m["roe_pct"] = round(npf / eq * 100, 1) if npf is not None and eq and eq != 0 else None
+                m["rev_growth_yoy_pct"] = (round((rev / _f(a1.get("revenues")) - 1) * 100, 1)
+                                           if a1 and rev and _f(a1.get("revenues")) else None)
         else:
             m["data_saknas"].append("inga årsrapporter före datum")
         return jsonify({
             "ticker": tk, "resolved": s, "isin": isin, "assessment_date": d0.isoformat(),
-            "publication_lag_days": lag, "report_cutoff": cutoff,
+            "annual_lag_days": ylag, "quarter_lag_days": qlag,
+            "ttm_through": (ttm["through"] if ttm else None), "n_quarters_known": len(quarters),
             "price_at": p_at, "price_fwd_12m": p_fwd, "fwd_return_12m_pct": fwd_ret, "fwd_valid": fwd_ok,
             "metrics": m, "annuals": annuals, "quarters": quarters,
         })
@@ -14417,6 +14453,142 @@ def api_diag_pit():
         try: db.rollback()
         except Exception: pass
         return jsonify({"error": str(e), "tb": traceback.format_exc()[:700]}), 500
+
+
+@app.route("/api/diag/backfill-quarters", methods=["POST", "GET"])
+def api_diag_backfill_quarters():
+    """FAS A2: backfill djup kvartals- + årshistorik från Börsdata för givna
+    tickers så PIT-TTM kan beräknas korrekt. ?tickers=Boliden,MAERSK B&maxq=44"""
+    from edge_db import _ph as _phf, _fetchone, _upsert_sql
+    from borsdata_fetcher import fetch_reports, fetch_global_reports, extract_v21_metrics
+    from datetime import datetime as _dt
+    db = get_db(); ph = _phf()
+    tickers = [t.strip() for t in (request.args.get("tickers") or "").split(",") if t.strip()]
+    maxq = int(request.args.get("maxq") or 44)
+    if not tickers:
+        return jsonify({"error": "ange ?tickers=A,B,C"}), 400
+    rcols = ["isin", "ins_id", "report_type", "period_year", "period_q", "report_end_date", "currency",
+             "revenues", "gross_income", "operating_income", "profit_before_tax", "net_profit", "eps",
+             "operating_cash_flow", "investing_cash_flow", "financing_cash_flow", "free_cash_flow", "cash_flow_year",
+             "total_assets", "current_assets", "non_current_assets", "tangible_assets", "intangible_assets",
+             "financial_assets", "total_equity", "total_liabilities", "current_liabilities", "non_current_liabilities",
+             "cash_and_equivalents", "net_debt", "shares_outstanding", "dividend", "stock_price_avg",
+             "stock_price_high", "stock_price_low", "broken_fiscal_year", "fetched_at"]
+    rsql = _upsert_sql("borsdata_reports", rcols, ["isin", "report_type", "period_year", "period_q"])
+    now_iso = _dt.utcnow().isoformat()
+    out = {}
+    for tk in tickers:
+        try:
+            srow = _fetchone(db, f"SELECT isin FROM stocks WHERE UPPER(ticker)=UPPER({ph}) OR UPPER(short_name)=UPPER({ph}) "
+                                 f"OR name LIKE {ph} ORDER BY number_of_owners DESC LIMIT 1", (tk, tk, f"%{tk}%"))
+            if not srow or not dict(srow).get("isin"):
+                out[tk] = {"error": "ingen isin"}; continue
+            isin = dict(srow)["isin"]
+            mrow = _fetchone(db, f"SELECT ins_id, is_global FROM borsdata_instrument_map WHERE isin={ph} LIMIT 1", (isin,))
+            if not mrow:
+                out[tk] = {"error": "ingen ins_id-mappning"}; continue
+            md = dict(mrow); ins_id = md["ins_id"]; is_global = bool(md.get("is_global"))
+            n = 0
+            for rt, mc in (("quarter", maxq), ("year", 20)):
+                reports = (fetch_global_reports(ins_id, rt, max_count=mc) if is_global
+                           else fetch_reports(ins_id, rt, max_count=mc)) or []
+                for r in reports:
+                    mm = extract_v21_metrics(r)
+                    py = r.get("year"); pq = r.get("period") if rt == "quarter" else 0
+                    if rt == "quarter" and pq in (None, 0, 5):
+                        continue
+                    try:
+                        db.execute(rsql, (isin, ins_id, rt, py, pq, mm.get("report_end_date"), mm.get("currency"),
+                            mm.get("revenues"), mm.get("gross_income"), mm.get("operating_income"), mm.get("profit_before_tax"),
+                            mm.get("net_profit"), mm.get("earnings_per_share"), mm.get("operating_cash_flow"),
+                            mm.get("investing_cash_flow"), mm.get("financing_cash_flow"), mm.get("free_cash_flow"),
+                            mm.get("cash_flow_year"), mm.get("total_assets"), mm.get("current_assets"),
+                            mm.get("non_current_assets"), mm.get("tangible_assets"), mm.get("intangible_assets"),
+                            mm.get("financial_assets"), mm.get("total_equity"), mm.get("total_liabilities"),
+                            mm.get("current_liabilities"), mm.get("non_current_liabilities"), mm.get("cash_and_equivalents"),
+                            mm.get("net_debt"), mm.get("shares_outstanding"), mm.get("dividend"), mm.get("stock_price_avg"),
+                            mm.get("stock_price_high"), mm.get("stock_price_low"), mm.get("broken_fiscal_year"), now_iso))
+                        n += 1
+                    except Exception:
+                        try: db.rollback()
+                        except Exception: pass
+            db.commit()
+            out[tk] = {"isin": isin, "ins_id": ins_id, "synced": n}
+        except Exception as e:
+            try: db.rollback()
+            except Exception: pass
+            out[tk] = {"error": str(e)[:90]}
+    return jsonify(out)
+
+
+@app.route("/api/diag/db-sweep")
+def api_diag_db_sweep():
+    """FAS A1: systematisk sanity-sweep över Börsdata-DB:n. Hittar SSAB-klassens
+    korruption + teckenfel. ?min_owners=500 (begränsa till relevanta namn)."""
+    from edge_db import _fetchall
+    db = get_db()
+    mo = int(request.args.get("min_owners") or 500)
+    res = {"min_owners": mo, "checks": {}}
+    if not _is_postgres():
+        return jsonify({"error": "kör endast mot Postgres (prod)"}), 400
+    try:
+        # antal testbara
+        n_tot = _fetchall(db, "SELECT COUNT(DISTINCT s.isin) AS n FROM stocks s "
+                              "JOIN borsdata_reports r ON s.isin=r.isin WHERE s.number_of_owners >= %s "
+                              "AND s.last_price > 0", (mo,))
+        res["n_tested"] = dict(n_tot[0])["n"] if n_tot else 0
+
+        # CHECK 1: Börsdata-pris vs Avanza-pris divergens >50% (fångar SSAB)
+        c1 = _fetchall(db, """
+            WITH lb AS (SELECT DISTINCT ON (isin) isin, close FROM borsdata_prices ORDER BY isin, date DESC)
+            SELECT s.short_name, s.name, s.isin, ROUND(s.last_price::numeric,2) AS avanza, ROUND(lb.close::numeric,2) AS borsdata,
+                   ROUND((ABS(lb.close - s.last_price)/NULLIF(s.last_price,0)*100)::numeric,0) AS divg_pct
+            FROM stocks s JOIN lb ON s.isin=lb.isin
+            WHERE s.number_of_owners >= %s AND s.last_price > 0 AND lb.close > 0
+              AND ABS(lb.close - s.last_price)/NULLIF(s.last_price,0) > 0.5
+            ORDER BY divg_pct DESC LIMIT 60""", (mo,))
+        res["checks"]["price_divergence_gt50pct"] = [dict(r) for r in (c1 or [])]
+
+        # CHECK 2: teckenfel i senaste årsbokslut (rev<0, eq<0, eps/net-tecken-mismatch)
+        c2 = _fetchall(db, """
+            WITH la AS (SELECT DISTINCT ON (isin) isin, period_year, revenues, total_equity, eps, net_profit
+                        FROM borsdata_reports WHERE report_type='year' ORDER BY isin, period_year DESC)
+            SELECT s.short_name, s.isin, la.period_year,
+                   ROUND(la.revenues::numeric,0) AS rev, ROUND(la.total_equity::numeric,0) AS equity,
+                   ROUND(la.eps::numeric,2) AS eps, ROUND(la.net_profit::numeric,0) AS net_profit,
+                   CASE WHEN la.revenues < 0 THEN 'rev<0 ' ELSE '' END ||
+                   CASE WHEN la.total_equity < 0 THEN 'equity<0 ' ELSE '' END ||
+                   CASE WHEN la.eps*la.net_profit < 0 THEN 'eps/net-teckenmismatch' ELSE '' END AS issue
+            FROM stocks s JOIN la ON s.isin=la.isin
+            WHERE s.number_of_owners >= %s AND (
+                  la.revenues < 0 OR la.total_equity < 0 OR
+                  (la.eps IS NOT NULL AND la.net_profit IS NOT NULL AND la.eps <> 0 AND la.net_profit <> 0 AND la.eps*la.net_profit < 0))
+            ORDER BY s.short_name LIMIT 80""", (mo,))
+        res["checks"]["sign_errors"] = [dict(r) for r in (c2 or [])]
+
+        # CHECK 3: extrema pris-gap dag-till-dag >70% (möjlig split-/datafel utan flagga)
+        c3 = _fetchall(db, """
+            WITH g AS (
+              SELECT isin, date, close, LAG(close) OVER (PARTITION BY isin ORDER BY date) AS prev
+              FROM borsdata_prices)
+            SELECT s.short_name, g.isin, g.date, ROUND(g.prev::numeric,2) AS prev, ROUND(g.close::numeric,2) AS close,
+                   ROUND((ABS(g.close-g.prev)/NULLIF(g.prev,0)*100)::numeric,0) AS gap_pct
+            FROM g JOIN stocks s ON s.isin=g.isin
+            WHERE s.number_of_owners >= %s AND g.prev > 0 AND ABS(g.close-g.prev)/NULLIF(g.prev,0) > 0.70
+            ORDER BY gap_pct DESC LIMIT 40""", (mo,))
+        res["checks"]["price_gaps_gt70pct"] = [dict(r) for r in (c3 or [])]
+
+        res["summary"] = {
+            "price_divergence_flagged": len(res["checks"]["price_divergence_gt50pct"]),
+            "sign_errors_flagged": len(res["checks"]["sign_errors"]),
+            "price_gaps_flagged": len(res["checks"]["price_gaps_gt70pct"]),
+        }
+        return jsonify(res)
+    except Exception as e:
+        import traceback
+        try: db.rollback()
+        except Exception: pass
+        return jsonify({"error": str(e), "tb": traceback.format_exc()[:800]}), 500
 
 
 @app.route("/api/dashboard/kpi-row")

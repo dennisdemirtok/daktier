@@ -105,7 +105,7 @@ def fetch_all_instruments_combined():
     return nordic + global_inst
 
 
-def fetch_global_reports(insId, report_type="quarter"):
+def fetch_global_reports(insId, report_type="quarter", max_count=None):
     """Reports för globala instrument.
 
     OBS: Tidigare använde vi /global/-prefix men det är fel format.
@@ -117,7 +117,8 @@ def fetch_global_reports(insId, report_type="quarter"):
         raise ValueError(f"Invalid report_type: {report_type}")
     # Samma path som fetch_reports — ingen /global/-prefix behövs
     url = f"{BORSDATA_BASE}/instruments/{insId}/reports/{report_type}"
-    data = _rate_limited_get(url)
+    params = {"maxCount": max_count} if max_count else None
+    data = _rate_limited_get(url, params=params)
     return data.get("reports", [])
 
 
@@ -131,7 +132,7 @@ def build_isin_to_insid_map():
 # Reports — fullständig kvartals/års-finansial data
 # ──────────────────────────────────────────────────────────────
 
-def fetch_reports(insId, report_type="quarter"):
+def fetch_reports(insId, report_type="quarter", max_count=None):
     """Hämtar alla reports (quarter, year, eller r12 = TTM) för en instrument.
 
     Returnerar lista med dicts som innehåller:
@@ -147,7 +148,8 @@ def fetch_reports(insId, report_type="quarter"):
     if report_type not in ("quarter", "year", "r12"):
         raise ValueError(f"Invalid report_type: {report_type}")
     url = f"{BORSDATA_BASE}/instruments/{insId}/reports/{report_type}"
-    data = _rate_limited_get(url)
+    params = {"maxCount": max_count} if max_count else None
+    data = _rate_limited_get(url, params=params)
     return data.get("reports", [])
 
 
