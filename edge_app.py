@@ -12267,10 +12267,15 @@ def _forward_log_run(db, reason="manual", run_date=None):
     rd = run_date or _dt.utcnow().date().isoformat()
     ts = _dt.utcnow().isoformat()
     # Fånga benchmark-indexserien (OMXS30GI) så M3-baslinjen finns vid utvärdering.
+    bench_status = None
     try:
-        _forward_ensure_data(db, BENCHMARK["ins_id"], BENCHMARK["isin"])
+        bc, bd_ = _forward_ensure_data(db, BENCHMARK["ins_id"], BENCHMARK["isin"])
+        bn = _fetchone(db, f"SELECT COUNT(*) as n FROM borsdata_prices WHERE isin={ph}", (BENCHMARK["isin"],))
+        bench_status = {"last_close": bc, "last_date": bd_,
+                        "rows_in_db": (dict(bn).get("n") if bn else None)}
     except Exception as _be:
         print(f"[forward] benchmark-fetch fel: {_be}", file=sys.stderr)
+        bench_status = {"error": str(_be)[:120]}
     cols = ["run_date", "run_timestamp", "universe_version", "rule_commit", "query", "short_name",
             "ins_id", "isin", "category", "value_signal", "value_rule", "value_profile",
             "quality_signal", "quality_rule", "quality_profile", "swing_signal", "swing_rule",
@@ -12279,7 +12284,8 @@ def _forward_log_run(db, reason="manual", run_date=None):
             "shadow_momentum_downweight", "shadow_quality_pe_cap", "note"]
     isql = f"INSERT INTO forward_log ({','.join(cols)}) VALUES ({_phf(len(cols))})"
     summary = {"run_date": rd, "reason": reason, "version": FORWARD_UNIVERSE_VERSION,
-               "commit": FORWARD_RULE_COMMIT, "inserted": 0, "skipped": 0, "errors": [], "rows": []}
+               "commit": FORWARD_RULE_COMMIT, "inserted": 0, "skipped": 0, "errors": [],
+               "benchmark": bench_status, "rows": []}
     for (query, ticker, ins_id, isin, cat) in FORWARD_UNIVERSE:
         try:
             # idempotens: en rad per bolag och körning-datum
@@ -14702,6 +14708,12 @@ def api_track_record_update():
 def track_record_page():
     """P1-6: track record-sida (träffsäkerhet för försäljning)."""
     return render_template("track_record.html")
+
+
+@app.route("/forward-log")
+def forward_log_page():
+    """Step b: pre-registrerad forward-logg (fryst v3.3, M3 efter 12 mån)."""
+    return render_template("forward_log.html")
 
 
 @app.route("/api/price-cache/status")

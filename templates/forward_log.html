@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DAKTIER · Forward-logg — pre-registrerad regelvalidering</title>
+<style>
+  * { box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Inter", sans-serif;
+         max-width: 1240px; margin: 0 auto; padding: 24px;
+         background: #fafafa; color: #1f2937; line-height: 1.5; }
+  a.top-link { display: inline-block; margin-bottom: 14px; color: #4f46e5;
+               text-decoration: none; font-weight: 600; font-size: 13px; }
+  h1 { font-size: 26px; margin: 0 0 4px; letter-spacing: -0.4px; }
+  .lede { color: #6b7280; margin-bottom: 18px; font-size: 13.5px; max-width: 760px; }
+  .meta-line { font-size: 12px; color: #475569; margin-bottom: 18px; }
+  .meta-line code { background: #eef2ff; color: #3730a3; padding: 1px 6px; border-radius: 5px;
+                    font-size: 11.5px; font-weight: 600; }
+  .toolbar { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-bottom: 18px; }
+  select { font-family: inherit; font-size: 13px; border: 1px solid #e2e8f0;
+           border-radius: 9px; padding: 8px 12px; background: #fff; color: #1f2937; cursor: pointer; }
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+           gap: 12px; margin-bottom: 22px; }
+  .card { background: #fff; border: 1px solid #e7eaf0; border-radius: 14px; padding: 16px 18px;
+          box-shadow: 0 1px 3px rgba(15,23,42,0.04); }
+  .card .hdr { font-size: 10.5px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px;
+               color: #94a3b8; margin-bottom: 8px; }
+  .card .big { font-size: 30px; font-weight: 800; line-height: 1; letter-spacing: -1px; }
+  .card .sub { font-size: 11.5px; color: #64748b; margin-top: 6px; }
+  .card.hl { background: linear-gradient(135deg,#0f172a,#1e3a8a); color: #fff; border: none; }
+  .card.hl .hdr { color: rgba(255,255,255,0.7); }
+  .card.hl .sub { color: rgba(255,255,255,0.78); }
+  h2 { font-size: 14px; margin: 24px 0 10px; color: #0f172a; text-transform: uppercase;
+       letter-spacing: 0.4px; font-weight: 800; }
+  h2 .cnt { color: #94a3b8; font-weight: 600; }
+  table { width: 100%; border-collapse: collapse; background: #fff;
+          border-radius: 12px; overflow: hidden; box-shadow: 0 1px 3px rgba(15,23,42,0.05);
+          font-size: 12.5px; margin-bottom: 4px; }
+  th { background: #f8fafc; color: #475569; font-weight: 700; padding: 9px 11px;
+       text-align: left; font-size: 10px; text-transform: uppercase; letter-spacing: 0.3px;
+       border-bottom: 1px solid #eef2f7; white-space: nowrap; }
+  td { padding: 8px 11px; border-bottom: 1px solid #f1f5f9; }
+  tr:last-child td { border-bottom: none; }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  .sig { display: inline-block; padding: 2px 8px; border-radius: 6px; font-size: 11px; font-weight: 700;
+         font-variant-numeric: tabular-nums; }
+  .sig.buy { background: rgba(5,150,105,0.13); color: #047857; }
+  .sig.sell { background: rgba(220,38,38,0.12); color: #b91c1c; }
+  .sig.hold { background: rgba(100,116,139,0.12); color: #475569; }
+  .sig.na { background: rgba(148,163,184,0.13); color: #94a3b8; }
+  .prof { font-size: 9.5px; color: #94a3b8; display: block; margin-top: 2px; font-weight: 600; }
+  .shadow { color: #7c3aed; font-size: 11px; }
+  .shadow.same { color: #cbd5e1; }
+  .verdict { font-weight: 800; font-size: 11px; }
+  .verdict.ratt { color: #047857; } .verdict.fel { color: #b91c1c; } .verdict.na { color: #cbd5e1; }
+  .muted { color: #94a3b8; }
+  .name { font-weight: 700; }
+  .name small { display:block; color:#94a3b8; font-weight:500; font-size:10.5px; }
+  .empty { background: #fff; border: 1px dashed #cbd5e1; border-radius: 14px; padding: 38px 24px;
+           text-align: center; color: #64748b; }
+  .disclaimer { margin-top: 26px; font-size: 11px; color: #94a3b8; line-height: 1.6;
+                border-top: 1px solid #eef2f7; padding-top: 14px; }
+  .pos { color: #047857; } .neg { color: #b91c1c; }
+  @media (max-width: 720px) { body { padding: 16px; } .hide-sm { display: none; } }
+</style>
+</head>
+<body>
+  <a class="top-link" href="/#/agent">← Tillbaka till DAKTIER</a>
+  <h1>Forward-logg</h1>
+  <p class="lede">Ett <strong>pre-registrerat</strong> framåtblickande test av den frysta regeluppsättningen
+     v3.3. Samma fasta bolagslista körs första handelsdagen varje månad med exakt samma mekaniska
+     regler. Inga signaler ändras i efterhand — utfallet mäts mot OMXS30GI först efter 12 månader.
+     Detta är skillnaden mot efterhandsrationalisering: vi binder oss vid prognosen <em>innan</em>
+     vi vet svaret.</p>
+  <div class="meta-line" id="metaLine"></div>
+
+  <div class="toolbar">
+    <select id="runSel"><option value="">Senaste körningen</option></select>
+    <select id="catSel">
+      <option value="">Alla kategorier</option>
+      <option value="cyclical">Cykliska</option>
+      <option value="compounder">Compounders</option>
+      <option value="investmentco">Investmentbolag</option>
+      <option value="turnaround">Turnaround</option>
+    </select>
+  </div>
+
+  <div id="content"><div class="empty">Laddar…</div></div>
+
+  <p class="disclaimer">
+    <strong>Metod.</strong> Universum fryst 2026-06-04 (25 bolag, pinnade till kanoniska Börsdata-ID).
+    Regeluppsättning fryst på commit <code id="cm">5b37fd6</code>. Varje rad loggar lins-signal,
+    regelhänvisning, rådata-snapshot och commit-hash. <strong>Skuggor</strong> (lila) är v3.4-kandidater
+    som körs parallellt utan att påverka primärsignalen. <strong>M3-utvärdering</strong> sker tidigast
+    12 månader efter varje rad: rel = aktiens totalavkastning − OMXS30GI. N/A och VÄNTA räknas aldrig
+    som RÄTT (utanför utvärderingen). Historiskt utfall är ingen garanti. DAKTIER ger beslutsstöd,
+    inte personlig finansiell rådgivning.
+  </p>
+
+<script>
+const $ = s => document.querySelector(s);
+const CATS = {cyclical:'Cykliska', compounder:'Compounders', investmentco:'Investmentbolag',
+              turnaround:'Turnaround', growth:'Tillväxt'};
+let RAW = null;
+
+function sigClass(s) {
+  if (!s) return 'na';
+  const u = s.toUpperCase();
+  if (u.startsWith('KÖP') || u.startsWith('STARK')) return 'buy';
+  if (u.startsWith('UNDVIK') || u.startsWith('TA PROFIT') || u.startsWith('SÄLJ')) return 'sell';
+  if (u.startsWith('HÅLL')) return 'hold';
+  return 'na';
+}
+function profShort(p) {
+  if (!p) return '';
+  if (p.indexOf('uppside') >= 0) return 'uppsida';
+  if (p.indexOf('risk') >= 0) return 'risk↓';
+  return '';
+}
+function sigCell(sig, rule, prof) {
+  const pr = profShort(prof);
+  return `<span class="sig ${sigClass(sig)}" title="${(rule||'').replace(/"/g,'&quot;')}">${sig||'–'}</span>`
+       + (pr ? `<span class="prof">${pr}</span>` : '');
+}
+function shadowCell(shadow, primary) {
+  if (!shadow) return '<span class="muted">–</span>';
+  const same = shadow === primary;
+  return `<span class="shadow ${same ? 'same' : ''}">${same ? '=' : shadow}</span>`;
+}
+function fmtNum(v, d=1) { return v == null ? '<span class="muted">–</span>' : Number(v).toFixed(d); }
+function fmtPct(v) { return v == null ? '<span class="muted">–</span>'
+  : `<span class="${v>=0?'pos':'neg'}">${v>=0?'+':''}${Number(v).toFixed(1)}%</span>`; }
+function verdictCell(v) {
+  if (!v) return '<span class="muted">–</span>';
+  const cls = v === 'RÄTT' ? 'ratt' : v === 'FEL' ? 'fel' : 'na';
+  return `<span class="verdict ${cls}">${v}</span>`;
+}
+
+function render() {
+  const d = RAW;
+  const rows = d.rows || [];
+  if (!rows.length) { $('#content').innerHTML = `<div class="empty"><strong>Inga rader än</strong>
+     Forward-loggen körs första handelsdagen varje månad.</div>`; return; }
+  const catFilter = $('#catSel').value;
+  const directional = s => { const c = sigClass(s); return c === 'buy' || c === 'sell'; };
+  const nDir = rows.filter(r => directional(r.value_signal) || directional(r.quality_signal)).length;
+  const nAbs = rows.filter(r => !directional(r.value_signal) && !directional(r.quality_signal)).length;
+  const nEval = d.evaluated || 0;
+
+  let html = `<div class="cards">
+    <div class="card hl"><div class="hdr">Bolag i universum</div><div class="big">${rows.length}</div>
+      <div class="sub">pre-registrerade · pinnade ID</div></div>
+    <div class="card"><div class="hdr">Riktade signaler</div><div class="big">${nDir}</div>
+      <div class="sub">KÖP / UNDVIK / TA PROFIT</div></div>
+    <div class="card"><div class="hdr">Avstår</div><div class="big">${nAbs}</div>
+      <div class="sub">N/A · VÄNTA (riskreducerande)</div></div>
+    <div class="card"><div class="hdr">M3-utvärderade</div><div class="big">${nEval}</div>
+      <div class="sub">≥12 mån · mot OMXS30GI</div></div>
+  </div>`;
+
+  const cats = [...new Set(rows.map(r => r.category))]
+    .filter(c => !catFilter || c === catFilter);
+  for (const cat of cats) {
+    const cr = rows.filter(r => r.category === cat);
+    if (!cr.length) continue;
+    html += `<h2>${CATS[cat] || cat} <span class="cnt">· ${cr.length}</span></h2>`;
+    html += `<table><thead><tr>
+      <th>Bolag</th><th>Value</th><th>Quality</th><th>Swing</th>
+      <th class="num">P/E</th><th class="num hide-sm">Pris</th><th class="num hide-sm">12m mom</th>
+      <th class="hide-sm">Skugga mom</th><th class="hide-sm">Skugga P/E</th>
+      <th class="num">rel 12m</th><th>M3</th></tr></thead><tbody>`;
+    for (const r of cr) {
+      const v = r.m3_verdicts || {};
+      // primär = Value om riktad annars Quality (för skugg-jämförelse)
+      const primaryMom = (sigClass(r.value_signal)==='buy'||sigClass(r.value_signal)==='sell')
+                         ? r.value_signal : r.quality_signal;
+      html += `<tr>
+        <td class="name">${r.query}<small>${r.isin || ''}</small></td>
+        <td>${sigCell(r.value_signal, r.value_rule, r.value_profile)}</td>
+        <td>${sigCell(r.quality_signal, r.quality_rule, r.quality_profile)}</td>
+        <td>${sigCell(r.swing_signal, r.swing_rule, r.swing_profile)}</td>
+        <td class="num">${fmtNum(r.ttm_pe)}</td>
+        <td class="num hide-sm">${fmtNum(r.price, 2)}</td>
+        <td class="num hide-sm">${fmtPct(r.prior_mom_pct)}</td>
+        <td class="hide-sm">${shadowCell(r.shadow_momentum_downweight, primaryMom)}</td>
+        <td class="hide-sm">${shadowCell(r.shadow_quality_pe_cap, r.quality_signal)}</td>
+        <td class="num">${fmtPct(r.rel_12m_pct)}</td>
+        <td>${verdictCell(v.value === 'RÄTT' || v.quality === 'RÄTT' ? 'RÄTT'
+              : (v.value === 'FEL' || v.quality === 'FEL' ? 'FEL'
+              : (r.evaluated_at ? '–' : null)))}</td>
+      </tr>`;
+    }
+    html += `</tbody></table>`;
+  }
+  $('#content').innerHTML = html;
+}
+
+async function load(runDate) {
+  $('#content').innerHTML = '<div class="empty">Laddar…</div>';
+  try {
+    const p = new URLSearchParams();
+    if (runDate) p.set('run_date', runDate);
+    const r = await fetch('/api/forward-log?' + p.toString());
+    RAW = await r.json();
+    if (RAW.error) { $('#content').innerHTML = `<div class="empty"><strong>Fel</strong>${RAW.error}</div>`; return; }
+    $('#metaLine').innerHTML = `Körningsdatum <code>${RAW.run_date || '–'}</code> · `
+      + `regelversion <code>${RAW.rule_commit || '–'}</code> · `
+      + `universum <code>${RAW.universe_version || '–'}</code>`;
+    $('#cm').textContent = RAW.rule_commit || '5b37fd6';
+    // fyll run-selector
+    const sel = $('#runSel');
+    if (sel.options.length <= 1 && RAW.all_runs) {
+      for (const run of RAW.all_runs) {
+        const o = document.createElement('option');
+        o.value = run.run_date; o.textContent = `${run.run_date} (${run.n})`;
+        sel.appendChild(o);
+      }
+    }
+    render();
+  } catch (e) {
+    $('#content').innerHTML = `<div class="empty"><strong>Kunde inte ladda</strong>${e}</div>`;
+  }
+}
+
+$('#runSel').addEventListener('change', () => load($('#runSel').value));
+$('#catSel').addEventListener('change', () => render());
+load('');
+</script>
+</body>
+</html>
