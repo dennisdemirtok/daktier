@@ -10796,14 +10796,15 @@ bredvid.
 **Steg 6b — DATAVALIDERING (P0, inga interna motsägelser)**
 
 Innan output — kör dessa sanity-checks och låt ALDRIG fritext motsäga siffror:
-- **PRIS-AUKTORITET (KRITISKT)**: BÖRSDATA är den auktoritativa källan för alla
-  färska siffror (pris, rapportdata, nyckeltal) — den är betald och komplett.
-  Priset i `price_verification`/"AKTUELLT PRIS enligt BÖRSDATA" ÄR definitionen av
-  nuvarande pris. Om web search visar ett ANNAT pris: anta INTE att det högre
-  talet är "aktuellt" och det lägre "gammalt" — lita på Börsdata-priset. På
-  rapportdag rör sig aktier kraftigt; invertera ALDRIG tidslinjen. Skriv ut
-  vilket pris du behandlar som aktuellt. En handlingsplan byggd på fel pris ("ta
-  profit vid X" när X inte är aktuellt pris) är det dyraste felet som finns.
+- **PRIS-AUKTORITET (KRITISKT)**: Priset i `price_verification` / "AKTUELLT PRIS"-
+  raden ÄR definitionen av nuvarande pris (källa: Avanza intradag, annars Börsdata
+  EOD). Rapportdata, market cap och nyckeltal kommer från Börsdata (betald,
+  komplett). Om web search visar ett ANNAT pris: anta INTE att det högre talet är
+  "aktuellt" och det lägre "gammalt" — lita på det verifierade priset och dess
+  tidsstämpel. På rapportdag rör sig aktier kraftigt; invertera ALDRIG tidslinjen.
+  Om priset är EOD (Börsdata) och kan släpa en dag, nämn det. Skriv ut vilket pris
+  du behandlar som aktuellt. En handlingsplan byggd på fel pris ("ta profit vid X"
+  när X inte är aktuellt pris) är det dyraste felet som finns.
 - **52-veckors range**: nuvarande pris MÅSTE ligga inom [lowest_price,
   highest_price]. Ligger priset utanför sitt eget intervall ⇒ antingen är
   priset eller intervallet stale: skriv "⚠️ pris utanför 52v-range, data stale"
@@ -11682,6 +11683,65 @@ def _agent_mcap_native_safe(d):
 
 _BD_PRICE_CACHE = {}       # ins_id -> (price, date_iso, fetched_epoch)
 _BD_PRICE_TTL = 600        # 10 min
+_AZA_PRICE_CACHE = {}      # orderbook_id -> ((price, ts, chg), fetched_epoch)
+_AZA_PRICE_TTL = 120       # 2 min (intradag — håll det färskt)
+
+
+def _fetch_avanza_live_price(orderbook_id):
+    """#1: FÄRSKT intradagspris från Avanza (mäklarens quote-endpoint).
+    Returnerar (price:float, ts_human:str|None, change_pct:float|None) eller None.
+    TTL-cachat 2 min, fail-safe."""
+    if not orderbook_id:
+        return None
+    import time as _t
+    now = _t.time()
+    c = _AZA_PRICE_CACHE.get(str(orderbook_id))
+    if c and (now - c[1]) < _AZA_PRICE_TTL:
+        return c[0]
+    try:
+        import requests
+        r = requests.get(f"https://www.avanza.se/_api/market-guide/stock/{orderbook_id}",
+                         headers={"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)",
+                                  "Accept": "application/json"}, timeout=8)
+        if r.status_code != 200:
+            return None
+        q = (r.json() or {}).get("quote") or {}
+        price = q.get("last")
+        if not price or price <= 0:
+            return None
+        ts = None
+        tof = q.get("timeOfLast") or q.get("updated")
+        if tof:
+            try:
+                ts = datetime.utcfromtimestamp(tof / 1000).strftime("%Y-%m-%d %H:%M UTC")
+            except Exception:
+                ts = None
+        res = (float(price), ts, q.get("changePercent"))
+        _AZA_PRICE_CACHE[str(orderbook_id)] = (res, now)
+        return res
+    except Exception as e:
+        print(f"[price-verify] Avanza live-pris fel oid={orderbook_id}: {e}", file=sys.stderr)
+        return None
+
+
+def _borsdata_latest_shares(db, isin):
+    """#3: senaste antal utestående aktier från Börsdata (för market cap = pris×aktier)."""
+    if not isin:
+        return None
+    try:
+        from edge_db import _ph as _phf, _fetchone
+        ph = _phf()
+        row = _fetchone(db,
+            f"SELECT shares_outstanding FROM borsdata_reports "
+            f"WHERE isin = {ph} AND shares_outstanding IS NOT NULL AND shares_outstanding > 0 "
+            f"ORDER BY period_year DESC, COALESCE(period_q, 0) DESC LIMIT 1", (isin,))
+        if row:
+            sh = dict(row).get("shares_outstanding")
+            return float(sh) if sh else None
+    except Exception:
+        try: db.rollback()
+        except Exception: pass
+    return None
 
 
 def _resolve_borsdata_insid(db, stock_data):
@@ -11744,42 +11804,89 @@ def _fetch_borsdata_price(db, stock_data):
         return None
 
 
+def _apply_borsdata_market_cap(db, stock_data, price):
+    """#3: market cap = aktuellt pris × senaste Börsdata-aktieantal (färsk källa
+    du betalar för). Muterar stock_data['market_cap'] + flaggar källa."""
+    try:
+        isin = stock_data.get("isin")
+        shares = _borsdata_latest_shares(db, isin)
+        if shares and price and price > 0:
+            mc = round(price * shares)
+            stock_data["market_cap"] = mc
+            stock_data["market_cap_native"] = mc
+            stock_data["market_cap_currency"] = stock_data.get("currency") or "SEK"
+            stock_data["market_cap_source"] = "Börsdata (pris×aktier)"
+            stock_data["shares_outstanding"] = shares
+    except Exception:
+        pass
+
+
 def _validate_price_freshness(db, stock_data, threshold_pct=5.0):
-    """P0-3 (KRITISK): hämta senaste pris från BÖRSDATA (auktoritativ källa) och
-    använd det som AKTUELLT pris. DB-priset (Avanza-feed) kan vara stale — t.ex.
-    på rapportdag. Detta fångar AVGO-typfelet (stale pris behandlat som aktuellt).
-    All färsk data ska komma från Börsdata. Muterar in-place; får aldrig krascha."""
+    """#1 (KRITISK): färskt AKTUELLT pris med källprioritet:
+       1) Avanza intradag (mäklaren) — färskast, fångar samma-dag-rörelser
+       2) Börsdata EOD — fallback om Avanza fallerar
+       3) stale DB-pris — sista utväg (markeras unverified)
+    Marknadsdata du betalar för, ingen yfinance. Sätter även market cap från
+    Börsdata (pris×aktier). Muterar in-place; får aldrig krascha analysen."""
     try:
         db_price = stock_data.get("last_price")
+
+        # ── 1) Avanza intradag (färskast) ──
+        oid = stock_data.get("orderbook_id")
+        aza = _fetch_avanza_live_price(oid)
+        if aza:
+            live_price, ts, chg = aza
+            diff_pct = ((live_price / db_price - 1) * 100) if db_price else None
+            stock_data["last_price"] = round(live_price, 4)
+            if chg is not None:
+                stock_data["one_day_change_pct"] = chg
+            ver = {"source": "Avanza (intradag)", "live_price": round(live_price, 4),
+                   "live_time": ts, "db_price": round(db_price, 4) if db_price else None,
+                   "diff_pct": round(diff_pct, 2) if diff_pct is not None else None}
+            if diff_pct is not None and abs(diff_pct) > threshold_pct:
+                stock_data["last_price_db_stale"] = round(db_price, 4)
+                ver["status"] = "overridden"
+                ver["note"] = (f"Bulk-DB-priset ({db_price:.2f}) var stale. AKTUELLT pris från "
+                               f"Avanza intradag = {live_price:.2f}" + (f" ({ts})" if ts else "")
+                               + f" (avvikelse {diff_pct:+.1f}%). Använd detta.")
+                print(f"[price-verify] {stock_data.get('short_name')}: Avanza OVERRIDE {db_price}->{live_price} ({diff_pct:+.1f}%)", file=sys.stderr)
+            else:
+                ver["status"] = "verified"
+                ver["note"] = (f"Aktuellt pris från Avanza intradag: {live_price:.2f}"
+                               + (f" ({ts})" if ts else "") + ".")
+            stock_data["price_verification"] = ver
+            _apply_borsdata_market_cap(db, stock_data, stock_data["last_price"])
+            return
+
+        # ── 2) Börsdata EOD (fallback) ──
         bd = _fetch_borsdata_price(db, stock_data)
         if not bd:
             stock_data["price_verification"] = {
-                "status": "unverified", "source": "Börsdata",
+                "status": "unverified", "source": "ingen",
                 "db_price": round(db_price, 4) if db_price else None,
-                "note": "Börsdata-pris ej tillgängligt — DB-pris (Avanza) EJ verifierat. "
-                        "Behandla priset med försiktighet.",
+                "note": "Varken Avanza eller Börsdata gav pris — DB-pris EJ verifierat. "
+                        "Var försiktig med prisbaserade slutsatser.",
             }
             return
         bd_price, bd_date = bd
         diff_pct = ((bd_price / db_price - 1) * 100) if db_price else None
-        # Börsdata är auktoritativ → använd ALLTID dess pris som aktuellt
         stock_data["last_price"] = round(bd_price, 4)
-        ver = {"source": "Börsdata", "borsdata_price": round(bd_price, 4),
-               "borsdata_date": bd_date,
-               "db_price": round(db_price, 4) if db_price else None,
+        ver = {"source": "Börsdata (EOD)", "borsdata_price": round(bd_price, 4),
+               "borsdata_date": bd_date, "db_price": round(db_price, 4) if db_price else None,
                "diff_pct": round(diff_pct, 2) if diff_pct is not None else None}
         if diff_pct is not None and abs(diff_pct) > threshold_pct:
             stock_data["last_price_db_stale"] = round(db_price, 4)
             ver["status"] = "overridden"
-            ver["note"] = (f"Avanza/DB-priset ({db_price:.2f}) avvek {diff_pct:+.1f}% från "
-                           f"Börsdata ({bd_price:.2f} per {bd_date}). Börsdata är auktoritativ "
-                           f"— {bd_price:.2f} ÄR det aktuella priset; DB-priset var stale.")
+            ver["note"] = (f"Avanza intradag otillgängligt. Börsdata EOD {bd_price:.2f} "
+                           f"(per {bd_date}) används; DB-priset {db_price:.2f} var stale "
+                           f"({diff_pct:+.1f}%). OBS: EOD kan släpa 1 dag.")
             print(f"[price-verify] {stock_data.get('short_name')}: Börsdata OVERRIDE {db_price}->{bd_price} ({diff_pct:+.1f}%)", file=sys.stderr)
         else:
             ver["status"] = "verified"
-            ver["note"] = (f"Pris bekräftat mot Börsdata ({bd_price:.2f} per {bd_date}"
-                           + (f", avvikelse {diff_pct:+.1f}%" if diff_pct is not None else "") + ").")
+            ver["note"] = (f"Avanza otillgängligt; pris bekräftat mot Börsdata EOD "
+                           f"({bd_price:.2f} per {bd_date}). OBS: EOD kan släpa 1 dag.")
         stock_data["price_verification"] = ver
+        _apply_borsdata_market_cap(db, stock_data, stock_data["last_price"])
     except Exception as e:
         print(f"[price-verify] fel: {e}", file=sys.stderr)
 
@@ -11793,12 +11900,22 @@ def _agent_get_full_stock(db, query):
     """
     from edge_db import _ph, _score_book_models, _attach_hist
     ph = _ph()
-    q = f"%{query}%"
+    qx = (query or "").strip()
+    q = f"%{qx}%"
+    # #2: EXAKT ticker/short_name-träff först — annars matchar "NET" (Cloudflare,
+    # US) fel mot "NETI B" (SE) bara för att den har fler Avanza-ägare.
     row = db.execute(
-        f"SELECT * FROM stocks WHERE name LIKE {ph} OR short_name LIKE {ph} OR ticker LIKE {ph} "
+        f"SELECT * FROM stocks WHERE UPPER(ticker) = UPPER({ph}) OR UPPER(short_name) = UPPER({ph}) "
         f"ORDER BY number_of_owners DESC LIMIT 1",
-        (q, q, q),
+        (qx, qx),
     ).fetchone()
+    if not row:
+        # Fuzzy-fallback (namn/ticker/short_name innehåller query).
+        row = db.execute(
+            f"SELECT * FROM stocks WHERE name LIKE {ph} OR short_name LIKE {ph} OR ticker LIKE {ph} "
+            f"ORDER BY number_of_owners DESC LIMIT 1",
+            (q, q, q),
+        ).fetchone()
     if not row:
         return {"error": f"Ingen aktie hittad för '{query}'"}
     d = dict(row)
@@ -12277,27 +12394,29 @@ def _build_batch_user_message(ticker, stock_data):
     short_name = stock_data.get("short_name") or ticker
     cur = stock_data.get("currency") or ""
 
-    # ── P0-3: tydligt VERIFIERAT pris högst upp (inte begravt i JSON) ──
+    # ── #1: tydligt VERIFIERAT pris högst upp (inte begravt i JSON) ──
     price_banner = ""
     pv = stock_data.get("price_verification") or {}
     lp = stock_data.get("last_price")
+    src = pv.get("source") or "okänd källa"
+    when = pv.get("live_time") or pv.get("borsdata_date") or ""
+    cur_price = pv.get("live_price") or pv.get("borsdata_price") or lp
+    when_str = f" (per {when})" if when else ""
     if pv.get("status") == "overridden":
         price_banner = (
-            f"🔴 PRIS-VARNING (rapportdag/stale data): Avanza/DB-priset "
-            f"{pv.get('db_price')} {cur} var INAKTUELLT. AKTUELLT PRIS enligt BÖRSDATA "
-            f"(auktoritativ källa) = **{pv.get('borsdata_price')} {cur}** "
-            f"(per {pv.get('borsdata_date')}). Avvikelse {pv.get('diff_pct')}%.\n"
-            f"➡️ ANVÄND {pv.get('borsdata_price')} {cur} SOM NUVARANDE PRIS. Behandla ALDRIG "
-            f"det gamla DB-priset eller ett äldre web-search-pris som 'aktuellt'. Alla "
-            f"färska siffror kommer från Börsdata. Tidslinjen: senaste Börsdata-pris = NU.\n\n")
+            f"🔴 PRIS-VARNING (stale bulk-data): DB-priset {pv.get('db_price')} {cur} var "
+            f"INAKTUELLT. AKTUELLT PRIS = **{cur_price} {cur}** ({src}{when_str}). "
+            f"Avvikelse {pv.get('diff_pct')}%.\n"
+            f"➡️ ANVÄND {cur_price} {cur} SOM NUVARANDE PRIS. Behandla ALDRIG det gamla "
+            f"DB-priset eller ett äldre web-search-pris som 'aktuellt'. Invertera aldrig "
+            f"tidslinjen — det FÄRSKASTE priset ({src}) är NU.\n\n")
     elif pv.get("status") == "verified":
-        price_banner = (f"✅ AKTUELLT PRIS (Börsdata, auktoritativ): **{lp} {cur}** "
-                        f"(per {pv.get('borsdata_date')}). Använd detta som nuvarande pris. "
-                        f"Hämta alla färska siffror från Börsdata, inte andra källor.\n\n")
+        price_banner = (f"✅ AKTUELLT PRIS: **{cur_price} {cur}** ({src}{when_str}). "
+                        f"Använd detta som nuvarande pris.\n\n")
     elif pv.get("status") == "unverified":
-        price_banner = (f"⚠️ PRIS EJ BÖRSDATA-VERIFIERAT: {lp} {cur} (DB/Avanza). "
-                        f"Börsdata-pris otillgängligt just nu — skriv 'DATA SAKNAS: "
-                        f"Börsdata-pris' och var försiktig med prisbaserade slutsatser.\n\n")
+        price_banner = (f"⚠️ PRIS EJ VERIFIERAT: {lp} {cur} (stale bulk-DB). Varken Avanza "
+                        f"intradag eller Börsdata gav färskt pris — skriv 'DATA SAKNAS: "
+                        f"färskt pris' och var försiktig med prisbaserade slutsatser.\n\n")
 
     # Truncate context för att hålla payload rimlig
     safe_data = {k: v for k, v in stock_data.items()
@@ -12388,7 +12507,8 @@ def _consistency_check(analysis_md, stock_data):
     if pv:
         ctx.append(f"price_verification_status={pv.get('status')}")
         if pv.get("status") == "overridden":
-            ctx.append(f"VERIFIERAT_AKTUELLT_PRIS_BORSDATA={pv.get('borsdata_price')}")
+            _cp = pv.get('live_price') or pv.get('borsdata_price')
+            ctx.append(f"VERIFIERAT_AKTUELLT_PRIS={_cp} (källa: {pv.get('source')})")
             ctx.append(f"stale_db_price={pv.get('db_price')}")
     prompt = (
         "Du är en sträng faktagranskare för en betald aktieanalys. Hitta ALLA "
@@ -14060,12 +14180,17 @@ def api_diag_price_check():
         return jsonify({
             "query": q,
             "short_name": full.get("short_name"),
+            "ticker": full.get("ticker"),
             "country": full.get("country"),
             "currency": full.get("currency"),
+            "orderbook_id": full.get("orderbook_id"),
             "borsdata_ins_id": resolved[0] if resolved else None,
             "is_global": resolved[1] if resolved else None,
             "last_price_used": full.get("last_price"),
             "price_verification": full.get("price_verification"),
+            "market_cap": full.get("market_cap"),
+            "market_cap_source": full.get("market_cap_source"),
+            "shares_outstanding": full.get("shares_outstanding"),
         })
     except Exception as e:
         import traceback
