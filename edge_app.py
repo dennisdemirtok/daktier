@@ -14055,6 +14055,32 @@ def api_price_cache_status():
     })
 
 
+@app.route("/api/diag/price-check")
+def api_diag_price_check():
+    """P0-3 diagnostik (ingen LLM): verifierar att realtids-priskällan fungerar.
+    ?ticker=AVGO → visar DB-pris vs realtid + override-beslut."""
+    db = get_db()
+    q = (request.args.get("ticker") or "").strip()
+    if not q:
+        return jsonify({"error": "ange ?ticker=SYMBOL"}), 400
+    try:
+        full = _agent_get_full_stock(db, q) or {}
+        if full.get("error"):
+            return jsonify({"error": full["error"], "query": q}), 404
+        return jsonify({
+            "query": q,
+            "short_name": full.get("short_name"),
+            "country": full.get("country"),
+            "currency": full.get("currency"),
+            "yahoo_ticker": _resolve_yahoo_ticker(db, full),
+            "last_price_used": full.get("last_price"),
+            "price_verification": full.get("price_verification"),
+        })
+    except Exception as e:
+        import traceback
+        return jsonify({"error": str(e), "tb": traceback.format_exc()[:600]}), 500
+
+
 @app.route("/api/dashboard/kpi-row")
 def api_dashboard_kpi_row():
     """Hero KPI-row: dagens signaler aggregerat över dashboard_safe-bolag.
