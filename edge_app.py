@@ -14559,14 +14559,37 @@ def api_diag_db_sweep():
 
         # CHECK 1: Börsdata-pris vs Avanza-pris divergens >50% (fångar SSAB)
         c1 = _fetchall(db, f"""
-            WITH lb AS (SELECT DISTINCT ON (isin) isin, close FROM borsdata_prices ORDER BY isin, date DESC)
-            SELECT s.short_name, s.name, s.isin, ROUND(s.last_price::numeric,2) AS avanza, ROUND(lb.close::numeric,2) AS borsdata,
-                   ROUND((ABS(lb.close - s.last_price)/NULLIF(s.last_price,0)*100)::numeric,0) AS divg_pct
-            FROM stocks s JOIN lb ON s.isin=lb.isin
+            WITH lb AS (SELECT DISTINCT ON (isin) isin, close FROM borsdata_prices ORDER BY isin, date DESC),
+                 lc AS (SELECT DISTINCT ON (isin) isin, currency FROM borsdata_reports ORDER BY isin, period_year DESC, period_q DESC NULLS LAST)
+            SELECT s.short_name, s.isin, ROUND(s.last_price::numeric,2) AS avanza, ROUND(lb.close::numeric,2) AS borsdata,
+                   ROUND((ABS(lb.close - s.last_price)/NULLIF(s.last_price,0)*100)::numeric,0) AS divg_pct,
+                   lc.currency AS bd_currency
+            FROM stocks s JOIN lb ON s.isin=lb.isin LEFT JOIN lc ON s.isin=lc.isin
             WHERE s.number_of_owners >= %s AND s.last_price > 0 AND lb.close > 0 {nf}
               AND ABS(lb.close - s.last_price)/NULLIF(s.last_price,0) > 0.5
             ORDER BY divg_pct DESC LIMIT 60""", (mo,))
-        res["checks"]["price_divergence_gt50pct"] = [dict(r) for r in (c1 or [])]
+        # Valutahypotes: Börsdata-pris × FX(rapportvaluta→SEK) ≈ Avanza? (±10% → valuta-förklarat)
+        from edge_db import _fx_rate
+        fxc = {}
+        def _fx(cur):
+            cur = (cur or "SEK").upper()
+            if cur not in fxc:
+                try: fxc[cur] = _fx_rate(cur, "SEK")
+                except Exception: fxc[cur] = 1.0
+            return fxc[cur] or 1.0
+        c1rows = []
+        cur_explained = 0
+        for r in (c1 or []):
+            rd = dict(r); cur = rd.get("bd_currency")
+            implied = (rd["borsdata"] * _fx(cur)) if (rd.get("borsdata") and cur) else None
+            ok = bool(implied and rd.get("avanza") and abs(implied - rd["avanza"]) / rd["avanza"] < 0.10)
+            rd["fx_used"] = round(_fx(cur), 3) if cur else None
+            rd["implied_sek"] = round(implied, 2) if implied else None
+            rd["currency_explained"] = ok
+            if ok: cur_explained += 1
+            c1rows.append(rd)
+        res["checks"]["price_divergence_gt50pct"] = c1rows
+        res["currency_explained_count"] = cur_explained
 
         # CHECK 2: teckenfel i senaste årsbokslut (rev<0, eq<0, eps/net-tecken-mismatch)
         c2 = _fetchall(db, f"""
