@@ -14488,10 +14488,16 @@ def api_diag_backfill_quarters():
             if not mrow:
                 out[tk] = {"error": "ingen ins_id-mappning"}; continue
             md = dict(mrow); ins_id = md["ins_id"]; is_global = bool(md.get("is_global"))
-            n = 0
+            n = 0; dbg = {}; first_err = None
             for rt, mc in (("quarter", maxq), ("year", 20)):
-                reports = (fetch_global_reports(ins_id, rt, max_count=mc) if is_global
-                           else fetch_reports(ins_id, rt, max_count=mc)) or []
+                try:
+                    reports = (fetch_global_reports(ins_id, rt, max_count=mc) if is_global
+                               else fetch_reports(ins_id, rt, max_count=mc)) or []
+                except Exception as fe:
+                    dbg[rt + "_fetch_err"] = str(fe)[:90]; reports = []
+                dbg["n_" + rt] = len(reports)
+                if reports and rt not in dbg:
+                    dbg[rt + "_keys"] = list(reports[0].keys())[:12]
                 for r in reports:
                     mm = extract_v21_metrics(r)
                     py = r.get("year"); pq = r.get("period") if rt == "quarter" else 0
@@ -14509,11 +14515,12 @@ def api_diag_backfill_quarters():
                             mm.get("net_debt"), mm.get("shares_outstanding"), mm.get("dividend"), mm.get("stock_price_avg"),
                             mm.get("stock_price_high"), mm.get("stock_price_low"), mm.get("broken_fiscal_year"), now_iso))
                         n += 1
-                    except Exception:
+                    except Exception as ie:
+                        if first_err is None: first_err = str(ie)[:120]
                         try: db.rollback()
                         except Exception: pass
             db.commit()
-            out[tk] = {"isin": isin, "ins_id": ins_id, "synced": n}
+            out[tk] = {"isin": isin, "ins_id": ins_id, "synced": n, "dbg": dbg, "first_err": first_err}
         except Exception as e:
             try: db.rollback()
             except Exception: pass
@@ -14528,7 +14535,9 @@ def api_diag_db_sweep():
     from edge_db import _fetchall
     db = get_db()
     mo = int(request.args.get("min_owners") or 500)
-    res = {"min_owners": mo, "checks": {}}
+    nordic = request.args.get("nordic") == "1"
+    nf = " AND (s.isin LIKE 'SE%' OR s.isin LIKE 'DK%' OR s.isin LIKE 'FI%' OR s.isin LIKE 'NO%') " if nordic else ""
+    res = {"min_owners": mo, "nordic_only": nordic, "checks": {}}
     if not _is_postgres():
         return jsonify({"error": "kör endast mot Postgres (prod)"}), 400
     try:
@@ -14539,44 +14548,50 @@ def api_diag_db_sweep():
         res["n_tested"] = dict(n_tot[0])["n"] if n_tot else 0
 
         # CHECK 1: Börsdata-pris vs Avanza-pris divergens >50% (fångar SSAB)
-        c1 = _fetchall(db, """
+        c1 = _fetchall(db, f"""
             WITH lb AS (SELECT DISTINCT ON (isin) isin, close FROM borsdata_prices ORDER BY isin, date DESC)
             SELECT s.short_name, s.name, s.isin, ROUND(s.last_price::numeric,2) AS avanza, ROUND(lb.close::numeric,2) AS borsdata,
                    ROUND((ABS(lb.close - s.last_price)/NULLIF(s.last_price,0)*100)::numeric,0) AS divg_pct
             FROM stocks s JOIN lb ON s.isin=lb.isin
-            WHERE s.number_of_owners >= %s AND s.last_price > 0 AND lb.close > 0
+            WHERE s.number_of_owners >= %s AND s.last_price > 0 AND lb.close > 0 {nf}
               AND ABS(lb.close - s.last_price)/NULLIF(s.last_price,0) > 0.5
             ORDER BY divg_pct DESC LIMIT 60""", (mo,))
         res["checks"]["price_divergence_gt50pct"] = [dict(r) for r in (c1 or [])]
 
         # CHECK 2: teckenfel i senaste årsbokslut (rev<0, eq<0, eps/net-tecken-mismatch)
-        c2 = _fetchall(db, """
+        c2 = _fetchall(db, f"""
             WITH la AS (SELECT DISTINCT ON (isin) isin, period_year, revenues, total_equity, eps, net_profit
                         FROM borsdata_reports WHERE report_type='year' ORDER BY isin, period_year DESC)
             SELECT s.short_name, s.isin, la.period_year,
                    ROUND(la.revenues::numeric,0) AS rev, ROUND(la.total_equity::numeric,0) AS equity,
                    ROUND(la.eps::numeric,2) AS eps, ROUND(la.net_profit::numeric,0) AS net_profit,
                    CASE WHEN la.revenues < 0 THEN 'rev<0 ' ELSE '' END ||
-                   CASE WHEN la.total_equity < 0 THEN 'equity<0 ' ELSE '' END ||
-                   CASE WHEN la.eps*la.net_profit < 0 THEN 'eps/net-teckenmismatch' ELSE '' END AS issue
+                   CASE WHEN la.eps*la.net_profit < 0 THEN 'eps/net-teckenmismatch ' ELSE '' END AS issue
             FROM stocks s JOIN la ON s.isin=la.isin
-            WHERE s.number_of_owners >= %s AND (
-                  la.revenues < 0 OR la.total_equity < 0 OR
+            WHERE s.number_of_owners >= %s {nf} AND (
+                  la.revenues < 0 OR
                   (la.eps IS NOT NULL AND la.net_profit IS NOT NULL AND la.eps <> 0 AND la.net_profit <> 0 AND la.eps*la.net_profit < 0))
             ORDER BY s.short_name LIMIT 80""", (mo,))
         res["checks"]["sign_errors"] = [dict(r) for r in (c2 or [])]
 
         # CHECK 3: extrema pris-gap dag-till-dag >70% (möjlig split-/datafel utan flagga)
-        c3 = _fetchall(db, """
-            WITH g AS (
-              SELECT isin, date, close, LAG(close) OVER (PARTITION BY isin ORDER BY date) AS prev
-              FROM borsdata_prices)
-            SELECT s.short_name, g.isin, g.date, ROUND(g.prev::numeric,2) AS prev, ROUND(g.close::numeric,2) AS close,
-                   ROUND((ABS(g.close-g.prev)/NULLIF(g.prev,0)*100)::numeric,0) AS gap_pct
-            FROM g JOIN stocks s ON s.isin=g.isin
-            WHERE s.number_of_owners >= %s AND g.prev > 0 AND ABS(g.close-g.prev)/NULLIF(g.prev,0) > 0.70
-            ORDER BY gap_pct DESC LIMIT 40""", (mo,))
-        res["checks"]["price_gaps_gt70pct"] = [dict(r) for r in (c3 or [])]
+        # Tung (window över alla priser) → egen try så ev. timeout ej fäller hela sweepen.
+        try:
+            c3 = _fetchall(db, f"""
+                WITH big AS (SELECT s.isin FROM stocks s WHERE s.number_of_owners >= %s {nf}),
+                g AS (SELECT p.isin, p.date, p.close,
+                             LAG(p.close) OVER (PARTITION BY p.isin ORDER BY p.date) AS prev
+                      FROM borsdata_prices p JOIN big ON big.isin=p.isin)
+                SELECT g.isin, g.date, ROUND(g.prev::numeric,2) AS prev, ROUND(g.close::numeric,2) AS close,
+                       ROUND((ABS(g.close-g.prev)/NULLIF(g.prev,0)*100)::numeric,0) AS gap_pct
+                FROM g WHERE g.prev > 0 AND ABS(g.close-g.prev)/NULLIF(g.prev,0) > 0.70
+                ORDER BY gap_pct DESC LIMIT 40""", (mo,))
+            res["checks"]["price_gaps_gt70pct"] = [dict(r) for r in (c3 or [])]
+        except Exception as ge:
+            try: db.rollback()
+            except Exception: pass
+            res["checks"]["price_gaps_gt70pct"] = []
+            res["price_gaps_error"] = str(ge)[:120]
 
         res["summary"] = {
             "price_divergence_flagged": len(res["checks"]["price_divergence_gt50pct"]),
