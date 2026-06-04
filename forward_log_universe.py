@@ -19,6 +19,13 @@ commit 5b37fd6 (fryst v3.3) — samma regeluppsättning som FAS C.
 FORWARD_UNIVERSE_VERSION = "2026-06-04"
 FORWARD_RULE_COMMIT = "5b37fd6"
 
+# Benchmark för M3 (rel = aktie-totalavkastning − index, 12 mån). OMXS30GI =
+# OMX Stockholm 30 GROSS index (totalavkastning, inkl utdelningar) — samma
+# index som användes i retrospektiv-valideringen. Pinnas till Börsdata ins_id.
+# Indexserien fångas vid varje körning så baslinjen finns för 12m-utvärderingen.
+BENCHMARK = {"name": "OMX Stockholm 30 GI", "ticker": "OMXS30GI",
+             "ins_id": 637, "isin": "SE0002402800"}
+
 # (query, ticker, ins_id, isin, pre-registrerad kategori)
 FORWARD_UNIVERSE = [
     # ── Cykliska ──

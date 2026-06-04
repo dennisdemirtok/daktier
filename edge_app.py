@@ -12260,12 +12260,17 @@ def _forward_log_run(db, reason="manual", run_date=None):
     import v33_live
     from edge_db import _ph as _phf, _fetchone, _upsert_sql
     from forward_log_universe import (FORWARD_UNIVERSE, FORWARD_UNIVERSE_VERSION,
-                                      FORWARD_RULE_COMMIT)
+                                      FORWARD_RULE_COMMIT, BENCHMARK)
     from datetime import datetime as _dt
     _forward_ensure_table(db)
     ph = _phf()
     rd = run_date or _dt.utcnow().date().isoformat()
     ts = _dt.utcnow().isoformat()
+    # Fånga benchmark-indexserien (OMXS30GI) så M3-baslinjen finns vid utvärdering.
+    try:
+        _forward_ensure_data(db, BENCHMARK["ins_id"], BENCHMARK["isin"])
+    except Exception as _be:
+        print(f"[forward] benchmark-fetch fel: {_be}", file=sys.stderr)
     cols = ["run_date", "run_timestamp", "universe_version", "rule_commit", "query", "short_name",
             "ins_id", "isin", "category", "value_signal", "value_rule", "value_profile",
             "quality_signal", "quality_rule", "quality_profile", "swing_signal", "swing_rule",
@@ -12314,6 +12319,80 @@ def _forward_log_run(db, reason="manual", run_date=None):
         db.commit()
     except Exception:
         pass
+    return summary
+
+
+def _forward_eval_verdicts(d):
+    """M3-verdikt per lins (frozen v33_rules.evaluate på rel). Beräknas vid LÄSNING
+    — lagras aldrig (regeln är fryst, verdikt härleds). N/A & VÄNTA → utanför."""
+    try:
+        from v33_rules import evaluate
+    except Exception:
+        return {}
+    rel = d.get("rel_12m_pct")
+    if rel is None:
+        return {"value": None, "quality": None, "swing": None}
+    return {
+        "value": evaluate(d.get("value_signal"), rel),
+        "quality": evaluate(d.get("quality_signal"), rel),
+        "swing": evaluate(d.get("swing_signal"), rel),
+    }
+
+
+def _forward_log_evaluate(db, today=None):
+    """M3-UTVÄRDERING (tidigast 12 mån efter varje rad). Fyller ENDAST mätkolumner
+    (eval_price, return_12m, index_return_12m, rel_12m, evaluated_at) — signal-
+    kolumnerna rörs ALDRIG (append-only: signaler är frysta, utfall mäts när de
+    mognar). rel = aktie-totalavkastning − OMXS30GI, 12 mån."""
+    from edge_db import _ph as _phf, _fetchall, _fetchone
+    from forward_log_universe import BENCHMARK
+    from datetime import datetime as _dt, timedelta as _td
+    _forward_ensure_table(db)
+    ph = _phf()
+    today = today or _dt.utcnow().date()
+    summary = {"evaluated": 0, "pending": 0, "rows": []}
+    rows = _fetchall(db, "SELECT * FROM forward_log WHERE evaluated_at IS NULL AND is_correction=0") or []
+    bi = BENCHMARK["isin"]
+    for r in rows:
+        d = dict(r)
+        try:
+            rds = (d.get("run_date") or "")[:10]
+            rdt = _dt.fromisoformat(rds).date()
+        except Exception:
+            continue
+        target = rdt + _td(days=365)
+        base_price = d.get("price")
+        if today < target or not base_price:
+            summary["pending"] += 1
+            continue
+        ep = _fetchone(db, f"SELECT date, close FROM borsdata_prices WHERE isin={ph} AND date >= {ph} "
+                           f"ORDER BY date ASC LIMIT 1", (d.get("isin"), target.isoformat()))
+        if not ep or dict(ep).get("close") in (None, 0):
+            summary["pending"] += 1
+            continue
+        epd = dict(ep)
+        ret = (float(epd["close"]) / float(base_price) - 1) * 100
+        # OMXS30GI total-return över samma fönster
+        b0 = _fetchone(db, f"SELECT close FROM borsdata_prices WHERE isin={ph} AND date <= {ph} "
+                           f"ORDER BY date DESC LIMIT 1", (bi, rds))
+        b1 = _fetchone(db, f"SELECT close FROM borsdata_prices WHERE isin={ph} AND date >= {ph} "
+                           f"ORDER BY date ASC LIMIT 1", (bi, target.isoformat()))
+        idx_ret = rel = None
+        if b0 and b1:
+            c0 = dict(b0).get("close"); c1 = dict(b1).get("close")
+            if c0 and c1:
+                idx_ret = (float(c1) / float(c0) - 1) * 100
+                rel = ret - idx_ret
+        db.execute(f"UPDATE forward_log SET eval_price={ph}, eval_date={ph}, return_12m_pct={ph}, "
+                   f"index_return_12m_pct={ph}, rel_12m_pct={ph}, evaluated_at={ph} WHERE id={ph}",
+                   (epd["close"], epd.get("date"), round(ret, 1),
+                    (round(idx_ret, 1) if idx_ret is not None else None),
+                    (round(rel, 1) if rel is not None else None),
+                    _dt.utcnow().isoformat(), d.get("id")))
+        db.commit()
+        summary["evaluated"] += 1
+        summary["rows"].append({"company": d.get("query"), "return_12m": round(ret, 1),
+                                "rel_12m": (round(rel, 1) if rel is not None else None)})
     return summary
 
 
@@ -14679,10 +14758,25 @@ def api_forward_log_run():
     return jsonify({"status": "started", "note": "kör i bakgrunden — hämta /api/forward-log"})
 
 
+@app.route("/api/forward-log/evaluate", methods=["GET", "POST"])
+def api_forward_log_evaluate():
+    """M3-utvärdering: fyller utfallskolumner för rader som passerat 12 mån.
+    Säker att köra när som helst — gör inget för rader yngre än 12 mån."""
+    import os as _os
+    need = _os.environ.get("FORWARD_LOG_TOKEN")
+    if need and (request.args.get("token") or "") != need:
+        return jsonify({"error": "ogiltig token"}), 403
+    db = get_db()
+    try:
+        return jsonify(_forward_log_evaluate(db))
+    finally:
+        db.close()
+
+
 @app.route("/api/forward-log")
 def api_forward_log():
     """Visar forward-loggen (append-only). ?run_date=YYYY-MM-DD filtrerar; annars
-    senaste körningen. ?all=1 = alla rader. Returnerar rader + körnings-status."""
+    senaste körningen. ?all=1 = alla rader. M3-verdikt härleds vid läsning."""
     db = get_db()
     from edge_db import _ph as _phf, _fetchall, _fetchone
     ph = _phf()
@@ -14699,12 +14793,19 @@ def api_forward_log():
                                  f"ORDER BY category, query", (rd,)) if rd else []
         runs = _fetchall(db, "SELECT run_date, COUNT(*) as n, MIN(rule_commit) as commit "
                              "FROM forward_log GROUP BY run_date ORDER BY run_date DESC")
-        out = [dict(r) for r in (rows or [])]
+        out = []
+        for r in (rows or []):
+            d = dict(r)
+            d["m3_verdicts"] = _forward_eval_verdicts(d)  # härleds, lagras ej
+            out.append(d)
+        n_eval = sum(1 for d in out if d.get("evaluated_at"))
         return jsonify({
             "run_date": rd,
             "rule_commit": (out[0].get("rule_commit") if out else None),
             "universe_version": (out[0].get("universe_version") if out else None),
             "count": len(out),
+            "evaluated": n_eval,
+            "note_m3": "M3-utvärdering tidigast 12 mån efter varje rad. N/A & VÄNTA är aldrig RÄTT (utanför utvärderingen).",
             "rows": out,
             "all_runs": [dict(r) for r in (runs or [])],
             "running": _FORWARD_LAST_RUN["running"],
@@ -16523,6 +16624,13 @@ def _startup():
                     s = _forward_log_run(dbf, reason="scheduled-monthly")
                     print(f"[AUTO] Forward-logg klar: {s.get('inserted')} rader, "
                           f"{len(s.get('errors', []))} fel")
+                    # M3-utvärdering av rader som passerat 12 mån (no-op tidigt)
+                    try:
+                        ev = _forward_log_evaluate(dbf)
+                        if ev.get("evaluated"):
+                            print(f"[AUTO] Forward-logg M3: {ev['evaluated']} rader utvärderade")
+                    except Exception as _ee:
+                        print(f"[AUTO] Forward-logg M3-fel: {_ee}")
                 finally:
                     dbf.close()
             except Exception as e:
