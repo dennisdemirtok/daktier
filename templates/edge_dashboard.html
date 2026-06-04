@@ -5872,7 +5872,7 @@ function _buildReportCard(d, rich) {
 
             <!-- Footer -->
             <div style="margin-top:14px;padding-top:12px;border-top:1px solid #e5e7eb;display:flex;justify-content:space-between;align-items:center;font-size:10px;color:#94a3b8">
-                <span>Agent-validerad analys (DEL 6.99 v3.1)${d.analysis_date ? ' · analys ' + d.analysis_date : ''}${d.ran_fresh ? ' · färsk' : ''}${d.has_analysis ? (d.consistency_flags && d.consistency_flags.length ? ' · ⚠️ ' + d.consistency_flags.length + ' konsistens-flagg' : ' · ✓ konsistens-granskad') : ''}</span>
+                <span>Agent-validerad analys (DEL 6.99 v3.2)${d.analysis_date ? ' · analys ' + d.analysis_date : ''}${d.ran_fresh ? ' · färsk' : ''}${d.has_analysis ? (d.consistency_flags && d.consistency_flags.length ? ' · ⚠️ ' + d.consistency_flags.length + ' konsistens-flagg' : ' · ✓ konsistens-granskad') : ''}</span>
                 <span>DAKTIER · Beslutsstöd, ej finansiell rådgivning</span>
             </div>
         </div>`;
@@ -5986,7 +5986,7 @@ function _buildAgentAnalysisCard(text, meta) {
                 </div>
             </div>
             <div style="margin-top:14px;padding-top:12px;border-top:1px solid #e5e7eb;display:flex;justify-content:space-between;align-items:center;font-size:10px;color:#94a3b8">
-                <span>DAKTIER Edge Agent (DEL 6.99 v3.1)${meta.modelLabel ? ' · ' + escapeHtml(meta.modelLabel) : ''}</span>
+                <span>DAKTIER Edge Agent (DEL 6.99 v3.2)${meta.modelLabel ? ' · ' + escapeHtml(meta.modelLabel) : ''}</span>
                 <span>DAKTIER · Beslutsstöd, ej finansiell rådgivning</span>
             </div>
         </div>`;

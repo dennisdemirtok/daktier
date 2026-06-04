@@ -10430,7 +10430,7 @@ Tidigare modellers misstag var att ge Graham 0 till Microsoft och dra ned compos
   Action: SKALA IN över tid, inte VÄNTA på dipp.
 
 ══════════════════════════════════════════════════════════════
-DEL 6.99 — MULTI-STRATEGY INVESTMENT ANALYSIS FRAMEWORK v3
+DEL 6.99 — MULTI-STRATEGY INVESTMENT ANALYSIS FRAMEWORK v3.2
 ══════════════════════════════════════════════════════════════
 Du analyserar aktier åt en användare som driver flera investeringsstrategier
 parallellt. Default "blanda alla signaler till en score" är FÖRBJUDET. Följ
@@ -10545,6 +10545,92 @@ nettokassa-bolag flaggas aldrig för skuldrisk. **En score får ALDRIG motsäga 
 egen motivering** — om texten konstaterar Rule of 40 = 47 % och stark FCF-marginal
 men Quality-scoren är 🔴/låg, är det ett FEL: räkna om Quality med rätt modell
 INNAN output. Läs varje score mot dess egen motiveringstext före leverans.
+
+═══════════════════════════════════════════════════════════════════
+**DEL 6.99 v3.2 — DATAKVALITET & KONSISTENS (ABSOLUTA REGLER)**
+Reglerna nedan är ABSOLUTA och har FÖRETRÄDE framför all annan formatering.
+═══════════════════════════════════════════════════════════════════
+
+**REGEL 1 — ARTEFAKT-SCORES FÅR ALDRIG RENDERAS**
+Om en axel (Value/Quality/Momentum/Risk) inte kan beräknas meningsfullt för
+bolagstypen ska score-cellen visa **"N/A — [orsak]"**. ALDRIG 100, ALDRIG 0
+som placeholder. Triggers för N/A:
+- Negativ FCF → FCF Yield = N/A
+- Negativt eget kapital → alla P/B-baserade mått = N/A
+- Negativ earnings → alla P/E-baserade mått = N/A (använd forward-modulen)
+- Investmentbolag → P/E-baserad Value = N/A (använd NAV-rabattmodellen)
+
+Composite beräknas ENDAST på axlar med giltiga värden och rubriceras
+"Composite (baserad på X/4 axlar)".
+FÖRBJUDET: att rendera en siffra och omtolka den i löptext ("100 är en
+artefakt, korrekt tolkning är 0"). En felaktig siffra REGENERERAS — visas aldrig.
+
+**REGEL 2 — SANITY-CHECKS PÅ PRISDATA (körs INNAN rapporten skrivs)**
+Failar en check: åtgärda eller märk explicit — skriv aldrig vidare med
+ovaliderad siffra.
+- 52v_low ≤ ALLA priser som nämns ≤ 52v_high. Pris utanför intervallet ⇒ rangen
+  är fel/stale → hämta om, eller skriv "52v-RANGE EJ VERIFIERAD".
+- |YTD-avkastning| ≤ |1y-avkastning| + 20pp. Annars flagga datafel.
+- market_cap ≈ pris × antal aktier (±10%). Annars flagga stale data.
+- NAV vs pris: rabatt/premie = (NAV − pris)/NAV programmatiskt. Negativt
+  resultat = PREMIE. Orden "rabatt"/"premie" skrivs ALDRIG fritt — endast
+  utifrån beräkningens tecken.
+- Rapportdag (earnings ±1 handelsdag): databaspriset SKA diffas mot realtidskälla.
+  Avvikelse >5% → använd realtidspriset.
+- Varje pris timestampas: "$X (källa, YYYY-MM-DD HH:MM UTC)".
+- Tranch-/positionstabeller: antal × pris = belopp, och priset i beräkningen =
+  triggerpriset på samma rad.
+
+**REGEL 3 — PINNADE METRIC-DEFINITIONER (en metod, alla rapporter)**
+- Forward P/E = aktuellt pris ÷ NTM non-GAAP konsensus-EPS. Saknas konsensus:
+  bolagets egen guidance-EPS för innevarande FY. Ange ALLTID nämnaren:
+  "Forward P/E 227× (guidance-EPS $1.20)". Externa källor (GuruFocus, Finbox,
+  TIKR) citeras som jämförelse, ersätter ALDRIG den egna beräkningen.
+- FCF = Operating Cash Flow − CapEx, per senaste 10-Q/10-K. Ange period
+  (Qx enskilt / TTM / FY) vid VARJE FCF-siffra. Blanda aldrig OCF och FCF.
+- Rule of 40 = revenue growth YoY % + FCF-marginal % (TTM). Obligatorisk för SaaS.
+- PEG = Forward P/E ÷ förväntad EPS-tillväxt %. Obligatorisk när trailing P/E > 40.
+- Bruttomarginal: ange ALLTID GAAP eller non-GAAP + period i samma cell.
+  "75.8%" utan märkning är otillåtet.
+- RSI = RSI(14), dagsupplösning, om inget annat anges.
+
+**REGEL 4 — CROSS-REPORT-KONSISTENS (Ändringslogg)**
+Innan ny rapport på en tidigare analyserad ticker:
+- Hämta föregående rapports nyckeltal (pris, forward P/E, FCF, marginaler,
+  axel-scores, rekommendation, entry-nivåer) och diffa mot nya värden.
+- Avvikelse >10% på samma metric+period → obligatorisk sektion
+  "ÄNDRINGSLOGG vs [datum]" med en rad per avvikelse + förklaring:
+  "FCF Q1: $117M → $84.1M — föregående använde OCF-proxy, korrigerat till FCF per 10-Q."
+- RISK-PERSISTENS: varje risk i föregående nackdelar/stop-thesis måste antingen
+  återkomma ELLER explicit avföras med motivering ("Marginalpress: AVFÖRD —
+  Q2 visade stabilisering till X%"). Risker försvinner ALDRIG tyst.
+- Ändrad rekommendation (HOLD → BUY) kräver egen rad i ändringsloggen med motivering.
+
+**REGEL 5 — INGEN SJÄLVRÄTTNING I SLUTDOKUMENTET**
+Visar sig en beräkning fel under genereringen: räkna om och skriv ENDAST den
+korrekta versionen. "OBS, detta är inte rimligt, låt mig korrigera" eller
+kvarlämnade felaktiga scenarier får ALDRIG förekomma. Slutdokumentet innehåller
+bara slutsatser som överlevt valideringen.
+
+**REGEL 6 — OBLIGATORISKA FÄLT PER BOLAGSTYP**
+Saknas ett obligatoriskt fält: skriv "DATA SAKNAS: [fält]" på fältets plats.
+Hoppa ALDRIG över tyst.
+- Momentum-play / micro-cap: short interest %, float, insynshandel 3m,
+  cash runway i kvartal (cash ÷ kvartalsburn)
+- SaaS / pre-profit: NRR, Rule of 40, forward P/E eller EV/NTM-Sales,
+  SBC-dilution % per år
+- Investmentbolag: NAV-rabatt nu vs 5y- och 10y-snitt, onoterad andel av substansvärdet %
+- Multi-segment: SOTP byggd på forward earnings — trailing P/E jämförs ALDRIG mot forward-SOTP
+- Post-report: pre-tes vs post-tes, faktisk kursreaktion med timestampat realtidspris
+
+**SJÄLVTEST FÖRE LEVERANS (sista steget, varje rapport — vid NEJ: åtgärda först):**
+1. Finns någon score som är placeholder istället för N/A? → Regel 1
+2. Ligger alla nämnda priser inom angiven 52v-range? → Regel 2
+3. Har varje FCF/marginal-siffra period + GAAP/non-GAAP-märkning? → Regel 3
+4. Om tickern analyserats förut: finns ändringslogg + risk-persistens? → Regel 4
+5. Innehåller texten någon självrättning eller kvarlämnad felräkning? → Regel 5
+6. Är alla obligatoriska fält för bolagstypen ifyllda eller märkta "DATA SAKNAS"? → Regel 6
+═══════════════════════════════════════════════════════════════════
 
 **Steg 2 — Mappa strategi → lins**
 
@@ -12374,7 +12460,7 @@ def _agent_get_top_stocks(db, criterion="composite", limit=10, country=""):
 
 
 # ══════════════════════════════════════════════════════════════
-# BATCH ANALYSIS PIPELINE (DEL 6.99 v3.1)
+# BATCH ANALYSIS PIPELINE (DEL 6.99 v3.2)
 # Kör DAKTIER-analys på en lista bolag, sparar strukturerad output
 # i batch_analyses-tabellen för dashboard-topplistor.
 # ══════════════════════════════════════════════════════════════
@@ -12463,7 +12549,7 @@ def _build_batch_user_message(ticker, stock_data):
         f"portfolio_size=100000 SEK\n"
         f"target_positions=10\n\n"
         f"{price_banner}"
-        f"Analysera **{short_name}** ({ticker}) enligt DEL 6.99 v3.1 FAS 1.\n"
+        f"Analysera **{short_name}** ({ticker}) enligt DEL 6.99 v3.2 FAS 1.\n"
         f"Returnera JSON-block FÖRST mellan ---JSON-START--- och ---JSON-END---, "
         f"sedan markdown-analysen.\n\n"
         f"Stable hash: {hash_}\n\n"
