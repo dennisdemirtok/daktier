@@ -14536,7 +14536,8 @@ def api_diag_db_sweep():
     db = get_db()
     mo = int(request.args.get("min_owners") or 500)
     nordic = request.args.get("nordic") == "1"
-    nf = " AND (s.isin LIKE 'SE%' OR s.isin LIKE 'DK%' OR s.isin LIKE 'FI%' OR s.isin LIKE 'NO%') " if nordic else ""
+    # OBS: %% — psycopg2 tolkar annars % i LIKE som parameter-markör (tuple index error)
+    nf = " AND (s.isin LIKE 'SE%%' OR s.isin LIKE 'DK%%' OR s.isin LIKE 'FI%%' OR s.isin LIKE 'NO%%') " if nordic else ""
     res = {"min_owners": mo, "nordic_only": nordic, "checks": {}}
     if not _is_postgres():
         return jsonify({"error": "kör endast mot Postgres (prod)"}), 400
