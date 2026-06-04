@@ -10796,14 +10796,14 @@ bredvid.
 **Steg 6b — DATAVALIDERING (P0, inga interna motsägelser)**
 
 Innan output — kör dessa sanity-checks och låt ALDRIG fritext motsäga siffror:
-- **PRIS-AUKTORITET (KRITISKT)**: Om context innehåller ett `price_verification`-
-  block eller en "VERIFIERAT AKTUELLT PRIS"-rad är DET priset definitionen av
-  NUVARANDE pris. Om web search visar ett ANNAT pris: anta INTE att det högre
-  talet är "aktuellt" och det lägre "gammalt". På rapportdag faller/stiger
-  aktier kraftigt — det FÄRSKASTE priset (senaste timestamp / post-rapport) är
-  NU. Invertera ALDRIG tidslinjen. Skriv ut vilket pris du behandlar som aktuellt
-  och varför. En handlingsplan byggd på fel pris ("ta profit vid X" när X inte
-  är aktuellt pris) är det dyraste felet som finns.
+- **PRIS-AUKTORITET (KRITISKT)**: BÖRSDATA är den auktoritativa källan för alla
+  färska siffror (pris, rapportdata, nyckeltal) — den är betald och komplett.
+  Priset i `price_verification`/"AKTUELLT PRIS enligt BÖRSDATA" ÄR definitionen av
+  nuvarande pris. Om web search visar ett ANNAT pris: anta INTE att det högre
+  talet är "aktuellt" och det lägre "gammalt" — lita på Börsdata-priset. På
+  rapportdag rör sig aktier kraftigt; invertera ALDRIG tidslinjen. Skriv ut
+  vilket pris du behandlar som aktuellt. En handlingsplan byggd på fel pris ("ta
+  profit vid X" när X inte är aktuellt pris) är det dyraste felet som finns.
 - **52-veckors range**: nuvarande pris MÅSTE ligga inom [lowest_price,
   highest_price]. Ligger priset utanför sitt eget intervall ⇒ antingen är
   priset eller intervallet stale: skriv "⚠️ pris utanför 52v-range, data stale"
@@ -11680,118 +11680,103 @@ def _agent_mcap_native_safe(d):
     return d.get("market_cap")
 
 
-_LIVE_PRICE_CACHE = {}     # yahoo_ticker -> (price, ts_iso, fetched_epoch)
-_LIVE_PRICE_TTL = 600      # 10 min
+_BD_PRICE_CACHE = {}       # ins_id -> (price, date_iso, fetched_epoch)
+_BD_PRICE_TTL = 600        # 10 min
 
 
-def _resolve_yahoo_ticker(db, stock_data):
-    """P0-3: härled Yahoo-ticker för realtids-prisverifiering."""
+def _resolve_borsdata_insid(db, stock_data):
+    """P0-3: hitta Börsdata ins_id (+ is_global) för aktien.
+    Returnerar (ins_id, is_global, isin) eller None."""
     isin = stock_data.get("isin")
     ticker = (stock_data.get("ticker") or stock_data.get("short_name") or "").strip()
-    country = (stock_data.get("country") or "").upper()
-    cur = (stock_data.get("currency") or "").upper()
-    # 1) explicit mappning från Börsdata
     try:
         from edge_db import _ph as _phf, _fetchone
         ph = _phf()
         row = None
         if isin:
-            row = _fetchone(db, f"SELECT yahoo_ticker FROM borsdata_instrument_map WHERE isin = {ph} LIMIT 1", (isin,))
-        if (not row or not (dict(row).get("yahoo_ticker") if row else None)) and ticker:
-            row = _fetchone(db, f"SELECT yahoo_ticker FROM borsdata_instrument_map WHERE UPPER(ticker) = UPPER({ph}) LIMIT 1", (ticker,))
+            row = _fetchone(db, f"SELECT ins_id, is_global, isin FROM borsdata_instrument_map WHERE isin = {ph} LIMIT 1", (isin,))
+        if not row and ticker:
+            row = _fetchone(db, f"SELECT ins_id, is_global, isin FROM borsdata_instrument_map WHERE UPPER(ticker) = UPPER({ph}) LIMIT 1", (ticker,))
         if row:
-            yt = dict(row).get("yahoo_ticker")
-            if yt and not str(yt).upper().startswith("YAHOO_"):
-                return yt
-    except Exception:
-        pass
-    # 2) heuristik
-    if not ticker:
-        return None
-    t = ticker.upper().replace(" ", "-")
-    if country in ("US", "USA") or cur == "USD":
-        return t
-    if country in ("SE", "SWEDEN"):
-        return t + ".ST"
-    suffix = {"FI": ".HE", "NO": ".OL", "DK": ".CO", "DE": ".DE", "GB": ".L",
-              "UK": ".L", "FR": ".PA", "NL": ".AS", "CA": ".TO"}.get(country)
-    return (t + suffix) if suffix else t
+            d = dict(row)
+            if d.get("ins_id") is not None:
+                return (d["ins_id"], bool(d.get("is_global")), d.get("isin") or isin)
+    except Exception as e:
+        print(f"[price-verify] insid-resolve fel: {e}", file=sys.stderr)
+    return None
 
 
-def _fetch_live_price(yahoo_ticker):
-    """P0-3: hämta realtids-/senaste pris via yfinance. TTL-cachat, fail-safe.
-    Returnerar (price:float, ts_iso:str) eller None."""
-    if not yahoo_ticker:
+def _fetch_borsdata_price(db, stock_data):
+    """P0-3: hämta senaste pris från BÖRSDATA (auktoritativ, betald källa — all
+    färsk data ska komma härifrån, inte från Avanza/yfinance). TTL-cachat,
+    fail-safe. Returnerar (price:float, date_iso:str) eller None."""
+    resolved = _resolve_borsdata_insid(db, stock_data)
+    if not resolved:
         return None
+    ins_id, is_global, _isin = resolved
     import time as _t
     now = _t.time()
-    c = _LIVE_PRICE_CACHE.get(yahoo_ticker)
-    if c and (now - c[2]) < _LIVE_PRICE_TTL:
+    c = _BD_PRICE_CACHE.get(ins_id)
+    if c and (now - c[2]) < _BD_PRICE_TTL:
         return (c[0], c[1])
     try:
-        import yfinance as yf
-        tk = yf.Ticker(yahoo_ticker)
-        price = None
-        for getter in (lambda: tk.fast_info["lastPrice"],
-                       lambda: tk.fast_info.last_price,
-                       lambda: tk.fast_info["last_price"]):
-            try:
-                v = getter()
-                if v: price = float(v); break
-            except Exception:
-                pass
-        if not price:
-            try:
-                h = tk.history(period="2d")
-                if h is not None and len(h):
-                    price = float(h["Close"].iloc[-1])
-            except Exception:
-                price = None
+        from borsdata_fetcher import fetch_stock_prices
+        from datetime import timedelta as _td
+        frm = (datetime.utcnow().date() - _td(days=14)).isoformat()
+        prices = fetch_stock_prices(ins_id, is_global=is_global, from_date=frm) or []
+        if not prices:
+            return None
+        # senaste posten enligt datum
+        try:
+            last = max(prices, key=lambda p: (p.get("d") or ""))
+        except Exception:
+            last = prices[-1]
+        price = last.get("c")
+        date_iso = (last.get("d") or "")[:10]
         if not price or price <= 0:
             return None
-        ts = datetime.utcnow().isoformat()
-        _LIVE_PRICE_CACHE[yahoo_ticker] = (float(price), ts, now)
-        return (float(price), ts)
+        _BD_PRICE_CACHE[ins_id] = (float(price), date_iso, now)
+        return (float(price), date_iso)
     except Exception as e:
-        print(f"[price-verify] yfinance fel {yahoo_ticker}: {e}", file=sys.stderr)
+        print(f"[price-verify] Börsdata pris-fel ins_id={ins_id}: {e}", file=sys.stderr)
         return None
 
 
 def _validate_price_freshness(db, stock_data, threshold_pct=5.0):
-    """P0-3 (KRITISK): diffa DB-pris mot realtidskälla. >threshold% avvikelse →
-    override med realtidspriset + tydlig flagga. Detta är koden som fångar
-    AVGO-typfelet (stale pre-rapport-pris behandlat som aktuellt). Muterar
-    stock_data in-place; får aldrig krascha analysen."""
+    """P0-3 (KRITISK): hämta senaste pris från BÖRSDATA (auktoritativ källa) och
+    använd det som AKTUELLT pris. DB-priset (Avanza-feed) kan vara stale — t.ex.
+    på rapportdag. Detta fångar AVGO-typfelet (stale pris behandlat som aktuellt).
+    All färsk data ska komma från Börsdata. Muterar in-place; får aldrig krascha."""
     try:
         db_price = stock_data.get("last_price")
-        if not db_price or db_price <= 0:
-            return
-        yt = _resolve_yahoo_ticker(db, stock_data)
-        live = _fetch_live_price(yt)
-        if not live:
+        bd = _fetch_borsdata_price(db, stock_data)
+        if not bd:
             stock_data["price_verification"] = {
-                "status": "unverified", "db_price": round(db_price, 4),
-                "yahoo_ticker": yt,
-                "note": "Realtidskälla ej tillgänglig — DB-pris EJ verifierat. "
-                        "Behandla priset med försiktighet och kontrollera mot live-källa.",
+                "status": "unverified", "source": "Börsdata",
+                "db_price": round(db_price, 4) if db_price else None,
+                "note": "Börsdata-pris ej tillgängligt — DB-pris (Avanza) EJ verifierat. "
+                        "Behandla priset med försiktighet.",
             }
             return
-        live_price, ts = live
-        diff_pct = (live_price / db_price - 1) * 100
-        ver = {"db_price": round(db_price, 4), "live_price": round(live_price, 4),
-               "diff_pct": round(diff_pct, 2), "source": "yfinance",
-               "yahoo_ticker": yt, "fetched_at": ts}
-        if abs(diff_pct) > threshold_pct:
-            stock_data["last_price"] = round(live_price, 4)
+        bd_price, bd_date = bd
+        diff_pct = ((bd_price / db_price - 1) * 100) if db_price else None
+        # Börsdata är auktoritativ → använd ALLTID dess pris som aktuellt
+        stock_data["last_price"] = round(bd_price, 4)
+        ver = {"source": "Börsdata", "borsdata_price": round(bd_price, 4),
+               "borsdata_date": bd_date,
+               "db_price": round(db_price, 4) if db_price else None,
+               "diff_pct": round(diff_pct, 2) if diff_pct is not None else None}
+        if diff_pct is not None and abs(diff_pct) > threshold_pct:
             stock_data["last_price_db_stale"] = round(db_price, 4)
             ver["status"] = "overridden"
-            ver["note"] = (f"DB-priset ({db_price:.2f}) avvek {diff_pct:+.1f}% från realtid "
-                           f"({live_price:.2f}). Realtidspriset {live_price:.2f} ÄR det aktuella "
-                           f"priset — använd det. DB-priset var inaktuellt (t.ex. pre-rapport).")
-            print(f"[price-verify] {stock_data.get('short_name')}: OVERRIDE {db_price}->{live_price} ({diff_pct:+.1f}%)", file=sys.stderr)
+            ver["note"] = (f"Avanza/DB-priset ({db_price:.2f}) avvek {diff_pct:+.1f}% från "
+                           f"Börsdata ({bd_price:.2f} per {bd_date}). Börsdata är auktoritativ "
+                           f"— {bd_price:.2f} ÄR det aktuella priset; DB-priset var stale.")
+            print(f"[price-verify] {stock_data.get('short_name')}: Börsdata OVERRIDE {db_price}->{bd_price} ({diff_pct:+.1f}%)", file=sys.stderr)
         else:
             ver["status"] = "verified"
-            ver["note"] = f"DB-pris verifierat mot realtid (avvikelse {diff_pct:+.1f}%)."
+            ver["note"] = (f"Pris bekräftat mot Börsdata ({bd_price:.2f} per {bd_date}"
+                           + (f", avvikelse {diff_pct:+.1f}%" if diff_pct is not None else "") + ").")
         stock_data["price_verification"] = ver
     except Exception as e:
         print(f"[price-verify] fel: {e}", file=sys.stderr)
@@ -12294,21 +12279,21 @@ def _build_batch_user_message(ticker, stock_data):
     lp = stock_data.get("last_price")
     if pv.get("status") == "overridden":
         price_banner = (
-            f"🔴 PRIS-VARNING (rapportdag/stale data): DB-priset "
-            f"{pv.get('db_price')} {cur} var INAKTUELLT. VERIFIERAT AKTUELLT PRIS = "
-            f"**{pv.get('live_price')} {cur}** (realtid {pv.get('source')}, {pv.get('fetched_at')}). "
-            f"Avvikelse {pv.get('diff_pct')}%.\n"
-            f"➡️ ANVÄND {pv.get('live_price')} {cur} SOM NUVARANDE PRIS. Behandla ALDRIG "
-            f"det högre/äldre DB-priset eller ett äldre web-search-pris som 'aktuellt'. "
-            f"Tidslinjen: lägre post-rapport-pris = NU; högre pre-rapport-pris = GAMMALT.\n\n")
+            f"🔴 PRIS-VARNING (rapportdag/stale data): Avanza/DB-priset "
+            f"{pv.get('db_price')} {cur} var INAKTUELLT. AKTUELLT PRIS enligt BÖRSDATA "
+            f"(auktoritativ källa) = **{pv.get('borsdata_price')} {cur}** "
+            f"(per {pv.get('borsdata_date')}). Avvikelse {pv.get('diff_pct')}%.\n"
+            f"➡️ ANVÄND {pv.get('borsdata_price')} {cur} SOM NUVARANDE PRIS. Behandla ALDRIG "
+            f"det gamla DB-priset eller ett äldre web-search-pris som 'aktuellt'. Alla "
+            f"färska siffror kommer från Börsdata. Tidslinjen: senaste Börsdata-pris = NU.\n\n")
     elif pv.get("status") == "verified":
-        price_banner = (f"✅ VERIFIERAT AKTUELLT PRIS: **{lp} {cur}** "
-                        f"(realtids-verifierat, avvikelse {pv.get('diff_pct')}%). "
-                        f"Använd detta som nuvarande pris.\n\n")
+        price_banner = (f"✅ AKTUELLT PRIS (Börsdata, auktoritativ): **{lp} {cur}** "
+                        f"(per {pv.get('borsdata_date')}). Använd detta som nuvarande pris. "
+                        f"Hämta alla färska siffror från Börsdata, inte andra källor.\n\n")
     elif pv.get("status") == "unverified":
-        price_banner = (f"⚠️ PRIS EJ REALTIDS-VERIFIERAT: {lp} {cur} (DB). "
-                        f"Realtidskälla otillgänglig — om web search visar ett tydligt "
-                        f"färskare pris, lita på det och skriv 'DATA SAKNAS: realtidspris'.\n\n")
+        price_banner = (f"⚠️ PRIS EJ BÖRSDATA-VERIFIERAT: {lp} {cur} (DB/Avanza). "
+                        f"Börsdata-pris otillgängligt just nu — skriv 'DATA SAKNAS: "
+                        f"Börsdata-pris' och var försiktig med prisbaserade slutsatser.\n\n")
 
     # Truncate context för att hålla payload rimlig
     safe_data = {k: v for k, v in stock_data.items()
@@ -12399,7 +12384,7 @@ def _consistency_check(analysis_md, stock_data):
     if pv:
         ctx.append(f"price_verification_status={pv.get('status')}")
         if pv.get("status") == "overridden":
-            ctx.append(f"VERIFIERAT_AKTUELLT_PRIS={pv.get('live_price')}")
+            ctx.append(f"VERIFIERAT_AKTUELLT_PRIS_BORSDATA={pv.get('borsdata_price')}")
             ctx.append(f"stale_db_price={pv.get('db_price')}")
     prompt = (
         "Du är en sträng faktagranskare för en betald aktieanalys. Hitta ALLA "
@@ -14057,8 +14042,8 @@ def api_price_cache_status():
 
 @app.route("/api/diag/price-check")
 def api_diag_price_check():
-    """P0-3 diagnostik (ingen LLM): verifierar att realtids-priskällan fungerar.
-    ?ticker=AVGO → visar DB-pris vs realtid + override-beslut."""
+    """P0-3 diagnostik (ingen LLM): verifierar att Börsdata-priskällan fungerar.
+    ?ticker=AVGO → visar DB-pris vs Börsdata + override-beslut."""
     db = get_db()
     q = (request.args.get("ticker") or "").strip()
     if not q:
@@ -14067,12 +14052,14 @@ def api_diag_price_check():
         full = _agent_get_full_stock(db, q) or {}
         if full.get("error"):
             return jsonify({"error": full["error"], "query": q}), 404
+        resolved = _resolve_borsdata_insid(db, full)
         return jsonify({
             "query": q,
             "short_name": full.get("short_name"),
             "country": full.get("country"),
             "currency": full.get("currency"),
-            "yahoo_ticker": _resolve_yahoo_ticker(db, full),
+            "borsdata_ins_id": resolved[0] if resolved else None,
+            "is_global": resolved[1] if resolved else None,
             "last_price_used": full.get("last_price"),
             "price_verification": full.get("price_verification"),
         })
