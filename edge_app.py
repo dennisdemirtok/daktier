@@ -11806,17 +11806,19 @@ def _fetch_borsdata_price(db, stock_data):
 
 def _apply_borsdata_market_cap(db, stock_data, price):
     """#3: market cap = aktuellt pris × senaste Börsdata-aktieantal (färsk källa
-    du betalar för). Muterar stock_data['market_cap'] + flaggar källa."""
+    du betalar för). OBS: Börsdata lagrar shares_outstanding i MILJONER → ×1e6
+    för absolut antal. Muterar stock_data['market_cap'] + flaggar källa."""
     try:
         isin = stock_data.get("isin")
-        shares = _borsdata_latest_shares(db, isin)
-        if shares and price and price > 0:
-            mc = round(price * shares)
+        shares_m = _borsdata_latest_shares(db, isin)  # miljoner aktier
+        if shares_m and price and price > 0:
+            shares_abs = shares_m * 1_000_000
+            mc = round(price * shares_abs)
             stock_data["market_cap"] = mc
             stock_data["market_cap_native"] = mc
             stock_data["market_cap_currency"] = stock_data.get("currency") or "SEK"
             stock_data["market_cap_source"] = "Börsdata (pris×aktier)"
-            stock_data["shares_outstanding"] = shares
+            stock_data["shares_outstanding"] = round(shares_abs)
     except Exception:
         pass
 
