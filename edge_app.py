@@ -14581,8 +14581,10 @@ def api_diag_db_sweep():
         cur_explained = 0
         for r in (c1 or []):
             rd = dict(r); cur = rd.get("bd_currency")
-            implied = (rd["borsdata"] * _fx(cur)) if (rd.get("borsdata") and cur) else None
-            ok = bool(implied and rd.get("avanza") and abs(implied - rd["avanza"]) / rd["avanza"] < 0.10)
+            bd = float(rd["borsdata"]) if rd.get("borsdata") is not None else None
+            av = float(rd["avanza"]) if rd.get("avanza") is not None else None
+            implied = (bd * _fx(cur)) if (bd and cur) else None
+            ok = bool(implied and av and abs(implied - av) / av < 0.10)
             rd["fx_used"] = round(_fx(cur), 3) if cur else None
             rd["implied_sek"] = round(implied, 2) if implied else None
             rd["currency_explained"] = ok
