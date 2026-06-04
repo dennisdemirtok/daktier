@@ -12982,7 +12982,11 @@ def _build_batch_user_message(ticker, stock_data):
             f"tidslinjen — det FÄRSKASTE priset ({src}) är NU.\n\n")
     elif pv.get("status") == "verified":
         price_banner = (f"✅ AKTUELLT PRIS: **{cur_price} {cur}** ({src}{when_str}). "
-                        f"Använd detta som nuvarande pris.\n\n")
+                        f"ANVÄND EXAKT detta i 'AKTUELLT PRIS'-raden OCH i alla prisbaserade "
+                        f"slutsatser (entry/exit/range). Citera ALDRIG ett webbsökt pris "
+                        f"(Morningstar/Yahoo/Google Finance) som nuvarande kurs — web search "
+                        f"är ENBART för kvalitativ kontext (nyheter, guidance, konsensus), "
+                        f"ALDRIG för själva kursen. Det verifierade priset ({src}) är NU.\n\n")
     elif pv.get("status") == "unverified":
         price_banner = (f"⚠️ PRIS EJ VERIFIERAT: {lp} {cur} (stale bulk-DB). Varken Avanza "
                         f"intradag eller Börsdata gav färskt pris — skriv 'DATA SAKNAS: "
