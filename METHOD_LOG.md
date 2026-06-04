@@ -35,3 +35,42 @@ INGEN auto-fix. Karantänen står. Flaggat för Börsdata-dataärende. v3.4-arbe
 3. N/A och VÄNTA är ALDRIG RÄTT — utanför utvärderingen. Ingen "avstod korrekt"-formulering.
 - C2-förbud: inga regeländringar under FAS C oavsett utfall. Wilson 95%-CI på alla hit rates.
   n<10 → "MÖNSTER, EJ SIGNIFIKANT". DIV-VÄND-flaggor. Skugglogg för struken momentum-nedviktning.
+
+## STEG b (forward-logg) — pre-registrerad 2026-06-04
+
+### Pre-registrering (FÖRE första körningen)
+- **Universum FRYST**: 25 bolag (`forward_log_universe.py`), pinnade till KANONISKA Börsdata-
+  ins_id + ISIN (verifierade mot instrument-katalogen). Ändras ALDRIG under utvärderingsperioden.
+  Karantänerade namn (SSAB, Telia) medvetet uteslutna.
+- **Klassificering pre-registrerad**: bolagstyp pinnad i universumet. v3.3:s MEKANISKA routing
+  (peak-detektor, P/E-grindar, datavaliditet) körs ovanpå. Klassificeraren validerades separat i
+  FAS A–C; forward-loggen testar reglernas routing/trösklar, inte klassificeringsheuristiken.
+- **Regeluppsättning FRYST** @ commit 5b37fd6 (samma som FAS C). Commit-hash i varje loggrad.
+
+### Loggrad (append-only)
+datum + tidsstämpel · bolag (pinnat ins_id+ISIN) · per-lins signal + M2-regelhänvisning + profil ·
+cyklisk fas · rådata-snapshot (pris, P/E-ttm, op-marginal, ROE, 12m-momentum) · commit-hash ·
+skuggor (v3.4-kandidater). Data dras FÄRSK från Börsdata på pinnat ins_id — kringgår den
+(delvis korrupta) lokala stocks-tabellen helt.
+
+### Append-only-disciplin
+- Signal-kolumner skrivs EN gång och rörs ALDRIG. Korrigeringar = NY rad (is_correction=1,
+  correction_of pekar på originalet som står kvar).
+- M3-mätkolumner (eval_price, return_12m, index_return_12m, rel_12m, evaluated_at) fylls EN gång
+  när raden passerat 12 mån. Detta är utfallsMÄTNING, inte signal-korrigering — tillåtet.
+
+### M3-utvärdering (tidigast 12 mån efter varje rad)
+rel = aktiens totalavkastning − OMXS30GI (totalavkastningsindex, ins_id 637), samma fönster.
+Verdikt härleds vid läsning via frysta `v33_rules.evaluate` (KÖP rätt om rel≥+5pe, UNDVIK/TA PROFIT
+rätt om rel≤−5pe, HÅLL rätt om |rel|≤15pe). N/A och VÄNTA är ALDRIG RÄTT — utanför utvärderingen.
+
+### v3.4-kandidater som skuggor (parallellt, påverkar ALDRIG primärsignalen)
+1. **momentum-nedviktning**: KÖP → HÅLL om 12m-momentum < −25% (fallande kniv).
+2. **Quality-P/E-tak**: Quality KÖP → HÅLL om TTM-P/E > 50 (kvalitet men för dyrt).
+Loggas i varje rad bredvid primärsignalen. Utvärderas separat efter 12 mån — befordras till v3.4
+endast om de slår primärregeln på matchade celler (samma C3-disciplin som FAS C).
+
+### Körning
+Schemalagd första handelsdagen varje månad (08:10), idempotent per månad via meta-stämpel.
+Manuell trigger: `/api/forward-log/run?sync=1`. Vy: `/forward-log` + `/api/forward-log`.
+Första registrering: 2026-06-04 (25 rader, commit 5b37fd6).
