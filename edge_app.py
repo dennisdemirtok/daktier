@@ -11702,6 +11702,8 @@ def _resolve_borsdata_insid(db, stock_data):
             if d.get("ins_id") is not None:
                 return (d["ins_id"], bool(d.get("is_global")), d.get("isin") or isin)
     except Exception as e:
+        try: db.rollback()  # poisona inte transaktionen för efterföljande queries
+        except Exception: pass
         print(f"[price-verify] insid-resolve fel: {e}", file=sys.stderr)
     return None
 

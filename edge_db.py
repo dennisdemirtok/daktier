@@ -67,9 +67,24 @@ class PgConnectionWrapper:
         self._conn = conn
 
     def execute(self, sql, params=None):
-        cur = self._conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
-        cur.execute(sql, params)
-        return cur
+        try:
+            cur = self._conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+            cur.execute(sql, params)
+            return cur
+        except psycopg2.Error as e:
+            # Auto-heal: ett tidigare fel kan ha lämnat transaktionen abortad
+            # (25P02 = in_failed_sql_transaction). Rolla tillbaka och försök EN
+            # gång till på ren transaktion — annars kaskaderar felet till varje
+            # efterföljande query på samma connection.
+            if getattr(e, "pgcode", None) == "25P02" or "is aborted" in str(e).lower():
+                try:
+                    self._conn.rollback()
+                except Exception:
+                    pass
+                cur = self._conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+                cur.execute(sql, params)
+                return cur
+            raise
 
     def commit(self):
         self._conn.commit()
