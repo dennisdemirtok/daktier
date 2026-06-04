@@ -12123,27 +12123,54 @@ def _agent_get_full_stock(db, query):
     except Exception:
         def is_quarantined(_x): return False
 
-    def _pick(cands):
-        cl = [dict(c) for c in (cands or []) if not is_quarantined(dict(c).get("isin"))]
-        if not cl:
-            return None
-        cl.sort(key=lambda c: (0 if (c.get("country") in ("SE", "FI", "DK", "NO")) else 1,
-                               -(c.get("number_of_owners") or 0)))
-        return cl[0]
+    def _isin_nordic(isin):
+        return isinstance(isin, str) and isin[:2] in ("SE", "FI", "DK", "NO", "IS")
+
+    def _pick(cands, want=None):
+        """Returnerar (bästa_kandidat, quarantine_hit). quarantine_hit=True om en
+        NAMN-matchande kandidat fanns men var karantänerad → anropet ska INTE
+        falla igenom till fuzzy (annars smyger fel bolag in, t.ex. SSAB B →
+        Viking Supply 'VSSAB B'). Rankar nordisk ISIN-prefix först (country-fältet
+        är opålitligt — kanadensisk SAND låg felmärkt som country=SE), sedan exakt
+        ticker-likhet, sedan ägarantal."""
+        raw = [dict(c) for c in (cands or [])]
+        q_hit = any(is_quarantined(c.get("isin")) for c in raw)
+        clean = [c for c in raw if not is_quarantined(c.get("isin"))]
+        if not clean:
+            return None, q_hit
+        wu = (want or "").upper()
+
+        def keyf(c):
+            tk = (c.get("ticker") or c.get("short_name") or "").upper()
+            sn = (c.get("short_name") or "").upper()
+            exact = 0 if wu and (tk == wu or sn == wu) else 1
+            return (0 if _isin_nordic(c.get("isin")) else 1, exact,
+                    -(c.get("number_of_owners") or 0))
+        clean.sort(key=keyf)
+        return clean[0], q_hit
 
     cands = db.execute(
         f"SELECT * FROM stocks WHERE (UPPER(ticker) = UPPER({ph}) OR UPPER(short_name) = UPPER({ph})) "
         f"AND last_price > 0 ORDER BY number_of_owners DESC LIMIT 8",
         (qx, qx),
     ).fetchall()
-    best = _pick(cands)
+    best, q_hit = _pick(cands, qx)
+    # Om en EXAKT namn-/ticker-match fanns men var karantänerad → returnera
+    # karantänfel direkt. Fall ALDRIG igenom till fuzzy (skulle plocka junk).
+    if not best and q_hit:
+        return {"error": f"'{query}' matchar ett karantänerat instrument (korrupt/felmärkt data). "
+                         f"Ingen ren ersättare med samma ticker. Manuell granskning krävs — "
+                         f"analysen avbryts hellre än att rapportera fel bolag."}
     if not best:
         cands = db.execute(
             f"SELECT * FROM stocks WHERE (name LIKE {ph} OR short_name LIKE {ph} OR ticker LIKE {ph}) "
             f"AND last_price > 0 ORDER BY number_of_owners DESC LIMIT 12",
             (q, q, q),
         ).fetchall()
-        best = _pick(cands)
+        best, q_hit = _pick(cands, qx)
+        if not best and q_hit:
+            return {"error": f"'{query}' matchar endast karantänerade instrument (korrupt data). "
+                             f"Analysen avbryts hellre än att rapportera fel bolag."}
     if not best:
         return {"error": f"Ingen ren aktie hittad för '{query}' (ev. karantänerad/korrupt data)"}
     d = best
@@ -14395,6 +14422,54 @@ def api_price_cache_status():
         "us_market_open": _is_market_hours_us(),
         "last_tick_unix": _LAST_PRICE_UPDATE_AT[0],
         "interval_sec": PRICE_UPDATE_INTERVAL_SEC,
+    })
+
+
+@app.route("/api/diag/resolve-candidates")
+def api_diag_resolve_candidates():
+    """Visar EXAKT vilka rader resolvern väljer mellan (felsökning av Step 1).
+    ?ticker=SAND → exakt-match-set + fuzzy-set med ISIN/ticker/karantänstatus."""
+    db = get_db()
+    from edge_db import _ph
+    ph = _ph()
+    qx = (request.args.get("ticker") or "").strip()
+    if not qx:
+        return jsonify({"error": "ange ?ticker=SYMBOL"}), 400
+    try:
+        from data_quarantine import is_quarantined
+    except Exception:
+        def is_quarantined(_x):
+            return False
+    q = f"%{qx}%"
+
+    def _rows(sql, params):
+        out = []
+        for c in db.execute(sql, params).fetchall():
+            d = dict(c)
+            out.append({
+                "short_name": d.get("short_name"), "ticker": d.get("ticker"),
+                "name": d.get("name"), "isin": d.get("isin"),
+                "country": d.get("country"), "last_price": d.get("last_price"),
+                "owners": d.get("number_of_owners"),
+                "quarantined": bool(is_quarantined(d.get("isin"))),
+                "isin_nordic": isinstance(d.get("isin"), str) and (d.get("isin") or "")[:2]
+                               in ("SE", "FI", "DK", "NO", "IS"),
+            })
+        return out
+
+    exact = _rows(
+        f"SELECT * FROM stocks WHERE (UPPER(ticker)=UPPER({ph}) OR UPPER(short_name)=UPPER({ph})) "
+        f"AND last_price > 0 ORDER BY number_of_owners DESC LIMIT 8", (qx, qx))
+    fuzzy = _rows(
+        f"SELECT * FROM stocks WHERE (name LIKE {ph} OR short_name LIKE {ph} OR ticker LIKE {ph}) "
+        f"AND last_price > 0 ORDER BY number_of_owners DESC LIMIT 12", (q, q, q))
+    chosen = _agent_get_full_stock(db, qx) or {}
+    return jsonify({
+        "query": qx,
+        "exact_match_candidates": exact,
+        "fuzzy_match_candidates": fuzzy,
+        "chosen": {"short_name": chosen.get("short_name"), "isin": chosen.get("isin"),
+                   "country": chosen.get("country"), "error": chosen.get("error")},
     })
 
 
