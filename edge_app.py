@@ -14318,6 +14318,107 @@ def api_diag_price_check():
         return jsonify({"error": str(e), "tb": traceback.format_exc()[:600]}), 500
 
 
+@app.route("/api/diag/pit")
+def api_diag_pit():
+    """Point-in-time-data för retrospektiv validering (M1/M6-disciplin).
+    ?ticker=SSAB B&date=2016-12-31&lag=75
+    Returnerar ENBART data känd vid datumet (rapporter med report_end_date <=
+    date − lag dagar, så ej ännu publicerade rapporter aldrig läcker in) +
+    pris vid datum och +12m, samt beräknade nyckeltal från RIKTIG Börsdata-data."""
+    from edge_db import _ph as _phf, _fetchone, _fetchall
+    from datetime import datetime as _dt, timedelta as _td
+    db = get_db(); ph = _phf()
+    tk = (request.args.get("ticker") or "").strip()
+    ds = (request.args.get("date") or "").strip()
+    lag = int(request.args.get("lag") or 75)
+    if not tk or not ds:
+        return jsonify({"error": "ange ?ticker=...&date=YYYY-MM-DD"}), 400
+    try:
+        d0 = _dt.fromisoformat(ds[:10]).date()
+    except Exception:
+        return jsonify({"error": "ogiltigt datum"}), 400
+    cutoff = (d0 - _td(days=lag)).isoformat()
+    fwd = (d0 + _td(days=365)).isoformat()
+    fwd_max = (d0 + _td(days=400)).isoformat()
+    try:
+        # resolve company (exakt först)
+        srow = _fetchone(db, f"SELECT isin, short_name, name, ticker, country, currency FROM stocks "
+                             f"WHERE UPPER(ticker)=UPPER({ph}) OR UPPER(short_name)=UPPER({ph}) "
+                             f"ORDER BY number_of_owners DESC LIMIT 1", (tk, tk))
+        if not srow:
+            srow = _fetchone(db, f"SELECT isin, short_name, name, ticker, country, currency FROM stocks "
+                                 f"WHERE name LIKE {ph} OR short_name LIKE {ph} ORDER BY number_of_owners DESC LIMIT 1",
+                                 (f"%{tk}%", f"%{tk}%"))
+        if not srow:
+            return jsonify({"error": f"ticker '{tk}' ej i DB", "data_saknas": True}), 404
+        s = dict(srow); isin = s.get("isin")
+        if not isin:
+            return jsonify({"error": "ingen isin", "data_saknas": True, "resolved": s}), 404
+
+        def price_at(maxd):
+            r = _fetchall(db, f"SELECT date, close FROM borsdata_prices WHERE isin={ph} AND date <= {ph} "
+                              f"ORDER BY date DESC LIMIT 1", (isin, maxd))
+            return dict(r[0]) if r else None
+        p_at = price_at(d0.isoformat())
+        p_fwd = price_at(fwd)
+        # endast giltig forward om priset ligger nära +365 (annars saknas framtida data)
+        fwd_ok = bool(p_fwd and p_fwd.get("date") and p_fwd["date"] <= fwd_max and p_fwd["date"] >= d0.isoformat())
+        fwd_ret = None
+        if p_at and fwd_ok and p_at.get("close"):
+            try: fwd_ret = round((p_fwd["close"] / p_at["close"] - 1) * 100, 1)
+            except Exception: pass
+
+        cols = ("period_year,period_q,report_end_date,revenues,gross_income,operating_income,"
+                "net_profit,eps,operating_cash_flow,free_cash_flow,total_equity,total_liabilities,"
+                "cash_and_equivalents,net_debt,shares_outstanding,dividend")
+        annuals = [dict(r) for r in (_fetchall(db,
+            f"SELECT {cols} FROM borsdata_reports WHERE isin={ph} AND report_type='year' "
+            f"AND report_end_date <= {ph} ORDER BY report_end_date DESC LIMIT 5", (isin, cutoff)) or [])]
+        quarters = [dict(r) for r in (_fetchall(db,
+            f"SELECT {cols} FROM borsdata_reports WHERE isin={ph} AND report_type='quarter' "
+            f"AND report_end_date <= {ph} ORDER BY report_end_date DESC LIMIT 6", (isin, cutoff)) or [])]
+
+        def _f(x):
+            try: return float(x) if x is not None else None
+            except Exception: return None
+        m = {"data_saknas": []}
+        a0 = annuals[0] if annuals else None
+        a1 = annuals[1] if len(annuals) > 1 else None
+        price = _f(p_at.get("close")) if p_at else None
+        if a0:
+            rev = _f(a0.get("revenues")); op = _f(a0.get("operating_income")); gi = _f(a0.get("gross_income"))
+            npf = _f(a0.get("net_profit")); eps = _f(a0.get("eps")); fcf = _f(a0.get("free_cash_flow"))
+            ocf = _f(a0.get("operating_cash_flow")); nd = _f(a0.get("net_debt")); eq = _f(a0.get("total_equity"))
+            sh = _f(a0.get("shares_outstanding"))
+            m["latest_annual_year"] = a0.get("period_year"); m["latest_annual_end"] = a0.get("report_end_date")
+            if not eps: m["data_saknas"].append("eps")
+            m["pe_annual"] = round(price / eps, 1) if (price and eps and eps != 0) else None
+            m["op_margin_pct"] = round(op / rev * 100, 1) if op is not None and rev else None
+            m["gross_margin_pct"] = round(gi / rev * 100, 1) if gi is not None and rev else None
+            m["net_margin_pct"] = round(npf / rev * 100, 1) if npf is not None and rev else None
+            m["fcf"] = fcf; m["ocf"] = ocf; m["net_profit"] = npf
+            m["fcf_to_netprofit"] = round(fcf / npf, 2) if fcf is not None and npf else None  # Wirecard-test
+            m["net_debt"] = nd
+            m["nd_to_ebit"] = round(nd / op, 1) if nd is not None and op and op != 0 else None  # EBITDA ej lagrad → EBIT-proxy
+            m["roe_pct"] = round(npf / eq * 100, 1) if npf is not None and eq and eq != 0 else None
+            m["rev_growth_yoy_pct"] = (round((rev / _f(a1.get("revenues")) - 1) * 100, 1)
+                                       if a1 and rev and _f(a1.get("revenues")) else None)
+            m["market_cap_m"] = round(price * sh, 0) if price and sh else None  # shares i miljoner → cap i miljoner
+        else:
+            m["data_saknas"].append("inga årsrapporter före datum")
+        return jsonify({
+            "ticker": tk, "resolved": s, "isin": isin, "assessment_date": d0.isoformat(),
+            "publication_lag_days": lag, "report_cutoff": cutoff,
+            "price_at": p_at, "price_fwd_12m": p_fwd, "fwd_return_12m_pct": fwd_ret, "fwd_valid": fwd_ok,
+            "metrics": m, "annuals": annuals, "quarters": quarters,
+        })
+    except Exception as e:
+        import traceback
+        try: db.rollback()
+        except Exception: pass
+        return jsonify({"error": str(e), "tb": traceback.format_exc()[:700]}), 500
+
+
 @app.route("/api/dashboard/kpi-row")
 def api_dashboard_kpi_row():
     """Hero KPI-row: dagens signaler aggregerat över dashboard_safe-bolag.
