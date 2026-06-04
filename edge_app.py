@@ -12023,23 +12023,40 @@ def _agent_get_full_stock(db, query):
     ph = _ph()
     qx = (query or "").strip()
     q = f"%{qx}%"
-    # #2: EXAKT ticker/short_name-träff först — annars matchar "NET" (Cloudflare,
-    # US) fel mot "NETI B" (SE) bara för att den har fler Avanza-ägare.
-    row = db.execute(
-        f"SELECT * FROM stocks WHERE UPPER(ticker) = UPPER({ph}) OR UPPER(short_name) = UPPER({ph}) "
-        f"ORDER BY number_of_owners DESC LIMIT 1",
+    # ROBUST RESOLVER (Step 1): exakt ticker/short_name → fuzzy, men:
+    #  - prioritera nordisk börs (SE/FI/DK/NO) — annars matchar "SAND" en
+    #    kanadensisk penny stock i st.f. Sandvik; "NET" → Cloudflare ej NETI B
+    #  - EXKLUDERA karantänerade ISIN (korrupt data, t.ex. SSAB) — fel bolag
+    #    får ALDRIG smyga in i en live-logg.
+    try:
+        from data_quarantine import is_quarantined
+    except Exception:
+        def is_quarantined(_x): return False
+
+    def _pick(cands):
+        cl = [dict(c) for c in (cands or []) if not is_quarantined(dict(c).get("isin"))]
+        if not cl:
+            return None
+        cl.sort(key=lambda c: (0 if (c.get("country") in ("SE", "FI", "DK", "NO")) else 1,
+                               -(c.get("number_of_owners") or 0)))
+        return cl[0]
+
+    cands = db.execute(
+        f"SELECT * FROM stocks WHERE (UPPER(ticker) = UPPER({ph}) OR UPPER(short_name) = UPPER({ph})) "
+        f"AND last_price > 0 ORDER BY number_of_owners DESC LIMIT 8",
         (qx, qx),
-    ).fetchone()
-    if not row:
-        # Fuzzy-fallback (namn/ticker/short_name innehåller query).
-        row = db.execute(
-            f"SELECT * FROM stocks WHERE name LIKE {ph} OR short_name LIKE {ph} OR ticker LIKE {ph} "
-            f"ORDER BY number_of_owners DESC LIMIT 1",
+    ).fetchall()
+    best = _pick(cands)
+    if not best:
+        cands = db.execute(
+            f"SELECT * FROM stocks WHERE (name LIKE {ph} OR short_name LIKE {ph} OR ticker LIKE {ph}) "
+            f"AND last_price > 0 ORDER BY number_of_owners DESC LIMIT 12",
             (q, q, q),
-        ).fetchone()
-    if not row:
-        return {"error": f"Ingen aktie hittad för '{query}'"}
-    d = dict(row)
+        ).fetchall()
+        best = _pick(cands)
+    if not best:
+        return {"error": f"Ingen ren aktie hittad för '{query}' (ev. karantänerad/korrupt data)"}
+    d = best
     sc = {}  # FIX: init före try — annars UnboundLocalError i v2-blocket nedan
              # om _attach_hist/_score_book_models kastar (kraschade hela analysen).
     try:
