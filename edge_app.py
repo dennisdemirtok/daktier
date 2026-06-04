@@ -14357,6 +14357,13 @@ def api_diag_pit():
         s = dict(srow); isin = s.get("isin")
         if not isin:
             return jsonify({"error": "ingen isin", "data_saknas": True, "resolved": s}), 404
+        try:
+            from data_quarantine import is_quarantined, quarantine_reason
+            if is_quarantined(isin):
+                return jsonify({"error": "DATA SAKNAS (karantän): " + (quarantine_reason(isin) or ""),
+                                "data_saknas": True, "quarantined": True, "resolved": s, "isin": isin}), 200
+        except Exception:
+            pass
 
         def price_at(maxd):
             r = _fetchall(db, f"SELECT date, close FROM borsdata_prices WHERE isin={ph} AND date <= {ph} "
@@ -14513,7 +14520,9 @@ def api_diag_backfill_quarters():
                             mm.get("financial_assets"), mm.get("total_equity"), mm.get("total_liabilities"),
                             mm.get("current_liabilities"), mm.get("non_current_liabilities"), mm.get("cash_and_equivalents"),
                             mm.get("net_debt"), mm.get("shares_outstanding"), mm.get("dividend"), mm.get("stock_price_avg"),
-                            mm.get("stock_price_high"), mm.get("stock_price_low"), mm.get("broken_fiscal_year"), now_iso))
+                            mm.get("stock_price_high"), mm.get("stock_price_low"),
+                            (int(mm.get("broken_fiscal_year")) if isinstance(mm.get("broken_fiscal_year"), bool)
+                             else mm.get("broken_fiscal_year")), now_iso))
                         n += 1
                     except Exception as ie:
                         if first_err is None: first_err = str(ie)[:120]
