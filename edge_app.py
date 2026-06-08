@@ -12489,10 +12489,15 @@ def _agent_get_full_stock(db, query):
         wu = (want or "").upper()
 
         def keyf(c):
+            isin = c.get("isin") or ""
             tk = (c.get("ticker") or c.get("short_name") or "").upper()
             sn = (c.get("short_name") or "").upper()
             exact = 0 if wu and (tk == wu or sn == wu) else 1
-            return (0 if _isin_nordic(c.get("isin")) else 1, exact,
+            # Nordisk ISIN först → sedan VILKEN som helst ISIN före ISIN-lös dubblett
+            # (en rad utan ISIN saknar Börsdata-fundamenta → agenten skulle gissa).
+            return (0 if _isin_nordic(isin) else 1,
+                    0 if isin else 1,
+                    exact,
                     -(c.get("number_of_owners") or 0))
         clean.sort(key=keyf)
         return clean[0], q_hit
@@ -15146,6 +15151,133 @@ def api_diag_pit():
         try: db.rollback()
         except Exception: pass
         return jsonify({"error": str(e), "tb": traceback.format_exc()[:700]}), 500
+
+
+_GLOBAL_SYNC_STATE = {"running": False, "summary": None}
+
+
+def _sync_missing_fundamentals(db, min_owners=500, limit=80):
+    """Backfill Börsdata-fundamenta (rapporter+priser) för högt-ägda bolag som
+    SAKNAR rapporter. Fixar US-täckningsluckan: många US-bolag ligger i stocks med
+    pris+ägare men utan fundamenta → agenten gissar. Resolvar mot Börsdatas
+    katalog (auktoritativ) på ticker/yahoo, drar data på ins_id, länkar stocks.isin."""
+    from edge_db import _ph as _phf, _fetchall
+    from borsdata_fetcher import fetch_all_instruments, fetch_global_instruments
+    ph = _phf()
+    # 1) ISIN som redan HAR rapporter
+    have = set()
+    for r in (_fetchall(db, "SELECT DISTINCT isin FROM borsdata_reports") or []):
+        iv = dict(r).get("isin")
+        if iv:
+            have.add(iv)
+    # 2) Bygg katalog-index (ticker/yahoo → instrument), prioritera riktig ISIN + US/EU
+    PREF = {5, 1, 6, 7, 4, 8, 9, 10}
+
+    def _prio(i):
+        return (0 if i.get("isin") else 1,
+                0 if (i.get("countryId") in PREF) else 1,
+                len(i.get("ticker") or ""))
+    gi = fetch_global_instruments() or []
+    for x in gi:
+        x["_is_global"] = True
+    ni = fetch_all_instruments() or []
+    for x in ni:
+        x["_is_global"] = False
+    idx = {}
+    for inst in sorted(gi + ni, key=_prio):
+        if not inst.get("isin"):
+            continue
+        for key in (inst.get("ticker"), inst.get("yahoo")):
+            if key:
+                k = str(key).upper()
+                if k not in idx:
+                    idx[k] = inst
+    # 3) Kandidater: högt-ägda bolag
+    cands = _fetchall(db, f"SELECT orderbook_id, short_name, name, isin, number_of_owners "
+                          f"FROM stocks WHERE number_of_owners >= {ph} AND last_price > 0 "
+                          f"ORDER BY number_of_owners DESC LIMIT 3000", (min_owners,))
+    summary = {"min_owners": min_owners, "limit": limit, "checked": 0, "already": 0,
+               "linked": 0, "synced": 0, "unresolved": [], "errors": [], "synced_list": []}
+    for c in (cands or []):
+        if summary["synced"] >= limit:
+            break
+        d = dict(c); summary["checked"] += 1
+        cur_isin = d.get("isin")
+        if cur_isin and cur_isin in have:
+            summary["already"] += 1
+            continue
+        sn = (d.get("short_name") or "").upper()
+        inst = idx.get(sn)
+        if not inst:
+            summary["unresolved"].append(d.get("short_name"))
+            continue
+        ins_id = inst.get("insId"); isin = inst.get("isin")
+        is_global = bool(inst.get("_is_global"))
+        oid = d.get("orderbook_id")
+        try:
+            if isin in have:
+                # rapporter finns redan — länka bara stocks.isin (fixar dubblett-buggen)
+                if cur_isin != isin:
+                    db.execute(f"UPDATE stocks SET isin={ph} WHERE orderbook_id={ph}", (isin, oid))
+                    db.commit()
+                    summary["linked"] += 1
+                else:
+                    summary["already"] += 1
+                continue
+            _forward_ensure_data(db, ins_id, isin, is_global)
+            if cur_isin != isin:
+                db.execute(f"UPDATE stocks SET isin={ph} WHERE orderbook_id={ph}", (isin, oid))
+                db.commit()
+            have.add(isin)
+            summary["synced"] += 1
+            summary["synced_list"].append({"ticker": d.get("short_name"), "isin": isin,
+                                           "ins_id": ins_id, "global": is_global})
+        except Exception as e:
+            try:
+                db.rollback()
+            except Exception:
+                pass
+            summary["errors"].append({"ticker": d.get("short_name"), "error": str(e)[:120]})
+    return summary
+
+
+@app.route("/api/diag/sync-missing-fundamentals", methods=["GET", "POST"])
+def api_sync_missing_fundamentals():
+    """Backfill fundamenta för högt-ägda bolag som saknar Börsdata-rapporter
+    (fixar US-täckningsluckan). ?min_owners=500&limit=80 (&sync=1 för inline)."""
+    import os as _os
+    if request.args.get("status") == "1":
+        return jsonify({"running": _GLOBAL_SYNC_STATE["running"],
+                        "summary": _GLOBAL_SYNC_STATE["summary"]})
+    need = _os.environ.get("FORWARD_LOG_TOKEN")
+    if need and (request.args.get("token") or "") != need:
+        return jsonify({"error": "ogiltig token"}), 403
+    min_owners = int(request.args.get("min_owners") or 500)
+    limit = int(request.args.get("limit") or 80)
+    if request.args.get("sync") == "1":
+        db = get_db()
+        try:
+            s = _sync_missing_fundamentals(db, min_owners, limit)
+            _GLOBAL_SYNC_STATE["summary"] = s
+            return jsonify(s)
+        finally:
+            db.close()
+    if _GLOBAL_SYNC_STATE["running"]:
+        return jsonify({"status": "already_running", "last": _GLOBAL_SYNC_STATE["summary"]})
+
+    def _run():
+        _GLOBAL_SYNC_STATE["running"] = True
+        dbb = get_db()
+        try:
+            _GLOBAL_SYNC_STATE["summary"] = _sync_missing_fundamentals(dbb, min_owners, limit)
+        except Exception as e:
+            _GLOBAL_SYNC_STATE["summary"] = {"error": str(e)}
+        finally:
+            dbb.close()
+            _GLOBAL_SYNC_STATE["running"] = False
+    threading.Thread(target=_run, daemon=True).start()
+    return jsonify({"status": "started", "min_owners": min_owners, "limit": limit,
+                    "note": "kör i bakgrunden — hämta status på /api/diag/sync-missing-fundamentals?status=1"})
 
 
 @app.route("/api/diag/backfill-quarters", methods=["POST", "GET"])
