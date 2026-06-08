@@ -38,8 +38,11 @@ _CYCLICAL_SECTORS = {"materials", "basic materials", "energy", "metals", "mining
                      "paper", "forest", "steel", "shipping", "autos", "chemicals"}
 
 
-def classify(stock_data, opm_history):
-    """Returnerar (kategori, metod). Fundamental-först + kurerad override."""
+def classify(stock_data, opm_history, roe=None):
+    """Returnerar (kategori, metod). Fundamental-först + kurerad override.
+    roe: Börsdata-beräknad ROE (skickas in från compute) — använd den i FÖRSTA hand;
+    stock_data.return_on_equity är ofta None för US-bolag (Avanza-fält saknas), vilket
+    annars felklassar t.ex. MSFT/NVDA som turnaround i stället för compounder."""
     name = (stock_data.get("name") or stock_data.get("short_name") or "").lower()
     for hint, cat in _OVERRIDE.items():
         if hint in name:
@@ -68,11 +71,18 @@ def classify(stock_data, opm_history):
     if (cv is not None and cv > 0.45) or any(s in sector for s in _CYCLICAL_SECTORS):
         return "cyclical", (f"marginal-CV {cv:.2f} > 0.45" if cv and cv > 0.45 else f"cyklisk sektor ({sector})")
 
-    # compounder: stabil hög ROE
-    roe = stock_data.get("return_on_equity")
+    # compounder: stabil hög ROE (Börsdata-ROE i första hand, Avanza-fält som fallback)
+    roe_eff = roe if roe is not None else stock_data.get("return_on_equity")
     try:
-        if roe is not None and float(roe) >= 15 and (cv is None or cv <= 0.45):
-            return "compounder", f"stabil ROE {float(roe):.0f}% + låg marginal-volatilitet"
+        if roe_eff is not None and float(roe_eff) >= 15 and (cv is None or cv <= 0.45):
+            return "compounder", f"stabil ROE {float(roe_eff):.0f}% + låg marginal-volatilitet"
+    except Exception:
+        pass
+    # stabil hög rörelsemarginal är också compounder-signal (fångar US-tech där ROE
+    # ibland saknas men marginalen är hög och stabil)
+    try:
+        if len(vals) >= 4 and (sum(vals) / len(vals)) >= 20 and (cv is not None and cv <= 0.35):
+            return "compounder", f"stabil hög rörelsemarginal (snitt {sum(vals)/len(vals):.0f}%, låg volatilitet)"
     except Exception:
         pass
     return "turnaround", "ingen tydlig klass → turnaround/other"
@@ -115,7 +125,7 @@ def compute_pinned(cat, ttm_pe, op_margin, opm_history, roe, prior_mom_pct, rev_
 
 def compute(stock_data, ttm_pe, op_margin, opm_history, roe, prior_mom_pct, rev_growth=None):
     """Kör fryst v3.3 → per-lins signal + citat + profil + klassning + commit-hash."""
-    cat, cat_method = classify(stock_data, opm_history)
+    cat, cat_method = classify(stock_data, opm_history, roe)
     vs, vc = value_signal(cat, ttm_pe, op_margin, opm_history, rev_growth)
     qs, qc = quality_signal(cat, roe, op_margin, opm_history)
     ss, sc = swing_signal(prior_mom_pct)
