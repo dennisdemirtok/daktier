@@ -7258,8 +7258,6 @@ function _colorizeSignals(root) {
 function _badgeConfidence(root) {
     try {
         (root || document).querySelectorAll('.agent-md, .report-md').forEach(md => {
-            if (md.dataset.confDone) return;
-            md.dataset.confDone = '1';
             md.querySelectorAll('p, li, td, h3, h4').forEach(el => {
                 if (!/confidence/i.test(el.textContent)) return;
                 el.querySelectorAll('strong').forEach(s => {
