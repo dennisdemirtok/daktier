@@ -5906,7 +5906,7 @@ async function _cardToFile(card, fname, format) {
         // Bearbeta innehållet: tabeller + signal-färger + diagram (utan animation
         // så de hinner ritas innan html2canvas fångar bilden).
         try {
-            _enhanceAgentTables(card); _colorizeSignals(card);
+            _enhanceAgentTables(card); _colorizeSignals(card); _badgeConfidence(card);
             if (typeof _renderAgentCharts === 'function') _renderAgentCharts(card, { noAnim: true });
             if (card.querySelector('.agent-chart canvas')) await new Promise(r => setTimeout(r, 320));
         } catch (e) { /* tyst */ }
@@ -6792,6 +6792,11 @@ function renderAgent() {
         /* Träff-kolumn: ren färgad text (ingen chip-bakgrund) */
         .agent-md .sig-ratt, .report-md .sig-ratt { color:#047857; background:none; padding:0; font-weight:700; }
         .agent-md .sig-fel, .report-md .sig-fel { color:#b91c1c; background:none; padding:0; font-weight:700; }
+        /* Confidence-badge (track record) */
+        .agent-md .conf-badge, .report-md .conf-badge { display:inline-block; padding:1px 10px; border-radius:6px; font-weight:700; font-size:0.9em; letter-spacing:0.03em; }
+        .agent-md .conf-hog, .report-md .conf-hog { color:#047857; background:rgba(5,150,105,0.13); }
+        .agent-md .conf-medel, .report-md .conf-medel { color:#b45309; background:rgba(180,83,9,0.13); }
+        .agent-md .conf-lag, .report-md .conf-lag { color:#b91c1c; background:rgba(185,28,28,0.13); }
         /* Diagram-container (chat + PDF) */
         .agent-md .agent-chart, .report-md .agent-chart { background:#fff; border:1px solid #e8eaed; border-radius:12px; padding:14px 16px 12px; margin:16px 0; }
         .agent-md .agent-chart-title, .report-md .agent-chart-title { font-size:13px; font-weight:600; color:#1f2937; margin-bottom:12px; letter-spacing:-0.01em; }
@@ -7248,6 +7253,27 @@ function _colorizeSignals(root) {
     } catch (e) { /* tyst */ }
 }
 
+// Färgad badge på confidence-nivån (HÖG/MEDEL/LÅG) i track record-sektionen.
+// Scopas till rader som nämner "confidence" så vanliga ord inte färgas.
+function _badgeConfidence(root) {
+    try {
+        (root || document).querySelectorAll('.agent-md, .report-md').forEach(md => {
+            if (md.dataset.confDone) return;
+            md.dataset.confDone = '1';
+            md.querySelectorAll('p, li, td, h3, h4').forEach(el => {
+                if (!/confidence/i.test(el.textContent)) return;
+                el.querySelectorAll('strong').forEach(s => {
+                    const t = s.textContent.trim().toUpperCase();
+                    const cls = t === 'HÖG' ? 'hog' : (t === 'MEDEL' ? 'medel' : (t === 'LÅG' ? 'lag' : null));
+                    if (cls && !s.classList.contains('conf-badge')) {
+                        s.classList.add('conf-badge', 'conf-' + cls);
+                    }
+                });
+            });
+        });
+    } catch (e) { /* tyst */ }
+}
+
 // ── Riktiga diagram från ```chart-block (JSON-spec) ──
 const _CHART_PALETTE = ['#2563eb', '#7c3aed', '#059669', '#d97706', '#dc2626', '#0891b2'];
 function _buildChart(canvas, spec, opts) {
@@ -7307,7 +7333,7 @@ function _renderAgentCharts(root, opts) {
 // Samlad efter-rendering: tabeller + signaler + diagram
 function _postRenderAgent(root) {
     _enhanceAgentTables(root);
-    _colorizeSignals(root);
+    _colorizeSignals(root); _badgeConfidence(root);
     _renderAgentCharts(root);
 }
 
