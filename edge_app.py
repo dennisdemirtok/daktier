@@ -16808,6 +16808,30 @@ def _startup():
 
         scheduler.add_job(scheduled_hist_sync, 'cron', hour=3, minute=30, id='hist_sync_nightly')
 
+        # Nightly täcknings-sync (04:30): backfilla fundamenta för högt-ägda bolag
+        # som saknar Börsdata-rapporter (US-täckningsluckan). Håller alla bolag
+        # användaren ser i ägarmomentum-listan analysbara — agenten ska aldrig
+        # behöva gissa pga saknad data.
+        def scheduled_fundamentals_sync():
+            if _GLOBAL_SYNC_STATE.get("running"):
+                return
+            print(f"[AUTO] Täcknings-sync (fundamenta) start {datetime.now().strftime('%H:%M')}")
+            _GLOBAL_SYNC_STATE["running"] = True
+            dbf = get_db()
+            try:
+                s = _sync_missing_fundamentals(dbf, min_owners=300, limit=300)
+                _GLOBAL_SYNC_STATE["summary"] = s
+                print(f"[AUTO] Täcknings-sync klar: {s.get('synced')} synkade, "
+                      f"{s.get('linked')} länkade, {len(s.get('unresolved', []))} olösta")
+            except Exception as e:
+                print(f"[AUTO] Täcknings-sync fel: {e}")
+            finally:
+                dbf.close()
+                _GLOBAL_SYNC_STATE["running"] = False
+
+        scheduler.add_job(scheduled_fundamentals_sync, 'cron', hour=4, minute=30,
+                          id='fundamentals_sync_nightly')
+
         # Dagligt makro-snapshot (06:00 lokal)
         def scheduled_macro_snapshot():
             try:
