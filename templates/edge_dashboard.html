@@ -824,8 +824,14 @@
             .agent-msg-img { max-width: 220px; max-height: 160px; }
             .agent-input-row { padding: 8px !important; }
             .agent-textarea { font-size: 16px; }
-            .agent-md table { font-size: 11px !important; }
-            .agent-md th, .agent-md td { padding: 5px 6px !important; }
+            .agent-md table { font-size: 11.5px !important; }
+            .agent-md th, .agent-md td { padding: 6px 8px !important; }
+            /* Tabeller växer till innehållet och scrollar i wrappern (ingen kapning).
+               Celler nowrap förutom sista kolumnen (ofta Kommentar) som får radbryta. */
+            .agent-md .agent-table-scroll > table { width: auto !important; min-width: 100%; }
+            .agent-md .agent-table-scroll th, .agent-md .agent-table-scroll td { white-space: nowrap; }
+            .agent-md .agent-table-scroll td:last-child,
+            .agent-md .agent-table-scroll th:last-child { white-space: normal; min-width: 130px; }
             .agent-examples { gap: 5px !important; padding: 4px 0 !important; }
             .agent-chip { padding: 7px 11px !important; font-size: 11px !important; }
 
@@ -5986,7 +5992,7 @@ function _buildAgentAnalysisCard(text, meta) {
                 </div>
             </div>
             <div style="margin-top:14px;padding-top:12px;border-top:1px solid #e5e7eb;display:flex;justify-content:space-between;align-items:center;font-size:10px;color:#94a3b8">
-                <span>DAKTIER Edge Agent (DEL 6.99 v3.2)${meta.modelLabel ? ' · ' + escapeHtml(meta.modelLabel) : ''}</span>
+                <span>DAKTIER Edge Agent${meta.modelLabel ? ' · ' + escapeHtml(meta.modelLabel) : ''}</span>
                 <span>DAKTIER · Beslutsstöd, ej finansiell rådgivning</span>
             </div>
         </div>`;
@@ -6783,6 +6789,12 @@ function renderAgent() {
         .agent-msg.ai .agent-msg-bubble tbody tr:last-child td { border-bottom:none; }
         .agent-msg.ai .agent-msg-bubble tbody tr:hover td { background:#fafbfc; }
         .agent-msg.ai .agent-msg-bubble hr { border:none; border-top:1px solid #eceef1; margin:18px 0; }
+        /* Horisontellt scrollbar tabell-container (mobil): breda tabeller scrollar
+           i stället för att kapas av skärmkanten. */
+        .agent-md .agent-table-scroll, .report-md .agent-table-scroll {
+            overflow-x:auto; -webkit-overflow-scrolling:touch; max-width:100%; margin:14px 0;
+            border-radius:10px; }
+        .agent-md .agent-table-scroll > table, .report-md .agent-table-scroll > table { margin:0; }
         /* Subtila, dämpade signal-chips (chat + PDF) */
         .agent-md .sig, .report-md .sig { display:inline-block; padding:0.5px 7px; border-radius:5px; font-weight:600; font-size:0.93em; line-height:1.55; white-space:nowrap; letter-spacing:0.01em; }
         .agent-md .sig-buy, .report-md .sig-buy { color:#047857; background:rgba(5,150,105,0.10); }
@@ -7182,6 +7194,14 @@ function _enhanceAgentTables(root) {
         (root || document).querySelectorAll('.agent-md table, .report-md table').forEach(tbl => {
             if (tbl.dataset.enhanced) return;
             tbl.dataset.enhanced = '1';
+            // Mobil: wrappa i horisontellt scrollbar container så breda tabeller
+            // scrollar i stället för att kapas av skärmkanten.
+            if (!tbl.parentElement || !tbl.parentElement.classList.contains('agent-table-scroll')) {
+                const wrap = document.createElement('div');
+                wrap.className = 'agent-table-scroll';
+                tbl.parentNode.insertBefore(wrap, tbl);
+                wrap.appendChild(tbl);
+            }
             const rows = Array.from(tbl.querySelectorAll('tr'));
             const bodyRows = rows.filter(r => r.querySelector('td'));
             if (!bodyRows.length) return;

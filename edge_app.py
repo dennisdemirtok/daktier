@@ -10695,17 +10695,22 @@ I VARJE analys, skriv ut:
 - Per lins (Value/Quality/Swing): signal + regelhänvisning (v33.*.rule) + PROFIL
   (riskreducerande / uppsidesökande / avstår) ur v33.*.profile.
 - Cyklisk fas + op-marginal vs median om v33.cyclical_phase finns.
-- Regelversion i analysens fot: "DEL 6.99 v3.3 (commit 5b37fd6)".
+
+⛔ INGEN VERSIONS-/MODELLPRAT I TEXTEN: nämn ALDRIG modellversion, commit-hash,
+"v3.3", "v3.2", "DEL 6.99", "commit 5b37fd6", "frysta mekaniska regler" eller
+liknande intern terminologi i det användarvända svaret. Det är internt och gör
+texten stolpig. Presentera bara signalen, profilen och motiveringen rakt — t.ex.
+"Mekaniska signaler: Value N/A, Quality KÖP, Swing HÅLL" utan versionsetikett.
+INGEN regelversions-fot.
 
 OBLIGATORISK PROFIL-MARKERING: ange tydligt om den samlade hållningen är
-RISKREDUCERANDE (TA PROFIT/UNDVIK/avstår) eller UPPSIDESÖKANDE (KÖP). Out-of-
-sample visade att v3.3 byter uppsida mot blow-up-skydd (avstod +38.6pe på
-compounders) — användaren ska kunna välja defensiv/offensiv tolkning medvetet.
+RISKREDUCERANDE (TA PROFIT/UNDVIK/avstår) eller UPPSIDESÖKANDE (KÖP). Ramverket
+byter ibland uppsida mot blow-up-skydd — användaren ska kunna välja defensiv/
+offensiv tolkning medvetet.
 
-Om din kvalitativa bedömning AVVIKER från v33-signalen: notera det öppet som en
-"avvikelse mot frysta reglerna", men ÄNDRA ALDRIG v33-signalen. Reglerna är frysta
-tills forward-loggen utvärderats (≥12 mån). Saknas v33-blocket (ingen Börsdata-
-data): skriv "v3.3-signal: DATA SAKNAS".
+Om din kvalitativa bedömning AVVIKER från den mekaniska signalen: notera det öppet
+men ÄNDRA ALDRIG signalen. Saknas v33-blocket (ingen Börsdata-data): skriv
+"Mekanisk signal: DATA SAKNAS".
 ═══════════════════════════════════════════════════════════════════
 
 ═══════════════════════════════════════════════════════════════════
@@ -15495,6 +15500,40 @@ def api_sync_missing_fundamentals():
     threading.Thread(target=_run, daemon=True).start()
     return jsonify({"status": "started", "min_owners": min_owners, "limit": limit,
                     "note": "kör i bakgrunden — hämta status på /api/diag/sync-missing-fundamentals?status=1"})
+
+
+@app.route("/api/diag/model-check")
+def api_diag_model_check():
+    """Testar vilka Claude-modell-ID:n som faktiskt fungerar mot Anthropic API
+    (tiny 1-token-anrop). Avgör vilket Opus-alias agenten ska skicka."""
+    import requests as _rq
+    cands = (request.args.get("models") or
+             "claude-opus-4,claude-opus-4-0,claude-opus-4-1,claude-opus-4-5,"
+             "claude-sonnet-4-5,claude-sonnet-4-20250514").split(",")
+    out = {}
+    for m in [c.strip() for c in cands if c.strip()]:
+        try:
+            r = _rq.post("https://api.anthropic.com/v1/messages",
+                         headers={"x-api-key": CLAUDE_API_KEY,
+                                  "anthropic-version": "2023-06-01",
+                                  "content-type": "application/json"},
+                         json={"model": m, "max_tokens": 1,
+                               "messages": [{"role": "user", "content": "hi"}]},
+                         timeout=30)
+            body = {}
+            try:
+                body = r.json()
+            except Exception:
+                pass
+            out[m] = {"status": r.status_code,
+                      "ok": r.status_code == 200,
+                      "real_model": body.get("model"),
+                      "error": (body.get("error", {}) or {}).get("message", "")[:120] if r.status_code != 200 else None}
+        except Exception as e:
+            out[m] = {"status": "exc", "ok": False, "error": str(e)[:120]}
+    return jsonify({"results": out,
+                    "working_opus": [m for m, v in out.items() if v.get("ok") and "opus" in m],
+                    "working_sonnet": [m for m, v in out.items() if v.get("ok") and "sonnet" in m]})
 
 
 @app.route("/api/diag/coverage-status")
