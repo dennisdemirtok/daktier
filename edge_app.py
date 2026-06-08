@@ -12671,18 +12671,23 @@ def _agent_get_full_stock(db, query):
             except Exception:
                 _nrep = 0
         _have_core = _fund["pe"] or _fund["roe"] or _fund["op_margin"]
-        _fundamentals_available = bool(_have_core and (_nrep >= 1 or _fund["eps"]))
+        # KRÄV Börsdata-RAPPORTER (inte bara ett Avanza-pe_ratio). Användaren vill ha
+        # Börsdata-siffror — ett Avanza-tal utan underliggande Börsdata-rapport räknas
+        # som SAKNAD data. nrep=0 → flagga, även om stocks-raden råkar ha ett pe_ratio.
+        _fundamentals_available = bool(_nrep >= 1 and _have_core)
         out["data_completeness"] = {
             "fundamentals_available": _fundamentals_available,
             "borsdata_reports_count": _nrep,
+            "source": "borsdata_reports" if _nrep >= 1 else "avanza_bulk_only",
             "present": [k for k, val in _fund.items() if val],
             "missing_DATA_SAKNAS": [k for k, val in _fund.items() if not val],
             "instruction": (
-                "Alla fundamenta finns — använd EXAKT dessa Börsdata-siffror, gissa inga."
+                "Börsdata-rapporter finns — använd EXAKT dessa siffror, gissa/uppskatta inga."
                 if _fundamentals_available else
-                "⚠ BÖRSDATA-FUNDAMENTA SAKNAS för detta bolag (endast pris/ägardata). "
-                "Gör INGEN värdering och gissa INGA nyckeltal (P/E, ROE, marginal). "
-                "Säg 'OTILLRÄCKLIG DATA — kan ej rekommendera' och be Dennis synka bolaget."),
+                "⚠ BÖRSDATA-RAPPORTER SAKNAS för detta bolag (0 rapporter; ev. bara Avanza-"
+                "bulkpris). Gör INGEN värdering och gissa/uppskatta INGA nyckeltal (P/E, ROE, "
+                "marginal) — inte ens från ett pe_ratio-fält utan Börsdata-grund. Säg "
+                "'OTILLRÄCKLIG BÖRSDATA — kan ej rekommendera' och be Dennis synka bolaget."),
         }
     except Exception as _dce:
         print(f"[data_completeness] fel: {_dce}", file=sys.stderr)
