@@ -12207,6 +12207,7 @@ def _company_recommendation_backtest(db, stock_data, years=10):
         from forward_log_universe import BENCHMARK
         from datetime import datetime as _dt, timedelta as _td
         import bisect as _bisect, math as _math
+        from edge_db import _fetchone as _fo
         ph = _phf()
         isin = stock_data.get("isin")
         if not isin:
@@ -12217,6 +12218,22 @@ def _company_recommendation_backtest(db, stock_data, years=10):
                 return float(x) if x is not None else None
             except Exception:
                 return None
+
+        def _q_count():
+            r = _fo(db, f"SELECT COUNT(*) n FROM borsdata_reports WHERE isin={ph} "
+                        f"AND report_type='quarter'", (isin,))
+            return int(dict(r).get("n") or 0) if r else 0
+        # Djup-fetch EN gång om historiken är grund (US-bolag synkas bara med 8 kvartal
+        # + 14mån pris för aktuella fundamenta; en 10-års-backtest behöver ~44q + 11år).
+        if _q_count() < 24:
+            mr = _fo(db, f"SELECT ins_id, is_global FROM borsdata_instrument_map WHERE isin={ph} LIMIT 1", (isin,))
+            if mr:
+                md = dict(mr)
+                try:
+                    _forward_ensure_data(db, md.get("ins_id"), isin, bool(md.get("is_global")),
+                                         price_from_days=4200, report_q_count=44, report_y_count=12)
+                except Exception as _dde:
+                    print(f"[backtest] djup-fetch reports {isin}: {_dde}", file=sys.stderr)
         qs = [dict(r) for r in (_fetchall(db,
             f"SELECT period_year,period_q,report_end_date,revenues,operating_income,"
             f"net_profit,eps,total_equity FROM borsdata_reports WHERE isin={ph} "
@@ -12387,11 +12404,13 @@ def _forward_ensure_table(db):
     db.commit()
 
 
-def _forward_ensure_data(db, ins_id, isin, is_global=False, price_from_days=430):
+def _forward_ensure_data(db, ins_id, isin, is_global=False, price_from_days=430,
+                         report_q_count=8, report_y_count=12):
     """Drar FÄRSK Börsdata-data (rapporter år+kvartal, priser) på ins_id och upsertar
     i lokala borsdata_reports/borsdata_prices. Returnerar (last_close, last_date).
-    price_from_days styr prishistorikens längd (default ~14mån; sätt högt för index/
-    backtest-historik). Auktoritativ källa = Börsdata (det vi betalar för)."""
+    price_from_days = prishistorikens längd, report_q_count = antal kvartalsrapporter
+    (default 8 för aktuella fundamenta; sätt högt, ~44, för 10-års-backtest).
+    Auktoritativ källa = Börsdata (det vi betalar för)."""
     from edge_db import _ph as _phf, _upsert_sql
     from borsdata_fetcher import (fetch_reports, fetch_global_reports,
                                   extract_v21_metrics, fetch_stock_prices)
@@ -12407,7 +12426,7 @@ def _forward_ensure_data(db, ins_id, isin, is_global=False, price_from_days=430)
              "cash_and_equivalents", "net_debt", "shares_outstanding", "dividend", "stock_price_avg",
              "stock_price_high", "stock_price_low", "broken_fiscal_year", "fetched_at"]
     rsql = _upsert_sql("borsdata_reports", rcols, ["isin", "report_type", "period_year", "period_q"])
-    for rt, mc in (("quarter", 8), ("year", 12)):
+    for rt, mc in (("quarter", report_q_count), ("year", report_y_count)):
         try:
             reports = (fetch_global_reports(ins_id, rt, max_count=mc) if is_global
                        else fetch_reports(ins_id, rt, max_count=mc)) or []
