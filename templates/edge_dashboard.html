@@ -7146,6 +7146,9 @@ function formatAgentText(s) {
     // riktiga rubriker (## först på raden) och "C#" (ensamt #) lämnas orörda.
     try { s = String(s || '').replace(/(?<=[^\n#])(#{2,6}\s+\S)/g, '\n\n$1'); }
     catch (e) { /* äldre webbläsare utan lookbehind — hoppa över */ }
+    // Fetstil med blanksteg precis innanför markörerna ("** Swing**") parsas inte av
+    // markdown → trimma så **X** alltid blir fet (vanligt i tabellceller).
+    s = String(s || '').replace(/\*\*(\s*)([^*\n]+?)(\s*)\*\*/g, (m, a, b) => '**' + b.trim() + '**');
     // Strip ledande ingress-meningar ("Jag hämtar data...", "Nu har jag...") när en
     // rubrik följer strax efter — analysen ska börja direkt på rubriken. Bara om en
     // ##-rubrik finns inom ~320 tecken OCH prefixet ser ut som en ingress (annars
