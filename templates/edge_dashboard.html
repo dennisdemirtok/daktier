@@ -6481,7 +6481,7 @@ const AGENT_MODELS = {
 function _realModelLabel(h) {
   const id = (h && h.model) || '';
   let mm = id.match(/opus-(\d+)(?:-(\d+))?/i);
-  if (mm) return { emoji: '🧠', label: 'Opus ' + mm[1] + (mm[2] ? '.' + mm[2] : ''), color: '#7c3aed' };
+  if (mm) return { emoji: '🧠', label: 'Opus ' + mm[1] + (mm[2] && mm[2].length <= 2 ? '.' + mm[2] : ''), color: '#7c3aed' };
   mm = id.match(/sonnet-(\d+)(?:-(\d+))?/i);
   if (mm) return { emoji: '⚡', label: 'Sonnet ' + mm[1] + (mm[2] && mm[2].length <= 2 ? '.' + mm[2] : ''), color: '#1e40af' };
   return (h && h.model_used && AGENT_MODELS[h.model_used]) ? AGENT_MODELS[h.model_used] : null;
