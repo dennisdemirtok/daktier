@@ -10551,6 +10551,45 @@ INNAN output. Läs varje score mot dess egen motiveringstext före leverans.
 Reglerna nedan är ABSOLUTA och har FÖRETRÄDE framför all annan formatering.
 ═══════════════════════════════════════════════════════════════════
 
+⛔⛔ **REGEL 0 — INGEN PÅHITTAD DATA. ALLA SIFFROR FRÅN BÖRSDATA. (VIKTIGAST AV ALLA)**
+Detta är den absolut viktigaste regeln. Att rekommendera KÖP på en gissad siffra är
+det farligaste felet som finns — vi BETALAR för Börsdata just för att slippa gissa.
+
+1. **VARJE numeriskt påstående** (P/E, ROE, marginal, FCF, EPS, omsättning, skuld,
+   tillväxt, pris) MÅSTE komma från den medskickade bolagskontexten (`stock_data`,
+   `v33`-blocket, Börsdata-rapporterna) eller beräknas DIREKT ur den (t.ex.
+   P/E = verifierat pris ÷ Börsdata-EPS). Du får ALDRIG uppskatta, gissa, runda
+   till "ungefär", eller minnas en siffra från träningsdata. Om du skriver en
+   siffra ska du kunna peka på exakt vilket Börsdata-fält den kom från.
+
+2. **Saknas siffran i kontexten → skriv "DATA SAKNAS" för det måttet.** Fyll ALDRIG
+   luckan med en gissning. Ett tomt fält är inte en inbjudan att hitta på — det är
+   ett stopptecken. "P/E DATA SAKNAS (ej i Börsdata)" är ALLTID rätt; "P/E ~14"
+   (gissat) är ALLTID fel.
+
+3. **Ingen score eller KÖP/UNDVIK-rekommendation på saknad/gissad data.** Om det
+   centrala värderingsmåttet för bolagstypen saknas (t.ex. P/E för en stalwart,
+   NAV för investmentbolag) → axeln blir "N/A — DATA SAKNAS" och slutbetyget blir
+   "OTILLRÄCKLIG DATA — kan ej rekommendera". Ge ALDRIG 8/10 eller 9/10 utan att
+   de underliggande nyckeltalen finns från Börsdata. Hellre "kan ej bedöma" än ett
+   självsäkert betyg på luft.
+
+4. **Kontrollera `data_completeness`-blocket.** Bolagskontexten innehåller en lista
+   över vilka Börsdata-fundamenta som finns vs saknas. Om `fundamentals_available`
+   är false eller nyckeltal listas som saknade → säg det rakt ut högst upp i svaret
+   ("⚠ Börsdata-fundamenta saknas för detta bolag — analysen begränsas till pris/
+   ägardata, ingen värdering kan göras") och avstå från värderingsslutsatser.
+
+**STEG 0.5 — INPUT-VERIFIERING (när användaren ger en egen siffra):**
+- Jämför användarens siffra mot Börsdata-kontexten. Om Börsdata HAR siffran och de
+  skiljer >15 % → visa BÅDA öppet, utgå från Börsdata-siffran, och flagga att din
+  egen tidigare uträkning var fel om så var fallet (be inte om ursäkt med en ny
+  gissning). Om Börsdata SAKNAR siffran → använd användarens och markera källan
+  "(användaruppgift, ej verifierad mot Börsdata)".
+- Räkna ALDRIG om ett helt betyg i samma andetag som du rättar en siffra utan att
+  först hämta de korrekta Börsdata-talen. En rättelse byggd på en ny gissning är
+  lika fel som det ursprungliga felet.
+
 **REGEL 1 — ARTEFAKT-SCORES FÅR ALDRIG RENDERAS**
 Om en axel (Value/Quality/Momentum/Risk) inte kan beräknas meningsfullt för
 bolagstypen ska score-cellen visa **"N/A — [orsak]"**. ALDRIG 100, ALDRIG 0
@@ -12597,6 +12636,50 @@ def _agent_get_full_stock(db, query):
         out["v33"] = _v33_signals_for_stock(db, out)
     except Exception as _ve:
         print(f"[v33] wrapper fel: {_ve}", file=sys.stderr)
+
+    # ── REGEL 0-stöd: explicit DATA-TILLGÄNGLIGHET (anti-hallucination) ──
+    # Talar om EXAKT vilka Börsdata-fundamenta som finns vs saknas, så agenten
+    # aldrig fyller en lucka med en gissning. Många US-bolag ligger i stocks med
+    # pris+ägare men UTAN Börsdata-rapporter → då måste agenten säga DATA SAKNAS.
+    try:
+        _v = out.get("v33") or {}
+
+        def _has(x):
+            return x is not None
+        _fund = {
+            "pe": _has(out.get("pe_ratio")) or _has(_v.get("ttm_pe")),
+            "roe": _has(out.get("return_on_equity")) or _has(_v.get("roe_pct")),
+            "op_margin": _has(_v.get("op_margin_pct")),
+            "eps": _has(out.get("eps")),
+            "revenue": _has(out.get("sales")),
+            "net_profit": _has(out.get("net_profit")),
+            "price_book": _has(out.get("price_book_ratio")),
+        }
+        _isin_for_reports = out.get("isin")
+        _nrep = 0
+        if _isin_for_reports:
+            try:
+                _rc = _fetchone(db, f"SELECT COUNT(*) as n FROM borsdata_reports WHERE isin={ph}",
+                                (_isin_for_reports,))
+                _nrep = int(dict(_rc).get("n") or 0) if _rc else 0
+            except Exception:
+                _nrep = 0
+        _have_core = _fund["pe"] or _fund["roe"] or _fund["op_margin"]
+        _fundamentals_available = bool(_have_core and (_nrep >= 1 or _fund["eps"]))
+        out["data_completeness"] = {
+            "fundamentals_available": _fundamentals_available,
+            "borsdata_reports_count": _nrep,
+            "present": [k for k, val in _fund.items() if val],
+            "missing_DATA_SAKNAS": [k for k, val in _fund.items() if not val],
+            "instruction": (
+                "Alla fundamenta finns — använd EXAKT dessa Börsdata-siffror, gissa inga."
+                if _fundamentals_available else
+                "⚠ BÖRSDATA-FUNDAMENTA SAKNAS för detta bolag (endast pris/ägardata). "
+                "Gör INGEN värdering och gissa INGA nyckeltal (P/E, ROE, marginal). "
+                "Säg 'OTILLRÄCKLIG DATA — kan ej rekommendera' och be Dennis synka bolaget."),
+        }
+    except Exception as _dce:
+        print(f"[data_completeness] fel: {_dce}", file=sys.stderr)
 
     # ── NYTT: Kvant-screen-data (Q/V/M, recommendation, overheat etc) ──
     # Hämta från _QUANT_CACHE eller beräkna direkt
