@@ -15281,6 +15281,39 @@ def api_sync_missing_fundamentals():
                     "note": "kör i bakgrunden — hämta status på /api/diag/sync-missing-fundamentals?status=1"})
 
 
+@app.route("/api/diag/coverage-status")
+def api_coverage_status():
+    """Worker-OBEROENDE täckningsstatus (läser DB direkt) — hur stor andel bolag
+    har Börsdata-fundamenta. Används för att följa full-synkens progress."""
+    db = get_db()
+    from edge_db import _ph as _phf, _fetchone
+    ph = _phf()
+
+    def _n(row):
+        try:
+            return int(dict(row).get("n") or 0) if row else 0
+        except Exception:
+            return 0
+    try:
+        out = {"buckets": {}}
+        for label, omin in (("owners>=1", 1), ("owners>=100", 100),
+                            ("owners>=300", 300), ("owners>=1000", 1000)):
+            tot = _fetchone(db, f"SELECT COUNT(*) n FROM stocks WHERE last_price>0 "
+                                f"AND number_of_owners >= {ph}", (omin,))
+            withr = _fetchone(db, f"SELECT COUNT(*) n FROM stocks s WHERE s.last_price>0 "
+                                  f"AND s.number_of_owners >= {ph} AND s.isin IS NOT NULL "
+                                  f"AND EXISTS (SELECT 1 FROM borsdata_reports r WHERE r.isin = s.isin)",
+                                  (omin,))
+            t = _n(tot); w = _n(withr)
+            out["buckets"][label] = {"total": t, "with_reports": w, "missing": t - w,
+                                     "pct_covered": (round(100 * w / t, 1) if t else None)}
+        out["distinct_report_isins"] = _n(_fetchone(db,
+            "SELECT COUNT(DISTINCT isin) n FROM borsdata_reports"))
+        return jsonify(out)
+    finally:
+        db.close()
+
+
 @app.route("/api/diag/backfill-quarters", methods=["POST", "GET"])
 def api_diag_backfill_quarters():
     """FAS A2: backfill djup kvartals- + årshistorik från Börsdata för givna
@@ -16820,7 +16853,10 @@ def _startup():
             _GLOBAL_SYNC_STATE["running"] = True
             dbf = get_db()
             try:
-                s = _sync_missing_fundamentals(dbf, min_owners=300, limit=300)
+                # min_owners=1 → ALLA bolag (även lågt-ägda — vinnare kan gömma sig
+                # där också). Idempotent: hoppar redan-täckta, så backloggen dräneras
+                # över några nätter och stabiliserar sig på endast nytillkomna.
+                s = _sync_missing_fundamentals(dbf, min_owners=1, limit=1500)
                 _GLOBAL_SYNC_STATE["summary"] = s
                 print(f"[AUTO] Täcknings-sync klar: {s.get('synced')} synkade, "
                       f"{s.get('linked')} länkade, {len(s.get('unresolved', []))} olösta")
