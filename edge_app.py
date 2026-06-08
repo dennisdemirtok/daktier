@@ -10619,6 +10619,16 @@ ovaliderad siffra.
 - Varje pris timestampas: "$X (källa, YYYY-MM-DD HH:MM UTC)".
 - Tranch-/positionstabeller: antal × pris = belopp, och priset i beräkningen =
   triggerpriset på samma rad.
+- **FORWARD-EPS-KONSISTENS (kritiskt):** om du anger en forward-EPS måste den vara
+  konsistent med Börsdata-TTM-EPS × (1 + din tillväxttakt). Forward-EPS som är LÄGRE
+  än TTM-EPS samtidigt som du hävdar POSITIV vinsttillväxt är ett LOGISKT FEL —
+  forward-P/E kan då inte vara högre än trailing-P/E med växande vinst. Antingen är
+  tillväxtsiffran fel eller forward-EPS:et (ofta ett webbsökt konsensus som inte
+  stämmer mot Börsdata). Räkna om från Börsdata-TTM, eller skriv ut avvikelsen
+  explicit med orsak (engångspost, marginalpress) — gissa aldrig bort konflikten.
+- **INGRESS-FÖRBUD:** börja svaret DIREKT med rubriken `## TICKER — ...`. Ingen
+  ingress, inga "Nu har jag data"/"Hämtar data"/"Här kommer analysen"-meningar, ingen
+  upprepning. Verktygs-chipsen visar redan att data hämtats — skriv inte det i text.
 
 **REGEL 3 — PINNADE METRIC-DEFINITIONER (en metod, alla rapporter)**
 - Forward P/E = aktuellt pris ÷ NTM non-GAAP konsensus-EPS. Saknas konsensus:
@@ -10696,6 +10706,28 @@ Om din kvalitativa bedömning AVVIKER från v33-signalen: notera det öppet som 
 "avvikelse mot frysta reglerna", men ÄNDRA ALDRIG v33-signalen. Reglerna är frysta
 tills forward-loggen utvärderats (≥12 mån). Saknas v33-blocket (ingen Börsdata-
 data): skriv "v3.3-signal: DATA SAKNAS".
+═══════════════════════════════════════════════════════════════════
+
+═══════════════════════════════════════════════════════════════════
+**TRACK RECORD — PER-BOLAG (OBLIGATORISK STANDARD-SEKTION)**
+Bolagskontexten innehåller `track_record_backtest`: hur v3.3-ramverket historiskt
+HADE presterat på JUST DETTA bolag (kvartalsvis ~10 år, point-in-time-fundamenta →
+faktisk forward-12m relativavkastning vs OMXS30GI). Rendera ALLTID en sektion
+"## Ramverkets track record på [TICKER]" med:
+
+1. **Confidence-rad högst upp:** "Confidence på dagens rekommendation: **[HÖG/MEDEL/LÅG]**
+   — [driver]" ur `confidence` + `driver`. Förklara kopplingen i en mening: hög
+   hit-rate historiskt = bolaget är fundamentalt driven (ramverket fångar det) →
+   högre tilltro till dagens signal; låg = makro-/nyhetsstyrd → läs dagens signal
+   med försiktighet.
+2. **Sammanfattning:** hit-rate `hit_rate_pct`% över `n_quarters_evaluated` kvartal
+   (Wilson-nedre-gräns `wilson_low_pct`%). Skriv ut att N/A/VÄNTA ligger utanför.
+3. **Kvartalstabell** ur `rows` (kolumner: Kvartal · Signal · Rel 12m vs index · Träff).
+   Färgmarkera RÄTT/FEL. Visa de senaste ~12–16 kvartalen.
+
+Detta är ärlig självutvärdering — siffrorna kommer ur frysta evaluate-trösklar på
+verklig Börsdata-historik, INTE ur marknadsföring. Saknas `track_record_backtest`
+(för kort historik): skriv "Track record: otillräcklig historik för backtest".
 ═══════════════════════════════════════════════════════════════════
 
 **Steg 2 — Mappa strategi → lins**
@@ -12161,6 +12193,125 @@ def _v33_signals_for_stock(db, stock_data):
         return None
 
 
+def _company_recommendation_backtest(db, stock_data, years=10):
+    """PER-BOLAG historisk träffsäkerhet (~10 år, kvartalsvis). För varje kvartal:
+    vad v3.3-ramverket HADE gett (point-in-time-fundamenta, 60d publiceringslag) +
+    faktisk forward-12m relativavkastning mot OMXS30GI + RÄTT/FEL (frysta evaluate).
+    Confidence = Wilson-nedre-gräns på hit-rate: hög hit-rate = bolaget är
+    fundamentalt driven (ramverket fångar det); låg = makro-/nyhetsstyrd, låg
+    prognoskraft. Allt från lokal Börsdata-data — inga API-anrop, inga gissningar."""
+    try:
+        from edge_db import _ph as _phf, _fetchall
+        import v33_live
+        from v33_rules import value_signal, quality_signal, evaluate
+        from forward_log_universe import BENCHMARK
+        from datetime import datetime as _dt, timedelta as _td
+        import bisect as _bisect, math as _math
+        ph = _phf()
+        isin = stock_data.get("isin")
+        if not isin:
+            return None
+
+        def _f(x):
+            try:
+                return float(x) if x is not None else None
+            except Exception:
+                return None
+        qs = [dict(r) for r in (_fetchall(db,
+            f"SELECT period_year,period_q,report_end_date,revenues,operating_income,"
+            f"net_profit,eps,total_equity FROM borsdata_reports WHERE isin={ph} "
+            f"AND report_type='quarter' ORDER BY period_year ASC, period_q ASC", (isin,)) or [])]
+        if len(qs) < 8:
+            return None
+        annuals = [dict(r) for r in (_fetchall(db,
+            f"SELECT period_year,revenues,operating_income FROM borsdata_reports WHERE isin={ph} "
+            f"AND report_type='year' ORDER BY period_year DESC LIMIT 8", (isin,)) or [])]
+        opm_hist = []
+        for a in annuals:
+            rev = _f(a.get("revenues")); op = _f(a.get("operating_income"))
+            opm_hist.append(round(op / rev * 100, 1) if op is not None and rev else None)
+
+        def _prices(iz):
+            ds, cs = [], []
+            for r in (_fetchall(db, f"SELECT date, close FROM borsdata_prices WHERE isin={ph} "
+                                    f"AND close>0 ORDER BY date ASC", (iz,)) or []):
+                d = dict(r); ds.append((d["date"] or "")[:10]); cs.append(_f(d["close"]))
+            return ds, cs
+        sds, scs = _prices(isin)
+        ids, ics = _prices(BENCHMARK["isin"])
+        if len(sds) < 200:
+            return None
+
+        def _p_on_after(ds, cs, target):
+            i = _bisect.bisect_left(ds, target)
+            return cs[i] if i < len(ds) else None
+        cat, _ = v33_live.classify(stock_data, opm_hist, _f(stock_data.get("return_on_equity")))
+        today = _dt.utcnow().date()
+        rows = []
+        for i in range(3, len(qs)):
+            q4 = qs[i - 3:i + 1]
+            red = (qs[i].get("report_end_date") or "")[:10]
+            if not red:
+                continue
+            try:
+                red_d = _dt.fromisoformat(red).date()
+            except Exception:
+                continue
+            pub = (red_d + _td(days=60)).isoformat()
+            fwd = (red_d + _td(days=425)).isoformat()
+            if _dt.fromisoformat(fwd).date() > today:
+                continue
+
+            def _s(k):
+                vs = [_f(x.get(k)) for x in q4]
+                return sum(v for v in vs if v is not None) if all(v is not None for v in vs) else None
+            eps = _s("eps"); rev = _s("revenues"); op = _s("operating_income"); npf = _s("net_profit")
+            p0 = _p_on_after(sds, scs, pub); p12 = _p_on_after(sds, scs, fwd)
+            if not (p0 and p12):
+                continue
+            ttm_pe = (round(p0 / eps, 1) if eps and eps != 0 else None)
+            op_margin = (round(op / rev * 100, 1) if op is not None and rev else None)
+            eq = _f(q4[-1].get("total_equity"))
+            roe = (round(npf / eq * 100, 1) if npf is not None and eq else None)
+            ret = (p12 / p0 - 1) * 100
+            i0 = _p_on_after(ids, ics, pub); i12 = _p_on_after(ids, ics, fwd)
+            rel = ret - ((i12 / i0 - 1) * 100 if i0 and i12 else 0)
+            vsig, _ = value_signal(cat, ttm_pe, op_margin, opm_hist, None)
+            qsig, _ = quality_signal(cat, roe, op_margin, opm_hist)
+            headline = vsig if vsig in ("KÖP", "UNDVIK", "TA PROFIT") else (
+                qsig if qsig in ("KÖP", "UNDVIK") else "HÅLL")
+            rows.append({"quarter": f"{qs[i]['period_year']} Q{qs[i]['period_q']}",
+                         "signal": headline, "rel_12m_pct": round(rel, 1),
+                         "verdict": evaluate(headline, rel)})
+        directional = [r for r in rows if r["verdict"] in ("RÄTT", "FEL")]
+        n = len(directional); hits = sum(1 for r in directional if r["verdict"] == "RÄTT")
+        hit_rate = round(100 * hits / n) if n else None
+        wlow = None
+        if n:
+            p = hits / n; z = 1.96
+            wlow = round(100 * ((p + z * z / (2 * n) - z * _math.sqrt(p * (1 - p) / n + z * z / (4 * n * n))) / (1 + z * z / n)))
+        beta = _f(stock_data.get("beta"))
+        if n >= 12 and wlow is not None and wlow >= 55:
+            conf = "HÖG"
+        elif n >= 8 and hit_rate is not None and hit_rate >= 50:
+            conf = "MEDEL"
+        else:
+            conf = "LÅG"
+        driver = ("fundamentalt driven — ramverket har historiskt fångat bolaget väl (hög prognoskraft)"
+                  if conf == "HÖG" else
+                  "blandad — viss makro-/nyhetskänslighet" if conf == "MEDEL" else
+                  "makro-/nyhetsstyrd eller för få datapunkter — fundamentala signaler har låg prognoskraft här")
+        if beta is not None and beta > 1.5 and conf != "LÅG":
+            driver += f" · hög beta {beta:.1f} (marknadskänslig)"
+        return {"category": cat, "n_quarters_evaluated": n, "hit_rate_pct": hit_rate,
+                "wilson_low_pct": wlow, "confidence": conf, "driver": driver, "beta": beta,
+                "method": "PIT-fundamenta (60d lag) → forward-12m rel vs OMXS30GI; v3.3-routad signal; frysta evaluate-trösklar",
+                "rows": rows[-16:]}
+    except Exception as e:
+        print(f"[backtest] fel: {e}", file=sys.stderr)
+        return None
+
+
 # ════════════════════════════════════════════════════════════════════════
 #  STEG b — PRE-REGISTRERAD FORWARD-LOGG (append-only, pinnad v3.3 5b37fd6)
 #  Månatlig körning första handelsdagen på ett FRYST universum. Varje rad:
@@ -12691,6 +12842,12 @@ def _agent_get_full_stock(db, query):
         }
     except Exception as _dce:
         print(f"[data_completeness] fel: {_dce}", file=sys.stderr)
+
+    # ── PER-BOLAG TRACK RECORD (10-års kvartals-backtest + confidence) ──
+    try:
+        out["track_record_backtest"] = _company_recommendation_backtest(db, out)
+    except Exception as _bte:
+        print(f"[backtest] wrapper fel: {_bte}", file=sys.stderr)
 
     # ── NYTT: Kvant-screen-data (Q/V/M, recommendation, overheat etc) ──
     # Hämta från _QUANT_CACHE eller beräkna direkt
@@ -15010,6 +15167,7 @@ def api_diag_price_check():
             "shares_outstanding": full.get("shares_outstanding"),
             "v33": full.get("v33"),
             "data_completeness": full.get("data_completeness"),
+            "track_record_backtest": full.get("track_record_backtest"),
         })
     except Exception as e:
         import traceback
