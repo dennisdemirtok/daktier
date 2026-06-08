@@ -6789,6 +6789,9 @@ function renderAgent() {
         .agent-md .sig-light, .report-md .sig-light { color:#0e7490; background:rgba(14,116,144,0.10); }
         .agent-md .sig-hold, .report-md .sig-hold { color:#b45309; background:rgba(180,83,9,0.10); }
         .agent-md .sig-avoid, .report-md .sig-avoid { color:#b91c1c; background:rgba(185,28,28,0.10); }
+        /* Träff-kolumn: ren färgad text (ingen chip-bakgrund) */
+        .agent-md .sig-ratt, .report-md .sig-ratt { color:#047857; background:none; padding:0; font-weight:700; }
+        .agent-md .sig-fel, .report-md .sig-fel { color:#b91c1c; background:none; padding:0; font-weight:700; }
         /* Diagram-container (chat + PDF) */
         .agent-md .agent-chart, .report-md .agent-chart { background:#fff; border:1px solid #e8eaed; border-radius:12px; padding:14px 16px 12px; margin:16px 0; }
         .agent-md .agent-chart-title, .report-md .agent-chart-title { font-size:13px; font-weight:600; color:#1f2937; margin-bottom:12px; letter-spacing:-0.01em; }
@@ -7138,6 +7141,16 @@ function formatAgentText(s) {
     // riktiga rubriker (## först på raden) och "C#" (ensamt #) lämnas orörda.
     try { s = String(s || '').replace(/(?<=[^\n#])(#{2,6}\s+\S)/g, '\n\n$1'); }
     catch (e) { /* äldre webbläsare utan lookbehind — hoppa över */ }
+    // Strip ledande ingress-meningar ("Jag hämtar data...", "Nu har jag...") när en
+    // rubrik följer strax efter — analysen ska börja direkt på rubriken. Bara om en
+    // ##-rubrik finns inom ~320 tecken OCH prefixet ser ut som en ingress (annars
+    // rörs vanliga konversationssvar utan rubrik inte).
+    try {
+        const hm = s.match(/^([\s\S]{0,320}?)\n*(#{2,6}\s)/);
+        if (hm && /\b(hämtar|analyserar|nu har jag|här (kommer|är)|låt mig|kör en|tar fram|fullständig data)\b/i.test(hm[1])) {
+            s = s.slice(hm[1].length).replace(/^\s+/, '');
+        }
+    } catch (e) { /* ignore */ }
     // Använd marked.js för full GFM-rendering med tabeller (efter normalisering)
     if (typeof marked !== 'undefined') {
         try {
@@ -7194,6 +7207,7 @@ const _SIGNAL_DEFS = [
     ['HÅLL','hold'], ['HOLD','hold'], ['AVVAKTA','hold'], ['NEUTRAL','hold'],
     ['UNDVIK','avoid'], ['AVOID','avoid'], ['SÄLJ','avoid'], ['SELL','avoid'],
     ['EXIT','avoid'], ['MINSKA','avoid'], ['REDUCE','avoid'],
+    ['RÄTT','ratt'], ['FEL','fel'],   // track record-tabellens träff-kolumn
 ];
 function _colorizeSignals(root) {
     try {
