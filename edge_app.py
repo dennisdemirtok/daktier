@@ -16274,7 +16274,8 @@ DEL 9 — DAGENS DB-SNAPSHOT (uppdateras var 5 min)
     _model_override = data.get("model")
     _allowed_models = {
         "claude-sonnet-4-5", "claude-sonnet-4-20250514",
-        "claude-opus-4", "claude-opus-4-1",
+        "claude-opus-4-5", "claude-opus-4-1", "claude-opus-4-0",
+        "claude-opus-4-1-20250805", "claude-opus-4-5-20251101",
     }
     if _model_override and _model_override in _allowed_models:
         MODEL = _model_override
@@ -16774,7 +16775,8 @@ DEL 9 — DAGENS DB-SNAPSHOT (uppdateras var 5 min)
     _model_override = data.get("model")
     _allowed_models = {
         "claude-sonnet-4-5", "claude-sonnet-4-20250514",
-        "claude-opus-4", "claude-opus-4-1",
+        "claude-opus-4-5", "claude-opus-4-1", "claude-opus-4-0",
+        "claude-opus-4-1-20250805", "claude-opus-4-5-20251101",
     }
     if _model_override and _model_override in _allowed_models:
         MODEL = _model_override

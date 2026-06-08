@@ -5951,7 +5951,7 @@ function _agentAnalysisMeta(text, h) {
     title = (title || 'Aktieanalys').replace(/[*_`#>|]/g, '').replace(/\s+/g, ' ').trim().slice(0, 72);
     const slug = (title.replace(/[^A-Za-z0-9åäöÅÄÖ]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 40)) || 'analys';
     const date = new Date().toISOString().slice(0, 10);
-    const mdl = (h && h.model_used && AGENT_MODELS[h.model_used]) ? AGENT_MODELS[h.model_used] : null;
+    const mdl = _realModelLabel(h);
     return { title, fileslug: slug, date, modelLabel: mdl ? (mdl.emoji + ' ' + mdl.label) : '' };
 }
 
@@ -6469,13 +6469,23 @@ const AGENT_MODELS = {
     color: '#1e40af',
   },
   opus: {
-    id: 'claude-opus-4',
-    label: 'Opus',
+    id: 'claude-opus-4-5',
+    label: 'Opus 4.5',
     emoji: '🧠',
-    desc: 'Djup · ~$0.30–0.80 per analys · post-report tes-skifte, stop-thesis i portfölj',
+    desc: 'Djupast · högre kostnad · för svåra case, post-report tes-skifte, stop-thesis',
     color: '#7c3aed',
   },
 };
+// Foten ska visa den FAKTISKA modellen (h.model från done-eventet), inte ditt val
+// (h.model_used) — så att en tyst Opus→Sonnet-fallback syns korrekt.
+function _realModelLabel(h) {
+  const id = (h && h.model) || '';
+  let mm = id.match(/opus-(\d+)(?:-(\d+))?/i);
+  if (mm) return { emoji: '🧠', label: 'Opus ' + mm[1] + (mm[2] ? '.' + mm[2] : ''), color: '#7c3aed' };
+  mm = id.match(/sonnet-(\d+)(?:-(\d+))?/i);
+  if (mm) return { emoji: '⚡', label: 'Sonnet ' + mm[1] + (mm[2] && mm[2].length <= 2 ? '.' + mm[2] : ''), color: '#1e40af' };
+  return (h && h.model_used && AGENT_MODELS[h.model_used]) ? AGENT_MODELS[h.model_used] : null;
+}
 let _agentModelKey = (() => {
   try { return localStorage.getItem('daktier_agent_model') || 'sonnet'; }
   catch (e) { return 'sonnet'; }
@@ -7018,9 +7028,9 @@ function renderAgentTurn(h, idx) {
 
         let footer = '';
         const footParts = [];
-        if (h.model_used && AGENT_MODELS[h.model_used]) {
-            const m = AGENT_MODELS[h.model_used];
-            footParts.push(`<span style="color:${m.color};font-weight:600">${m.emoji} via ${m.label}</span>`);
+        const _fm = _realModelLabel(h);
+        if (_fm) {
+            footParts.push(`<span style="color:${_fm.color};font-weight:600">${_fm.emoji} via ${_fm.label}</span>`);
         }
         if (usage.cache_read_input_tokens > 0) footParts.push(`⚡ ${(usage.cache_read_input_tokens).toLocaleString('sv')} tokens från cache`);
         if (usage.output_tokens) footParts.push(`📤 ${usage.output_tokens} tokens svar`);
