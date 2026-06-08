@@ -10723,7 +10723,11 @@ faktisk forward-12m relativavkastning vs OMXS30GI). Rendera ALLTID en sektion
 2. **Sammanfattning:** hit-rate `hit_rate_pct`% över `n_quarters_evaluated` kvartal
    (Wilson-nedre-gräns `wilson_low_pct`%). Skriv ut att N/A/VÄNTA ligger utanför.
 3. **Kvartalstabell** ur `rows` (kolumner: Kvartal · Signal · Rel 12m vs index · Träff).
-   Färgmarkera RÄTT/FEL. Visa de senaste ~12–16 kvartalen.
+   Visa de senaste ~12–16 kvartalen. Använd `rows[].signal`, `rows[].rel_12m_pct` och
+   `rows[].verdict` EXAKT som de står. **Träff-kolumnen får ENDAST innehålla värdet ur
+   `verdict` — dvs RÄTT, FEL eller N/A. Hitta ALDRIG på egna omdömen** (t.ex. "TVEKAN",
+   "DELVIS", "NÄRA") och tolka aldrig om ett gränsfall — verdikten är redan beräknad med
+   frysta trösklar. Skriv "✅ RÄTT" / "❌ FEL" / "N/A" och inget annat i den kolumnen.
 
 Detta är ärlig självutvärdering — siffrorna kommer ur frysta evaluate-trösklar på
 verklig Börsdata-historik, INTE ur marknadsföring. Saknas `track_record_backtest`
