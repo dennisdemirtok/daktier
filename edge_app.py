@@ -149,7 +149,9 @@ CLAUDE_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
 
 # ── Modell-resolver: kör ALLTID senaste Opus/Sonnet (auto via /v1/models) ──
 _MODELS_CACHE = {"ts": 0.0, "data": None}
-_MODEL_FALLBACK = {"opus": "claude-opus-4-8", "sonnet": "claude-sonnet-4-6"}
+# Golv = SENASTE BEKRÄFTAT fungerande (testat mot API). Resolvern uppgraderar
+# automatiskt om /v1/models listar nyare; golvet används bara om API:t inte svarar.
+_MODEL_FALLBACK = {"opus": "claude-opus-4-5", "sonnet": "claude-sonnet-4-5"}
 # Pris per 1M tokens (USD), input/output. Uppdatera vid prisändring.
 MODEL_PRICING = {"opus": {"in": 15.0, "out": 75.0}, "sonnet": {"in": 3.0, "out": 15.0}}
 
@@ -160,8 +162,10 @@ def _model_tier(model_id):
 
 
 def _model_ver_key(mid):
+    # major + minor, men IGNORERA datumsuffix (8 siffror). Minor = 1–2 siffror
+    # följt av "-" (datum) eller slut. "opus-4-20250514"->(4,0); "opus-4-5-..."->(4,5).
     import re as _re
-    mm = _re.search(r"(?:opus|sonnet)-(\d+)(?:-(\d+))?", (mid or "").lower())
+    mm = _re.search(r"(?:opus|sonnet)-(\d+)(?:-(\d{1,2})(?=-|$))?", (mid or "").lower())
     return (int(mm.group(1)), int(mm.group(2) or 0)) if mm else (0, 0)
 
 
@@ -184,7 +188,11 @@ def _latest_models():
             for tier in ("opus", "sonnet"):
                 cands = [i for i in ids if tier in i.lower()]
                 if cands:
-                    out[tier] = max(cands, key=_model_ver_key)
+                    best = max(cands, key=_model_ver_key)
+                    # aldrig REGRESSERA under det hårdkodade senaste (skydd om API:t
+                    # bara listar äldre daterade ID:n).
+                    if _model_ver_key(best) >= _model_ver_key(_MODEL_FALLBACK[tier]):
+                        out[tier] = best
     except Exception as e:
         print(f"[models] resolver fel: {e}", file=sys.stderr)
     c.update(ts=now, data=out)
@@ -15593,8 +15601,19 @@ def api_diag_model_check():
     (tiny 1-token-anrop). Avgör vilket Opus-alias agenten ska skicka."""
     import requests as _rq
     cands = (request.args.get("models") or
-             "claude-opus-4,claude-opus-4-0,claude-opus-4-1,claude-opus-4-5,"
-             "claude-sonnet-4-5,claude-sonnet-4-20250514").split(",")
+             "claude-opus-4-1,claude-opus-4-5,claude-opus-4-6,claude-opus-4-7,claude-opus-4-8,"
+             "claude-sonnet-4-5,claude-sonnet-4-6,claude-sonnet-4-7").split(",")
+    # Rå lista över ALLA modeller API:t exponerar (sanning om vad som finns)
+    v1_models = []
+    try:
+        rm = _rq.get("https://api.anthropic.com/v1/models?limit=200",
+                     headers={"x-api-key": CLAUDE_API_KEY, "anthropic-version": "2023-06-01"},
+                     timeout=20)
+        if rm.status_code == 200:
+            v1_models = [m.get("id", "") for m in (rm.json().get("data") or [])
+                         if "opus" in m.get("id", "") or "sonnet" in m.get("id", "")]
+    except Exception as e:
+        v1_models = [f"ERR {e}"]
     out = {}
     for m in [c.strip() for c in cands if c.strip()]:
         try:
@@ -15616,7 +15635,10 @@ def api_diag_model_check():
                       "error": (body.get("error", {}) or {}).get("message", "")[:120] if r.status_code != 200 else None}
         except Exception as e:
             out[m] = {"status": "exc", "ok": False, "error": str(e)[:120]}
+    # busta cache så resolver_latest speglar senaste koden
+    _MODELS_CACHE.update(ts=0.0, data=None)
     return jsonify({"results": out,
+                    "v1_models_listed": v1_models,
                     "working_opus": [m for m, v in out.items() if v.get("ok") and "opus" in m],
                     "working_sonnet": [m for m, v in out.items() if v.get("ok") and "sonnet" in m],
                     "resolver_latest": _latest_models()})
