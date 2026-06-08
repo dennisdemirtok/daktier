@@ -7257,15 +7257,34 @@ function _colorizeSignals(root) {
 // Scopas till rader som nämner "confidence" så vanliga ord inte färgas.
 function _badgeConfidence(root) {
     try {
+        const re = /(?<![\wÅÄÖåäö])(HÖG|MEDEL|LÅG)(?![\wÅÄÖåäö])/;
+        const clsOf = t => t === 'HÖG' ? 'hog' : (t === 'MEDEL' ? 'medel' : 'lag');
         (root || document).querySelectorAll('.agent-md, .report-md').forEach(md => {
             md.querySelectorAll('p, li, td, h3, h4').forEach(el => {
                 if (!/confidence/i.test(el.textContent)) return;
-                el.querySelectorAll('strong').forEach(s => {
-                    const t = s.textContent.trim().toUpperCase();
-                    const cls = t === 'HÖG' ? 'hog' : (t === 'MEDEL' ? 'medel' : (t === 'LÅG' ? 'lag' : null));
-                    if (cls && !s.classList.contains('conf-badge')) {
-                        s.classList.add('conf-badge', 'conf-' + cls);
+                const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT, {
+                    acceptNode(n) {
+                        if (n.parentElement && n.parentElement.classList.contains('conf-badge'))
+                            return NodeFilter.FILTER_REJECT;
+                        return re.test(n.nodeValue) ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT;
                     }
+                });
+                const targets = []; while (walker.nextNode()) targets.push(walker.currentNode);
+                targets.forEach(node => {
+                    const parts = node.nodeValue.split(re);
+                    if (parts.length < 2) return;
+                    const frag = document.createDocumentFragment();
+                    parts.forEach((part, idx) => {
+                        if (idx % 2 === 1) {
+                            const span = document.createElement('span');
+                            span.className = 'conf-badge conf-' + clsOf(part.toUpperCase());
+                            span.textContent = part;
+                            frag.appendChild(span);
+                        } else if (part) {
+                            frag.appendChild(document.createTextNode(part));
+                        }
+                    });
+                    node.parentNode.replaceChild(frag, node);
                 });
             });
         });
