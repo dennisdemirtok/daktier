@@ -15004,6 +15004,7 @@ def api_diag_price_check():
             "market_cap_source": full.get("market_cap_source"),
             "shares_outstanding": full.get("shares_outstanding"),
             "v33": full.get("v33"),
+            "data_completeness": full.get("data_completeness"),
         })
     except Exception as e:
         import traceback
@@ -15193,10 +15194,11 @@ def _sync_missing_fundamentals(db, min_owners=500, limit=80):
                 k = str(key).upper()
                 if k not in idx:
                     idx[k] = inst
-    # 3) Kandidater: högt-ägda bolag
+    # 3) Kandidater: alla bolag >= min_owners (LIMIT högt så full-synk ser hela
+    #    svansen — min_owners=1 har ~10k bolag, får ej kapas vid 3000).
     cands = _fetchall(db, f"SELECT orderbook_id, short_name, name, isin, number_of_owners "
                           f"FROM stocks WHERE number_of_owners >= {ph} AND last_price > 0 "
-                          f"ORDER BY number_of_owners DESC LIMIT 3000", (min_owners,))
+                          f"ORDER BY number_of_owners DESC LIMIT 20000", (min_owners,))
     summary = {"min_owners": min_owners, "limit": limit, "checked": 0, "already": 0,
                "linked": 0, "synced": 0, "unresolved": [], "errors": [], "synced_list": []}
     for c in (cands or []):
