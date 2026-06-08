@@ -7256,6 +7256,33 @@ function _enhanceAgentTables(root) {
     } catch (e) { /* tyst */ }
 }
 
+// Säkerhetsnät för verdict-låset: i track record-tabellens per-KVARTAL-utfall
+// (kolumn "Träff"/"Utfall"/"Resultat") får ENDAST RÄTT/FEL/N/A stå. Om modellen
+// mot regeln skriver något eget (t.ex. "TVEKAN") neutraliseras cellen till "—".
+// Vi HITTAR ALDRIG på ett utfall. Per-LINS-sammanfattningen (header "Lins", där
+// "Träff" = procent) rörs INTE — den identifieras via "Kvartal"-kolumnen.
+function _scrubTrackVerdicts(root) {
+    try {
+        (root || document).querySelectorAll('.agent-md table, .report-md table').forEach(tbl => {
+            const hdrs = Array.from(tbl.querySelectorAll('th')).map(x => x.textContent.trim());
+            if (!hdrs.some(h => /Kvartal/i.test(h))) return;   // bara per-kvartal-tabellen
+            const idx = hdrs.findIndex(h => /^(Träff|Utfall|Resultat)$/i.test(h));
+            if (idx < 0) return;
+            tbl.querySelectorAll('tr').forEach(r => {
+                if (!r.querySelector('td')) return;
+                const cell = r.children[idx];
+                if (!cell) return;
+                const t = cell.textContent.trim();
+                if (!t) return;
+                // tillåtna utfall: ✅ RÄTT · ❌ FEL · N/A · —
+                if (/^(✅\s*)?RÄTT$|^(❌\s*)?FEL$|^N\/A$|^[—-]$/.test(t)) return;
+                cell.textContent = '—';
+                cell.title = 'Icke-standard utfall normaliserat (endast RÄTT/FEL/N/A tillåts)';
+            });
+        });
+    } catch (e) { /* tyst */ }
+}
+
 // ── Subtil, dämpad färg på signal-ord (versaler, exakt match) ──
 const _SIGNAL_DEFS = [
     ['STARK KÖP','buy'], ['STARK BUY','buy'], ['STRONG BUY','buy'],
@@ -7403,6 +7430,7 @@ function _renderAgentCharts(root, opts) {
 // Samlad efter-rendering: tabeller + signaler + diagram
 function _postRenderAgent(root) {
     _enhanceAgentTables(root);
+    _scrubTrackVerdicts(root);   // neutralisera ev. påhittade utfall (TVEKAN m.m.)
     _colorizeSignals(root); _badgeConfidence(root);
     _renderAgentCharts(root);
 }
@@ -7582,12 +7610,24 @@ async function agentSend() {
             scheduleStreamRender();
         }
     } catch (e) {
-        if (e.name !== 'AbortError') {
+        if (e.name === 'AbortError') {
+            assistantTurn.aborted = true;   // användaren avbröt själv → ingen varning
+        } else {
             assistantTurn.content = (assistantTurn.content || '') + '\n\n⚠ Fel: ' + e.message;
+            assistantTurn.hadError = true;
         }
     } finally {
         if (scheduledRaf) { cancelAnimationFrame(scheduledRaf); scheduledRaf = null; }
         if (trailingTimer) { clearTimeout(trailingTimer); trailingTimer = null; }
+        // Strömmen tog slut UTAN ett 'done'-event (tappad anslutning / server-timeout
+        // under last) → flagga tydligt att analysen är ofullständig i stället för att
+        // rendera en kapad text som om den vore klar (slutsatsen kan saknas).
+        if (!assistantTurn.completed && !assistantTurn.hadError && !assistantTurn.aborted
+            && (assistantTurn.content || '').trim().length > 0) {
+            assistantTurn.content = (assistantTurn.content || '') +
+                '\n\n---\n⚠️ *Analysen avbröts innan den var klar — anslutningen tappades (nätverk eller hög last). Slutsatsen kan saknas. Klicka **Skicka** igen för att köra om.*';
+            assistantTurn.incomplete = true;
+        }
         assistantTurn.streaming = false;
         _agentLoading = false;
         _agentAbortController = null;
@@ -7667,9 +7707,11 @@ function handleAgentSSE(ev, turn) {
             break;
         case 'done':
             turn.model = ev.model;
+            turn.completed = true;   // äkta slut-event mottaget → analysen är hel
             break;
         case 'error':
             turn.content = (turn.content || '') + '\n\n⚠ ' + (ev.error || 'Okänt fel');
+            turn.hadError = true;    // explicit fel → visa inte även "avbruten"-varning
             break;
         case 'info':
             // Statusmeddelande, t.ex. modellbyte
