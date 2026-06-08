@@ -6460,22 +6460,30 @@ let _agentChatId = null;  // aktiv chat-id (null = ny chatt, ej sparad än)
 let _agentShowHistory = false;  // dropdown öppen?
 
 // ── Modell-val (Sonnet default, Opus opt-in per query) ──────
+// Backend resolverar tier → SENASTE modell automatiskt. Frontend skickar bara tier;
+// faktisk modell/version visas i foten ur done-eventet. Pris per 1M tokens (in/ut).
 const AGENT_MODELS = {
   sonnet: {
-    id: 'claude-sonnet-4-5',
-    label: 'Sonnet',
-    emoji: '⚡',
-    desc: 'Snabb · ~$0.05 per djupanalys · räcker för 95%',
-    color: '#1e40af',
+    tier: 'sonnet', label: 'Sonnet', emoji: '⚡', color: '#1e40af',
+    desc: 'Snabb & billig · ~5× billigare än Opus · räcker för 95%',
+    priceIn: 3, priceOut: 15,
   },
   opus: {
-    id: 'claude-opus-4-5',
-    label: 'Opus 4.5',
-    emoji: '🧠',
-    desc: 'Djupast · högre kostnad · för svåra case, post-report tes-skifte, stop-thesis',
-    color: '#7c3aed',
+    tier: 'opus', label: 'Opus', emoji: '🧠', color: '#7c3aed',
+    desc: 'Djupast resonemang · ~5× dyrare · för svåra case',
+    priceIn: 15, priceOut: 75,
   },
 };
+// Estimerad USD-kostnad för en analys utifrån token-användning + modellpris.
+function _agentCostUSD(usage, isOpus) {
+  if (!usage) return 0;
+  const p = isOpus ? AGENT_MODELS.opus : AGENT_MODELS.sonnet;
+  const reg = (usage.input_tokens || 0) * p.priceIn;
+  const cr = (usage.cache_read_input_tokens || 0) * p.priceIn * 0.1;       // cache-läsning ~10%
+  const cc = (usage.cache_creation_input_tokens || 0) * p.priceIn * 1.25;  // cache-skrivning ~125%
+  const out = (usage.output_tokens || 0) * p.priceOut;
+  return (reg + cr + cc + out) / 1e6;
+}
 // Foten ska visa den FAKTISKA modellen (h.model från done-eventet), inte ditt val
 // (h.model_used) — så att en tyst Opus→Sonnet-fallback syns korrekt.
 function _realModelLabel(h) {
@@ -7034,6 +7042,18 @@ function renderAgentTurn(h, idx) {
         }
         if (usage.cache_read_input_tokens > 0) footParts.push(`⚡ ${(usage.cache_read_input_tokens).toLocaleString('sv')} tokens från cache`);
         if (usage.output_tokens) footParts.push(`📤 ${usage.output_tokens} tokens svar`);
+        // Kostnad (estimat) + jämförelse mot andra modellen
+        if (usage.output_tokens) {
+            const _isOpus = /opus/i.test((h && h.model) || '') || (!(h && h.model) && h.model_used === 'opus');
+            const _cost = _agentCostUSD(usage, _isOpus);
+            const _alt = _agentCostUSD(usage, !_isOpus);
+            if (_cost > 0) {
+                let s = `💰 ~$${_cost.toFixed(2)}`;
+                if (_alt > 0) s += _isOpus ? ` (≈${(_cost / _alt).toFixed(0)}× Sonnet $${_alt.toFixed(2)})`
+                                           : ` (Opus ≈$${_alt.toFixed(2)})`;
+                footParts.push(s);
+            }
+        }
         if (footParts.length) footer = `<div class="agent-foot">${footParts.join(' · ')}</div>`;
         // v2.2 Gate 2 (legacy warn-mode) — visa förbjudna sentiment-mönster
         if (h.v22_violations && h.v22_violations.length) {
@@ -7448,7 +7468,7 @@ async function agentSend() {
             role: h.role,
             content: h.content,
         })),
-        model: AGENT_MODELS[_agentModelKey].id,  // användarens modell-val
+        model_tier: AGENT_MODELS[_agentModelKey].tier,  // backend resolverar → senaste modell
     };
     if (_agentImage) {
         payload.image_b64 = _agentImage.b64;

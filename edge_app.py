@@ -147,6 +147,49 @@ ai_toplist_state = {"loading": False, "progress": ""}
 
 CLAUDE_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
 
+# ── Modell-resolver: kör ALLTID senaste Opus/Sonnet (auto via /v1/models) ──
+_MODELS_CACHE = {"ts": 0.0, "data": None}
+_MODEL_FALLBACK = {"opus": "claude-opus-4-8", "sonnet": "claude-sonnet-4-6"}
+# Pris per 1M tokens (USD), input/output. Uppdatera vid prisändring.
+MODEL_PRICING = {"opus": {"in": 15.0, "out": 75.0}, "sonnet": {"in": 3.0, "out": 15.0}}
+
+
+def _model_tier(model_id):
+    m = (model_id or "").lower()
+    return "opus" if "opus" in m else ("sonnet" if "sonnet" in m else None)
+
+
+def _model_ver_key(mid):
+    import re as _re
+    mm = _re.search(r"(?:opus|sonnet)-(\d+)(?:-(\d+))?", (mid or "").lower())
+    return (int(mm.group(1)), int(mm.group(2) or 0)) if mm else (0, 0)
+
+
+def _latest_models():
+    """Returnerar {opus, sonnet} med SENASTE tillgängliga modell-ID. Frågar
+    Anthropic /v1/models (cachat 6h), väljer högsta versionen per tier; faller
+    tillbaka till hårdkodat senaste om API:t inte svarar."""
+    import time as _t
+    c = _MODELS_CACHE
+    now = _t.time()
+    if c["data"] and (now - c["ts"]) < 6 * 3600:
+        return c["data"]
+    out = dict(_MODEL_FALLBACK)
+    try:
+        r = requests.get("https://api.anthropic.com/v1/models?limit=200",
+                         headers={"x-api-key": CLAUDE_API_KEY, "anthropic-version": "2023-06-01"},
+                         timeout=20)
+        if r.status_code == 200:
+            ids = [m.get("id", "") for m in (r.json().get("data") or [])]
+            for tier in ("opus", "sonnet"):
+                cands = [i for i in ids if tier in i.lower()]
+                if cands:
+                    out[tier] = max(cands, key=_model_ver_key)
+    except Exception as e:
+        print(f"[models] resolver fel: {e}", file=sys.stderr)
+    c.update(ts=now, data=out)
+    return out
+
 
 def _is_market_open():
     """Kolla om NÅGON börs är öppen (SE 9:00-17:30 CET, US 15:30-22:00 CET)."""
@@ -10720,23 +10763,31 @@ HADE presterat på JUST DETTA bolag (kvartalsvis ~10 år, point-in-time-fundamen
 faktisk forward-12m relativavkastning vs OMXS30GI). Rendera ALLTID en sektion
 "## Ramverkets track record på [TICKER]" med:
 
-1. **Confidence-rad högst upp:** "Confidence på dagens rekommendation: **[HÖG/MEDEL/LÅG]**
-   — [driver]" ur `confidence` + `driver`. Förklara kopplingen i en mening: hög
-   hit-rate historiskt = bolaget är fundamentalt driven (ramverket fångar det) →
-   högre tilltro till dagens signal; låg = makro-/nyhetsstyrd → läs dagens signal
-   med försiktighet.
-2. **Sammanfattning:** hit-rate `hit_rate_pct`% över `n_quarters_evaluated` kvartal
-   (Wilson-nedre-gräns `wilson_low_pct`%). Skriv ut att N/A/VÄNTA ligger utanför.
-3. **Kvartalstabell** ur `rows` (kolumner: Kvartal · Signal · Rel 12m vs index · Träff).
-   Visa de senaste ~12–16 kvartalen. Använd `rows[].signal`, `rows[].rel_12m_pct` och
-   `rows[].verdict` EXAKT som de står. **Träff-kolumnen får ENDAST innehålla värdet ur
-   `verdict` — dvs RÄTT, FEL eller N/A. Hitta ALDRIG på egna omdömen** (t.ex. "TVEKAN",
-   "DELVIS", "NÄRA") och tolka aldrig om ett gränsfall — verdikten är redan beräknad med
-   frysta trösklar. Skriv "✅ RÄTT" / "❌ FEL" / "N/A" och inget annat i den kolumnen.
+1. **DEN VIKTIGASTE RADEN — VILKEN LINS ATT FÖLJA (FET, högst upp):** ur `best_lens`.
+   Skriv tydligt och MARKERAT, t.ex.:
+   "➡️ **Följ [best_lens.lens]-linsen för [TICKER]** — den har historiskt varit mest
+   lönsam: **[hit_rate_pct]% träff** (n=[n]), snitt **+[avg_rel_when_directional_pct]%**
+   relativavkastning när den gav en riktad signal."
+   Detta löser problemet att tre linser (Swing/Quality/Value) säger olika saker —
+   tala om vilken som FAKTISKT tjänat pengar på just detta bolag. Är `best_lens` null
+   (för få riktade signaler i någon lins): skriv "Ingen enskild lins har statistiskt
+   säkerställd kant här — väg dem jämnt och luta mot dagens samlade profil."
+2. **Confidence-rad:** "Confidence på dagens rekommendation: **[HÖG/MEDEL/LÅG]** — [driver]"
+   ur `confidence` + `driver`.
+3. **Per-lins-träffsäkerhet (ur `lenses`):** en rad/tabell:
+   "Value [lenses.value.hit_rate_pct]% (n=[..]) · Quality [..]% · Swing [..]%". Linser
+   med få riktade signaler (mest N/A) → skriv "—" och nämn att de mest avstår.
+4. **Kvartalstabell** ur `rows`, de senaste ~12–16 kvartalen, med kolumner:
+   **Kvartal · Value · Quality · Swing · Rel 12m vs index · Träff**. Använd
+   `rows[].value`, `rows[].quality`, `rows[].swing`, `rows[].rel_12m_pct` och
+   `rows[].verdict` EXAKT som de står. **Träff-kolumnen får ENDAST innehålla `verdict`
+   (RÄTT / FEL / N/A). Hitta ALDRIG på egna omdömen** ("TVEKAN", "DELVIS" osv) och tolka
+   aldrig om ett gränsfall. Skriv "✅ RÄTT" / "❌ FEL" / "N/A" och inget annat där.
 
-Detta är ärlig självutvärdering — siffrorna kommer ur frysta evaluate-trösklar på
-verklig Börsdata-historik, INTE ur marknadsföring. Saknas `track_record_backtest`
-(för kort historik): skriv "Track record: otillräcklig historik för backtest".
+Detta är ÄKTA historik — varje siffra kommer ur verklig Börsdata-kvartalsdata (point-
+in-time) och faktiska priser, utvärderat med frysta trösklar. Det är INTE påhittat och
+INTE en rekonstruktion du gör själv — använd `track_record_backtest` rakt av. Saknas
+blocket (för kort historik): skriv "Track record: otillräcklig historik för backtest".
 ═══════════════════════════════════════════════════════════════════
 
 **Steg 2 — Mappa strategi → lins**
@@ -12212,7 +12263,7 @@ def _company_recommendation_backtest(db, stock_data, years=10):
     try:
         from edge_db import _ph as _phf, _fetchall
         import v33_live
-        from v33_rules import value_signal, quality_signal, evaluate
+        from v33_rules import value_signal, quality_signal, swing_signal, evaluate
         from forward_log_universe import BENCHMARK
         from datetime import datetime as _dt, timedelta as _td
         import bisect as _bisect, math as _math
@@ -12326,11 +12377,16 @@ def _company_recommendation_backtest(db, stock_data, years=10):
             ret = (p12 / p0 - 1) * 100
             i0 = _p_on_after(ids, ics, pub); i12 = _p_on_after(ids, ics, fwd)
             rel = ret - ((i12 / i0 - 1) * 100 if i0 and i12 else 0)
+            # prior-12m momentum vid detta kvartal (för Swing-linsen)
+            p_prior = _p_on_after(sds, scs, (red_d + _td(days=60 - 365)).isoformat())
+            mom = ((p0 / p_prior - 1) * 100) if (p0 and p_prior) else None
             vsig, _ = value_signal(cat, ttm_pe, op_margin, opm_hist, None)
             qsig, _ = quality_signal(cat, roe, op_margin, opm_hist)
+            ssig, _ = swing_signal(mom)
             headline = vsig if vsig in ("KÖP", "UNDVIK", "TA PROFIT") else (
                 qsig if qsig in ("KÖP", "UNDVIK") else "HÅLL")
             rows.append({"quarter": f"{qs[i]['period_year']} Q{qs[i]['period_q']}",
+                         "value": vsig, "quality": qsig, "swing": ssig,
                          "signal": headline, "rel_12m_pct": round(rel, 1),
                          "verdict": evaluate(headline, rel)})
         directional = [r for r in rows if r["verdict"] in ("RÄTT", "FEL")]
@@ -12356,9 +12412,38 @@ def _company_recommendation_backtest(db, stock_data, years=10):
                       f"bolag ({hit_rate}% träff på {n} kvartal; läs dagens signal med försiktighet)")
         if beta is not None and beta > 1.5 and conf != "LÅG":
             driver += f" · hög beta {beta:.1f} (marknadskänslig)"
+
+        # ── PER-LINS: vilken lins (Value/Quality/Swing) har varit mest lönsam? ──
+        def _wilson(hh, nn):
+            if not nn:
+                return None
+            pp = hh / nn; z = 1.96
+            return round(100 * ((pp + z * z / (2 * nn) - z * _math.sqrt(pp * (1 - pp) / nn + z * z / (4 * nn * nn))) / (1 + z * z / nn)))
+
+        def _lens_stats(key):
+            ev = [evaluate(r.get(key), r["rel_12m_pct"]) for r in rows]
+            dirn = [(r, e) for r, e in zip(rows, ev) if e in ("RÄTT", "FEL")]
+            nn = len(dirn); hh = sum(1 for _, e in dirn if e == "RÄTT")
+            # snitt-rel när linsen var RIKTAD (faktisk lönsamhet, inte bara träff)
+            avg_rel = round(sum(r["rel_12m_pct"] for r, e in dirn) / nn, 1) if nn else None
+            return {"hit_rate_pct": (round(100 * hh / nn) if nn else None), "n": nn,
+                    "wilson_low_pct": _wilson(hh, nn), "avg_rel_when_directional_pct": avg_rel}
+        lenses = {k: _lens_stats(k) for k in ("value", "quality", "swing")}
+        _ranked = sorted(
+            [(k, v) for k, v in lenses.items() if v["n"] >= 6 and v["wilson_low_pct"] is not None],
+            key=lambda kv: (kv[1]["wilson_low_pct"], kv[1]["hit_rate_pct"] or 0), reverse=True)
+        best_lens = None
+        if _ranked:
+            bk, bv = _ranked[0]
+            best_lens = {"lens": {"value": "Value", "quality": "Quality", "swing": "Swing"}[bk],
+                         "hit_rate_pct": bv["hit_rate_pct"], "n": bv["n"],
+                         "wilson_low_pct": bv["wilson_low_pct"],
+                         "avg_rel_when_directional_pct": bv["avg_rel_when_directional_pct"]}
+
         return {"category": cat, "n_quarters_evaluated": n, "hit_rate_pct": hit_rate,
                 "wilson_low_pct": wlow, "confidence": conf, "driver": driver, "beta": beta,
-                "method": "PIT-fundamenta (60d lag) → forward-12m rel vs OMXS30GI; v3.3-routad signal; frysta evaluate-trösklar",
+                "lenses": lenses, "best_lens": best_lens,
+                "method": "PIT-fundamenta (60d lag) → forward-12m rel vs OMXS30GI; per-lins frysta evaluate-trösklar på verklig Börsdata-historik",
                 "rows": rows[-16:]}
     except Exception as e:
         print(f"[backtest] fel: {e}", file=sys.stderr)
@@ -15533,7 +15618,8 @@ def api_diag_model_check():
             out[m] = {"status": "exc", "ok": False, "error": str(e)[:120]}
     return jsonify({"results": out,
                     "working_opus": [m for m, v in out.items() if v.get("ok") and "opus" in m],
-                    "working_sonnet": [m for m, v in out.items() if v.get("ok") and "sonnet" in m]})
+                    "working_sonnet": [m for m, v in out.items() if v.get("ok") and "sonnet" in m],
+                    "resolver_latest": _latest_models()})
 
 
 @app.route("/api/diag/coverage-status")
@@ -16269,16 +16355,11 @@ DEL 9 — DAGENS DB-SNAPSHOT (uppdateras var 5 min)
 
     # Sonnet 4.5 default — högre rate limits än Opus (30k → 200k tokens/min)
     # och fortfarande mycket kompetent. Opus är opt-in via env.
-    MODEL = os.environ.get("AGENT_MODEL", "claude-sonnet-4-5")
-    # v3: tillåt frontend att override:a modellen per request (Sonnet/Opus-val)
-    _model_override = data.get("model")
-    _allowed_models = {
-        "claude-sonnet-4-5", "claude-sonnet-4-20250514",
-        "claude-opus-4-5", "claude-opus-4-1", "claude-opus-4-0",
-        "claude-opus-4-1-20250805", "claude-opus-4-5-20251101",
-    }
-    if _model_override and _model_override in _allowed_models:
-        MODEL = _model_override
+    # Modell: alltid SENASTE Opus/Sonnet. Frontend skickar model_tier ('opus'/'sonnet')
+    # eller ett model-id — vi uppgraderar till tier:ets nyaste (auto via /v1/models).
+    _latest = _latest_models()
+    _tier = data.get("model_tier") or _model_tier(data.get("model"))
+    MODEL = _latest[_tier] if _tier in ("opus", "sonnet") else (os.environ.get("AGENT_MODEL") or _latest["sonnet"])
     headers = {
         "x-api-key": CLAUDE_API_KEY,
         "anthropic-version": "2023-06-01",
@@ -16769,18 +16850,12 @@ DEL 9 — DAGENS DB-SNAPSHOT (uppdateras var 5 min)
 
     tools = _agent_tools_definition()
     # Sonnet 4.5 default (200k tokens/min vs Opus 30k/min). Opus opt-in via env.
-    MODEL = os.environ.get("AGENT_MODEL", "claude-sonnet-4-5")
-    # v3: tillåt frontend att override:a modellen per request (Sonnet/Opus-val).
-    # Whitelist för säkerhet — bara godkända Claude-modeller.
-    _model_override = data.get("model")
-    _allowed_models = {
-        "claude-sonnet-4-5", "claude-sonnet-4-20250514",
-        "claude-opus-4-5", "claude-opus-4-1", "claude-opus-4-0",
-        "claude-opus-4-1-20250805", "claude-opus-4-5-20251101",
-    }
-    if _model_override and _model_override in _allowed_models:
-        MODEL = _model_override
-        print(f"[agent] model override → {MODEL}", file=sys.stderr)
+    # Modell: alltid SENASTE Opus/Sonnet. Frontend skickar model_tier ('opus'/'sonnet')
+    # eller ett model-id — vi uppgraderar till tier:ets nyaste (auto via /v1/models).
+    _latest = _latest_models()
+    _tier = data.get("model_tier") or _model_tier(data.get("model"))
+    MODEL = _latest[_tier] if _tier in ("opus", "sonnet") else (os.environ.get("AGENT_MODEL") or _latest["sonnet"])
+    print(f"[agent] model={MODEL} (tier={_tier})", file=sys.stderr)
     headers = {
         "x-api-key": CLAUDE_API_KEY,
         "anthropic-version": "2023-06-01",
@@ -16823,13 +16898,13 @@ DEL 9 — DAGENS DB-SNAPSHOT (uppdateras var 5 min)
                             err_text = resp.read().decode("utf-8", errors="ignore")
                             # Modell-fallback: 404/400 om Opus-modell inte tillgänglig
                             if _iter == 0 and resp.status_code in (404, 400) and MODEL.startswith("claude-opus"):
-                                MODEL = "claude-sonnet-4-5"
+                                MODEL = _latest["sonnet"]
                                 payload["model"] = MODEL
                                 yield _sse({"type": "info", "message": f"Bytte till {MODEL} (Opus ej tillgänglig)"})
                                 continue
                             # Rate limit-fallback: byt till Sonnet om Opus rate-limitas
                             if resp.status_code == 429 and MODEL.startswith("claude-opus"):
-                                MODEL = "claude-sonnet-4-5"
+                                MODEL = _latest["sonnet"]
                                 payload["model"] = MODEL
                                 yield _sse({"type": "info", "message": f"Opus rate-limitat — bytte till {MODEL}"})
                                 continue
