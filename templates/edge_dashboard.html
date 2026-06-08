@@ -7132,6 +7132,10 @@ function _stripAgentJsonBlock(s) {
 
 function formatAgentText(s) {
     s = _stripAgentJsonBlock(s);
+    // Säkerhetsnät: om en rubrik klistrats ihop med föregående text (t.ex. en
+    // residual-ingress "...nu.## NVDA") parsas inte ## som rubrik. Tvinga blankrad
+    // före markdown-rubriker som inte redan står först på raden.
+    s = String(s || '').replace(/([^\n])(#{1,6}\s+\S)/g, '$1\n\n$2');
     // Använd marked.js för full GFM-rendering med tabeller (efter normalisering)
     if (typeof marked !== 'undefined') {
         try {
