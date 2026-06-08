@@ -12266,7 +12266,10 @@ def _company_recommendation_backtest(db, stock_data, years=10):
         def _p_on_after(ds, cs, target):
             i = _bisect.bisect_left(ds, target)
             return cs[i] if i < len(ds) else None
-        cat, _ = v33_live.classify(stock_data, opm_hist, _f(stock_data.get("return_on_equity")))
+        # Klassificera med Börsdata-ROE (v33-blocket) i första hand — Avanza-fältet
+        # är ofta None för US-bolag och felklassar då NVDA m.fl. som turnaround.
+        _roe_class = _f((stock_data.get("v33") or {}).get("roe_pct")) or _f(stock_data.get("return_on_equity"))
+        cat, _ = v33_live.classify(stock_data, opm_hist, _roe_class)
         today = _dt.utcnow().date()
         rows = []
         for i in range(3, len(qs)):
@@ -12312,16 +12315,19 @@ def _company_recommendation_backtest(db, stock_data, years=10):
             p = hits / n; z = 1.96
             wlow = round(100 * ((p + z * z / (2 * n) - z * _math.sqrt(p * (1 - p) / n + z * z / (4 * n * n))) / (1 + z * z / n)))
         beta = _f(stock_data.get("beta"))
-        if n >= 12 and wlow is not None and wlow >= 55:
+        if n < 8:
+            conf = "LÅG"
+            driver = f"för kort historik för en slutsats (endast {n} utvärderade kvartal)"
+        elif n >= 12 and wlow is not None and wlow >= 55:
             conf = "HÖG"
-        elif n >= 8 and hit_rate is not None and hit_rate >= 50:
+            driver = f"fundamentalt driven — ramverket har historiskt fångat bolaget väl ({hit_rate}% träff, {n} kvartal)"
+        elif hit_rate is not None and hit_rate >= 50:
             conf = "MEDEL"
+            driver = f"blandad — viss makro-/nyhetskänslighet ({hit_rate}% träff, {n} kvartal)"
         else:
             conf = "LÅG"
-        driver = ("fundamentalt driven — ramverket har historiskt fångat bolaget väl (hög prognoskraft)"
-                  if conf == "HÖG" else
-                  "blandad — viss makro-/nyhetskänslighet" if conf == "MEDEL" else
-                  "makro-/nyhetsstyrd eller för få datapunkter — fundamentala signaler har låg prognoskraft här")
+            driver = (f"makro-/nyhetsstyrd — fundamentala signaler har låg prognoskraft på detta "
+                      f"bolag ({hit_rate}% träff på {n} kvartal; läs dagens signal med försiktighet)")
         if beta is not None and beta > 1.5 and conf != "LÅG":
             driver += f" · hög beta {beta:.1f} (marknadskänslig)"
         return {"category": cat, "n_quarters_evaluated": n, "hit_rate_pct": hit_rate,
