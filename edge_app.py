@@ -12647,6 +12647,7 @@ def _agent_get_full_stock(db, query):
     # aldrig fyller en lucka med en gissning. Många US-bolag ligger i stocks med
     # pris+ägare men UTAN Börsdata-rapporter → då måste agenten säga DATA SAKNAS.
     try:
+        from edge_db import _fetchone as _fetchone_dc
         _v = out.get("v33") or {}
 
         def _has(x):
@@ -12664,8 +12665,8 @@ def _agent_get_full_stock(db, query):
         _nrep = 0
         if _isin_for_reports:
             try:
-                _rc = _fetchone(db, f"SELECT COUNT(*) as n FROM borsdata_reports WHERE isin={ph}",
-                                (_isin_for_reports,))
+                _rc = _fetchone_dc(db, f"SELECT COUNT(*) as n FROM borsdata_reports WHERE isin={ph}",
+                                   (_isin_for_reports,))
                 _nrep = int(dict(_rc).get("n") or 0) if _rc else 0
             except Exception:
                 _nrep = 0
