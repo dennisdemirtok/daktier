@@ -12231,14 +12231,35 @@ def _company_recommendation_backtest(db, stock_data, years=10):
             rev = _f(a.get("revenues")); op = _f(a.get("operating_income"))
             opm_hist.append(round(op / rev * 100, 1) if op is not None and rev else None)
 
+        from edge_db import _fetchone as _fo
+        cutoff_deep = (_dt.utcnow().date() - _td(days=365 * 6)).isoformat()
+
         def _prices(iz):
             ds, cs = [], []
             for r in (_fetchall(db, f"SELECT date, close FROM borsdata_prices WHERE isin={ph} "
                                     f"AND close>0 ORDER BY date ASC", (iz,)) or []):
                 d = dict(r); ds.append((d["date"] or "")[:10]); cs.append(_f(d["close"]))
             return ds, cs
-        sds, scs = _prices(isin)
-        ids, ics = _prices(BENCHMARK["isin"])
+
+        def _ensure_deep(iz, ins_id_hint=None, is_global_hint=False):
+            """Om prishistoriken är grund (<6 år) → dra ~11 års historik en gång (cachas)."""
+            ds, cs = _prices(iz)
+            if ds and len(ds) >= 500 and ds[0] <= cutoff_deep:
+                return ds, cs
+            ins_id, isg = ins_id_hint, is_global_hint
+            if ins_id is None:
+                mr = _fo(db, f"SELECT ins_id, is_global FROM borsdata_instrument_map WHERE isin={ph} LIMIT 1", (iz,))
+                if mr:
+                    md = dict(mr); ins_id = md.get("ins_id"); isg = bool(md.get("is_global"))
+            if ins_id is not None:
+                try:
+                    _forward_ensure_data(db, ins_id, iz, isg, price_from_days=4200)
+                    ds, cs = _prices(iz)
+                except Exception as _de:
+                    print(f"[backtest] deep-fetch {iz}: {_de}", file=sys.stderr)
+            return ds, cs
+        sds, scs = _ensure_deep(isin)
+        ids, ics = _ensure_deep(BENCHMARK["isin"], BENCHMARK["ins_id"], False)
         if len(sds) < 200:
             return None
 
@@ -12360,10 +12381,11 @@ def _forward_ensure_table(db):
     db.commit()
 
 
-def _forward_ensure_data(db, ins_id, isin, is_global=False):
-    """Drar FÄRSK Börsdata-data (rapporter år+kvartal, ~14mån priser) på ins_id
-    och upsertar i lokala borsdata_reports/borsdata_prices. Returnerar
-    (last_close, last_date). Auktoritativ källa = Börsdata (det vi betalar för)."""
+def _forward_ensure_data(db, ins_id, isin, is_global=False, price_from_days=430):
+    """Drar FÄRSK Börsdata-data (rapporter år+kvartal, priser) på ins_id och upsertar
+    i lokala borsdata_reports/borsdata_prices. Returnerar (last_close, last_date).
+    price_from_days styr prishistorikens längd (default ~14mån; sätt högt för index/
+    backtest-historik). Auktoritativ källa = Börsdata (det vi betalar för)."""
     from edge_db import _ph as _phf, _upsert_sql
     from borsdata_fetcher import (fetch_reports, fetch_global_reports,
                                   extract_v21_metrics, fetch_stock_prices)
@@ -12410,7 +12432,7 @@ def _forward_ensure_data(db, ins_id, isin, is_global=False):
     # ── Priser (~14 mån för momentum-baslinje) ──
     last_close = last_date = None
     try:
-        frm = (_dt.utcnow().date() - _td(days=430)).isoformat()
+        frm = (_dt.utcnow().date() - _td(days=int(price_from_days))).isoformat()
         prices = fetch_stock_prices(ins_id, is_global=is_global, from_date=frm) or []
         psql = _upsert_sql("borsdata_prices", ["isin", "date", "open", "high", "low", "close", "volume"],
                            ["isin", "date"])
