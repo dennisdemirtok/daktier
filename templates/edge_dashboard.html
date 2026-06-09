@@ -5917,7 +5917,13 @@ async function _cardToFile(card, fname, format) {
             if (typeof _renderAgentCharts === 'function') _renderAgentCharts(card, { noAnim: true });
             if (card.querySelector('.agent-chart canvas')) await new Promise(r => setTimeout(r, 320));
         } catch (e) { /* tyst */ }
-        canvas = await html2canvas(card, { scale: 2, backgroundColor: '#ffffff', logging: false, useCORS: true });
+        // Adaptiv skala: håll canvas-höjden hanterbar (~≤5400px) så renderingen är
+        // snabb och inte fryser sidan på långa flersidiga analyser. Korta analyser
+        // får skarpare upplösning (upp till 1.8×). Sidbrytnings-matematiken nedan
+        // härleds ur faktiska canvas-måtten, så skalan påverkar inte marginalerna.
+        const _ch = card.getBoundingClientRect().height || card.offsetHeight || 1200;
+        const _scale = Math.max(1, Math.min(1.8, 5400 / _ch));
+        canvas = await html2canvas(card, { scale: _scale, backgroundColor: '#ffffff', logging: false, useCORS: true });
         // Säkra sidbrytnings-positioner = TOPPEN på varje block/rad (CSS-px relativt
         // kortet). Sidan får sluta strax FÖRE ett element så inget element kapas mitt
         // itu vid sidbyte. tr/li tas med så långa tabeller bryts mellan rader.
