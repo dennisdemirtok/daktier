@@ -5972,17 +5972,20 @@ async function _cardToFile(card, fname, format) {
         startY = cut;
     }
 
+    // EN enda JPEG-kodning av hela bilden (snabbt; jsPDF bäddar in bilden en gång
+    // och återanvänder den per sida). Varje sida placerar bilden så att snittets
+    // start hamnar vid toppmarginalen, och maskar bort det som sticker ut ovanför/
+    // under snittet → rena topp-/bottenmarginaler, inga halva element från grann-sidan.
+    const fullImg = canvas.toDataURL('image/jpeg', 0.95);
     for (let p = 0; p < slices.length; p++) {
         const [y0, y1] = slices[p];
-        const hpx = y1 - y0;
-        if (hpx <= 0) continue;
-        const tmp = document.createElement('canvas');
-        tmp.width = canvas.width; tmp.height = hpx;
-        const tctx = tmp.getContext('2d');
-        tctx.fillStyle = '#ffffff'; tctx.fillRect(0, 0, tmp.width, tmp.height);
-        tctx.drawImage(canvas, 0, y0, canvas.width, hpx, 0, 0, canvas.width, hpx);
+        const sliceHmm = (y1 - y0) / pxPerMm;
+        if (sliceHmm <= 0) continue;
         if (p > 0) pdf.addPage();
-        pdf.addImage(tmp.toDataURL('image/jpeg', 0.95), 'JPEG', m, m, iw, hpx / pxPerMm);
+        pdf.addImage(fullImg, 'JPEG', m, m - y0 / pxPerMm, iw, ih);
+        pdf.setFillColor(255, 255, 255);
+        if (m > 0) pdf.rect(0, 0, pw, m, 'F');                    // toppmarginal
+        pdf.rect(0, m + sliceHmm, pw, ph - (m + sliceHmm), 'F');  // bottenmarginal + ev. bleed
     }
     pdf.save(fname + '.pdf');
 }
@@ -6052,6 +6055,8 @@ async function downloadAgentAnalysisPdf(idx, format) {
     const text = typeof h.content === 'string' ? h.content : '';
     if (!text.trim()) { alert('Inget innehåll att exportera ännu.'); return; }
     if (typeof html2canvas === 'undefined') { alert('Bild-biblioteket laddas än, försök strax igen.'); return; }
+    if (window.__agentPdfBusy) return;   // förhindra överlappande rendering (dubbelklick)
+    window.__agentPdfBusy = true;
     // Hitta knappen för loading-state
     let btn = null;
     try { btn = document.querySelector(`.agent-dl-btn[onclick*="downloadAgentAnalysisPdf(${idx},"][onclick*="'${format}'"]`); } catch (e) {}
@@ -6065,6 +6070,7 @@ async function downloadAgentAnalysisPdf(idx, format) {
     } catch (e) {
         alert('Fel vid nedladdning: ' + (e && e.message ? e.message : e));
     } finally {
+        window.__agentPdfBusy = false;
         if (btn) { btn.disabled = false; btn.innerHTML = orig; }
     }
 }
