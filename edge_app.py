@@ -93,6 +93,16 @@ _OPEN_PREFIXES = ("/login", "/health", "/api/auth/", "/auth/google", "/static/",
                   "/api/diag/auth-tables")
 
 
+@app.after_request
+def _no_html_cache(resp):
+    # HTML:en ÄR appen (en stor template) — cachea aldrig, annars kör browsern
+    # gammal frontend-bundle efter deploys (gav verklig bugg: ny backend-data
+    # renderades av gammal JS). CDN-assets (marked/chart.js) berörs inte.
+    if (resp.mimetype or "").startswith("text/html"):
+        resp.headers["Cache-Control"] = "no-cache"
+    return resp
+
+
 @app.before_request
 def _auth_gate():
     p = request.path or "/"

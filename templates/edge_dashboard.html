@@ -7210,6 +7210,15 @@ function renderAgentTurn(h, idx) {
             // footer += `<div style="font-size:10px;color:#059669;margin-top:6px">✓ Sentiment-validatorn passerade</div>`;
         }
 
+        // Försök igen-knapp: stream-fel eller tappad anslutning → kör om
+        // samma fråga med ett klick (i stället för att skriva om den).
+        if (!isStreaming && (h.hadError || h.incomplete)) {
+            footer += `<div class="agent-foot" style="border-top:none;padding-top:0;margin-top:8px">
+                <button class="agent-dl-btn" style="background:#b91c1c" onclick="agentRetryTurn(${idx})">
+                    <span class="material-symbols-outlined">refresh</span>Försök igen</button>
+            </div>`;
+        }
+
         // Ladda ner-knappar: färdig analys → snygg PDF/PNG av agentens svar.
         // Visas bara på avslutade, innehållsrika svar (inte småprat/streaming).
         if (!isStreaming && text && text.trim().length > 350) {
@@ -7591,6 +7600,24 @@ function agentCancel() {
     }
     _agentLoading = false;
     renderAgent();
+}
+
+function agentRetryTurn(idx) {
+    // Kör om en misslyckad analys (stream-fel/avbrott): plocka bort den trasiga
+    // assistent-turen + dess user-tur ur historiken och skicka om samma fråga
+    // genom ordinarie agentSend-flödet.
+    if (_agentLoading) return;
+    const user = _agentHistory[idx - 1];
+    if (!user || user.role !== 'user') return;
+    const text = Array.isArray(user.content)
+        ? (user.content.find(c => c.type === 'text')?.text || '')
+        : (typeof user.content === 'string' ? user.content : '');
+    if (!text) return;
+    _agentHistory.splice(idx - 1, 2);
+    renderAgent();
+    const inp = document.getElementById('agentInput');
+    if (inp) { inp.value = text; }
+    agentSend();
 }
 
 async function agentSend() {
