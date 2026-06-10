@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="sv">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Logga in — DAKTIER</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, Inter, Helvetica, sans-serif;
+    background: linear-gradient(160deg, #f8fafc 0%, #eef2ff 100%);
+    min-height: 100vh; display: flex; align-items: center; justify-content: center;
+    color: #0f172a; padding: 20px;
+  }
+  .card {
+    background: #fff; border-radius: 18px; width: 100%; max-width: 400px;
+    box-shadow: 0 8px 40px rgba(15, 23, 42, .08); overflow: hidden;
+  }
+  .card-head {
+    background: linear-gradient(135deg, #0f172a 0%, #1e3a8a 60%, #3b82f6 100%);
+    color: #fff; padding: 26px 28px;
+  }
+  .logo { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+  .logo-d {
+    width: 30px; height: 30px; background: #fff; border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    color: #1e3a8a; font-weight: 800; font-size: 16px;
+  }
+  .logo span { font-weight: 800; letter-spacing: 2px; font-size: 15px; }
+  .card-head p { font-size: 12.5px; opacity: .85; line-height: 1.5; }
+  .card-body { padding: 26px 28px 28px; }
+  h2 { font-size: 17px; margin-bottom: 16px; }
+  label { display: block; font-size: 12px; font-weight: 600; color: #475569; margin: 12px 0 5px; }
+  input {
+    width: 100%; padding: 10px 13px; border: 1.5px solid #e2e8f0; border-radius: 10px;
+    font-size: 14px; outline: none; transition: border-color .15s;
+  }
+  input:focus { border-color: #3b82f6; }
+  button.primary {
+    width: 100%; margin-top: 18px; padding: 11px; border: 0; border-radius: 10px;
+    background: #1e40af; color: #fff; font-size: 14px; font-weight: 700; cursor: pointer;
+  }
+  button.primary:hover { background: #1c3aa0; }
+  button.primary:disabled { opacity: .6; cursor: wait; }
+  .google-btn {
+    width: 100%; margin-top: 10px; padding: 10px; border: 1.5px solid #e2e8f0;
+    border-radius: 10px; background: #fff; font-size: 13.5px; font-weight: 600;
+    cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px;
+  }
+  .google-btn:hover { background: #f8fafc; }
+  .toggle { text-align: center; margin-top: 16px; font-size: 13px; color: #64748b; }
+  .toggle a { color: #1e40af; font-weight: 600; cursor: pointer; text-decoration: none; }
+  .err {
+    display: none; margin-top: 12px; background: #fee2e2; color: #991b1b;
+    border-radius: 8px; padding: 9px 12px; font-size: 12.5px;
+  }
+  .divider { display: flex; align-items: center; gap: 10px; margin-top: 16px; color: #94a3b8; font-size: 11px; }
+  .divider::before, .divider::after { content: ""; flex: 1; height: 1px; background: #e2e8f0; }
+  .foot { text-align: center; font-size: 10.5px; color: #94a3b8; margin-top: 18px; }
+</style>
+</head>
+<body>
+  <div class="card">
+    <div class="card-head">
+      <div class="logo"><div class="logo-d">D</div><span>DAKTIER</span></div>
+      <p>AI-driven aktieanalys — Börsdata-fundamenta, ägarmomentum och backtestade signaler i varje analys.</p>
+    </div>
+    <div class="card-body">
+      <h2 id="formTitle">Logga in</h2>
+      <form id="authForm" onsubmit="return submitAuth(event)">
+        <div id="nameRow" style="display:none">
+          <label for="name">Namn</label>
+          <input id="name" type="text" autocomplete="name" placeholder="Ditt namn">
+        </div>
+        <label for="email">E-post</label>
+        <input id="email" type="email" autocomplete="email" required placeholder="din@email.se">
+        <label for="password">Lösenord</label>
+        <input id="password" type="password" autocomplete="current-password" required minlength="8" placeholder="Minst 8 tecken">
+        <div class="err" id="errBox"></div>
+        <button class="primary" id="submitBtn" type="submit">Logga in</button>
+      </form>
+      {% if google_enabled %}
+      <div class="divider">eller</div>
+      <button class="google-btn" onclick="window.location='/auth/google'">
+        <svg width="16" height="16" viewBox="0 0 48 48"><path fill="#FFC107" d="M43.6 20.1H42V20H24v8h11.3C33.7 32.7 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.9 1.2 8 3l5.7-5.7C34.3 6.1 29.4 4 24 4 13 4 4 13 4 24s9 20 20 20 20-9 20-20c0-1.3-.1-2.6-.4-3.9z"/><path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.9 1.2 8 3l5.7-5.7C34.3 6.1 29.4 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.2 0-9.6-3.3-11.3-8l-6.5 5C9.5 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.1H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C40.9 35.4 44 30.1 44 24c0-1.3-.1-2.6-.4-3.9z"/></svg>
+        Fortsätt med Google
+      </button>
+      {% endif %}
+      <div class="toggle" id="toggleRow">
+        Inget konto? <a onclick="toggleMode()">Skapa konto</a>
+      </div>
+      <div class="foot">Beslutsstöd, ej finansiell rådgivning · DAKTIER</div>
+    </div>
+  </div>
+<script>
+let isRegister = false;
+function toggleMode() {
+  isRegister = !isRegister;
+  document.getElementById('formTitle').textContent = isRegister ? 'Skapa konto' : 'Logga in';
+  document.getElementById('submitBtn').textContent = isRegister ? 'Skapa konto' : 'Logga in';
+  document.getElementById('nameRow').style.display = isRegister ? 'block' : 'none';
+  document.getElementById('toggleRow').innerHTML = isRegister
+    ? 'Har du redan ett konto? <a onclick="toggleMode()">Logga in</a>'
+    : 'Inget konto? <a onclick="toggleMode()">Skapa konto</a>';
+  document.getElementById('errBox').style.display = 'none';
+  document.getElementById('password').autocomplete = isRegister ? 'new-password' : 'current-password';
+}
+async function submitAuth(e) {
+  e.preventDefault();
+  const btn = document.getElementById('submitBtn');
+  const err = document.getElementById('errBox');
+  err.style.display = 'none';
+  btn.disabled = true;
+  try {
+    const body = {
+      email: document.getElementById('email').value.trim(),
+      password: document.getElementById('password').value,
+    };
+    if (isRegister) body.name = document.getElementById('name').value.trim();
+    const r = await fetch(isRegister ? '/api/auth/register' : '/api/auth/login', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    const d = await r.json().catch(() => ({}));
+    if (r.ok && d.ok) { window.location = '/'; return false; }
+    err.textContent = d.error || 'Något gick fel — försök igen.';
+    err.style.display = 'block';
+  } catch (ex) {
+    err.textContent = 'Nätverksfel — försök igen.';
+    err.style.display = 'block';
+  } finally {
+    btn.disabled = false;
+  }
+  return false;
+}
+// Visa ev. felmeddelande från redirect (t.ex. Google ej konfigurerat)
+if (new URLSearchParams(location.search).get('err') === 'google') {
+  const err = document.getElementById('errBox');
+  err.textContent = 'Google-inloggning misslyckades — prova e-post/lösenord.';
+  err.style.display = 'block';
+}
+</script>
+</body>
+</html>

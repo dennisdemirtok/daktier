@@ -16,7 +16,9 @@ import threading
 import time as _time
 import requests
 from datetime import datetime, timedelta
-from flask import Flask, render_template, jsonify, request, Response, stream_with_context
+from flask import (Flask, render_template, jsonify, request, Response,
+                   stream_with_context, session, redirect)
+from werkzeug.security import generate_password_hash, check_password_hash
 
 # Ladda .env automatiskt — appen behöver ANTHROPIC_API_KEY för AI-funktioner
 try:
@@ -49,6 +51,59 @@ from edge_db import (
 app = Flask(__name__)
 
 
+# ── Sessioner: stabil SECRET_KEY delad av alla workers ──────────
+# Prioritet: env SECRET_KEY → meta-tabellen (genereras EN gång, atomiskt så
+# alla 3 gunicorn-workers läser samma) → sista utväg slumpad (sessioner
+# överlever då inte omstart — loggas som varning).
+def _bootstrap_secret_key():
+    sk = os.environ.get("SECRET_KEY")
+    if sk:
+        return sk
+    try:
+        import secrets as _secrets
+        db = get_db()
+        try:
+            ph = _ph()
+            db.execute(f"INSERT INTO meta (key, value) VALUES ({ph}, {ph}) "
+                       f"ON CONFLICT (key) DO NOTHING",
+                       ("flask_secret_key", _secrets.token_hex(32)))
+            db.commit()
+            cur = db.execute(f"SELECT value FROM meta WHERE key = {ph}",
+                             ("flask_secret_key",))
+            row = cur.fetchone()
+            if row:
+                return dict(row)["value"]
+        finally:
+            db.close()
+    except Exception as e:
+        print(f"[auth] secret-key-bootstrap misslyckades ({e}) — slumpad nyckel", file=sys.stderr)
+    import secrets as _secrets
+    return _secrets.token_hex(32)
+
+
+app.secret_key = _bootstrap_secret_key()
+app.config.update(SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE="Lax",
+                  PERMANENT_SESSION_LIFETIME=60 * 60 * 24 * 30)  # 30 dagar
+
+ADMIN_EMAILS = {e.strip().lower() for e in
+                os.environ.get("ADMIN_EMAILS", "dennis.demirtok@gmail.com").split(",") if e.strip()}
+
+# Öppna paths (allt annat kräver inloggning)
+_OPEN_PREFIXES = ("/login", "/health", "/api/auth/", "/auth/google", "/static/", "/favicon")
+
+
+@app.before_request
+def _auth_gate():
+    p = request.path or "/"
+    if any(p.startswith(x) for x in _OPEN_PREFIXES):
+        return None
+    if session.get("uid"):
+        return None
+    if p.startswith("/api/"):
+        return jsonify({"error": "auth_required"}), 401
+    return redirect("/login")
+
+
 # ── Global error handler: alla /api/*-fel returnerar JSON ──────
 # Förhindrar 'Unexpected token <'-fel i frontend när Flask annars
 # skulle returnera HTML-error-page. Behåll HTML för icke-API-routes.
@@ -74,6 +129,268 @@ def _json_error_handler(e):
         }), 200  # 200 så frontend inte triggar catch
     # För icke-API: låt Flask hantera normalt
     raise e
+
+
+# ══════════════════════════════════════════════════════════════
+# AUTH — konto, inloggning, usage-spårning
+# ══════════════════════════════════════════════════════════════
+
+_EMAIL_RE_AUTH = None
+
+
+def _valid_email(email):
+    global _EMAIL_RE_AUTH
+    import re as _re
+    if _EMAIL_RE_AUTH is None:
+        _EMAIL_RE_AUTH = _re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]{2,}$")
+    return bool(email and _EMAIL_RE_AUTH.match(email))
+
+
+def _login_session(user):
+    session.permanent = True
+    session["uid"] = user["id"]
+    session["email"] = user["email"]
+    session["is_admin"] = bool(user.get("is_admin"))
+
+
+@app.route("/health")
+def health():
+    return "ok", 200
+
+
+@app.route("/login")
+def login_page():
+    if session.get("uid"):
+        return redirect("/")
+    return render_template("login.html",
+                           google_enabled=bool(os.environ.get("GOOGLE_CLIENT_ID")))
+
+
+@app.route("/api/auth/register", methods=["POST"])
+def api_auth_register():
+    from edge_db import _fetchone
+    data = request.get_json(silent=True) or {}
+    email = (data.get("email") or "").strip().lower()
+    password = data.get("password") or ""
+    name = (data.get("name") or "").strip()[:80]
+    if not _valid_email(email):
+        return jsonify({"error": "Ogiltig e-postadress"}), 400
+    if len(password) < 8:
+        return jsonify({"error": "Lösenordet måste vara minst 8 tecken"}), 400
+    db = get_db()
+    try:
+        ph = _ph()
+        if _fetchone(db, f"SELECT id FROM users WHERE email = {ph}", (email,)):
+            return jsonify({"error": "Kontot finns redan — logga in i stället"}), 409
+        now = datetime.now().isoformat()
+        is_admin = 1 if email in ADMIN_EMAILS else 0
+        db.execute(f"INSERT INTO users (email, password_hash, name, is_admin, created_at, last_login) "
+                   f"VALUES ({ph}, {ph}, {ph}, {ph}, {ph}, {ph})",
+                   (email, generate_password_hash(password), name, is_admin, now, now))
+        db.commit()
+        row = _fetchone(db, f"SELECT id, email, name, is_admin FROM users WHERE email = {ph}", (email,))
+        user = dict(row)
+        _login_session(user)
+        return jsonify({"ok": True, "email": email, "is_admin": bool(is_admin)})
+    finally:
+        db.close()
+
+
+@app.route("/api/auth/login", methods=["POST"])
+def api_auth_login():
+    from edge_db import _fetchone
+    data = request.get_json(silent=True) or {}
+    email = (data.get("email") or "").strip().lower()
+    password = data.get("password") or ""
+    db = get_db()
+    try:
+        ph = _ph()
+        row = _fetchone(db, f"SELECT id, email, name, is_admin, password_hash FROM users WHERE email = {ph}", (email,))
+        if not row:
+            return jsonify({"error": "Fel e-post eller lösenord"}), 401
+        user = dict(row)
+        if not user.get("password_hash") or not check_password_hash(user["password_hash"], password):
+            return jsonify({"error": "Fel e-post eller lösenord"}), 401
+        # admin-status kan ha ändrats via env — uppdatera vid inlogg
+        is_admin = 1 if email in ADMIN_EMAILS else (1 if user.get("is_admin") else 0)
+        db.execute(f"UPDATE users SET last_login = {ph}, is_admin = {ph} WHERE id = {ph}",
+                   (datetime.now().isoformat(), is_admin, user["id"]))
+        db.commit()
+        user["is_admin"] = is_admin
+        _login_session(user)
+        return jsonify({"ok": True, "email": email, "is_admin": bool(is_admin)})
+    finally:
+        db.close()
+
+
+@app.route("/api/auth/logout", methods=["POST"])
+def api_auth_logout():
+    session.clear()
+    return jsonify({"ok": True})
+
+
+@app.route("/api/auth/me")
+def api_auth_me():
+    if not session.get("uid"):
+        return jsonify({"authenticated": False}), 401
+    from edge_db import _fetchone
+    db = get_db()
+    try:
+        ph = _ph()
+        usage = _fetchone(db,
+            f"SELECT COUNT(*) AS n, COALESCE(SUM(output_tokens),0) AS out_tok, "
+            f"COALESCE(SUM(cost_usd),0) AS cost FROM usage_events WHERE user_id = {ph}",
+            (session["uid"],))
+        u = dict(usage) if usage else {}
+        return jsonify({"authenticated": True, "email": session.get("email"),
+                        "is_admin": bool(session.get("is_admin")),
+                        "usage": {"events": int(u.get("n") or 0),
+                                  "output_tokens": int(u.get("out_tok") or 0),
+                                  "cost_usd": round(float(u.get("cost") or 0), 4)}})
+    finally:
+        db.close()
+
+
+# ── Google OAuth (aktiveras genom att sätta GOOGLE_CLIENT_ID + GOOGLE_CLIENT_SECRET) ──
+@app.route("/auth/google")
+def auth_google_start():
+    cid = os.environ.get("GOOGLE_CLIENT_ID")
+    if not cid:
+        return redirect("/login?err=google")
+    import secrets as _secrets
+    from urllib.parse import urlencode
+    state = _secrets.token_urlsafe(24)
+    session["oauth_state"] = state
+    redirect_uri = os.environ.get("GOOGLE_REDIRECT_URI",
+                                  request.url_root.rstrip("/") + "/auth/google/callback")
+    params = {"client_id": cid, "redirect_uri": redirect_uri,
+              "response_type": "code", "scope": "openid email profile",
+              "state": state, "prompt": "select_account"}
+    return redirect("https://accounts.google.com/o/oauth2/v2/auth?" + urlencode(params))
+
+
+@app.route("/auth/google/callback")
+def auth_google_callback():
+    from edge_db import _fetchone
+    cid = os.environ.get("GOOGLE_CLIENT_ID")
+    csec = os.environ.get("GOOGLE_CLIENT_SECRET")
+    code = request.args.get("code")
+    if not (cid and csec and code) or request.args.get("state") != session.pop("oauth_state", None):
+        return redirect("/login?err=google")
+    redirect_uri = os.environ.get("GOOGLE_REDIRECT_URI",
+                                  request.url_root.rstrip("/") + "/auth/google/callback")
+    try:
+        tok = requests.post("https://oauth2.googleapis.com/token", data={
+            "client_id": cid, "client_secret": csec, "code": code,
+            "grant_type": "authorization_code", "redirect_uri": redirect_uri}, timeout=15).json()
+        ui = requests.get("https://openidconnect.googleapis.com/v1/userinfo",
+                          headers={"Authorization": f"Bearer {tok.get('access_token','')}"},
+                          timeout=15).json()
+        email = (ui.get("email") or "").lower()
+        gid = ui.get("sub")
+        name = (ui.get("name") or "")[:80]
+        if not _valid_email(email):
+            return redirect("/login?err=google")
+        db = get_db()
+        try:
+            ph = _ph()
+            now = datetime.now().isoformat()
+            row = _fetchone(db, f"SELECT id, email, name, is_admin FROM users WHERE email = {ph}", (email,))
+            if row:
+                user = dict(row)
+                db.execute(f"UPDATE users SET google_id = {ph}, last_login = {ph} WHERE id = {ph}",
+                           (gid, now, user["id"]))
+            else:
+                is_admin = 1 if email in ADMIN_EMAILS else 0
+                db.execute(f"INSERT INTO users (email, google_id, name, is_admin, created_at, last_login) "
+                           f"VALUES ({ph}, {ph}, {ph}, {ph}, {ph}, {ph})",
+                           (email, gid, name, is_admin, now, now))
+            db.commit()
+            row = _fetchone(db, f"SELECT id, email, name, is_admin FROM users WHERE email = {ph}", (email,))
+            _login_session(dict(row))
+        finally:
+            db.close()
+        return redirect("/")
+    except Exception as e:
+        print(f"[auth] google-callback fel: {e}", file=sys.stderr)
+        return redirect("/login?err=google")
+
+
+def _log_usage_event(user_id, email, endpoint, model, usage, query):
+    """Skriv en usage-rad (alla iterationer summerade) + beräknad USD-kostnad.
+    Får ALDRIG krascha anropet — bara logga fel."""
+    try:
+        tier = _model_tier(model) or "sonnet"
+        pr = MODEL_PRICING.get(tier, MODEL_PRICING["sonnet"])
+        cost = ((usage.get("input_tokens") or 0) * pr["in"]
+                + (usage.get("cache_read_input_tokens") or 0) * pr["in"] * 0.1
+                + (usage.get("cache_creation_input_tokens") or 0) * pr["in"] * 1.25
+                + (usage.get("output_tokens") or 0) * pr["out"]) / 1e6
+        db = get_db()
+        try:
+            ph = _ph()
+            db.execute(f"INSERT INTO usage_events (user_id, email, endpoint, model, iterations, "
+                       f"input_tokens, cache_read_tokens, cache_creation_tokens, output_tokens, "
+                       f"cost_usd, query, created_at) VALUES "
+                       f"({ph},{ph},{ph},{ph},{ph},{ph},{ph},{ph},{ph},{ph},{ph},{ph})",
+                       (user_id, email, endpoint, model, usage.get("iterations") or 1,
+                        usage.get("input_tokens") or 0, usage.get("cache_read_input_tokens") or 0,
+                        usage.get("cache_creation_input_tokens") or 0, usage.get("output_tokens") or 0,
+                        round(cost, 6), (query or "")[:300], datetime.now().isoformat()))
+            db.commit()
+        finally:
+            db.close()
+    except Exception as e:
+        print(f"[usage] logg-fel: {e}", file=sys.stderr)
+
+
+@app.route("/admin")
+def admin_page():
+    if not session.get("is_admin"):
+        return redirect("/login") if not session.get("uid") else ("Endast admin", 403)
+    from edge_db import _fetchall
+    db = get_db()
+    try:
+        users = [dict(r) for r in _fetchall(db,
+            "SELECT u.id, u.email, u.name, u.is_admin, u.created_at, u.last_login, "
+            "COUNT(e.id) AS events, COALESCE(SUM(e.output_tokens),0) AS out_tok, "
+            "COALESCE(SUM(e.cost_usd),0) AS cost "
+            "FROM users u LEFT JOIN usage_events e ON e.user_id = u.id "
+            "GROUP BY u.id, u.email, u.name, u.is_admin, u.created_at, u.last_login "
+            "ORDER BY cost DESC")]
+        recent = [dict(r) for r in _fetchall(db,
+            "SELECT email, endpoint, model, iterations, input_tokens, cache_read_tokens, "
+            "cache_creation_tokens, output_tokens, cost_usd, query, created_at "
+            "FROM usage_events ORDER BY id DESC LIMIT 40")]
+    finally:
+        db.close()
+    rows_u = "".join(
+        f"<tr><td>{u['email']}</td><td>{u.get('name') or ''}</td>"
+        f"<td>{'✓' if u.get('is_admin') else ''}</td><td>{(u.get('created_at') or '')[:10]}</td>"
+        f"<td>{(u.get('last_login') or '')[:16].replace('T',' ')}</td><td style='text-align:right'>{u['events']}</td>"
+        f"<td style='text-align:right'>{int(u['out_tok']):,}</td>"
+        f"<td style='text-align:right'>${float(u['cost']):.2f}</td></tr>" for u in users)
+    rows_e = "".join(
+        f"<tr><td>{(e.get('created_at') or '')[:16].replace('T',' ')}</td><td>{e['email'] or '–'}</td>"
+        f"<td>{e['model'] or ''}</td><td style='text-align:right'>{e.get('iterations') or 1}</td>"
+        f"<td style='text-align:right'>{int(e.get('output_tokens') or 0):,}</td>"
+        f"<td style='text-align:right'>${float(e.get('cost_usd') or 0):.3f}</td>"
+        f"<td style='color:#64748b'>{(e.get('query') or '')[:70]}</td></tr>" for e in recent)
+    return f"""<!doctype html><html lang="sv"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>DAKTIER Admin</title><style>
+body{{font-family:-apple-system,BlinkMacSystemFont,Inter,sans-serif;background:#f8fafc;color:#0f172a;margin:0;padding:28px}}
+h1{{font-size:20px}} h2{{font-size:15px;margin-top:28px}}
+table{{border-collapse:collapse;width:100%;background:#fff;border-radius:10px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.06);font-size:13px}}
+th,td{{padding:8px 12px;border-bottom:1px solid #eef2f7;text-align:left}}
+th{{background:#f1f5f9;font-size:11px;text-transform:uppercase;letter-spacing:.4px;color:#64748b}}
+a{{color:#1e40af}}</style></head><body>
+<h1>DAKTIER — Admin</h1><a href="/">← Tillbaka till appen</a>
+<h2>Användare ({len(users)})</h2>
+<table><tr><th>E-post</th><th>Namn</th><th>Admin</th><th>Skapad</th><th>Senast inloggad</th><th>Analyser</th><th>Output-tokens</th><th>Kostnad</th></tr>{rows_u}</table>
+<h2>Senaste 40 anropen</h2>
+<table><tr><th>Tid</th><th>Användare</th><th>Modell</th><th>Iter</th><th>Out-tok</th><th>USD</th><th>Fråga</th></tr>{rows_e}</table>
+</body></html>"""
 
 
 # ── Server-side response cache (fast tab switches) ────────
@@ -16821,6 +17138,11 @@ def api_agent_chat_stream():
     if not message and not image_b64:
         return jsonify({"error": "Tomt meddelande"}), 400
 
+    # Fånga användaren INNAN generatorn startar (sessionen är inte säkert
+    # tillgänglig efter att svaret börjat streama)
+    _usage_uid = session.get("uid")
+    _usage_email = session.get("email")
+
     # Bygg system-prompt med DB-kontext (samma som non-streaming-routen)
     db = get_db()
     try:
@@ -16905,6 +17227,16 @@ DEL 9 — DAGENS DB-SNAPSHOT (uppdateras var 5 min)
         nonlocal MODEL
         rate_limit_retries = 0
         validation_retry_used = False  # max 1 retry på sentiment-violation (block-mode)
+        # Summa över ALLA iterationer (footern visade tidigare bara sista
+        # iterationen → undervisade verklig kostnad med 30-80%)
+        usage_total = {"input_tokens": 0, "cache_read_input_tokens": 0,
+                       "cache_creation_input_tokens": 0, "output_tokens": 0,
+                       "iterations": 0}
+
+        def _flush_usage():
+            if usage_total["iterations"] > 0:
+                _log_usage_event(_usage_uid, _usage_email, "agent_stream", MODEL,
+                                 usage_total, message)
         try:
             for _iter in range(8):  # max 8 iterationer (multi-tool)
                 payload = {
@@ -17057,6 +17389,12 @@ DEL 9 — DAGENS DB-SNAPSHOT (uppdateras var 5 min)
                     yield _sse({"type": "error", "error": f"Streaming-fel: {e}"})
                     return
 
+                # Ackumulera iterationens tokens i totalen
+                for _k in ("input_tokens", "cache_read_input_tokens",
+                           "cache_creation_input_tokens", "output_tokens"):
+                    usage_total[_k] += usage_info.get(_k) or 0
+                usage_total["iterations"] += 1
+
                 # Tool use → kör tools, fortsätt loop
                 if stop_reason == "tool_use":
                     # Filtrera bort None-block
@@ -17090,8 +17428,9 @@ DEL 9 — DAGENS DB-SNAPSHOT (uppdateras var 5 min)
                 ])
                 v22_violations = _validate_v22_sentiment(full_text)
 
-                # Skicka usage + ev. warning + done — INGEN retry-loop
-                yield _sse({"type": "usage", **usage_info})
+                # Skicka usage (SUMMA över alla iterationer = sann kostnad i
+                # footern) + ev. warning + done — INGEN retry-loop
+                yield _sse({"type": "usage", **usage_total})
                 if v22_violations:
                     yield _sse({
                         "type": "validation_warning",
@@ -17102,13 +17441,16 @@ DEL 9 — DAGENS DB-SNAPSHOT (uppdateras var 5 min)
                 yield _sse({"type": "done", "model": MODEL,
                            "validated": not v22_violations,
                            "warn_count": len(v22_violations) if v22_violations else 0})
+                _flush_usage()
                 return
 
             # Max iterations nådda
             yield _sse({"type": "error", "error": "Max tool-iterationer nått"})
+            _flush_usage()
         except Exception as e:
             import traceback; traceback.print_exc()
             yield _sse({"type": "error", "error": str(e)})
+            _flush_usage()
 
     return Response(stream_with_context(generate()),
                     mimetype="text/event-stream",

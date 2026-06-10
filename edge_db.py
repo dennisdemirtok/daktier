@@ -1328,6 +1328,7 @@ def _create_tables(db):
         _ensure_smart_score_columns(db)
         _ensure_batch_analyses_columns(db)
         _ensure_recommendation_log_table(db)  # P1-6 track record
+        _ensure_auth_tables(db)               # users + usage_events (inlogg)
 
 
 def _list_batch_analyses_columns(db):
@@ -1550,6 +1551,79 @@ def _ensure_recommendation_log_table(db):
         try: db.rollback()
         except Exception: pass
         print(f"[migration] _ensure_recommendation_log_table failed: {e}", file=_sys.stderr)
+        return False
+
+
+def _ensure_auth_tables(db):
+    """Inlogg + användarspårning: users (e-post/lösenord + ev. Google) och
+    usage_events (token-förbrukning per API-anrop, för per-användare-statistik
+    och sann kostnadsbild). Idempotent (PG + SQLite)."""
+    import sys as _sys
+    try:
+        if _use_postgres():
+            db.execute("""
+                CREATE TABLE IF NOT EXISTS users (
+                    id SERIAL PRIMARY KEY,
+                    email TEXT UNIQUE NOT NULL,
+                    password_hash TEXT,
+                    google_id TEXT,
+                    name TEXT,
+                    is_admin INTEGER DEFAULT 0,
+                    created_at TEXT,
+                    last_login TEXT
+                )""")
+            db.execute("""
+                CREATE TABLE IF NOT EXISTS usage_events (
+                    id SERIAL PRIMARY KEY,
+                    user_id INTEGER,
+                    email TEXT,
+                    endpoint TEXT,
+                    model TEXT,
+                    iterations INTEGER,
+                    input_tokens BIGINT,
+                    cache_read_tokens BIGINT,
+                    cache_creation_tokens BIGINT,
+                    output_tokens BIGINT,
+                    cost_usd DOUBLE PRECISION,
+                    query TEXT,
+                    created_at TEXT
+                )""")
+        else:
+            db.execute("""
+                CREATE TABLE IF NOT EXISTS users (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    email TEXT UNIQUE NOT NULL,
+                    password_hash TEXT,
+                    google_id TEXT,
+                    name TEXT,
+                    is_admin INTEGER DEFAULT 0,
+                    created_at TEXT,
+                    last_login TEXT
+                )""")
+            db.execute("""
+                CREATE TABLE IF NOT EXISTS usage_events (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id INTEGER,
+                    email TEXT,
+                    endpoint TEXT,
+                    model TEXT,
+                    iterations INTEGER,
+                    input_tokens INTEGER,
+                    cache_read_tokens INTEGER,
+                    cache_creation_tokens INTEGER,
+                    output_tokens INTEGER,
+                    cost_usd REAL,
+                    query TEXT,
+                    created_at TEXT
+                )""")
+        db.execute("CREATE INDEX IF NOT EXISTS idx_usage_user ON usage_events(user_id)")
+        db.execute("CREATE INDEX IF NOT EXISTS idx_usage_created ON usage_events(created_at)")
+        db.commit()
+        return True
+    except Exception as e:
+        try: db.rollback()
+        except Exception: pass
+        print(f"[migration] _ensure_auth_tables failed: {e}", file=_sys.stderr)
         return False
 
 
