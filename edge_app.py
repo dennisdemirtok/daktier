@@ -15644,6 +15644,20 @@ def api_diag_model_check():
                     "resolver_latest": _latest_models()})
 
 
+@app.route("/api/diag/sched-claims")
+def api_diag_sched_claims():
+    """Visar scheduler-vakternas claims (meta-nycklar 'sched:*') — verifierar att
+    cron-jobben körs exakt 1× över alla gunicorn-workers."""
+    db = get_db()
+    try:
+        from edge_db import _fetchall
+        rows = _fetchall(db, f"SELECT key, value FROM meta WHERE key LIKE {_ph()} ORDER BY key",
+                         ("sched:%",))
+        return jsonify({"claims": {dict(r)["key"]: dict(r)["value"] for r in rows}})
+    finally:
+        db.close()
+
+
 @app.route("/api/diag/coverage-status")
 def api_coverage_status():
     """Worker-OBEROENDE täckningsstatus (läser DB direkt) — hur stor andel bolag
@@ -17103,6 +17117,41 @@ DEL 9 — DAGENS DB-SNAPSHOT (uppdateras var 5 min)
 
 # ── Startup (runs for both gunicorn and direct execution) ──
 
+def _sched_claim(job_id, period_key):
+    """Cross-process-vakt för schemalagda jobb. Varje gunicorn-worker (3 st) kör
+    en egen APScheduler, så utan vakt körs varje cron-jobb 3× parallellt (3×
+    Börsdata-anrop, 3 dagliga mejl). Atomisk compare-and-set i meta-tabellen:
+    INSERT vinner om nyckeln saknas; ON CONFLICT-UPDATE vinner bara om perioden
+    är NY (value <> ny period). rowcount=0 → en annan worker tog redan perioden.
+    Postgres serialiserar konkurrenta upserts på radlåset, sqlite är single-
+    writer — exakt EN vinnare per (jobb, period). Obs: vinnare som kraschar
+    mitt i jobbet blockerar perioden (nästa period kör igen) — acceptabelt för
+    synk-jobb med dagliga/veckovisa backstops. Vid DB-fel: kör ändå (fail-open,
+    hellre dubbelkörning än missad synk)."""
+    db = None
+    try:
+        db = get_db()
+        ph = _ph()
+        cur = db.execute(
+            f"INSERT INTO meta (key, value) VALUES ({ph}, {ph}) "
+            f"ON CONFLICT (key) DO UPDATE SET value = excluded.value "
+            f"WHERE meta.value <> excluded.value",
+            (f"sched:{job_id}", str(period_key)))
+        won = (getattr(cur, "rowcount", 0) or 0) > 0
+        db.commit()
+        if not won:
+            print(f"[SCHED-LOCK] {job_id} {period_key}: annan worker kör — hoppar")
+        return won
+    except Exception as e:
+        print(f"[SCHED-LOCK] {job_id}: {e} — kör ändå (fail-open)")
+        return True
+    finally:
+        try:
+            if db: db.close()
+        except Exception:
+            pass
+
+
 def _startup():
     db = get_db()
     # P1-6: säkerställ track record-tabellen på PG (skapas annars bara lazy)
@@ -17181,6 +17230,9 @@ def _startup():
                 return
             if state["loading"]:
                 return
+            _n = datetime.now()
+            if not _sched_claim("price_refresh", f"{_n:%Y-%m-%dT%H}:{_n.minute // 15}"):
+                return
             print(f"[AUTO] Schemalagd prisuppdatering {datetime.now().strftime('%H:%M')}")
             refresh_prices()
 
@@ -17190,6 +17242,8 @@ def _startup():
         # Nightly historical sync (03:30 lokal) — extended tier (~2000 aktier)
         def scheduled_hist_sync():
             if _hist_sync_state.get("running"):
+                return
+            if not _sched_claim("hist_sync", datetime.now().strftime("%Y-%m-%d")):
                 return
             print(f"[AUTO] Nightly historical sync start {datetime.now().strftime('%H:%M')}")
             _run_hist_sync(limit=None, max_age_days=6, tier="extended")
@@ -17202,6 +17256,8 @@ def _startup():
         # behöva gissa pga saknad data.
         def scheduled_fundamentals_sync():
             if _GLOBAL_SYNC_STATE.get("running"):
+                return
+            if not _sched_claim("fundamentals_sync", datetime.now().strftime("%Y-%m-%d")):
                 return
             print(f"[AUTO] Täcknings-sync (fundamenta) start {datetime.now().strftime('%H:%M')}")
             _GLOBAL_SYNC_STATE["running"] = True
@@ -17225,6 +17281,8 @@ def _startup():
 
         # Dagligt makro-snapshot (06:00 lokal)
         def scheduled_macro_snapshot():
+            if not _sched_claim("macro_snapshot", datetime.now().strftime("%Y-%m-%d")):
+                return
             try:
                 from edge_db import save_macro_snapshot, seed_macro_history
                 _MACRO_CACHE["data"] = None  # tvinga ny live-fetch
@@ -17248,6 +17306,8 @@ def _startup():
         def scheduled_insider_sync():
             if state["loading"]:
                 return
+            if not _sched_claim("insider_sync", datetime.now().strftime("%Y-%m-%d")):
+                return
             print(f"[AUTO] Daglig insider-sync start {datetime.now().strftime('%H:%M')}")
             try:
                 refresh_insiders()
@@ -17268,6 +17328,8 @@ def _startup():
                 while first.weekday() >= 5:  # hoppa lör/sön → första vardag
                     first += _td(days=1)
                 if today != first:
+                    return
+                if not _sched_claim("forward_log_check", today.isoformat()):
                     return
                 dbf = get_db()
                 try:
@@ -17298,6 +17360,8 @@ def _startup():
         # Sparar live-träffar för Confluence/Trifecta/Dual-Screen för
         # senare 12m-uppföljning. Validerar live att backtest speglar verkligheten.
         def scheduled_screen_snapshot():
+            if not _sched_claim("screen_snapshot", datetime.now().strftime("%Y-%m-%d")):
+                return
             try:
                 print(f"[AUTO] Dagligt screen-snapshot start {datetime.now().strftime('%H:%M')}")
                 from edge_db import _ph as ph_fn, _upsert_sql, compute_quant_scores
@@ -17364,6 +17428,8 @@ def _startup():
 
         # 📧 Dagligt mail-digest (vardagar 17:30 — efter snapshot)
         def scheduled_daily_email():
+            if not _sched_claim("daily_email", datetime.now().strftime("%Y-%m-%d")):
+                return
             try:
                 print(f"[AUTO] Daily email start {datetime.now().strftime('%H:%M')}")
                 dbe = get_db()
@@ -17385,6 +17451,8 @@ def _startup():
 
         # Uppdatera fwd-returns på söndagar — utvärderar gamla snapshots
         def scheduled_update_fwd_returns():
+            if not _sched_claim("fwd_returns", datetime.now().strftime("%G-W%V")):
+                return
             try:
                 print(f"[AUTO] Uppdaterar fwd-returns för screen_snapshots")
                 from edge_db import _ph as ph_fn, _fetchall
@@ -17442,6 +17510,8 @@ def _startup():
         # Nattlig Börsdata-prissync (04:00 lokal, efter hist sync) — inkrementellt
         # Hämtar bara nya datapunkter sedan senast (last_date+1), så det går snabbt.
         def scheduled_borsdata_prices():
+            if not _sched_claim("borsdata_prices", datetime.now().strftime("%Y-%m-%d")):
+                return
             try:
                 from edge_db import sync_borsdata_prices
                 print(f"[AUTO] Börsdata-prissync start {datetime.now().strftime('%H:%M')}")
@@ -17461,6 +17531,8 @@ def _startup():
         # Veckovis Börsdata-rapportsync (söndagar 04:30) — full
         # PLUS daglig snabb-sync 05:30 under earnings-säsong för senaste rapporterna.
         def scheduled_borsdata_reports():
+            if not _sched_claim("borsdata_reports_weekly", datetime.now().strftime("%G-W%V")):
+                return
             try:
                 from edge_db import sync_borsdata_reports
                 print(f"[AUTO] Börsdata-rapportsync start {datetime.now().strftime('%H:%M')}")
@@ -17475,6 +17547,8 @@ def _startup():
 
         # Daglig snabb-sync för senaste rapporter — bara bolag med rapport-datum <14d
         def scheduled_daily_reports_sync():
+            if not _sched_claim("daily_reports_sync", datetime.now().strftime("%Y-%m-%d")):
+                return
             try:
                 from edge_db import sync_borsdata_reports
                 print(f"[AUTO] Daglig rapport-sync (fresh) start")
@@ -17498,6 +17572,8 @@ def _startup():
 
         # Månatlig Börsdata-metadata-sync (1:a varje månad 05:00) — sektorer/branscher
         def scheduled_borsdata_metadata():
+            if not _sched_claim("borsdata_metadata", datetime.now().strftime("%Y-%m")):
+                return
             try:
                 from edge_db import sync_borsdata_metadata
                 print(f"[AUTO] Börsdata-metadata-sync start {datetime.now().strftime('%H:%M')}")
