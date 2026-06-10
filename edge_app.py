@@ -11111,15 +11111,25 @@ HADE presterat på JUST DETTA bolag (kvartalsvis ~10 år, point-in-time-fundamen
 faktisk forward-12m relativavkastning vs OMXS30GI). Rendera ALLTID en sektion
 "## Ramverkets track record på [TICKER]" med:
 
-1. **DEN VIKTIGASTE RADEN — VILKEN LINS ATT FÖLJA (FET, högst upp):** ur `best_lens`.
-   Skriv tydligt och MARKERAT, t.ex.:
-   "➡️ **Följ [best_lens.lens]-linsen för [TICKER]** — den har historiskt varit mest
-   lönsam: **[hit_rate_pct]% träff** (n=[n]), snitt **+[avg_rel_when_directional_pct]%**
-   relativavkastning när den gav en riktad signal."
+1. **DEN VIKTIGASTE RADEN — VILKEN LINS ATT FÖLJA (FET, högst upp):** ur `best_lens`,
+   med TVÅ LÄGEN styrda av `best_lens.hit_rate_pct`:
+   • **hit_rate_pct ≥ 55 → rekommendationsläge.** Skriv MARKERAT:
+     "➡️ **Följ [best_lens.lens]-linsen för [TICKER]** — den har historiskt varit mest
+     lönsam: **[hit_rate_pct]% träff** (n=[n]), snitt **+[avg_rel_when_directional_pct]%**
+     relativavkastning när den gav en riktad signal."
+   • **hit_rate_pct < 55 → VARNINGSLÄGE (säg ALDRIG "följ" en lins som inte slår
+     slumpen).** Skriv i stället MARKERAT:
+     "⚠️ **Ingen lins har historiskt slagit slumpen på [TICKER]** — bäst är
+     [best_lens.lens] med bara **[hit_rate_pct]% träff** (n=[n]). Bolaget är makro-/
+     nyhetsstyrt snarare än fundamentalt prognosbart — extra ödmjukhet, mindre
+     position, och lita mer på dagens helhetsbild än på någon enskild signal."
+     Slutsatsen ska då vila på samlad bedömning (värdering+cykel+risk), INTE på
+     den "bästa" linsen.
    Detta löser problemet att tre linser (Swing/Quality/Value) säger olika saker —
-   tala om vilken som FAKTISKT tjänat pengar på just detta bolag. Är `best_lens` null
-   (för få riktade signaler i någon lins): skriv "Ingen enskild lins har statistiskt
-   säkerställd kant här — väg dem jämnt och luta mot dagens samlade profil."
+   tala om vilken som FAKTISKT tjänat pengar på just detta bolag, eller varna ärligt
+   när ingen gjort det. Är `best_lens` null (för få riktade signaler i någon lins):
+   skriv "Ingen enskild lins har statistiskt säkerställd kant här — väg dem jämnt
+   och luta mot dagens samlade profil."
 2. **Confidence-rad:** "Confidence på dagens rekommendation: **[HÖG/MEDEL/LÅG]** — [driver]"
    ur `confidence` + `driver`.
 3. **Per-lins-träffsäkerhet (ur `lenses`):** en rad/tabell:

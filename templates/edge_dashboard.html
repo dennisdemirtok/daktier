@@ -6643,14 +6643,30 @@ function _saveCurrentChat() {
     if (!_agentChatId) {
         _agentChatId = 'chat_' + now;
     }
-    // Härled titel från första user-meddelandet
+    // Härled titel: helst bolagsrubriken ur agentens svar ("## NVDA — ..."),
+    // annars user-frågan rensad från boilerplate ("Gör en fullständig analys av ...")
     let title = 'Ny chatt';
     for (const h of _agentHistory) {
-        if (h.role === 'user') {
-            const text = Array.isArray(h.content)
-                ? (h.content.find(c => c.type === 'text')?.text || '')
-                : (typeof h.content === 'string' ? h.content : '');
-            if (text) { title = text.slice(0, 80); break; }
+        if (h.role === 'assistant' && typeof h.content === 'string') {
+            const m = h.content.match(/##\s+([^\n#]{2,70})/);
+            if (m) { title = m[1].replace(/[*_`#|]/g, '').trim().slice(0, 60); break; }
+        }
+    }
+    if (title === 'Ny chatt') {
+        for (const h of _agentHistory) {
+            if (h.role === 'user') {
+                let text = Array.isArray(h.content)
+                    ? (h.content.find(c => c.type === 'text')?.text || '')
+                    : (typeof h.content === 'string' ? h.content : '');
+                if (text) {
+                    text = text
+                        .replace(/^(gör|kör|skapa)\s+en\s+(fullständig\s+|djup)?analys\s+(av|på)\s+/i, '')
+                        .replace(/\s+med\s+köp\/?sälj.*$/i, '')
+                        .trim();
+                    title = (text || 'Ny chatt').slice(0, 60);
+                    break;
+                }
+            }
         }
     }
     chats[_agentChatId] = {
