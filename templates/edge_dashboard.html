@@ -1520,7 +1520,7 @@ function switchTab(tab, el) {
     // m.fl.) — låt det vara dess egna tab.
     // v3.8: snapshot:a dashboarden INNAN vi lämnar den (komplett DOM)
     if (currentTab === 'dashboard' && tab !== 'dashboard') {
-        try { const c = document.getElementById('content'); if (c) _dashSnapshot = { html: c.innerHTML, ts: Date.now() }; } catch (e) {}
+        try { const c = document.getElementById('content'); if (c) _saveDashSnapshot(c.innerHTML); } catch (e) {}
     }
     currentTab = tab;
     // v3.7: synka top-nav + contextual subnav + mobile-nav aktiv-states
@@ -8971,6 +8971,34 @@ function _renderModelDetail(el, d) {
 // v3.8: snapshot-cache så dashboarden inte laddar om varje gång
 let _dashSnapshot = null;   // {html, ts}
 let _dashSnapTimer = null;
+const _DASH_SNAP_LS = 'daktier_dash_snap_v1';
+
+// Persistent dashboard-cache: snapshot sparas i localStorage så den överlever
+// sidladdningar — dashboarden renderar direkt ur cache och revaliderar tyst.
+function _saveDashSnapshot(html) {
+    _dashSnapshot = { html, ts: Date.now() };
+    try { localStorage.setItem(_DASH_SNAP_LS, JSON.stringify(_dashSnapshot)); }
+    catch (e) { /* quota — in-memory räcker */ }
+}
+function _loadDashSnapshotLS() {
+    try {
+        const s = JSON.parse(localStorage.getItem(_DASH_SNAP_LS) || 'null');
+        if (s && s.html && (Date.now() - s.ts) < 24 * 3600 * 1000) return s;
+    } catch (e) {}
+    return null;
+}
+// Byt DOM-innehåll BARA när det faktiskt ändrats — annars behålls cachad vy
+// orörd (ingen flimmer, inga spinners vid revalidering).
+function _swapIfChanged(el, html) {
+    if (!el) return;
+    const s = String(html);
+    let h = 0;
+    for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0;
+    const hh = h + ':' + s.length;
+    if (el.dataset.h === hh) return;
+    el.innerHTML = s;
+    el.dataset.h = hh;
+}
 function _warmDashboard() {
     // Warma backend + browser-cache i bakgrunden (medan man är i agenten)
     try {
@@ -8986,13 +9014,18 @@ async function renderDashboard() {
     const cards = document.getElementById('cards');
     if (cards) cards.innerHTML = '';
 
-    // v3.8: återställ från snapshot om färsk (<15 min) → instant, ingen omladdning
-    if (_dashSnapshot && (Date.now() - _dashSnapshot.ts) < 900000) {
-        root.innerHTML = _dashSnapshot.html;
-        return;
+    // v3.9: persistent snapshot (minne → localStorage) → instant render utan
+    // spinners. <60s gammal: rör ingenting alls. Äldre: visa cachen direkt och
+    // revalidera tyst nedanför — sektioner byts BARA om innehållet ändrats
+    // (_swapIfChanged), så inget laddas om i onödan.
+    const __snap = (_dashSnapshot && (Date.now() - _dashSnapshot.ts) < 86400000)
+        ? _dashSnapshot : _loadDashSnapshotLS();
+    if (__snap) {
+        _dashSnapshot = __snap;
+        root.innerHTML = __snap.html;
+        if ((Date.now() - __snap.ts) < 60000) return;
     }
-
-    root.innerHTML = `
+    if (!__snap) root.innerHTML = `
         <div class="dash-grid">
 
             <!-- v3.3 ① DAGLIG BRIEF — en mening om dagen -->
@@ -9127,7 +9160,7 @@ async function renderDashboard() {
     // lämnar fliken — snapshot tas annars i switchTab vid byte FRÅN dashboard)
     clearTimeout(_dashSnapTimer);
     _dashSnapTimer = setTimeout(() => {
-        try { if (currentTab === 'dashboard') _dashSnapshot = { html: root.innerHTML, ts: Date.now() }; } catch (e) {}
+        try { if (currentTab === 'dashboard') _saveDashSnapshot(root.innerHTML); } catch (e) {}
     }, 7000);
 }
 
@@ -9189,9 +9222,10 @@ async function loadSwedishNews() {
                 <div class="news-source">${srcHtml}${dateStr ? ` · ${dateStr}` : ''}${it.in_db ? ' · 🔗 i din databas' : ''}</div>
             </div>`;
         }).join('');
-        el.innerHTML = recap + (cards ? `<div class="news-grid">${cards}</div>` : '');
+        _swapIfChanged(el, recap + (cards ? `<div class="news-grid">${cards}</div>` : ''));
     } catch (e) {
-        el.innerHTML = `<div style="padding:14px;color:#dc2626;font-size:12px">Kunde ej ladda svenska nyheter: ${e.message}</div>`;
+        // Behåll cachat innehåll vid transient fetch-fel — visa bara felet om tomt
+        if (!el.dataset.h) el.innerHTML = `<div style="padding:14px;color:#dc2626;font-size:12px">Kunde ej ladda svenska nyheter: ${e.message}</div>`;
     }
 }
 async function refreshSwedishNews() {
@@ -9240,7 +9274,7 @@ async function loadMacroPulse() {
             `<div class="mp-sec"><div class="mp-sec-title">${escapeHtml(s.title || '')}</div><ul>${(s.points || []).map(p => `<li>${escapeHtml(p)}</li>`).join('')}</ul></div>`).join('');
         const src = (d.sources || []).slice(0, 4).map(s =>
             s.url ? `<a href="${escapeHtml(s.url)}" target="_blank" rel="noopener" style="color:#9ca3af">${escapeHtml(s.title || 'källa')}</a>` : '').filter(Boolean).join(' · ');
-        el.innerHTML = `<div class="mp-card">
+        _swapIfChanged(el, `<div class="mp-card">
             <div class="mp-head">
                 <span class="mp-sent ${sentCls}">${escapeHtml(d.sentiment || 'neutral')}</span>
                 <span class="mp-headline">${escapeHtml(d.headline || '')}</span>
@@ -9249,9 +9283,9 @@ async function loadMacroPulse() {
             ${inds ? `<div class="mp-ind-strip">${inds}</div>` : ''}
             ${secs ? `<div class="mp-secs">${secs}</div>` : ''}
             ${(src || d.generated_at) ? `<div style="font-size:10.5px;color:#9ca3af;margin-top:12px">${src ? 'Källor: ' + src + ' · ' : ''}${d.generated_at ? 'uppdaterad ' + new Date(d.generated_at + (String(d.generated_at).endsWith('Z') ? '' : 'Z')).toLocaleDateString('sv-SE') : ''}</div>` : ''}
-        </div>`;
+        </div>`);
     } catch (e) {
-        el.innerHTML = `<div style="padding:14px;color:#dc2626;font-size:12px">Kunde ej ladda makro-puls: ${e.message}</div>`;
+        if (!el.dataset.h) el.innerHTML = `<div style="padding:14px;color:#dc2626;font-size:12px">Kunde ej ladda makro-puls: ${e.message}</div>`;
     }
 }
 async function refreshMacroPulse() {
@@ -9318,7 +9352,7 @@ function _maybeRenderBrief() {
     }
 
     el.style.opacity = '1';
-    el.innerHTML = parts.join(' ');
+    _swapIfChanged(el, parts.join(' '));
 
     // Chips (snabbnavigering)
     if (chipsEl && k) {
@@ -9327,7 +9361,7 @@ function _maybeRenderBrief() {
         if (k.super_confluence_count) chips.push(`<a class="brief-chip" href="/toplists" target="_blank">⭐ ${k.super_confluence_count} Super Confluence</a>`);
         if (k.reports_today_count) chips.push(`<span class="brief-chip" onclick="document.getElementById('reportsWrap').scrollIntoView({behavior:'smooth'})">📊 ${k.reports_today_count} rapporter</span>`);
         if (k.buy_count) chips.push(`<span class="brief-chip">🟢 ${k.buy_count} BUY</span>`);
-        chipsEl.innerHTML = chips.join('');
+        _swapIfChanged(chipsEl, chips.join(''));
     }
 }
 
@@ -9417,9 +9451,9 @@ async function loadBullets(date) {
         if (d.source_url) {
             html += `<div style="font-size:10.5px;color:#9ca3af;margin-top:8px">Källa: <a href="${escapeHtml(d.source_url)}" target="_blank" rel="noopener" style="color:#9ca3af">stockanalysis.com market bullets</a></div>`;
         }
-        el.innerHTML = html || '<div style="padding:14px;color:#6b7280">Inget innehåll.</div>';
+        _swapIfChanged(el, html || '<div style="padding:14px;color:#6b7280">Inget innehåll.</div>');
     } catch (e) {
-        el.innerHTML = `<div style="padding:14px;color:#dc2626;font-size:12px">Kunde ej ladda bullets: ${e.message}</div>`;
+        if (!el.dataset.h) el.innerHTML = `<div style="padding:14px;color:#dc2626;font-size:12px">Kunde ej ladda bullets: ${e.message}</div>`;
     }
 }
 
@@ -9505,10 +9539,10 @@ async function loadTrending() {
                 </div>
             </div>`;
         }).join('');
-        el.innerHTML = newInfo + `<div class="trend-grid">${cards}</div>` +
-            `<div style="font-size:10.5px;color:#9ca3af;margin-top:8px">${d.date} · sorterat efter sidvisningar · stockanalysis.com</div>`;
+        _swapIfChanged(el, newInfo + `<div class="trend-grid">${cards}</div>` +
+            `<div style="font-size:10.5px;color:#9ca3af;margin-top:8px">${d.date} · sorterat efter sidvisningar · stockanalysis.com</div>`);
     } catch (e) {
-        el.innerHTML = `<div style="padding:14px;color:#dc2626;font-size:12px">Kunde ej ladda trending: ${e.message}</div>`;
+        if (!el.dataset.h) el.innerHTML = `<div style="padding:14px;color:#dc2626;font-size:12px">Kunde ej ladda trending: ${e.message}</div>`;
     }
 }
 async function syncTrending() {
