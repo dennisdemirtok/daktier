@@ -5906,7 +5906,9 @@ REGLER:
     }
     payload = {
         "model": "claude-sonnet-4-20250514",
-        "max_tokens": 3000,
+        # 4500: med date + source_url per item blev 3000 för snålt — modellen
+        # hann bara skriva 2 av 8-12 items innan taket.
+        "max_tokens": 4500,
         "messages": [{"role": "user", "content": prompt}],
         "tools": [{"type": "web_search_20250305", "name": "web_search",
                    "max_uses": 5}],
