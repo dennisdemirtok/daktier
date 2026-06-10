@@ -1619,12 +1619,12 @@ def _ensure_auth_tables(db):
         db.execute("CREATE INDEX IF NOT EXISTS idx_usage_user ON usage_events(user_id)")
         db.execute("CREATE INDEX IF NOT EXISTS idx_usage_created ON usage_events(created_at)")
         db.commit()
-        return True
+        return True, None
     except Exception as e:
         try: db.rollback()
         except Exception: pass
         print(f"[migration] _ensure_auth_tables failed: {e}", file=_sys.stderr)
-        return False
+        return False, str(e)
 
 
 def _ensure_borsdata_columns(db):

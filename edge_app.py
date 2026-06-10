@@ -89,7 +89,8 @@ ADMIN_EMAILS = {e.strip().lower() for e in
                 os.environ.get("ADMIN_EMAILS", "dennis.demirtok@gmail.com").split(",") if e.strip()}
 
 # Öppna paths (allt annat kräver inloggning)
-_OPEN_PREFIXES = ("/login", "/health", "/api/auth/", "/auth/google", "/static/", "/favicon")
+_OPEN_PREFIXES = ("/login", "/health", "/api/auth/", "/auth/google", "/static/", "/favicon",
+                  "/api/diag/auth-tables")
 
 
 @app.before_request
@@ -158,6 +159,26 @@ def health():
     return "ok", 200
 
 
+@app.route("/api/diag/auth-tables")
+def api_diag_auth_tables():
+    """Säkerställer + verifierar auth-tabellerna. Öppen (skapar bara tabeller,
+    läcker ingen data) — fungerar som självläkning + felsökning om migrationen
+    i _create_tables inte gått igenom."""
+    from edge_db import _ensure_auth_tables, _fetchone
+    db = get_db()
+    try:
+        ok, err = _ensure_auth_tables(db)
+        n_users = n_events = None
+        try:
+            n_users = int(dict(_fetchone(db, "SELECT COUNT(*) AS n FROM users"))["n"])
+            n_events = int(dict(_fetchone(db, "SELECT COUNT(*) AS n FROM usage_events"))["n"])
+        except Exception as e2:
+            err = err or str(e2)
+        return jsonify({"ensured": ok, "error": err, "users": n_users, "usage_events": n_events})
+    finally:
+        db.close()
+
+
 @app.route("/login")
 def login_page():
     if session.get("uid"):
@@ -168,7 +189,7 @@ def login_page():
 
 @app.route("/api/auth/register", methods=["POST"])
 def api_auth_register():
-    from edge_db import _fetchone
+    from edge_db import _fetchone, _ensure_auth_tables
     data = request.get_json(silent=True) or {}
     email = (data.get("email") or "").strip().lower()
     password = data.get("password") or ""
@@ -179,6 +200,7 @@ def api_auth_register():
         return jsonify({"error": "Lösenordet måste vara minst 8 tecken"}), 400
     db = get_db()
     try:
+        _ensure_auth_tables(db)  # självläkande om migrationen inte gått
         ph = _ph()
         if _fetchone(db, f"SELECT id FROM users WHERE email = {ph}", (email,)):
             return jsonify({"error": "Kontot finns redan — logga in i stället"}), 409
@@ -198,12 +220,13 @@ def api_auth_register():
 
 @app.route("/api/auth/login", methods=["POST"])
 def api_auth_login():
-    from edge_db import _fetchone
+    from edge_db import _fetchone, _ensure_auth_tables
     data = request.get_json(silent=True) or {}
     email = (data.get("email") or "").strip().lower()
     password = data.get("password") or ""
     db = get_db()
     try:
+        _ensure_auth_tables(db)  # självläkande om migrationen inte gått
         ph = _ph()
         row = _fetchone(db, f"SELECT id, email, name, is_admin, password_hash FROM users WHERE email = {ph}", (email,))
         if not row:
