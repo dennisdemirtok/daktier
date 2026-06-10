@@ -7396,8 +7396,9 @@ function _scrubTrackVerdicts(root) {
                 if (!cell) return;
                 const t = cell.textContent.trim();
                 if (!t) return;
-                // tillåtna utfall: ✅ RÄTT · ❌ FEL · N/A · —
-                if (/^(✅\s*)?RÄTT$|^(❌\s*)?FEL$|^N\/A$|^[—-]$/.test(t)) return;
+                // tillåtna utfall: ✅ RÄTT · ❌ FEL · N/A · ⏳ Pågår · —
+                if (/^(✅\s*)?RÄTT$|^(❌\s*)?FEL$|^N\/A$|^(⏳\s*)?PÅGÅR$|^[—-]$/i.test(t)) return;
+                if (/pågår|utv\./i.test(t)) return;   // "⏳ Pågår (utv. 2026-09)" m.fl.
                 cell.textContent = '—';
                 cell.title = 'Icke-standard utfall normaliserat (endast RÄTT/FEL/N/A tillåts)';
             });

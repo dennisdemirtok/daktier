@@ -9869,6 +9869,10 @@ NYA TOOLS:
   revenues, gross_income, EBIT, net_profit, EPS, OCF, FCF, total_assets,
   equity, net_debt, intangible_assets m.m. RIKTIG DATA, ingen proxy.
   Använd när användaren frågar om FCF-utveckling, marginal-trend osv.
+  ⚠️ När du renderar en historiktabell: ta med ALLA år i OBRUTEN följd
+  (2016, 2017, 2018, ... — hoppa ALDRIG över år för att spara plats).
+  Saknas ett år i datan: visa raden med "–" och säg att året saknas i källan.
+  En tabell med hål ser ut som slarv och sänker förtroendet.
 
 - `get_sector_peers(query, limit=10)` — peers i samma sektor (verifierad
   Börsdata-sektor, INTE keyword-gissning). För 'jämför Microsoft mot peers'.
@@ -11139,8 +11143,13 @@ faktisk forward-12m relativavkastning vs OMXS30GI). Rendera ALLTID en sektion
    **Kvartal · Value · Quality · Swing · Rel 12m vs index · Träff**. Använd
    `rows[].value`, `rows[].quality`, `rows[].swing`, `rows[].rel_12m_pct` och
    `rows[].verdict` EXAKT som de står. **Träff-kolumnen får ENDAST innehålla `verdict`
-   (RÄTT / FEL / N/A). Hitta ALDRIG på egna omdömen** ("TVEKAN", "DELVIS" osv) och tolka
-   aldrig om ett gränsfall. Skriv "✅ RÄTT" / "❌ FEL" / "N/A" och inget annat där.
+   (RÄTT / FEL / N/A / PÅGÅR). Hitta ALDRIG på egna omdömen** ("TVEKAN", "DELVIS" osv)
+   och tolka aldrig om ett gränsfall. Skriv "✅ RÄTT" / "❌ FEL" / "N/A" och inget annat där.
+   Rader med `verdict: PÅGÅR` är de SENASTE kvartalen vars 12-månadersfönster ännu inte
+   stängt: rendera Träff som "⏳ Pågår", Rel-kolumnen som "–" (eller "utv. [evaluable_at]").
+   Direkt under tabellen, skriv ALLTID förklaringen (ordagrant eller nära):
+   "*Varje signal utvärderas mot 12 månaders avkastning vs index — de senaste kvartalen
+   har därför ännu inte facit (⏳).*" Det förklarar varför facit slutar ~15 månader bakåt.
 
 Detta är ÄKTA historik — varje siffra kommer ur verklig Börsdata-kvartalsdata (point-
 in-time) och faktiska priser, utvärderat med frysta trösklar. Det är INTE påhittat och
@@ -12718,23 +12727,24 @@ def _company_recommendation_backtest(db, stock_data, years=10):
                 continue
             pub = (red_d + _td(days=60)).isoformat()
             fwd = (red_d + _td(days=425)).isoformat()
-            if _dt.fromisoformat(fwd).date() > today:
-                continue
+            # Kvartal vars 12m-forward-fönster inte stängt än får verdict PÅGÅR
+            # (signalen finns, facit saknas) i stället för att utelämnas — annars
+            # ser historiken ut att sluta för ~15 mån sedan ("stale data").
+            pending = _dt.fromisoformat(fwd).date() > today
+            if pending and _dt.fromisoformat(pub).date() > today:
+                continue  # rapporten + 60d-lag har inte ens passerat → ingen signal än
 
             def _s(k):
                 vs = [_f(x.get(k)) for x in q4]
                 return sum(v for v in vs if v is not None) if all(v is not None for v in vs) else None
             eps = _s("eps"); rev = _s("revenues"); op = _s("operating_income"); npf = _s("net_profit")
-            p0 = _p_on_after(sds, scs, pub); p12 = _p_on_after(sds, scs, fwd)
-            if not (p0 and p12):
+            p0 = _p_on_after(sds, scs, pub)
+            if not p0:
                 continue
             ttm_pe = (round(p0 / eps, 1) if eps and eps != 0 else None)
             op_margin = (round(op / rev * 100, 1) if op is not None and rev else None)
             eq = _f(q4[-1].get("total_equity"))
             roe = (round(npf / eq * 100, 1) if npf is not None and eq else None)
-            ret = (p12 / p0 - 1) * 100
-            i0 = _p_on_after(ids, ics, pub); i12 = _p_on_after(ids, ics, fwd)
-            rel = ret - ((i12 / i0 - 1) * 100 if i0 and i12 else 0)
             # prior-12m momentum vid detta kvartal (för Swing-linsen)
             p_prior = _p_on_after(sds, scs, (red_d + _td(days=60 - 365)).isoformat())
             mom = ((p0 / p_prior - 1) * 100) if (p0 and p_prior) else None
@@ -12743,6 +12753,18 @@ def _company_recommendation_backtest(db, stock_data, years=10):
             ssig, _ = swing_signal(mom)
             headline = vsig if vsig in ("KÖP", "UNDVIK", "TA PROFIT") else (
                 qsig if qsig in ("KÖP", "UNDVIK") else "HÅLL")
+            if pending:
+                rows.append({"quarter": f"{qs[i]['period_year']} Q{qs[i]['period_q']}",
+                             "value": vsig, "quality": qsig, "swing": ssig,
+                             "signal": headline, "rel_12m_pct": None,
+                             "verdict": "PÅGÅR", "evaluable_at": fwd[:7]})
+                continue
+            p12 = _p_on_after(sds, scs, fwd)
+            if not p12:
+                continue
+            ret = (p12 / p0 - 1) * 100
+            i0 = _p_on_after(ids, ics, pub); i12 = _p_on_after(ids, ics, fwd)
+            rel = ret - ((i12 / i0 - 1) * 100 if i0 and i12 else 0)
             rows.append({"quarter": f"{qs[i]['period_year']} Q{qs[i]['period_q']}",
                          "value": vsig, "quality": qsig, "swing": ssig,
                          "signal": headline, "rel_12m_pct": round(rel, 1),
@@ -12779,8 +12801,10 @@ def _company_recommendation_backtest(db, stock_data, years=10):
             return round(100 * ((pp + z * z / (2 * nn) - z * _math.sqrt(pp * (1 - pp) / nn + z * z / (4 * nn * nn))) / (1 + z * z / nn)))
 
         def _lens_stats(key):
-            ev = [evaluate(r.get(key), r["rel_12m_pct"]) for r in rows]
-            dirn = [(r, e) for r, e in zip(rows, ev) if e in ("RÄTT", "FEL")]
+            # endast kvartal med stängt 12m-fönster (PÅGÅR-rader har rel=None)
+            done = [r for r in rows if r.get("rel_12m_pct") is not None]
+            ev = [evaluate(r.get(key), r["rel_12m_pct"]) for r in done]
+            dirn = [(r, e) for r, e in zip(done, ev) if e in ("RÄTT", "FEL")]
             nn = len(dirn); hh = sum(1 for _, e in dirn if e == "RÄTT")
             # snitt-rel när linsen var RIKTAD (faktisk lönsamhet, inte bara träff)
             avg_rel = round(sum(r["rel_12m_pct"] for r, e in dirn) / nn, 1) if nn else None
