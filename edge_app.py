@@ -11129,6 +11129,12 @@ liknande intern terminologi i det användarvända svaret. Det är internt och g�
 texten stolpig. Presentera bara signalen, profilen och motiveringen rakt — t.ex.
 "Mekaniska signaler: Value N/A, Quality KÖP, Swing HÅLL" utan versionsetikett.
 INGEN regelversions-fot.
+⛔ INGA INTERNA FÄLT-/VARIABELNAMN I TEXTEN: skriv ALDRIG datastrukturernas
+namn som "best_lens", "hit_rate_pct", "rows[]", "track_record_backtest",
+"data_completeness", "evaluable_at", "wilson_low_pct" osv. i användarvänd text.
+Översätt alltid till naturlig svenska: "best_lens är Swing" → "Swing-linsen har
+historiskt varit mest träffsäker". Fältnamn ser ut som buggar för en betalande
+kund.
 
 OBLIGATORISK PROFIL-MARKERING: ange tydligt om den samlade hållningen är
 RISKREDUCERANDE (TA PROFIT/UNDVIK/avstår) eller UPPSIDESÖKANDE (KÖP). Ramverket
@@ -11517,8 +11523,11 @@ Obligatoriska fält per analystyp — saknas fältet i datakällan, skriv ut
 Avsluta ALLTID med en graderad entry-bedömning, inte bara BUY/AVOID:
 > "Entry **6/10 nu** · **8/10 vid $230** · 9/10 vid $210 (då P/E < 12)."
 
-Detta löser upplevelsen av att agenten "aldrig köper" och ger kunden en
-konkret handlingsregel. Aldrig utelämna den.
+EXAKT DETTA FORMAT är obligatoriskt — alltid raden "Entry X/10 nu (pris) ·
+Y/10 vid [nivå] · Z/10 vid [nivå]" med 2–3 nivåer och motivering i parentes.
+Att bara nämna ett "intressant entry-intervall" i löptext räcker INTE och
+räknas som utelämnad. Detta löser upplevelsen av att agenten "aldrig köper"
+och ger kunden en konkret handlingsregel. Aldrig utelämna den.
 
 **KOMPRIMERING (P1):** Säg slutsatsen/AVOID EN gång — inte 3–4. En betalande
 kund vill ha täthet. Upprepa inte samma poäng i flera sektioner.
