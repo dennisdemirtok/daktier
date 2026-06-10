@@ -9137,6 +9137,18 @@ function _seNewsChg(v) {
     const c = v >= 0 ? '#059669' : '#dc2626';
     return `<span class="news-chg" style="color:${c}">${v >= 0 ? '+' : ''}${Number(v).toFixed(1)}%</span>`;
 }
+// Defensiv skrubbning av <cite index="...">-markörer (web_search-citat) — gamla
+// cachade digests i DB kan innehålla dem även efter backend-fixen.
+function _stripCites(s) {
+    return String(s || '').replace(/<cite[^>]*>/g, '').replace(/<\/cite>/g, '');
+}
+// "2026-06-10" → "10 jun" (kort svenskt datum för nyhetskorten)
+function _seNewsDate(d) {
+    const m = String(d || '').match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (!m) return '';
+    const mon = ['jan','feb','mar','apr','maj','jun','jul','aug','sep','okt','nov','dec'][+m[2] - 1] || '';
+    return `${+m[3]} ${mon}`;
+}
 async function loadSwedishNews() {
     const el = document.getElementById('seNewsContent');
     if (!el) return;
@@ -9152,11 +9164,19 @@ async function loadSwedishNews() {
             </div>`;
             return;
         }
-        const recap = d.market_recap ? `<div class="news-recap">🇸🇪 ${escapeHtml(d.market_recap)}</div>` : '';
+        const genAt = d.generated_at ? ` <span style="font-size:10.5px;color:#9ca3af;font-weight:400">· uppdaterad ${String(d.generated_at).slice(0, 16).replace('T', ' ')}</span>` : '';
+        const recap = d.market_recap ? `<div class="news-recap">🇸🇪 ${escapeHtml(_stripCites(d.market_recap))}${genAt}</div>` : '';
         const cards = items.map(it => {
             const cat = (it.category || 'other').toLowerCase();
             const tk = it.ticker || '';
             const bare = String(tk).split(':').pop().replace(/'/g, '');
+            // Klickbar källa: bara http/https-länkar släpps igenom
+            const url = String(it.source_url || '');
+            const srcName = escapeHtml(it.source || '');
+            const srcHtml = /^https?:\/\//i.test(url)
+                ? `<a href="${escapeHtml(url)}" target="_blank" rel="noopener" style="color:#1e40af;text-decoration:none">${srcName} ↗</a>`
+                : srcName;
+            const dateStr = _seNewsDate(it.date);
             return `<div class="news-card">
                 <div class="news-card-head">
                     <span class="news-ticker linked" onclick="openStockByTicker('${bare}')">${escapeHtml(tk)}</span>
@@ -9164,9 +9184,9 @@ async function loadSwedishNews() {
                     ${_seNewsChg(it.change_pct)}
                     <span class="news-cat ${cat}" style="margin-left:auto">${escapeHtml(cat)}</span>
                 </div>
-                <div class="news-headline">${escapeHtml(it.headline || '')}</div>
-                <div class="news-summary">${escapeHtml(it.summary || '')}</div>
-                <div class="news-source">${escapeHtml(it.source || '')}${it.in_db ? ' · 🔗 i din databas' : ''}</div>
+                <div class="news-headline">${escapeHtml(_stripCites(it.headline))}</div>
+                <div class="news-summary">${escapeHtml(_stripCites(it.summary))}</div>
+                <div class="news-source">${srcHtml}${dateStr ? ` · ${dateStr}` : ''}${it.in_db ? ' · 🔗 i din databas' : ''}</div>
             </div>`;
         }).join('');
         el.innerHTML = recap + (cards ? `<div class="news-grid">${cards}</div>` : '');

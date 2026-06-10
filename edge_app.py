@@ -5878,6 +5878,7 @@ Returnera EXAKT ett JSON-block mellan markörerna, inget annat efter:
       "change_pct": 3.2,
       "source": "Di",
       "source_url": "https://...",
+      "date": "2026-06-10",
       "category": "earnings"
     }
   ]
@@ -5888,6 +5889,10 @@ REGLER:
 - 8-12 items, MINST 6 svenska/nordiska bolag. Prioritera: kursrörelser,
   rapporter, M&A, guidance, insynshandel, analytiker-rek på nordiska bolag.
 - ALLT på SVENSKA (summary, recap, rubriker). Behåll bolagsnamn/ticker.
+- REN TEXT i alla strängar: skriv ALDRIG <cite>-taggar, källmarkörer,
+  index-referenser eller annan markup i recap/headline/summary.
+- date = nyhetens publiceringsdatum (YYYY-MM-DD) från källan; osäker → dagens datum.
+- source_url = DIREKT länk till artikeln från web-sökningen (http/https).
 - category ∈ ["earnings","mna","guidance","macro","analyst","product","other"]
 - change_pct = dagens kursrörelse i % eller null.
 - ticker = svensk börsticker (t.ex. "EVO","VOLVO B","INVE B") eller nordisk.
@@ -5946,6 +5951,21 @@ REGLER:
     except Exception as e:
         print(f"[market news] JSON parse fel: {e}", file=sys.stderr)
         return None, cost
+
+    # Skrubba web_search-citatmarkörer (<cite index="...">...</cite>) som modellen
+    # ibland bäddar in i strängarna trots instruktion — de renderades som rå kod
+    # i dashboarden. Behåll innertexten, släng taggarna.
+    def _strip_cites(s):
+        if not isinstance(s, str):
+            return s
+        s = _re.sub(r"<cite[^>]*>", "", s)
+        return s.replace("</cite>", "").strip()
+
+    parsed["market_recap"] = _strip_cites(parsed.get("market_recap"))
+    for it in (parsed.get("items") or []):
+        for k in ("headline", "summary", "source", "company", "ticker"):
+            if k in it:
+                it[k] = _strip_cites(it.get(k))
     return parsed, cost
 
 
