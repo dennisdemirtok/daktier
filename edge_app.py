@@ -12919,24 +12919,32 @@ def _company_recommendation_backtest(db, stock_data, years=10):
         directional = [r for r in rows if r["verdict"] in ("RÄTT", "FEL")]
         n = len(directional); hits = sum(1 for r in directional if r["verdict"] == "RÄTT")
         hit_rate = round(100 * hits / n) if n else None
-        wlow = None
+        # Wilson 95%-intervall (lägre OCH övre gräns) — confidence styrs av den
+        # STATISTISKA gränsen, inte råa hit-raten. 50%-träff med vitt intervall
+        # ger LÅG (inte MEDEL), eftersom intervallet rymmer slumpen.
+        wlow = whigh = None
         if n:
             p = hits / n; z = 1.96
-            wlow = round(100 * ((p + z * z / (2 * n) - z * _math.sqrt(p * (1 - p) / n + z * z / (4 * n * n))) / (1 + z * z / n)))
+            _c = z * _math.sqrt(p * (1 - p) / n + z * z / (4 * n * n))
+            _d = 1 + z * z / n
+            wlow = round(100 * ((p + z * z / (2 * n) - _c) / _d))
+            whigh = round(100 * ((p + z * z / (2 * n) + _c) / _d))
         beta = _f(stock_data.get("beta"))
+        ci = f"95%-intervall {wlow}–{whigh}%" if (wlow is not None and whigh is not None) else ""
         if n < 8:
             conf = "LÅG"
             driver = f"för kort historik för en slutsats (endast {n} utvärderade kvartal)"
-        elif n >= 12 and wlow is not None and wlow >= 55:
+        elif wlow is not None and wlow >= 52:
             conf = "HÖG"
-            driver = f"fundamentalt driven — ramverket har historiskt fångat bolaget väl ({hit_rate}% träff, {n} kvartal)"
-        elif hit_rate is not None and hit_rate >= 50:
+            driver = f"statistiskt säkerställd kant — {hit_rate}% träff (n={n}, {ci}); även i värsta fall över slumpen"
+        elif (hit_rate or 0) >= 55 and wlow is not None and wlow >= 42:
             conf = "MEDEL"
-            driver = f"blandad — viss makro-/nyhetskänslighet ({hit_rate}% träff, {n} kvartal)"
+            driver = f"lutar åt en kant men ej statistiskt säkerställd — {hit_rate}% träff (n={n}, {ci}); väg in osäkerheten"
         else:
             conf = "LÅG"
-            driver = (f"makro-/nyhetsstyrd — fundamentala signaler har låg prognoskraft på detta "
-                      f"bolag ({hit_rate}% träff på {n} kvartal; läs dagens signal med försiktighet)")
+            driver = (f"ingen säkerställd kant — {hit_rate}% träff på {n} kvartal ({ci}); intervallet "
+                      f"rymmer slumpen (50%), så bolaget är makro-/nyhetsstyrt snarare än fundamentalt "
+                      f"prognosbart. Läs dagens signal med försiktighet")
         if beta is not None and beta > 1.5 and conf != "LÅG":
             driver += f" · hög beta {beta:.1f} (marknadskänslig)"
 
@@ -12970,7 +12978,8 @@ def _company_recommendation_backtest(db, stock_data, years=10):
                          "avg_rel_when_directional_pct": bv["avg_rel_when_directional_pct"]}
 
         return {"category": cat, "n_quarters_evaluated": n, "hit_rate_pct": hit_rate,
-                "wilson_low_pct": wlow, "confidence": conf, "driver": driver, "beta": beta,
+                "wilson_low_pct": wlow, "wilson_high_pct": whigh,
+                "confidence": conf, "driver": driver, "beta": beta,
                 "lenses": lenses, "best_lens": best_lens,
                 "method": "PIT-fundamenta (60d lag) → forward-12m rel vs OMXS30GI; per-lins frysta evaluate-trösklar på verklig Börsdata-historik",
                 "rows": rows[-16:]}
