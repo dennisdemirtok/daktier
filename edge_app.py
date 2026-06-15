@@ -11368,6 +11368,14 @@ låt Value-bedömningen reflektera det.
 
 **3c — Cyklisk-invertering är OBLIGATORISK**:
 
+⚙️ MEKANISK FLAGGA (använd FÖRST): bolagskontexten innehåller nu `cycle_risk`
+(beräknas på rörelsemarginal vs historisk median för ALLA bolag, inte bara
+klassiskt cykliska). Om `cycle_risk.position = "peak"` → följ peak-regeln nedan
+OBLIGATORISKT (dämpa Value även vid låg P/E), även om bolaget klassats som
+compounder/quality. Är `position = "trough"` → trough-regeln. Citera resonemanget
+ur `cycle_risk.note` i din motivering. Detta löser fallet där t.ex. NVDA på
+supercykel-topp ser "billig" ut på P/E men E är uppblåst.
+
 Identifiera cykel-position (trough/mid/peak) med tre datapunkter:
 
 1. **Marginal vs historisk snitt**: >1.5× 5y-snitt → peak-signal.
@@ -12760,8 +12768,37 @@ def _v33_signals_for_stock(db, stock_data):
             return None
         m = _v33_metrics_from_reports(db, isin, stock_data.get("last_price"),
                                       roe_fallback=stock_data.get("return_on_equity"))
-        return v33_live.compute(stock_data, m["ttm_pe"], m["op_margin"], m["opm_hist"],
-                                m["roe"], m["mom"])
+        result = v33_live.compute(stock_data, m["ttm_pe"], m["op_margin"], m["opm_hist"],
+                                  m["roe"], m["mom"])
+        # LAGER OVANPÅ frysta v3.3 (rör EJ reglerna): peak/trough-flagga för ALLA
+        # bolag. Frysta cyclical_phase beräknas bara för cyclical-klassade — men
+        # även en "compounder" på supercykel-topp (t.ex. NVDA) har toppvinst-risk
+        # som gör låg P/E vilseledande. Mekanisk marginal-vs-historik så agenten
+        # inte behöver räkna ut det själv.
+        try:
+            import statistics as _st
+            hist = [v for v in (m.get("opm_hist") or []) if isinstance(v, (int, float))]
+            cur = m.get("op_margin")
+            if isinstance(result, dict) and cur is not None and len(hist) >= 4:
+                med = _st.median(hist)
+                if med and med > 0:
+                    ratio = round(cur / med, 2)
+                    if ratio >= 1.4:
+                        result["cycle_risk"] = {"position": "peak", "margin_vs_median": ratio,
+                            "note": (f"⚠️ TOPPVINST-RISK: rörelsemarginal {cur:.1f}% är {ratio:.1f}× "
+                                     f"historisk median ({med:.1f}%). Låg P/E kan vara VILSELEDANDE — "
+                                     f"vinsten (E) är uppblåst av cykeltopp. DÄMPA Value-tesen även "
+                                     f"vid låg multipel; väg in normaliserings-risk.")}
+                    elif ratio <= 0.7:
+                        result["cycle_risk"] = {"position": "trough", "margin_vs_median": ratio,
+                            "note": (f"BOTTEN-marginal: {cur:.1f}% är {ratio:.1f}× historisk median "
+                                     f"({med:.1f}%). Hög P/E kan vara vilseledande (E nedtryckt). "
+                                     f"Möjligt köpläge OM normalisering väntas — annars värdefälla.")}
+                    else:
+                        result["cycle_risk"] = {"position": "mid", "margin_vs_median": ratio}
+        except Exception:
+            pass
+        return result
     except Exception as e:
         print(f"[v33] signal-fel: {e}", file=sys.stderr)
         return None
@@ -13505,12 +13542,27 @@ def _agent_get_full_stock(db, query):
         # Börsdata-siffror — ett Avanza-tal utan underliggande Börsdata-rapport räknas
         # som SAKNAD data. nrep=0 → flagga, även om stocks-raden råkar ha ett pe_ratio.
         _fundamentals_available = bool(_nrep >= 1 and _have_core)
+        # PER-LINS-täckning: räcker datan för Value/Quality/FCF-linsen var för sig?
+        # (Tidigare bara binärt finns/finns-ej → agenten visste inte att den t.ex.
+        # kunde köra Value men ej Quality.)
+        _has_ocf = _has(out.get("operating_cash_flow")) or _has(_v.get("fcf"))
+        _suff_value = bool(_fundamentals_available and (_fund["pe"] or _fund["price_book"]) and _fund["op_margin"])
+        _suff_quality = bool(_fundamentals_available and _fund["roe"] and _nrep >= 4)
+        _suff_fcf = bool(_fundamentals_available and _has_ocf)
         out["data_completeness"] = {
             "fundamentals_available": _fundamentals_available,
             "borsdata_reports_count": _nrep,
             "source": "borsdata_reports" if _nrep >= 1 else "avanza_bulk_only",
             "present": [k for k, val in _fund.items() if val],
             "missing_DATA_SAKNAS": [k for k, val in _fund.items() if not val],
+            "sufficient_for_value_lens": _suff_value,
+            "sufficient_for_quality_lens": _suff_quality,
+            "sufficient_for_fcf_analysis": _suff_fcf,
+            "per_lens_instruction": (
+                "Kör BARA de linser där täckning finns. Saknas Quality-data (för få "
+                "kvartal/ingen ROE) → hoppa Quality-axeln, säg 'för kort historik för "
+                "kvalitetsbedömning', kör Value/Swing. Påstå ALDRIG en lins du saknar "
+                "data för."),
             "instruction": (
                 "Börsdata-rapporter finns — använd EXAKT dessa siffror, gissa/uppskatta inga."
                 if _fundamentals_available else
