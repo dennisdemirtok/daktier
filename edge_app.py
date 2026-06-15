@@ -14043,7 +14043,13 @@ def _edgar_filing_text(ticker, form="10-K"):
         doc = rec["primaryDocument"][idx]
         url = f"https://www.sec.gov/Archives/edgar/data/{int(cik)}/{acc}/{doc}"
         html = requests.get(url, headers=_EDGAR_UA, timeout=30).text
-        text = _re.sub(r"<[^>]+>", " ", html)
+        # Bevara stycke-gränser: ta bort script/style/inline-XBRL-header, lägg
+        # radbrytning vid block-taggar FÖRE strippning (annars blir hela 10-K:n
+        # ETT stycke som domineras av XBRL-metadata högst upp).
+        h = _re.sub(r"(?is)<(script|style|ix:header)[^>]*>.*?</\1>", " ", html)
+        h = _re.sub(r"(?i)</(p|div|tr|li|h[1-6]|table|section)>", "\n", h)
+        h = _re.sub(r"(?i)<br[^>]*>", "\n", h)
+        text = _re.sub(r"<[^>]+>", " ", h)
         text = _re.sub(r"&#?\w+;", " ", text)
         text = _re.sub(r"[ \t]+", " ", text)
         text = _re.sub(r"\s*\n\s*", "\n", text)
@@ -14068,9 +14074,18 @@ def _agent_get_filings(ticker, topic="", form="10-K", max_excerpts=12):
                          "fulltext-filing-källa, använd web_search för kvalitativ kontext.")}
     text = f["text"]
     paras = [p.strip() for p in _re.split(r"\n+", text) if len(p.strip()) > 120]
+    # Behåll bara PROSA (löptext) — filtrera bort XBRL-/siffertabell-brus så
+    # agenten får narrativa avsnitt (risker, kunder, guidance), inte taggar.
+    def _is_prose(p):
+        if len(p) < 140:
+            return False
+        alpha = sum(c.isalpha() or c.isspace() for c in p) / len(p)
+        return (alpha > 0.80 and len(p.split()) >= 22 and p.count(".") >= 2
+                and (sum(c.isdigit() for c in p) / len(p)) < 0.10)
+    prose = [p for p in paras if _is_prose(p)] or paras
     if topic:
         kws = [w.lower() for w in _re.findall(r"\w{4,}", topic)]
-        scored = [(sum(p.lower().count(k) for k in kws), p) for p in paras]
+        scored = [(sum(p.lower().count(k) for k in kws), p) for p in prose]
         scored = sorted([s for s in scored if s[0] > 0], key=lambda x: -x[0])
         excerpts = [p[:750] for _, p in scored[:max_excerpts]]
         if not excerpts:
