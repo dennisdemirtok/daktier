@@ -6917,17 +6917,18 @@ function renderAgent() {
         }
         .agent-msg.ai .agent-msg-bubble thead th { position:relative; }
         .agent-msg.ai .agent-msg-bubble th {
-            background:#f7f8fa; color:#5b6573; font-weight:600; text-align:left;
-            padding:10px 14px; font-size:12px; border-bottom:1px solid #e8eaed;
-            white-space:nowrap; letter-spacing:0.01em; text-transform:none;
+            background:#eef2f7; color:#0f172a; font-weight:700; text-align:left;
+            padding:10px 14px; font-size:11.5px; border-bottom:1.5px solid #dbe1ea;
+            white-space:nowrap; letter-spacing:0.02em; text-transform:none;
         }
         .agent-msg.ai .agent-msg-bubble td {
-            padding:10px 14px; border-bottom:1px solid #f1f3f5;
+            padding:9px 14px; border-bottom:1px solid #f1f3f5;
             color:#1f2937; line-height:1.45; vertical-align:top;
             font-variant-numeric:tabular-nums;
         }
+        .agent-msg.ai .agent-msg-bubble tbody tr:nth-child(even) td { background:#fafbfc; }
         .agent-msg.ai .agent-msg-bubble tbody tr:last-child td { border-bottom:none; }
-        .agent-msg.ai .agent-msg-bubble tbody tr:hover td { background:#fafbfc; }
+        .agent-msg.ai .agent-msg-bubble tbody tr:hover td { background:#eef5ff; }
         .agent-msg.ai .agent-msg-bubble hr { border:none; border-top:1px solid #eceef1; margin:18px 0; }
         /* Horisontellt scrollbar tabell-container (mobil): breda tabeller scrollar
            i stället för att kapas av skärmkanten. */
@@ -6936,22 +6937,22 @@ function renderAgent() {
             border-radius:10px; }
         .agent-md .agent-table-scroll > table, .report-md .agent-table-scroll > table { margin:0; }
         /* Subtila, dämpade signal-chips (chat + PDF) */
-        .agent-md .sig, .report-md .sig { display:inline-block; padding:0.5px 7px; border-radius:5px; font-weight:600; font-size:0.93em; line-height:1.55; white-space:nowrap; letter-spacing:0.01em; }
-        .agent-md .sig-buy, .report-md .sig-buy { color:#047857; background:rgba(5,150,105,0.10); }
-        .agent-md .sig-light, .report-md .sig-light { color:#0e7490; background:rgba(14,116,144,0.10); }
-        .agent-md .sig-hold, .report-md .sig-hold { color:#b45309; background:rgba(180,83,9,0.10); }
-        .agent-md .sig-avoid, .report-md .sig-avoid { color:#b91c1c; background:rgba(185,28,28,0.10); }
+        .agent-md .sig, .report-md .sig { display:inline-block; padding:1px 8px; border-radius:6px; font-weight:700; font-size:0.9em; line-height:1.5; white-space:nowrap; letter-spacing:0.02em; border:1px solid transparent; }
+        .agent-md .sig-buy, .report-md .sig-buy { color:#047857; background:rgba(5,150,105,0.11); border-color:rgba(5,150,105,0.22); }
+        .agent-md .sig-light, .report-md .sig-light { color:#0e7490; background:rgba(14,116,144,0.11); border-color:rgba(14,116,144,0.22); }
+        .agent-md .sig-hold, .report-md .sig-hold { color:#b45309; background:rgba(180,83,9,0.11); border-color:rgba(180,83,9,0.22); }
+        .agent-md .sig-avoid, .report-md .sig-avoid { color:#b91c1c; background:rgba(185,28,28,0.11); border-color:rgba(185,28,28,0.22); }
         /* Träff-kolumn: ren färgad text (ingen chip-bakgrund) */
         .agent-md .sig-ratt, .report-md .sig-ratt { color:#047857; background:none; padding:0; font-weight:700; }
         .agent-md .sig-fel, .report-md .sig-fel { color:#b91c1c; background:none; padding:0; font-weight:700; }
         /* Confidence-badge (track record) */
-        .agent-md .conf-badge, .report-md .conf-badge { display:inline-block; padding:1px 10px; border-radius:6px; font-weight:700; font-size:0.9em; letter-spacing:0.03em; }
-        .agent-md .conf-hog, .report-md .conf-hog { color:#047857; background:rgba(5,150,105,0.13); }
-        .agent-md .conf-medel, .report-md .conf-medel { color:#b45309; background:rgba(180,83,9,0.13); }
-        .agent-md .conf-lag, .report-md .conf-lag { color:#b91c1c; background:rgba(185,28,28,0.13); }
+        .agent-md .conf-badge, .report-md .conf-badge { display:inline-block; padding:1px 10px; border-radius:6px; font-weight:700; font-size:0.9em; letter-spacing:0.03em; border:1px solid transparent; }
+        .agent-md .conf-hog, .report-md .conf-hog { color:#047857; background:rgba(5,150,105,0.13); border-color:rgba(5,150,105,0.25); }
+        .agent-md .conf-medel, .report-md .conf-medel { color:#b45309; background:rgba(180,83,9,0.13); border-color:rgba(180,83,9,0.25); }
+        .agent-md .conf-lag, .report-md .conf-lag { color:#b91c1c; background:rgba(185,28,28,0.13); border-color:rgba(185,28,28,0.25); }
         /* Diagram-container (chat + PDF) */
-        .agent-md .agent-chart, .report-md .agent-chart { background:#fff; border:1px solid #e8eaed; border-radius:12px; padding:14px 16px 12px; margin:16px 0; }
-        .agent-md .agent-chart-title, .report-md .agent-chart-title { font-size:13px; font-weight:600; color:#1f2937; margin-bottom:12px; letter-spacing:-0.01em; }
+        .agent-md .agent-chart, .report-md .agent-chart { background:linear-gradient(135deg,#f8fafc 0%,#ffffff 60%); border:1px solid #e6eaef; border-radius:12px; padding:16px 18px 12px; margin:16px 0; }
+        .agent-md .agent-chart-title, .report-md .agent-chart-title { font-size:14px; font-weight:700; color:#0f172a; margin-bottom:14px; letter-spacing:-0.01em; }
         .agent-md .agent-chart-canvas, .report-md .agent-chart-canvas { position:relative; height:300px; width:100%; }
         .agent-msg-bubble.streaming { background:linear-gradient(120deg,white 0%,#f8fafc 50%,white 100%); background-size:200% 100%; animation:agent-shimmer 2s linear infinite; }
         @keyframes agent-shimmer { 0%{background-position:-200% 0;} 100%{background-position:200% 0;} }
@@ -7022,9 +7023,10 @@ function renderAgent() {
         .agent-md pre code { background:none; padding:0; color:inherit; }
         .agent-md blockquote { border-left:3px solid #6366f1; padding:4px 12px; color:#4b5563; background:#f9fafb; margin:8px 0; border-radius:0 6px 6px 0; }
         .agent-md table { border-collapse:collapse; margin:10px 0; font-size:12.5px; width:100%; }
-        .agent-md th { background:#f1f5f9; text-align:left; padding:8px 10px; font-weight:700; border-bottom:2px solid #cbd5e1; }
-        .agent-md td { padding:6px 10px; border-bottom:1px solid #e5e7eb; }
-        .agent-md tr:hover td { background:#f9fafb; }
+        .agent-md th { background:#eef2f7; color:#0f172a; text-align:left; padding:8px 11px; font-weight:700; font-size:11.5px; letter-spacing:0.02em; border-bottom:1.5px solid #dbe1ea; }
+        .agent-md td { padding:7px 11px; border-bottom:1px solid #eef1f4; font-variant-numeric:tabular-nums; }
+        .agent-md tbody tr:nth-child(even) td { background:#fafbfc; }
+        .agent-md tbody tr:last-child td { border-bottom:none; }
         .agent-md hr { border:none; border-top:1px solid #e5e7eb; margin:14px 0; }
         .agent-md a { color:#2563eb; text-decoration:underline; }
         .agent-md em { font-style:italic; color:#6b7280; }
