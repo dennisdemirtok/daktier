@@ -9909,6 +9909,13 @@ NYA TOOLS:
 - `get_sector_peers(query, limit=10)` — peers i samma sektor (verifierad
   Börsdata-sektor, INTE keyword-gissning). För 'jämför Microsoft mot peers'.
 
+- `get_filings(ticker, topic)` — PRIMÄRKÄLLA för US-bolag: faktisk text ur senaste
+  10-K/10-Q hos SEC. När du gör kvalitativa påståenden om ett US-bolag (kund-
+  koncentration, moat, risker, segment-drivare, guidance) — GRUNDA dem i filingen
+  och citera bolagets egna ord ('enligt 10-K: …') i stället för att lita på web-
+  sökta sammanfattningar. Höjer trovärdigheten rejält. ENDAST US (nordiska bolag:
+  web_search). Anropa när användaren vill ha djup på ett US-bolag.
+
 - `get_backtest(setup, start_year, max_holdings)` — backtest av setup-strategi
   retroaktivt 2018-nu. Returnerar CAGR, Sharpe, max drawdown, n_trades.
   Använd för 'har Trifecta-strategin presterat historiskt?'.
@@ -13990,6 +13997,98 @@ def _agent_screen_stocks(db, screen="magic", country="", roce_min=None,
     return {"screen": screen, "country": ",".join(cset), "n": len(out), "stocks": out}
 
 
+# ── SEC EDGAR dokumentgrundning (US-bolag) ────────────────────────────────
+# Låter agenten citera FAKTISK 10-K/10-Q-text (risk factors, kundkoncentration,
+# guidance-språk) i stället för web-sökta sammanfattningar — "Harvey-mönstret".
+# Mini-RAG: hämta filing → dela i stycken → returnera mest relevanta för ämnet.
+# ENDAST US (SEC EDGAR). Nordiska bolag saknar gratis fulltextkälla.
+_EDGAR_UA = {"User-Agent": "DAKTIER equity research (dennis.demirtok@gmail.com)"}
+_EDGAR_CIK_CACHE = {"data": None, "ts": 0.0}
+_EDGAR_DOC_CACHE = {}  # {(ticker, form): {text, date, url, ts}}
+
+
+def _edgar_cik(ticker):
+    import time as _t
+    c = _EDGAR_CIK_CACHE
+    if not c["data"] or (_t.time() - c["ts"]) > 86400:
+        try:
+            data = requests.get("https://www.sec.gov/files/company_tickers.json",
+                                headers=_EDGAR_UA, timeout=20).json()
+            c["data"] = {v["ticker"].upper(): str(v["cik_str"]).zfill(10) for v in data.values()}
+            c["ts"] = _t.time()
+        except Exception as e:
+            print(f"[edgar] cik-map fel: {e}", file=sys.stderr)
+            return None
+    tk = (ticker or "").upper().split(":")[-1].replace(" ", "")
+    return c["data"].get(tk)
+
+
+def _edgar_filing_text(ticker, form="10-K"):
+    import time as _t, re as _re
+    key = (ticker.upper(), form)
+    cached = _EDGAR_DOC_CACHE.get(key)
+    if cached and (_t.time() - cached["ts"]) < 30 * 86400:
+        return cached
+    cik = _edgar_cik(ticker)
+    if not cik:
+        return None
+    try:
+        sub = requests.get(f"https://data.sec.gov/submissions/CIK{cik}.json",
+                           headers=_EDGAR_UA, timeout=20).json()
+        rec = sub["filings"]["recent"]
+        idx = next((i for i, fm in enumerate(rec["form"]) if fm == form), None)
+        if idx is None:
+            return None
+        acc = rec["accessionNumber"][idx].replace("-", "")
+        doc = rec["primaryDocument"][idx]
+        url = f"https://www.sec.gov/Archives/edgar/data/{int(cik)}/{acc}/{doc}"
+        html = requests.get(url, headers=_EDGAR_UA, timeout=30).text
+        text = _re.sub(r"<[^>]+>", " ", html)
+        text = _re.sub(r"&#?\w+;", " ", text)
+        text = _re.sub(r"[ \t]+", " ", text)
+        text = _re.sub(r"\s*\n\s*", "\n", text)
+        out = {"text": text, "date": rec["filingDate"][idx], "url": url,
+               "form": form, "ts": _t.time()}
+        _EDGAR_DOC_CACHE[key] = out
+        return out
+    except Exception as e:
+        print(f"[edgar] filing-fel {ticker}/{form}: {e}", file=sys.stderr)
+        return None
+
+
+def _agent_get_filings(ticker, topic="", form="10-K", max_excerpts=12):
+    """Hämtar senaste SEC-filing (10-K/10-Q) för ETT US-bolag och returnerar de
+    mest relevanta avsnitten för `topic` (mini-RAG över filing-texten)."""
+    import re as _re
+    f = _edgar_filing_text(ticker, form if form in ("10-K", "10-Q") else "10-K")
+    if not f:
+        return {"available": False,
+                "note": (f"Ingen SEC-filing för {ticker} (form {form}). SEC EDGAR täcker "
+                         "ENDAST US-noterade bolag — för nordiska bolag finns ingen "
+                         "fulltext-filing-källa, använd web_search för kvalitativ kontext.")}
+    text = f["text"]
+    paras = [p.strip() for p in _re.split(r"\n+", text) if len(p.strip()) > 120]
+    if topic:
+        kws = [w.lower() for w in _re.findall(r"\w{4,}", topic)]
+        scored = [(sum(p.lower().count(k) for k in kws), p) for p in paras]
+        scored = sorted([s for s in scored if s[0] > 0], key=lambda x: -x[0])
+        excerpts = [p[:750] for _, p in scored[:max_excerpts]]
+        if not excerpts:
+            excerpts = [f"(Inga avsnitt matchade '{topic}' i {form}. Filing finns men "
+                        f"nämner inte termen — prova annan formulering eller web_search.)"]
+    else:
+        low = text.lower()
+        i = low.find("risk factors")
+        excerpts = [text[i:i + 9000] if i >= 0 else text[:9000]]
+    return {"available": True, "ticker": ticker.upper(), "form": f["form"],
+            "filing_date": f["date"], "source_url": f["url"],
+            "topic": topic or "(Risk Factors-avsnittet)", "excerpts": excerpts,
+            "instruction": (f"PRIMÄRKÄLLA — faktisk text ur bolagets {f['form']} hos SEC "
+                            f"({f['date']}). Citera direkt och ange alltid källan "
+                            f"'({f['form']}, {f['date']})'. Detta är INTE en websökt "
+                            "sammanfattning utan bolagets egna ord i den officiella filingen.")}
+
+
 # ══════════════════════════════════════════════════════════════
 # BATCH ANALYSIS PIPELINE (DEL 6.99 v3.2)
 # Kör DAKTIER-analys på en lista bolag, sparar strukturerad output
@@ -17339,6 +17438,10 @@ def _agent_run_tool(tool_name, tool_input):
                 roce_max=tool_input.get("roce_max"),
                 ev_ebit_max=tool_input.get("ev_ebit_max"),
                 limit=tool_input.get("limit", 25))
+        elif tool_name == "get_filings":
+            res = _agent_get_filings(tool_input.get("ticker", ""),
+                topic=tool_input.get("topic", ""),
+                form=tool_input.get("form", "10-K"))
         elif tool_name == "get_borsdata_history":
             res = _agent_get_borsdata_history(db, tool_input.get("query", ""),
                                                 periods=tool_input.get("years", 10))
@@ -17422,6 +17525,19 @@ def _agent_tools_definition():
                     "query": {"type": "string", "description": "Bolagsnamn eller ticker"},
                 },
                 "required": ["query"],
+            },
+        },
+        {
+            "name": "get_filings",
+            "description": "PRIMÄRKÄLLA: hämtar faktisk text ur ett US-bolags senaste SEC-filing (10-K årsredovisning / 10-Q kvartalsrapport) och returnerar de mest relevanta avsnitten för ett ämne. Använd för att GRUNDA kvalitativa påståenden i bolagets EGNA ord i stället för web-sökta sammanfattningar — t.ex. kundkoncentration, risker, segment, guidance-språk, redovisningsval. Ange ticker (US, t.ex. 'NVDA') + topic (vad du letar efter, t.ex. 'customer concentration', 'AI demand', 'gross margin drivers'). ENDAST US-bolag (SEC EDGAR) — nordiska bolag stöds ej, använd web_search där.",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "ticker": {"type": "string", "description": "US-ticker, t.ex. 'NVDA', 'AVGO'"},
+                    "topic": {"type": "string", "description": "Vad du söker i filingen (engelska, t.ex. 'customer concentration risk', 'data center revenue', 'inventory')"},
+                    "form": {"type": "string", "description": "'10-K' (årsredovisning, default) eller '10-Q' (senaste kvartal)", "default": "10-K"},
+                },
+                "required": ["ticker"],
             },
         },
         {
