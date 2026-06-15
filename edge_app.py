@@ -11136,6 +11136,27 @@ namn som "best_lens", "hit_rate_pct", "rows[]", "track_record_backtest",
 historiskt varit mest träffsäker". Fältnamn ser ut som buggar för en betalande
 kund.
 
+⛔⛔ INGEN SPEKULATION OM BACKEND/DATAARKITEKTUR (VIKTIGT): Du SER INTE källkoden,
+databasschemat, Börsdata-pipelinen eller hur EV/ROCE/FCF beräknas internt. Du har
+BARA dina verktygssvar + denna kontext. Om någon frågar "vad saknas för att bygga
+X?", "hur beräknas EV?", "hämtar vi current_assets?", "vilka tabeller finns?" e.d.
+— HITTA ALDRIG PÅ tekniska detaljer om implementationen (kolumnnamn, formler,
+"vår EV = mcap×(1+0.5×D/E)", "vi hämtar inte X"). Säg ärligt: "Jag ser inte
+backend-koden, så jag kan inte uttala mig om exakt hur det är byggt — det vet
+utvecklaren." Du kan beskriva vad som vore ÖNSKVÄRT analytiskt, men presentera
+det som förslag, inte som fakta om hur systemet faktiskt fungerar. Att gissa
+backend-arkitektur och presentera den som sanning är en allvarlig förtroende-
+skada som kan leda till felaktiga byggbeslut.
+
+📊 FÖRBERÄKNADE SCREENINGAR — SVARA UTAN VERKTYGSANROP: I DEL 9 (DB-snapshot) finns
+färdiga topplistor (Magic Formula, högst ROCE, bästa kassaflöde, lägst EV/EBIT),
+uppdaterade dagligen. När användaren frågar om dessa ("bästa FCF?", "Magic Formula
+topp 10?", "vilka har högst ROCE?", "är X med i Magic Formula?") — SVARA DIREKT
+från den listan. Anropa INTE verktyg för det (det kostar onödiga tokens). Använd
+`screen_stocks`-verktyget BARA för egna filter som listan inte täcker (t.ex. FCF-
+vändningar, specifikt ROCE-intervall, ett land). Vill man ha ETT bolags exakta
+Magic Formula-rank: `get_full_stock` ger den.
+
 OBLIGATORISK PROFIL-MARKERING: ange tydligt om den samlade hållningen är
 RISKREDUCERANDE (TA PROFIT/UNDVIK/avstår) eller UPPSIDESÖKANDE (KÖP). Ramverket
 byter ibland uppsida mot blow-up-skydd — användaren ska kunna välja defensiv/
@@ -11984,6 +12005,81 @@ analysera viktning, kvalitet (composite), koncentrationsrisk, missing föreslagn
 """
 
 
+def _build_screen_digest(db):
+    """Förberäknad screening-digest som bakas in i agentens CACHADE systemprompt.
+    Token-effektivitet: vanliga universum-frågor ('bästa FCF', 'Magic Formula
+    topp', 'är X med') besvaras direkt härifrån utan verktygsanrop → cache-
+    läsning (~10% av pris) i stället för ocachade tool-resultat.
+
+    Screens beräknas från `stocks` (ev_ebit_ratio, return_on_capital_employed,
+    operating_cash_flow m.m. — riktiga lagrade kolumner). Kompakt: ~topp 12-15
+    per lista så den cachade prefixet inte sväller."""
+    from edge_db import _fetchall, _ph
+    ph = _ph()
+    rows = _fetchall(db, f"""
+        SELECT short_name, name, country, currency, market_cap, last_price,
+               ev_ebit_ratio, return_on_capital_employed, return_on_equity,
+               operating_cash_flow, pe_ratio, number_of_owners
+        FROM stocks
+        WHERE last_price > 0 AND market_cap >= 500000000
+          AND number_of_owners >= 50 AND country IN ('SE', 'US')
+        ORDER BY market_cap DESC LIMIT 700
+    """)
+    U = [dict(r) for r in rows]
+    if not U:
+        return None
+    f = lambda v: v if isinstance(v, (int, float)) else None
+
+    def _mc(s):
+        mc = f(s.get("market_cap")) or 0
+        cur = s.get("currency") or ""
+        return f"{mc/1e9:.0f} mdr {cur}".strip() if mc >= 1e9 else f"{mc/1e6:.0f} mn {cur}".strip()
+
+    def _row(s, extra):
+        return f"  {s.get('short_name')} ({(s.get('name') or '')[:26]}, {s.get('country')}) — {extra} · {_mc(s)}"
+
+    # 🏆 Magic Formula (Greenblatt): rank EV/EBIT asc + rank ROCE desc, lägst summa bäst
+    elig = [s for s in U if (f(s.get("ev_ebit_ratio")) and 0 < s["ev_ebit_ratio"] < 100
+                             and f(s.get("return_on_capital_employed")) and s["return_on_capital_employed"] > 0)]
+    magic = []
+    if len(elig) >= 10:
+        by_ev = sorted(elig, key=lambda x: x["ev_ebit_ratio"])
+        for i, s in enumerate(by_ev): s["_evr"] = i + 1
+        by_roce = sorted(elig, key=lambda x: -x["return_on_capital_employed"])
+        for i, s in enumerate(by_roce): s["_rcr"] = i + 1
+        magic = sorted(elig, key=lambda x: x["_evr"] + x["_rcr"])[:12]
+
+    # 💎 Högst ROCE · 💰 Bästa OCF-yield · 🔖 Lägst EV/EBIT
+    top_roce = sorted([s for s in U if f(s.get("return_on_capital_employed"))],
+                      key=lambda x: -x["return_on_capital_employed"])[:10]
+    ocf = [s for s in U if f(s.get("operating_cash_flow")) and f(s.get("market_cap")) and s["market_cap"] > 0]
+    for s in ocf: s["_ocfy"] = 100 * s["operating_cash_flow"] / s["market_cap"]
+    top_ocf = sorted(ocf, key=lambda x: -x["_ocfy"])[:10]
+    deep_value = sorted(elig, key=lambda x: x["ev_ebit_ratio"])[:10]
+
+    out = ["📊 FÖRBERÄKNADE SCREENINGAR (uppdateras dagligen — SVARA DIREKT HÄRIFRÅN "
+           "utan verktygsanrop när användaren frågar om dessa topplistor):"]
+    if magic:
+        out.append("\n🏆 MAGIC FORMULA (Greenblatt — EV/EBIT-rank + ROCE-rank, lägst kombinerat = bäst):\n"
+                   + "\n".join(_row(s, f"EV/EBIT {s['ev_ebit_ratio']:.1f}, ROCE {s['return_on_capital_employed']:.0f}%")
+                               for s in magic))
+    if top_roce:
+        out.append("\n💎 HÖGST ROCE (kapitaleffektivitet):\n"
+                   + "\n".join(_row(s, f"ROCE {s['return_on_capital_employed']:.0f}%, EV/EBIT {f(s.get('ev_ebit_ratio')) or 0:.1f}")
+                               for s in top_roce))
+    if top_ocf:
+        out.append("\n💰 BÄSTA KASSAFLÖDE (OCF-yield = operativt kassaflöde / börsvärde):\n"
+                   + "\n".join(_row(s, f"OCF-yield {s['_ocfy']:.1f}%") for s in top_ocf))
+    if deep_value:
+        out.append("\n🔖 LÄGST EV/EBIT (deep value — verifiera kvalitet separat):\n"
+                   + "\n".join(_row(s, f"EV/EBIT {s['ev_ebit_ratio']:.1f}") for s in deep_value))
+    out.append("\nÄr ett bolag INTE i listorna? Det betyder bara att det inte är i topp-12/15 — "
+               "använd `screen_stocks`-verktyget för fullständig screening med egna filter "
+               "(land, ROCE-intervall, FCF-vändning m.m.), eller `get_full_stock` som ger "
+               "bolagets EXAKTA Magic Formula-rank i universumet.")
+    return "\n".join(out)
+
+
 def _build_agent_context(db, max_per_list=20):
     """Bygger en text-snapshot av databasens viktigaste topplistor som
     Claude får som kontext. Cachas 5 min."""
@@ -12295,6 +12391,16 @@ def _build_agent_context(db, max_per_list=20):
                              "sektor-allokering):\n" + "\n".join(ml))
     except Exception as e:
         print(f"[agent ctx] macro pulse error: {e}", file=sys.stderr)
+
+    # ── FÖRBERÄKNADE SCREENINGAR (Magic Formula, ROCE, FCF, deep value) ──
+    # Bakas in i cachad prompt → agenten svarar på universum-frågor utan
+    # verktygsanrop (token-effektivt).
+    try:
+        digest = _build_screen_digest(db)
+        if digest:
+            parts.append(digest)
+    except Exception as e:
+        print(f"[agent ctx] screen digest error: {e}", file=sys.stderr)
 
     return "\n\n".join(parts)
 
@@ -13721,6 +13827,106 @@ def _agent_get_top_stocks(db, criterion="composite", limit=10, country=""):
             "number_of_owners": d.get("number_of_owners"),
         })
     return {"criterion": criterion, "country": country or "all", "stocks": out}
+
+
+def _agent_screen_stocks(db, screen="magic", country="", roce_min=None,
+                         roce_max=None, ev_ebit_max=None, limit=25):
+    """Flexibel universum-screening för agenten. Komplement till de förberäknade
+    listorna i kontexten — använd för EGNA filter (FCF-vändning, ROCE-intervall).
+
+    screen ∈ {magic, high_roce, best_ocf, deep_value, fcf_turnaround}
+    """
+    from edge_db import _fetchall, _ph
+    ph = _ph()
+    f = lambda v: v if isinstance(v, (int, float)) else None
+    cset = [c.strip().upper() for c in str(country).split(",") if c.strip()] or ["SE", "US"]
+    cph = ",".join([ph] * len(cset))
+
+    def _compact(s, **extra):
+        d = {"ticker": s.get("short_name"), "name": s.get("name"),
+             "country": s.get("country"), "currency": s.get("currency"),
+             "market_cap": f(s.get("market_cap")),
+             "ev_ebit": f(s.get("ev_ebit_ratio")),
+             "roce": f(s.get("return_on_capital_employed")),
+             "roe": f(s.get("return_on_equity"))}
+        d.update(extra)
+        return d
+
+    # FCF-vändning: senaste kvartalet positivt FCF, kvartalet innan negativt
+    if screen == "fcf_turnaround":
+        rows = _fetchall(db, f"""
+            SELECT s.short_name, s.name, s.country, s.currency, s.market_cap,
+                   s.return_on_capital_employed, s.ev_ebit_ratio, s.return_on_equity,
+                   br.free_cash_flow AS fcf_curr, br.report_end_date
+            FROM stocks s
+            JOIN borsdata_instrument_map m ON s.short_name = m.ticker
+            JOIN borsdata_reports br ON br.isin = m.isin
+            WHERE br.report_type = 'quarter' AND s.country IN ({cph})
+              AND s.market_cap >= 500000000
+            ORDER BY m.isin, br.report_end_date DESC
+        """, tuple(cset))
+        by_isin = {}
+        for r in rows:
+            d = dict(r); k = d["short_name"]
+            by_isin.setdefault(k, []).append(d)
+        out = []
+        for k, qs in by_isin.items():
+            if len(qs) < 2:
+                continue
+            curr, prev = f(qs[0].get("fcf_curr")), f(qs[1].get("fcf_curr"))
+            rc = f(qs[0].get("return_on_capital_employed"))
+            if curr is not None and prev is not None and curr > 0 and prev < 0:
+                if roce_min is not None and (rc is None or rc < roce_min):
+                    continue
+                if roce_max is not None and (rc is None or rc > roce_max):
+                    continue
+                out.append(_compact(qs[0], fcf_prev=round(prev, 1), fcf_curr=round(curr, 1),
+                                    quarter=str(qs[0].get("report_end_date"))[:10]))
+        out.sort(key=lambda x: (x.get("fcf_curr") or 0), reverse=True)
+        return {"screen": screen, "country": ",".join(cset), "n": len(out), "stocks": out[:limit]}
+
+    # Övriga screens: ladda eligible universum från stocks
+    rows = _fetchall(db, f"""
+        SELECT short_name, name, country, currency, market_cap, last_price,
+               ev_ebit_ratio, return_on_capital_employed, return_on_equity, operating_cash_flow
+        FROM stocks
+        WHERE last_price > 0 AND market_cap >= 500000000 AND country IN ({cph})
+        ORDER BY market_cap DESC LIMIT 900
+    """, tuple(cset))
+    U = [dict(r) for r in rows]
+
+    def _ok_roce(s):
+        rc = f(s.get("return_on_capital_employed"))
+        if roce_min is not None and (rc is None or rc < roce_min): return False
+        if roce_max is not None and (rc is None or rc > roce_max): return False
+        return True
+    U = [s for s in U if _ok_roce(s)]
+    if ev_ebit_max is not None:
+        U = [s for s in U if f(s.get("ev_ebit_ratio")) and s["ev_ebit_ratio"] <= ev_ebit_max]
+
+    if screen == "magic":
+        elig = [s for s in U if (f(s.get("ev_ebit_ratio")) and 0 < s["ev_ebit_ratio"] < 100
+                                 and f(s.get("return_on_capital_employed")) and s["return_on_capital_employed"] > 0)]
+        by_ev = sorted(elig, key=lambda x: x["ev_ebit_ratio"])
+        for i, s in enumerate(by_ev): s["_evr"] = i + 1
+        by_rc = sorted(elig, key=lambda x: -x["return_on_capital_employed"])
+        for i, s in enumerate(by_rc): s["_rcr"] = i + 1
+        ranked = sorted(elig, key=lambda x: x["_evr"] + x["_rcr"])
+        out = [_compact(s, magic_rank=i + 1) for i, s in enumerate(ranked[:limit])]
+    elif screen == "high_roce":
+        ranked = sorted([s for s in U if f(s.get("return_on_capital_employed"))],
+                        key=lambda x: -x["return_on_capital_employed"])
+        out = [_compact(s) for s in ranked[:limit]]
+    elif screen == "best_ocf":
+        cand = [s for s in U if f(s.get("operating_cash_flow")) and f(s.get("market_cap")) and s["market_cap"] > 0]
+        for s in cand: s["_y"] = 100 * s["operating_cash_flow"] / s["market_cap"]
+        out = [_compact(s, ocf_yield_pct=round(s["_y"], 1)) for s in sorted(cand, key=lambda x: -x["_y"])[:limit]]
+    elif screen == "deep_value":
+        elig = [s for s in U if f(s.get("ev_ebit_ratio")) and s["ev_ebit_ratio"] > 0]
+        out = [_compact(s) for s in sorted(elig, key=lambda x: x["ev_ebit_ratio"])[:limit]]
+    else:
+        return {"error": f"Okänd screen: {screen}. Använd magic|high_roce|best_ocf|deep_value|fcf_turnaround"}
+    return {"screen": screen, "country": ",".join(cset), "n": len(out), "stocks": out}
 
 
 # ══════════════════════════════════════════════════════════════
@@ -17064,6 +17270,14 @@ def _agent_run_tool(tool_name, tool_input):
                 criterion=tool_input.get("criterion", "composite"),
                 limit=tool_input.get("limit", 10),
                 country=tool_input.get("country", ""))
+        elif tool_name == "screen_stocks":
+            res = _agent_screen_stocks(db,
+                screen=tool_input.get("screen", "magic"),
+                country=tool_input.get("country", ""),
+                roce_min=tool_input.get("roce_min"),
+                roce_max=tool_input.get("roce_max"),
+                ev_ebit_max=tool_input.get("ev_ebit_max"),
+                limit=tool_input.get("limit", 25))
         elif tool_name == "get_borsdata_history":
             res = _agent_get_borsdata_history(db, tool_input.get("query", ""),
                                                 periods=tool_input.get("years", 10))
@@ -17147,6 +17361,22 @@ def _agent_tools_definition():
                     "query": {"type": "string", "description": "Bolagsnamn eller ticker"},
                 },
                 "required": ["query"],
+            },
+        },
+        {
+            "name": "screen_stocks",
+            "description": "Universum-screening med EGNA filter över ALLA bolag (SE+US). Använd när de FÖRBERÄKNADE listorna i kontexten (Magic Formula, ROCE, FCF, deep value) inte räcker — t.ex. för FCF-vändningar eller ett specifikt ROCE-intervall. screen='magic' (Greenblatt-rank), 'high_roce', 'best_ocf' (OCF-yield), 'deep_value' (lägst EV/EBIT), 'fcf_turnaround' (FCF neg→pos senaste kvartalet). Valfria filter: country (t.ex. 'SE' eller 'SE,US'), roce_min/roce_max, ev_ebit_max. Returnerar kompakt lista med ticker, namn, EV/EBIT, ROCE m.m. OBS: svara på vanliga 'topp X'-frågor från den förberäknade listan i stället för att anropa detta varje gång.",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "screen": {"type": "string", "description": "magic | high_roce | best_ocf | deep_value | fcf_turnaround", "default": "magic"},
+                    "country": {"type": "string", "description": "'SE', 'US' eller 'SE,US' (default båda)"},
+                    "roce_min": {"type": "number", "description": "Lägsta ROCE i % (valfritt)"},
+                    "roce_max": {"type": "number", "description": "Högsta ROCE i % (valfritt)"},
+                    "ev_ebit_max": {"type": "number", "description": "Högsta EV/EBIT (valfritt)"},
+                    "limit": {"type": "integer", "description": "Max antal träffar (default 25)", "default": 25},
+                },
+                "required": [],
             },
         },
         {
