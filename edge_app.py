@@ -83,6 +83,9 @@ def _bootstrap_secret_key():
 
 app.secret_key = _bootstrap_secret_key()
 app.config.update(SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE="Lax",
+                  # Secure-cookie i prod (Railway = alltid https); av lokalt (http)
+                  SESSION_COOKIE_SECURE=bool(os.environ.get("RAILWAY_ENVIRONMENT")
+                                             or os.environ.get("COOKIE_SECURE")),
                   PERMANENT_SESSION_LIFETIME=60 * 60 * 24 * 30)  # 30 dagar
 
 ADMIN_EMAILS = {e.strip().lower() for e in
@@ -109,6 +112,11 @@ def _auth_gate():
     if any(p.startswith(x) for x in _OPEN_PREFIXES):
         return None
     if session.get("uid"):
+        # Diag/diagnostics är drift-verktyg (kan trigga tunga syncar) —
+        # endast admin efter go-live. auth-tables är öppen via _OPEN_PREFIXES.
+        if ((p.startswith("/api/diag/") or p.startswith("/api/diagnostics/"))
+                and not session.get("is_admin")):
+            return jsonify({"error": "admin_required"}), 403
         return None
     if p.startswith("/api/"):
         return jsonify({"error": "auth_required"}), 401
@@ -17842,6 +17850,30 @@ def api_agent_chat_stream():
     # tillgänglig efter att svaret börjat streama)
     _usage_uid = session.get("uid")
     _usage_email = session.get("email")
+
+    # 💸 DAGLIG BUDGET per användare (go-live-skydd): agent-anrop kostar riktiga
+    # Anthropic-tokens. Tak per dygn (meddelanden + USD), admin undantagen,
+    # env-styrt. Fail-open vid DB-fel — skyddet får aldrig sänka tjänsten.
+    if not session.get("is_admin"):
+        try:
+            lim_msgs = int(os.environ.get("AGENT_DAILY_MSG_LIMIT", "60"))
+            lim_usd = float(os.environ.get("AGENT_DAILY_USD_LIMIT", "5.0"))
+            from edge_db import _fetchone as _bf1, _ph as _bph
+            dbb = get_db()
+            try:
+                r = _bf1(dbb, f"SELECT COUNT(*) AS n, COALESCE(SUM(cost_usd), 0) AS c "
+                              f"FROM usage_events WHERE user_id = {_bph()} "
+                              f"AND created_at >= {_bph()}",
+                         (_usage_uid, datetime.now().strftime("%Y-%m-%dT00:00:00")))
+                _bd = dict(r) if r else {}
+                if (_bd.get("n") or 0) >= lim_msgs or (_bd.get("c") or 0.0) >= lim_usd:
+                    return jsonify({"error": "Daglig användningsgräns nådd — kvoten "
+                                             "nollställs vid midnatt. Kontakta oss om "
+                                             "du behöver högre gräns."}), 429
+            finally:
+                dbb.close()
+        except Exception as _be:
+            print(f"[budget] check-fel (fail-open): {_be}", file=sys.stderr)
 
     # Bygg system-prompt med DB-kontext (samma som non-streaming-routen)
     db = get_db()
