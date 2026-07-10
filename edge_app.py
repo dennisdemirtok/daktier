@@ -14081,6 +14081,16 @@ def _agent_screen_stocks(db, screen="magic", country="", roce_min=None,
                     r = _kf1(db, f"SELECT COUNT(*) AS n {_kop_from}{_kop_where}{extra}",
                              tuple(cset))
                     dbg[lbl] = dict(r).get("n") if r else None
+                # Djupdiagnos: är ROCE NULL (fonder/ETF:er?) eller fel skala
+                # (0.27 i st.f. 27)? Max/avg bland trend-passerarna avslöjar.
+                r = _kf1(db, f"SELECT COUNT(*) AS nulls, MAX(s.return_on_capital_employed) AS mx "
+                             f"{_kop_from}{_kop_where}{_gate_trend}", tuple(cset))
+                if r:
+                    d = dict(r)
+                    r2 = _kf1(db, f"SELECT COUNT(*) AS n {_kop_from}{_kop_where}{_gate_trend}"
+                                  f"AND s.return_on_capital_employed IS NULL", tuple(cset))
+                    dbg["roce_null_among_trend"] = dict(r2).get("n") if r2 else None
+                    dbg["roce_max_among_trend"] = d.get("mx")
             except Exception as _de:
                 try: db.rollback()
                 except Exception: pass
@@ -18036,7 +18046,9 @@ DEL 9 — DAGENS DB-SNAPSHOT (uppdateras var 5 min)
             for _iter in range(8):  # max 8 iterationer (multi-tool)
                 payload = {
                     "model": MODEL,
-                    "max_tokens": 8000,
+                    # 20000: Sonnet 5:s adaptive thinking räknas MOT max_tokens —
+                    # 8000 åts upp av tänkande på svåra frågor → 0 tecken svar.
+                    "max_tokens": 20000,
                     "stream": True,
                     "system": [
                         {"type": "text", "text": static_system,
@@ -18139,6 +18151,23 @@ DEL 9 — DAGENS DB-SNAPSHOT (uppdateras var 5 min)
                                     current_block = {"type": "web_search_tool_result",
                                                      "tool_use_id": cb.get("tool_use_id"),
                                                      "content": cb.get("content")}
+                                elif cb_type == "thinking":
+                                    # Sonnet 5 kör ADAPTIVE thinking när `thinking`
+                                    # utelämnas. Blocken måste fångas + ekas tillbaka
+                                    # ORÖRDA i tool-loopen (annars 400), och deras
+                                    # tokens räknas mot max_tokens.
+                                    current_block = {"type": "thinking",
+                                                     "thinking": cb.get("thinking") or "",
+                                                     "signature": cb.get("signature") or ""}
+                                elif cb_type == "redacted_thinking":
+                                    current_block = {"type": "redacted_thinking",
+                                                     "data": cb.get("data") or ""}
+                                else:
+                                    # OKÄND blocktyp → ALDRIG stale-alias: gamla
+                                    # current_block på nytt index gav dubblerade
+                                    # server-tool-block ("multiple blocks with id",
+                                    # 400 som dödade analyser).
+                                    current_block = None
                                 while len(accumulator_blocks) <= idx:
                                     accumulator_blocks.append(None)
                                 accumulator_blocks[idx] = current_block
@@ -18159,6 +18188,14 @@ DEL 9 — DAGENS DB-SNAPSHOT (uppdateras var 5 min)
                                     if accumulator_blocks[idx]:
                                         accumulator_blocks[idx].setdefault("_partial_json", "")
                                         accumulator_blocks[idx]["_partial_json"] += delta.get("partial_json", "")
+                                elif dtype == "thinking_delta":
+                                    blk = accumulator_blocks[idx] if idx < len(accumulator_blocks) else None
+                                    if blk and blk.get("type") == "thinking":
+                                        blk["thinking"] = (blk.get("thinking") or "") + (delta.get("thinking") or "")
+                                elif dtype == "signature_delta":
+                                    blk = accumulator_blocks[idx] if idx < len(accumulator_blocks) else None
+                                    if blk and blk.get("type") == "thinking":
+                                        blk["signature"] = delta.get("signature") or ""
 
                             elif etype == "content_block_stop":
                                 idx = event.get("index", 0)
