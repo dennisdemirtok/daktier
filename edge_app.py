@@ -11597,8 +11597,16 @@ Sätt ETT huvudverdikt i fetstil: **KÖPLÄGE** / **AVVAKTA (bevaka)** /
 **AVSTÅ** / **REDUCERA** — inramat som beslutsstöd enligt 6e (setupen, inte
 en order). Saknas `trend`-blocket → säg att trenddata saknas och kör utan gate.
 
-För "vad ska jag köpa?"-frågor: utgå från 📈 DAKTIER-LISTAN i kontexten
-(kvalitet × värdering × trend) och redovisa listans regler + exit-regler.
+För "vad ska jag köpa?"-frågor: presentera 📈 DAKTIER-LISTAN **vid namn** som
+huvudsvar — tabell med topp 5–10 (ticker, ROCE, EV/EBIT, % vs MA200,
+6m-momentum) + listans regler + exit-regler, så användaren kan FÖLJA den
+mekaniskt. Djupdyk därefter i 2–3 av bolagen (linser + track record +
+entry-score). Listan finns redan i din kontext — anropa INTE screen_stocks
+när listan syns där; saknas den: anropa screen_stocks(koplista) EN gång
+(default-land räcker — inga separata SE/US-anrop). Investmentbolag
+(Investor, Industrivärden m.fl.) filtreras MEDVETET bort av EV/EBIT-golvet
+(NAV-redovisningsartefakt ger falskt låg multipel) — vill du lyfta dem, gör
+det separat utanför listan med NAV-rabatt-resonemang.
 Evidens-ärlighet: trendfilter + momentum är dokumenterade faktorpremier som
 historiskt minskat djupa drawdowns — de garanterar INGET enskilt utfall;
 listans live-facit loggas dagligen och mäts mot 12m-utfall.
@@ -18149,6 +18157,33 @@ DEL 9 — DAGENS DB-SNAPSHOT (uppdateras var 5 min)
                         # server_tool_use (web_search) hanteras automatiskt av Anthropic — ingen action här
                     if tool_results:
                         messages.append({"role": "user", "content": tool_results})
+                    continue
+
+                # 🔁 MAX_TOKENS-FORTSÄTTNING: svaret klipptes av output-taket.
+                # Fortsätt sömlöst i nästa iteration i stället för att lämna
+                # användaren med en halv tabell.
+                if stop_reason == "max_tokens":
+                    asst = [b for b in accumulator_blocks if b]
+                    if asst:
+                        messages.append({"role": "assistant", "content": asst})
+                        messages.append({"role": "user", "content":
+                            "Svaret klipptes vid token-taket. Fortsätt EXAKT där du "
+                            "slutade — upprepa ingenting, skriv bara fortsättningen."})
+                        yield _sse({"type": "info", "message": "Fortsätter svaret..."})
+                        continue
+
+                # 🛑 DÖD STREAM (stop_reason None = anslutningen mot Anthropic
+                # bröts mitt i genereringen). Har text redan visats → error +
+                # retry-knapp i stället för TYST omgenerering (dubblerar annars
+                # texten på skärmen). Inget visat ännu → re-iterera tyst.
+                if stop_reason is None:
+                    _partial = any(b and b.get("type") == "text" and (b.get("text") or "").strip()
+                                   for b in accumulator_blocks)
+                    if _partial:
+                        yield _sse({"type": "error",
+                                    "error": "Strömmen bröts mitt i svaret — tryck 'Försök igen'."})
+                        _flush_usage()
+                        return
                     continue
 
                 # end_turn → vi är klara. v3 WARN-MODE: validera output men
