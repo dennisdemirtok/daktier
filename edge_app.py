@@ -12125,11 +12125,16 @@ def _build_screen_digest(db):
         trows = _fetchall(db, "SELECT isin, pct_vs_ma200, ret_6m FROM trend_snapshot "
                               "WHERE above_ma200 = 1 AND ret_6m > 0")
         tmap = {r["isin"]: dict(r) for r in trows}
-        kand = [s for s in U if s.get("isin") in tmap
-                and f(s.get("return_on_capital_employed")) and s["return_on_capital_employed"] >= 15
-                and f(s.get("ev_ebit_ratio")) and 4 < s["ev_ebit_ratio"] <= 25]
-        for s in kand:
-            s["_t"] = tmap[s["isin"]]
+        # ticker→isin via instrument_map (stocks.isin är inte alltid satt)
+        mrows = _fetchall(db, "SELECT ticker, isin FROM borsdata_instrument_map")
+        m_isin = {r["ticker"]: r["isin"] for r in mrows}
+        kand = []
+        for s in U:
+            t = tmap.get(m_isin.get(s.get("short_name")) or s.get("isin"))
+            if (t and f(s.get("return_on_capital_employed")) and s["return_on_capital_employed"] >= 15
+                    and f(s.get("ev_ebit_ratio")) and 4 < s["ev_ebit_ratio"] <= 25):
+                s["_t"] = t
+                kand.append(s)
         if len(kand) >= 5:
             for key, attr, rev in (("_ke", lambda x: x["ev_ebit_ratio"], False),
                                    ("_kr", lambda x: -x["return_on_capital_employed"], False),
@@ -14035,22 +14040,28 @@ def _agent_screen_stocks(db, screen="magic", country="", roce_min=None,
     # OCH 6m-momentum > 0 (timing). Rank: Greenblatt-stil kombinerad rank
     # (EV/EBIT + ROCE + 6m-momentum, lägst summa = bäst).
     if screen == "koplista":
-        r_min = roce_min if roce_min is not None else 15
-        e_max = ev_ebit_max if ev_ebit_max is not None else 25
+        r_min = float(roce_min) if roce_min is not None else 15.0
+        e_max = float(ev_ebit_max) if ev_ebit_max is not None else 25.0
+        # JOIN via instrument_map (etablerade ticker→isin-mönstret, jfr
+        # fcf_turnaround) med s.isin som fallback — stocks.isin är inte
+        # garanterat satt för alla bolag.
+        _kop_from = ("FROM stocks s "
+                     "LEFT JOIN borsdata_instrument_map m ON s.short_name = m.ticker "
+                     "JOIN trend_snapshot t ON t.isin = COALESCE(m.isin, s.isin) ")
+        _kop_where = (f"WHERE s.last_price > 0 AND s.market_cap >= 500000000 "
+                      f"AND s.country IN ({cph}) AND s.number_of_owners >= 50 ")
+        _gate_trend = "AND t.above_ma200 = 1 AND t.ret_6m > 0 "
+        _gate_roce = f"AND s.return_on_capital_employed >= {r_min} "
+        _gate_ev = f"AND s.ev_ebit_ratio > 4 AND s.ev_ebit_ratio <= {e_max} "
         try:
             rows = _fetchall(db, f"""
-                SELECT s.isin, s.short_name, s.name, s.country, s.currency,
-                       s.market_cap, s.last_price, s.ev_ebit_ratio,
-                       s.return_on_capital_employed, s.return_on_equity,
+                SELECT COALESCE(m.isin, s.isin) AS isin, s.short_name, s.name,
+                       s.country, s.currency, s.market_cap, s.last_price,
+                       s.ev_ebit_ratio, s.return_on_capital_employed,
+                       s.return_on_equity,
                        t.pct_vs_ma200, t.ret_6m, t.ret_12m, t.dist_52w_high
-                FROM stocks s
-                JOIN trend_snapshot t ON t.isin = s.isin
-                WHERE s.last_price > 0 AND s.market_cap >= 500000000
-                  AND s.country IN ({cph}) AND s.number_of_owners >= 50
-                  AND t.above_ma200 = 1 AND t.ret_6m > 0
-                  AND s.return_on_capital_employed >= {ph}
-                  AND s.ev_ebit_ratio > 4 AND s.ev_ebit_ratio <= {ph}
-            """, tuple(cset) + (r_min, e_max))
+                {_kop_from}{_kop_where}{_gate_trend}{_gate_roce}{_gate_ev}
+            """, tuple(cset))
         except Exception:
             try: db.rollback()
             except Exception: pass
@@ -14058,8 +14069,24 @@ def _agent_screen_stocks(db, screen="magic", country="", roce_min=None,
                     "note": "trend_snapshot saknas ännu — byggs nattligt efter prissync."}
         cand = [dict(r) for r in rows]
         if not cand:
+            # Självdiagnos: hur många kandidater överlever varje gate-steg?
+            # (join → trend → roce → full) — gör tom lista felsökningsbar direkt.
+            dbg = {}
+            try:
+                from edge_db import _fetchone as _kf1
+                for lbl, extra in (("join", ""),
+                                   ("trend", _gate_trend),
+                                   ("roce", _gate_trend + _gate_roce),
+                                   ("full", _gate_trend + _gate_roce + _gate_ev)):
+                    r = _kf1(db, f"SELECT COUNT(*) AS n {_kop_from}{_kop_where}{extra}",
+                             tuple(cset))
+                    dbg[lbl] = dict(r).get("n") if r else None
+            except Exception as _de:
+                try: db.rollback()
+                except Exception: pass
+                dbg["err"] = str(_de)[:150]
             return {"screen": screen, "country": ",".join(cset), "n": 0, "stocks": [],
-                    "note": "Inga bolag klarar gaten (ROCE, EV/EBIT, trend) just nu."}
+                    "note": f"Inga bolag klarar gaten just nu. Kandidater kvar per steg: {dbg}"}
         for key, keyfn in (("_ke", lambda x: (x.get("ev_ebit_ratio") or 999)),
                            ("_kr", lambda x: -(x.get("return_on_capital_employed") or 0)),
                            ("_km", lambda x: -(x.get("ret_6m") or 0))):
@@ -17977,8 +18004,35 @@ DEL 9 — DAGENS DB-SNAPSHOT (uppdateras var 5 min)
             if usage_total["iterations"] > 0:
                 _log_usage_event(_usage_uid, _usage_email, "agent_stream", MODEL,
                                  usage_total, message)
+        def _append_assistant(blocks):
+            """Lägg till (eller MERGA) assistant-content i messages.
+            pause_turn lämnar en trailing assistant-tur → nästa append måste
+            merga (två assistant i rad ger API 400). Deduplar dessutom
+            server-tool-block på (type, id) — dubblerade web_search_tool_result
+            ger annars 'found multiple blocks with id' (400, EVO-buggen)."""
+            if messages and messages[-1].get("role") == "assistant":
+                merged = list(messages[-1].get("content") or []) + list(blocks)
+                trailing = True
+            else:
+                merged = list(blocks)
+                trailing = False
+            seen, out = set(), []
+            for b in merged:
+                bid = (b or {}).get("id") or (b or {}).get("tool_use_id")
+                key = ((b or {}).get("type"), bid)
+                if bid and key in seen:
+                    continue
+                if bid:
+                    seen.add(key)
+                out.append(b)
+            if trailing:
+                messages[-1]["content"] = out
+            else:
+                messages.append({"role": "assistant", "content": out})
+
         try:
             _nudged = False  # empty-answer-guard: max EN nudge-retry
+            _any_text_streamed = False  # över ALLA iterationer (pause_turn delar upp texten)
             for _iter in range(8):  # max 8 iterationer (multi-tool)
                 payload = {
                     "model": MODEL,
@@ -18097,6 +18151,8 @@ DEL 9 — DAGENS DB-SNAPSHOT (uppdateras var 5 min)
                                     text = delta.get("text", "")
                                     if accumulator_blocks[idx]:
                                         accumulator_blocks[idx]["text"] = (accumulator_blocks[idx].get("text") or "") + text
+                                    if text.strip():
+                                        _any_text_streamed = True
                                     yield _sse({"type": "text_delta", "text": text})
                                 elif dtype == "input_json_delta":
                                     # Tool input byggs upp som JSON-string
@@ -18136,11 +18192,20 @@ DEL 9 — DAGENS DB-SNAPSHOT (uppdateras var 5 min)
                     usage_total[_k] += usage_info.get(_k) or 0
                 usage_total["iterations"] += 1
 
+                # pause_turn → server-verktyg (web_search) pausade turen.
+                # Skicka tillbaka partial content och låt modellen fortsätta —
+                # tidigare föll detta genom till "klart" = trunkerade svar.
+                if stop_reason == "pause_turn":
+                    asst = [b for b in accumulator_blocks if b]
+                    if asst:
+                        _append_assistant(asst)
+                    continue
+
                 # Tool use → kör tools, fortsätt loop
                 if stop_reason == "tool_use":
                     # Filtrera bort None-block
                     asst_content = [b for b in accumulator_blocks if b]
-                    messages.append({"role": "assistant", "content": asst_content})
+                    _append_assistant(asst_content)
                     tool_results = []
                     for blk in asst_content:
                         if blk.get("type") == "tool_use":
@@ -18165,7 +18230,7 @@ DEL 9 — DAGENS DB-SNAPSHOT (uppdateras var 5 min)
                 if stop_reason == "max_tokens":
                     asst = [b for b in accumulator_blocks if b]
                     if asst:
-                        messages.append({"role": "assistant", "content": asst})
+                        _append_assistant(asst)
                         messages.append({"role": "user", "content":
                             "Svaret klipptes vid token-taket. Fortsätt EXAKT där du "
                             "slutade — upprepa ingenting, skriv bara fortsättningen."})
@@ -18199,11 +18264,11 @@ DEL 9 — DAGENS DB-SNAPSHOT (uppdateras var 5 min)
                 # text efter en lång tool-kedja → användaren fick tidigare ett
                 # tomt svar efter flera minuters väntan. EN nudge-retry som
                 # tvingar fram textsvaret i stället.
-                if not full_text.strip() and not _nudged:
+                if not full_text.strip() and not _any_text_streamed and not _nudged:
                     _nudged = True
                     asst = ([b for b in accumulator_blocks if b]
                             or [{"type": "text", "text": "(tomt svar)"}])
-                    messages.append({"role": "assistant", "content": asst})
+                    _append_assistant(asst)
                     messages.append({"role": "user", "content":
                         "Du avslutade utan att skriva något svar till användaren. "
                         "Skriv NU det fullständiga svaret i löptext baserat på "
