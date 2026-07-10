@@ -11565,6 +11565,36 @@ Att bara nämna ett "intressant entry-intervall" i löptext räcker INTE och
 räknas som utelämnad. Detta löser upplevelsen av att agenten "aldrig köper"
 och ger kunden en konkret handlingsregel. Aldrig utelämna den.
 
+**Steg 6d-TIMING — TREND-GATE & KÖPBESLUT (OBLIGATORISK när frågan är
+"ska jag köpa?", "när köper jag?" eller "vad ska jag köpa?")**
+
+Användarens största problem är att skilja "köpvärt bolag" från "köpläge NU".
+Håll därför ALLTID isär dem, i denna ordning:
+
+1. **BOLAG** — köpvärt alls? (v3.3-linser + kvalitet + `cycle_risk` + confidence)
+2. **TIMING** — köpläge nu? Använd `trend`-blocket i bolagskontexten:
+   `timing_gate = ÖPPEN` (pris > MA200 OCH 6m-momentum > 0) → köp kan utföras
+   enligt entry-scoren. `STÄNGD` (under MA200) → verdiktet är **AVVAKTA (bevaka)**
+   — sätt bevakning vid återtag av MA200, INTE köp nu, oavsett hur billigt det
+   ser ut. `HALVÖPPEN` → halv position/extra tranchering. Redovisa siffrorna
+   (t.ex. "+7% över MA200, 6m +18%"). Ett kvalitetsbolag i fallande trend är
+   ett AVVAKTA — fallande kniv fångas inte.
+3. **UTFÖRANDE** — entry-scoren ovan (Steg 6d) + tranchering.
+4. **EXIT-REGLER** — alltid konkreta, så strategin går att FÖLJA mekaniskt:
+   (a) stängning >10% under MA200 → reducera/sälj, (b) fundament viker
+   (2 kvartal fallande ROCE/vinst) → ompröva tesen, (c) tesen bruten → sälj
+   oavsett kurs. Långsiktig horisont = följ upp MÅNADSVIS, inte dagligen.
+
+Sätt ETT huvudverdikt i fetstil: **KÖPLÄGE** / **AVVAKTA (bevaka)** /
+**AVSTÅ** / **REDUCERA** — inramat som beslutsstöd enligt 6e (setupen, inte
+en order). Saknas `trend`-blocket → säg att trenddata saknas och kör utan gate.
+
+För "vad ska jag köpa?"-frågor: utgå från 📈 DAKTIER-LISTAN i kontexten
+(kvalitet × värdering × trend) och redovisa listans regler + exit-regler.
+Evidens-ärlighet: trendfilter + momentum är dokumenterade faktorpremier som
+historiskt minskat djupa drawdowns — de garanterar INGET enskilt utfall;
+listans live-facit loggas dagligen och mäts mot 12m-utfall.
+
 **KOMPRIMERING (P1):** Säg slutsatsen/AVOID EN gång — inte 3–4. En betalande
 kund vill ha täthet. Upprepa inte samma poäng i flera sektioner.
 
@@ -12032,7 +12062,7 @@ def _build_screen_digest(db):
     from edge_db import _fetchall, _ph
     ph = _ph()
     rows = _fetchall(db, f"""
-        SELECT short_name, name, country, currency, market_cap, last_price,
+        SELECT isin, short_name, name, country, currency, market_cap, last_price,
                ev_ebit_ratio, return_on_capital_employed, return_on_equity,
                operating_cash_flow, pe_ratio, number_of_owners
         FROM stocks
@@ -12072,6 +12102,29 @@ def _build_screen_digest(db):
     top_ocf = sorted(ocf, key=lambda x: -x["_ocfy"])[:10]
     deep_value = sorted(elig, key=lambda x: x["ev_ebit_ratio"])[:10]
 
+    # 📈 DAKTIER-LISTAN: kvalitet × värdering × TREND — kärnan i köpbeslutsstödet.
+    # Trend-gate ur trend_snapshot (MA200 + 6m-momentum, byggs nattligt).
+    koplista = []
+    try:
+        trows = _fetchall(db, "SELECT isin, pct_vs_ma200, ret_6m FROM trend_snapshot "
+                              "WHERE above_ma200 = 1 AND ret_6m > 0")
+        tmap = {r["isin"]: dict(r) for r in trows}
+        kand = [s for s in U if s.get("isin") in tmap
+                and f(s.get("return_on_capital_employed")) and s["return_on_capital_employed"] >= 15
+                and f(s.get("ev_ebit_ratio")) and 4 < s["ev_ebit_ratio"] <= 25]
+        for s in kand:
+            s["_t"] = tmap[s["isin"]]
+        if len(kand) >= 5:
+            for key, attr, rev in (("_ke", lambda x: x["ev_ebit_ratio"], False),
+                                   ("_kr", lambda x: -x["return_on_capital_employed"], False),
+                                   ("_km", lambda x: -(x["_t"].get("ret_6m") or 0), False)):
+                srt = sorted(kand, key=attr)
+                for i, s in enumerate(srt): s[key] = i + 1
+            koplista = sorted(kand, key=lambda x: x["_ke"] + x["_kr"] + x["_km"])[:10]
+    except Exception:
+        try: db.rollback()
+        except Exception: pass
+
     out = ["📊 FÖRBERÄKNADE SCREENINGAR (uppdateras dagligen — SVARA DIREKT HÄRIFRÅN "
            "utan verktygsanrop när användaren frågar om dessa topplistor):"]
     if magic:
@@ -12088,9 +12141,22 @@ def _build_screen_digest(db):
     if deep_value:
         out.append("\n🔖 LÄGST EV/EBIT (deep value — verifiera kvalitet separat):\n"
                    + "\n".join(_row(s, f"EV/EBIT {s['ev_ebit_ratio']:.1f}") for s in deep_value))
+    if koplista:
+        def _trow(s):
+            t = s["_t"]
+            return _row(s, f"ROCE {s['return_on_capital_employed']:.0f}%, EV/EBIT {s['ev_ebit_ratio']:.1f}, "
+                           f"{t['pct_vs_ma200']:+.0f}% vs MA200, 6m {t['ret_6m']:+.0f}%")
+        out.append("\n📈 DAKTIER-LISTAN (kvalitet × värdering × TREND — den följbara långsiktiga köplistan; "
+                   "ANVÄND DENNA när användaren frågar 'vad ska jag köpa?'):\n"
+                   + "\n".join(_trow(s) for s in koplista)
+                   + "\n  Regler (redovisa alltid): ROCE ≥ 15 · EV/EBIT 4–25 · pris > MA200 · "
+                     "6m-momentum > 0 · rank = EV/EBIT + ROCE + momentum (kombinerad, lägst bäst). "
+                     "Exit: stängning >10% under MA200 eller fundament viker (2 kvartal fallande "
+                     "ROCE/vinst). Uppdateras dagligen efter prissync; live-facit loggas i "
+                     "screen-snapshots för 12m-uppföljning.")
     out.append("\nÄr ett bolag INTE i listorna? Det betyder bara att det inte är i topp-12/15 — "
                "använd `screen_stocks`-verktyget för fullständig screening med egna filter "
-               "(land, ROCE-intervall, FCF-vändning m.m.), eller `get_full_stock` som ger "
+               "(land, ROCE-intervall, FCF-vändning, koplista m.m.), eller `get_full_stock` som ger "
                "bolagets EXAKTA Magic Formula-rank i universumet.")
     return "\n".join(out)
 
@@ -12805,6 +12871,34 @@ def _v33_signals_for_stock(db, stock_data):
                         result["cycle_risk"] = {"position": "mid", "margin_vs_median": ratio}
         except Exception:
             pass
+        # TREND/TIMING-GATE (köpbeslutsstöd): MA200 + momentum ur trend_snapshot
+        # (byggs nattligt ur borsdata_prices). Ger agenten MEKANISK timing så att
+        # "köpvärt bolag" och "köpläge nu" hålls isär: pris > MA200 + positivt
+        # 6m-momentum = gate öppen; under MA200 = AVVAKTA nya köp.
+        try:
+            from edge_db import _fetchone as _f1, _ph as _phf
+            t = _f1(db, f"SELECT * FROM trend_snapshot WHERE isin = {_phf()}", (isin,))
+            if t and isinstance(result, dict):
+                td = dict(t)
+                above = bool(td.get("above_ma200"))
+                mom6 = td.get("ret_6m")
+                gate_open = above and isinstance(mom6, (int, float)) and mom6 > 0
+                result["trend"] = {
+                    "above_ma200": above,
+                    "pct_vs_ma200": td.get("pct_vs_ma200"),
+                    "ret_6m_pct": mom6,
+                    "ret_12m_pct": td.get("ret_12m"),
+                    "dist_52w_high_pct": td.get("dist_52w_high"),
+                    "as_of": td.get("last_date"),
+                    "timing_gate": ("ÖPPEN — pris över MA200 med positivt 6m-momentum"
+                                    if gate_open else
+                                    ("STÄNGD — under MA200 (AVVAKTA nya köp; bevaka återtag av MA200)"
+                                     if not above else
+                                     "HALVÖPPEN — över MA200 men negativt 6m-momentum")),
+                }
+        except Exception:
+            try: db.rollback()
+            except Exception: pass
         return result
     except Exception as e:
         print(f"[v33] signal-fel: {e}", file=sys.stderr)
@@ -13902,7 +13996,7 @@ def _agent_screen_stocks(db, screen="magic", country="", roce_min=None,
     """Flexibel universum-screening för agenten. Komplement till de förberäknade
     listorna i kontexten — använd för EGNA filter (FCF-vändning, ROCE-intervall).
 
-    screen ∈ {magic, high_roce, best_ocf, deep_value, fcf_turnaround}
+    screen ∈ {koplista, magic, high_roce, best_ocf, deep_value, fcf_turnaround}
     """
     from edge_db import _fetchall, _ph
     ph = _ph()
@@ -13919,6 +14013,54 @@ def _agent_screen_stocks(db, screen="magic", country="", roce_min=None,
              "roe": f(s.get("return_on_equity"))}
         d.update(extra)
         return d
+
+    # 📈 KÖPLISTAN: kvalitet × värdering × TREND — den följbara långsiktiga listan.
+    # Gate: ROCE ≥ 15 (kvalitet), EV/EBIT 4–25 (rimlig värdering), pris > MA200
+    # OCH 6m-momentum > 0 (timing). Rank: Greenblatt-stil kombinerad rank
+    # (EV/EBIT + ROCE + 6m-momentum, lägst summa = bäst).
+    if screen == "koplista":
+        r_min = roce_min if roce_min is not None else 15
+        e_max = ev_ebit_max if ev_ebit_max is not None else 25
+        try:
+            rows = _fetchall(db, f"""
+                SELECT s.isin, s.short_name, s.name, s.country, s.currency,
+                       s.market_cap, s.last_price, s.ev_ebit_ratio,
+                       s.return_on_capital_employed, s.return_on_equity,
+                       t.pct_vs_ma200, t.ret_6m, t.ret_12m, t.dist_52w_high
+                FROM stocks s
+                JOIN trend_snapshot t ON t.isin = s.isin
+                WHERE s.last_price > 0 AND s.market_cap >= 500000000
+                  AND s.country IN ({cph}) AND s.number_of_owners >= 50
+                  AND t.above_ma200 = 1 AND t.ret_6m > 0
+                  AND s.return_on_capital_employed >= {ph}
+                  AND s.ev_ebit_ratio > 4 AND s.ev_ebit_ratio <= {ph}
+            """, tuple(cset) + (r_min, e_max))
+        except Exception:
+            try: db.rollback()
+            except Exception: pass
+            return {"screen": screen, "n": 0, "stocks": [],
+                    "note": "trend_snapshot saknas ännu — byggs nattligt efter prissync."}
+        cand = [dict(r) for r in rows]
+        if not cand:
+            return {"screen": screen, "country": ",".join(cset), "n": 0, "stocks": [],
+                    "note": "Inga bolag klarar gaten (ROCE, EV/EBIT, trend) just nu."}
+        for key, keyfn in (("_ke", lambda x: (x.get("ev_ebit_ratio") or 999)),
+                           ("_kr", lambda x: -(x.get("return_on_capital_employed") or 0)),
+                           ("_km", lambda x: -(x.get("ret_6m") or 0))):
+            srt = sorted(cand, key=keyfn)
+            for i, s in enumerate(srt): s[key] = i + 1
+        ranked = sorted(cand, key=lambda x: x["_ke"] + x["_kr"] + x["_km"])
+        out = [_compact(s, koplista_rank=i + 1, isin=s.get("isin"),
+                        price=f(s.get("last_price")),
+                        vs_ma200_pct=(round(s["pct_vs_ma200"], 1) if isinstance(s.get("pct_vs_ma200"), (int, float)) else None),
+                        ret_6m_pct=(round(s["ret_6m"], 1) if isinstance(s.get("ret_6m"), (int, float)) else None),
+                        ret_12m_pct=(round(s["ret_12m"], 1) if isinstance(s.get("ret_12m"), (int, float)) else None))
+               for i, s in enumerate(ranked[:limit])]
+        return {"screen": screen, "country": ",".join(cset), "n": len(out), "stocks": out,
+                "rules": (f"Gate: ROCE≥{r_min}, EV/EBIT 4–{e_max}, pris>MA200, 6m-momentum>0. "
+                          "Rank: EV/EBIT + ROCE + 6m-momentum (kombinerad, lägst bäst). "
+                          "Exit: stängning >10% under MA200 eller fundament viker "
+                          "(2 kvartal fallande ROCE/vinst). Följ upp månadsvis.")}
 
     # FCF-vändning: senaste kvartalet positivt FCF, kvartalet innan negativt
     if screen == "fcf_turnaround":
@@ -13993,7 +14135,7 @@ def _agent_screen_stocks(db, screen="magic", country="", roce_min=None,
         elig = [s for s in U if f(s.get("ev_ebit_ratio")) and s["ev_ebit_ratio"] > 0]
         out = [_compact(s) for s in sorted(elig, key=lambda x: x["ev_ebit_ratio"])[:limit]]
     else:
-        return {"error": f"Okänd screen: {screen}. Använd magic|high_roce|best_ocf|deep_value|fcf_turnaround"}
+        return {"error": f"Okänd screen: {screen}. Använd koplista|magic|high_roce|best_ocf|deep_value|fcf_turnaround"}
     return {"screen": screen, "country": ",".join(cset), "n": len(out), "stocks": out}
 
 
@@ -16487,6 +16629,44 @@ def api_coverage_status():
         db.close()
 
 
+@app.route("/api/diag/build-trend-snapshot")
+def api_diag_build_trend_snapshot():
+    """Bygger/uppdaterar trend_snapshot manuellt (nattjobbet gör det annars 05:10)
+    + rapporterar datafärskhet: senaste prisdatum, senaste kvartal, Q2-2026-flöde."""
+    import time as _t
+    from edge_db import compute_trend_snapshot, _fetchone
+    db = get_db()
+    t0 = _t.time()
+    try:
+        res = compute_trend_snapshot(db)
+    except Exception as e:
+        try: db.rollback()
+        except Exception: pass
+        return jsonify({"error": str(e)[:400]}), 500
+    fresh = {}
+    try:
+        r = _fetchone(db, "SELECT MAX(date) AS d FROM borsdata_prices")
+        fresh["latest_price_date"] = str(dict(r).get("d"))[:10] if r else None
+        r = _fetchone(db, "SELECT MAX(report_end_date) AS d FROM borsdata_reports "
+                          "WHERE report_type = 'quarter'")
+        fresh["latest_quarter_end"] = str(dict(r).get("d"))[:10] if r else None
+        r = _fetchone(db, "SELECT COUNT(DISTINCT isin) AS n FROM borsdata_reports "
+                          "WHERE report_type = 'quarter' AND report_end_date >= '2026-04-01'")
+        fresh["companies_with_q2_2026"] = dict(r).get("n") if r else None
+        r = _fetchone(db, "SELECT COUNT(*) AS n, SUM(above_ma200) AS above, "
+                          "MAX(last_date) AS latest FROM trend_snapshot")
+        d = dict(r) if r else {}
+        fresh["trend_rows"] = d.get("n")
+        fresh["above_ma200"] = d.get("above")
+        fresh["trend_latest_price"] = str(d.get("latest"))[:10] if d.get("latest") else None
+    except Exception as e:
+        try: db.rollback()
+        except Exception: pass
+        fresh["err"] = str(e)[:200]
+    return jsonify({"result": res, "seconds": round(_t.time() - t0, 1),
+                    "freshness": fresh})
+
+
 @app.route("/api/diag/backfill-quarters", methods=["POST", "GET"])
 def api_diag_backfill_quarters():
     """FAS A2: backfill djup kvartals- + årshistorik från Börsdata för givna
@@ -17557,11 +17737,11 @@ def _agent_tools_definition():
         },
         {
             "name": "screen_stocks",
-            "description": "Universum-screening med EGNA filter över ALLA bolag (SE+US). Använd när de FÖRBERÄKNADE listorna i kontexten (Magic Formula, ROCE, FCF, deep value) inte räcker — t.ex. för FCF-vändningar eller ett specifikt ROCE-intervall. screen='magic' (Greenblatt-rank), 'high_roce', 'best_ocf' (OCF-yield), 'deep_value' (lägst EV/EBIT), 'fcf_turnaround' (FCF neg→pos senaste kvartalet). Valfria filter: country (t.ex. 'SE' eller 'SE,US'), roce_min/roce_max, ev_ebit_max. Returnerar kompakt lista med ticker, namn, EV/EBIT, ROCE m.m. OBS: svara på vanliga 'topp X'-frågor från den förberäknade listan i stället för att anropa detta varje gång.",
+            "description": "Universum-screening med EGNA filter över ALLA bolag (SE+US). Använd när de FÖRBERÄKNADE listorna i kontexten (DAKTIER-listan, Magic Formula, ROCE, FCF, deep value) inte räcker — t.ex. för FCF-vändningar, specifikt ROCE-intervall eller fler än topp-10 ur Köplistan. screen='koplista' (DAKTIER-listan: kvalitet ROCE≥15 × värdering EV/EBIT 4–25 × trend pris>MA200 & 6m-momentum>0 — den följbara långsiktiga köplistan med exit-regler), 'magic' (Greenblatt-rank), 'high_roce', 'best_ocf' (OCF-yield), 'deep_value' (lägst EV/EBIT), 'fcf_turnaround' (FCF neg→pos senaste kvartalet). Valfria filter: country (t.ex. 'SE' eller 'SE,US'), roce_min/roce_max, ev_ebit_max. Returnerar kompakt lista med ticker, namn, EV/EBIT, ROCE, trenddata m.m. OBS: svara på vanliga 'topp X'-frågor från den förberäknade listan i stället för att anropa detta varje gång.",
             "input_schema": {
                 "type": "object",
                 "properties": {
-                    "screen": {"type": "string", "description": "magic | high_roce | best_ocf | deep_value | fcf_turnaround", "default": "magic"},
+                    "screen": {"type": "string", "description": "koplista | magic | high_roce | best_ocf | deep_value | fcf_turnaround", "default": "magic"},
                     "country": {"type": "string", "description": "'SE', 'US' eller 'SE,US' (default båda)"},
                     "roce_min": {"type": "number", "description": "Lägsta ROCE i % (valfritt)"},
                     "roce_max": {"type": "number", "description": "Högsta ROCE i % (valfritt)"},
@@ -17758,6 +17938,7 @@ DEL 9 — DAGENS DB-SNAPSHOT (uppdateras var 5 min)
                 _log_usage_event(_usage_uid, _usage_email, "agent_stream", MODEL,
                                  usage_total, message)
         try:
+            _nudged = False  # empty-answer-guard: max EN nudge-retry
             for _iter in range(8):  # max 8 iterationer (multi-tool)
                 payload = {
                     "model": MODEL,
@@ -17946,6 +18127,23 @@ DEL 9 — DAGENS DB-SNAPSHOT (uppdateras var 5 min)
                     b.get("text", "") for b in accumulator_blocks
                     if b and b.get("type") == "text"
                 ])
+
+                # 🛡️ EMPTY-ANSWER-GUARD: modellen kan avsluta med end_turn UTAN
+                # text efter en lång tool-kedja → användaren fick tidigare ett
+                # tomt svar efter flera minuters väntan. EN nudge-retry som
+                # tvingar fram textsvaret i stället.
+                if not full_text.strip() and not _nudged:
+                    _nudged = True
+                    asst = ([b for b in accumulator_blocks if b]
+                            or [{"type": "text", "text": "(tomt svar)"}])
+                    messages.append({"role": "assistant", "content": asst})
+                    messages.append({"role": "user", "content":
+                        "Du avslutade utan att skriva något svar till användaren. "
+                        "Skriv NU det fullständiga svaret i löptext baserat på "
+                        "verktygsresultaten ovan. Anropa INGA fler verktyg."})
+                    yield _sse({"type": "info", "message": "Slutför svaret..."})
+                    continue
+
                 v22_violations = _validate_v22_sentiment(full_text)
 
                 # Skicka usage (SUMMA över alla iterationer = sann kostnad i
@@ -18389,6 +18587,53 @@ def _startup():
 
         scheduler.add_job(scheduled_borsdata_prices, 'cron', hour=4, minute=0,
                           id='borsdata_prices_daily')
+
+        # 📈 Trend-snapshot (05:10, efter prissync 04:00): MA200 + 6/12m-momentum
+        # per bolag → trend_snapshot. Loggar därefter dagens Köplista (kvalitet ×
+        # värdering × trend) i screen_snapshots (screen_name='koplista_v1') så
+        # listan får ett mätbart LIVE-facit via befintlig 12m-uppföljning —
+        # användaren ska kunna FÖLJA listan, inte lita på backtest.
+        def scheduled_trend_snapshot():
+            if not _sched_claim("trend_snapshot", datetime.now().strftime("%Y-%m-%d")):
+                return
+            try:
+                from edge_db import compute_trend_snapshot, _upsert_sql
+                print(f"[AUTO] Trend-snapshot start {datetime.now().strftime('%H:%M')}")
+                dbt = get_db()
+                try:
+                    res = compute_trend_snapshot(dbt)
+                    print(f"[AUTO] Trend-snapshot klar: {res}")
+                    kop = _agent_screen_stocks(dbt, screen="koplista",
+                                               country="SE,US", limit=10)
+                    snap_date = datetime.now().strftime("%Y-%m-%d")
+                    ins_sql = _upsert_sql("screen_snapshots",
+                        ["snapshot_date", "screen_name", "country", "ticker", "isin",
+                         "name", "price", "quality_score", "value_score",
+                         "momentum_score", "last_updated"],
+                        ["snapshot_date", "screen_name", "ticker"])
+                    saved = 0
+                    for stk in (kop.get("stocks") or []):
+                        if not stk.get("ticker"):
+                            continue
+                        try:
+                            dbt.execute(ins_sql, (snap_date, "koplista_v1",
+                                stk.get("country"), stk.get("ticker"), stk.get("isin"),
+                                stk.get("name"), stk.get("price"),
+                                stk.get("roce"), stk.get("ev_ebit"),
+                                stk.get("ret_6m_pct"), datetime.now().isoformat()))
+                            saved += 1
+                        except Exception:
+                            try: dbt.rollback()
+                            except Exception: pass
+                    dbt.commit()
+                    print(f"[AUTO] Köplista loggad: {saved} bolag ({snap_date})")
+                finally:
+                    dbt.close()
+            except Exception as e:
+                print(f"[AUTO] Trend-snapshot fel: {e}")
+
+        scheduler.add_job(scheduled_trend_snapshot, 'cron', hour=5, minute=10,
+                          id='trend_snapshot_daily')
 
         # Veckovis Börsdata-rapportsync (söndagar 04:30) — full
         # PLUS daglig snabb-sync 05:30 under earnings-säsong för senaste rapporterna.

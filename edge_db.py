@@ -4778,6 +4778,82 @@ def sync_borsdata_prices(db, isin_list=None, from_date=None, max_per_run=500,
             "total": len(targets)}
 
 
+def compute_trend_snapshot(db):
+    """Trend-metrik per bolag ur borsdata_prices (daglig historik) → trend_snapshot
+    (en rad per ISIN). MA200, pris-vs-MA200, 6m/12m-avkastning, avstånd 52v-högsta.
+    Körs nattligt efter prissync (+ manuellt via /api/diag/build-trend-snapshot).
+
+    Evidensbas för köpbeslutsstödet: trendfilter (pris > MA200) + 6–12m momentum
+    är de mest dokumenterade timing-faktorerna för långsiktiga strategier —
+    minskar historiskt djupa drawdowns, garanterar inget enskilt utfall."""
+    from datetime import datetime as _dt, timedelta as _td
+    ph = _ph()
+    db.execute("""
+        CREATE TABLE IF NOT EXISTS trend_snapshot (
+            isin TEXT PRIMARY KEY,
+            snap_date TEXT,
+            last_date TEXT,
+            last_close DOUBLE PRECISION,
+            ma200 DOUBLE PRECISION,
+            pct_vs_ma200 DOUBLE PRECISION,
+            ret_6m DOUBLE PRECISION,
+            ret_12m DOUBLE PRECISION,
+            dist_52w_high DOUBLE PRECISION,
+            above_ma200 INTEGER,
+            n_days INTEGER
+        )
+    """)
+    db.commit()
+    # Ett svep över senaste ~430 kalenderdagar räcker för MA200 + 12m-retur.
+    # rn = handelsdagar bakåt per bolag; 6m ≈ rn 126, 12m ≈ rn 252.
+    cutoff = (_dt.utcnow() - _td(days=430)).strftime("%Y-%m-%d")
+    rows = _fetchall(db, f"""
+        WITH ranked AS (
+            SELECT isin, date, close,
+                   ROW_NUMBER() OVER (PARTITION BY isin ORDER BY date DESC) AS rn
+            FROM borsdata_prices
+            WHERE close > 0 AND date >= {ph}
+        )
+        SELECT isin,
+               MAX(CASE WHEN rn = 1 THEN close END)                 AS last_close,
+               MAX(CASE WHEN rn = 1 THEN date END)                  AS last_date,
+               AVG(CASE WHEN rn <= 200 THEN close END)              AS ma200,
+               AVG(CASE WHEN rn BETWEEN 123 AND 129 THEN close END) AS close_6m,
+               AVG(CASE WHEN rn BETWEEN 248 AND 256 THEN close END) AS close_12m,
+               MAX(CASE WHEN rn <= 252 THEN close END)              AS high_52w,
+               COUNT(*)                                             AS n_days
+        FROM ranked
+        WHERE rn <= 260
+        GROUP BY isin
+        HAVING COUNT(*) >= 150
+    """, (cutoff,))
+    snap = _dt.utcnow().strftime("%Y-%m-%d")
+    ins = _upsert_sql("trend_snapshot",
+        ["isin", "snap_date", "last_date", "last_close", "ma200", "pct_vs_ma200",
+         "ret_6m", "ret_12m", "dist_52w_high", "above_ma200", "n_days"], ["isin"])
+    n = 0
+    for r in rows:
+        d = dict(r)
+        lc, ma = d.get("last_close"), d.get("ma200")
+        if not lc or not ma or ma <= 0:
+            continue
+        c6, c12, hi = d.get("close_6m"), d.get("close_12m"), d.get("high_52w")
+        try:
+            db.execute(ins, (d["isin"], snap, str(d.get("last_date") or "")[:10],
+                             round(lc, 4), round(ma, 4),
+                             round(100 * (lc / ma - 1), 2),
+                             round(100 * (lc / c6 - 1), 2) if c6 else None,
+                             round(100 * (lc / c12 - 1), 2) if c12 else None,
+                             round(100 * (lc / hi - 1), 2) if hi else None,
+                             1 if lc > ma else 0, d.get("n_days")))
+            n += 1
+        except Exception:
+            try: db.rollback()
+            except Exception: pass
+    db.commit()
+    return {"rows": n, "snap_date": snap}
+
+
 def sync_borsdata_kpis(db, kpi_ids=None, isin_list=None, max_per_run=500):
     """Synkar KPI-historik. Default: top 15 KPIs (FCF, ROIC, P/E, etc.)."""
     try:
