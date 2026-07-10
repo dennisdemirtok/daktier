@@ -12131,7 +12131,8 @@ def _build_screen_digest(db):
         kand = []
         for s in U:
             t = tmap.get(m_isin.get(s.get("short_name")) or s.get("isin"))
-            if (t and f(s.get("return_on_capital_employed")) and s["return_on_capital_employed"] >= 15
+            # ROCE i stocks är KVOT-skala: 0.15 = 15%
+            if (t and f(s.get("return_on_capital_employed")) and s["return_on_capital_employed"] >= 0.15
                     and f(s.get("ev_ebit_ratio")) and 4 < s["ev_ebit_ratio"] <= 25):
                 s["_t"] = t
                 kand.append(s)
@@ -12150,11 +12151,11 @@ def _build_screen_digest(db):
            "utan verktygsanrop när användaren frågar om dessa topplistor):"]
     if magic:
         out.append("\n🏆 MAGIC FORMULA (Greenblatt — EV/EBIT-rank + ROCE-rank, lägst kombinerat = bäst):\n"
-                   + "\n".join(_row(s, f"EV/EBIT {s['ev_ebit_ratio']:.1f}, ROCE {s['return_on_capital_employed']:.0f}%")
+                   + "\n".join(_row(s, f"EV/EBIT {s['ev_ebit_ratio']:.1f}, ROCE {s['return_on_capital_employed'] * 100:.0f}%")
                                for s in magic))
     if top_roce:
         out.append("\n💎 HÖGST ROCE (kapitaleffektivitet):\n"
-                   + "\n".join(_row(s, f"ROCE {s['return_on_capital_employed']:.0f}%, EV/EBIT {f(s.get('ev_ebit_ratio')) or 0:.1f}")
+                   + "\n".join(_row(s, f"ROCE {s['return_on_capital_employed'] * 100:.0f}%, EV/EBIT {f(s.get('ev_ebit_ratio')) or 0:.1f}")
                                for s in top_roce))
     if top_ocf:
         out.append("\n💰 BÄSTA KASSAFLÖDE (OCF-yield = operativt kassaflöde / börsvärde):\n"
@@ -12165,7 +12166,7 @@ def _build_screen_digest(db):
     if koplista:
         def _trow(s):
             t = s["_t"]
-            return _row(s, f"ROCE {s['return_on_capital_employed']:.0f}%, EV/EBIT {s['ev_ebit_ratio']:.1f}, "
+            return _row(s, f"ROCE {s['return_on_capital_employed'] * 100:.0f}%, EV/EBIT {s['ev_ebit_ratio']:.1f}, "
                            f"{t['pct_vs_ma200']:+.0f}% vs MA200, 6m {t['ret_6m']:+.0f}%")
         out.append("\n📈 DAKTIER-LISTAN (kvalitet × värdering × TREND — den följbara långsiktiga köplistan; "
                    "ANVÄND DENNA när användaren frågar 'vad ska jag köpa?'):\n"
@@ -14025,13 +14026,19 @@ def _agent_screen_stocks(db, screen="magic", country="", roce_min=None,
     cset = [c.strip().upper() for c in str(country).split(",") if c.strip()] or ["SE", "US"]
     cph = ",".join([ph] * len(cset))
 
+    # OBS: stocks.return_on_capital_employed/return_on_equity lagras som KVOT
+    # (0.34 = 34%) — se roce_pct = roce * 100 i edge_db. Verktyget exponerar %
+    # utåt (agent-vänligt) och konverterar internt.
+    def _pct(v):
+        return round(v * 100, 1) if isinstance(v, (int, float)) else None
+
     def _compact(s, **extra):
         d = {"ticker": s.get("short_name"), "name": s.get("name"),
              "country": s.get("country"), "currency": s.get("currency"),
              "market_cap": f(s.get("market_cap")),
              "ev_ebit": f(s.get("ev_ebit_ratio")),
-             "roce": f(s.get("return_on_capital_employed")),
-             "roe": f(s.get("return_on_equity"))}
+             "roce_pct": _pct(f(s.get("return_on_capital_employed"))),
+             "roe_pct": _pct(f(s.get("return_on_equity")))}
         d.update(extra)
         return d
 
@@ -14040,8 +14047,9 @@ def _agent_screen_stocks(db, screen="magic", country="", roce_min=None,
     # OCH 6m-momentum > 0 (timing). Rank: Greenblatt-stil kombinerad rank
     # (EV/EBIT + ROCE + 6m-momentum, lägst summa = bäst).
     if screen == "koplista":
-        r_min = float(roce_min) if roce_min is not None else 15.0
+        r_min = float(roce_min) if roce_min is not None else 15.0   # i PROCENT
         e_max = float(ev_ebit_max) if ev_ebit_max is not None else 25.0
+        r_ratio = r_min / 100.0  # kolumnen är kvot-skala (0.15 = 15%)
         # JOIN via instrument_map (etablerade ticker→isin-mönstret, jfr
         # fcf_turnaround) med s.isin som fallback — stocks.isin är inte
         # garanterat satt för alla bolag.
@@ -14051,7 +14059,7 @@ def _agent_screen_stocks(db, screen="magic", country="", roce_min=None,
         _kop_where = (f"WHERE s.last_price > 0 AND s.market_cap >= 500000000 "
                       f"AND s.country IN ({cph}) AND s.number_of_owners >= 50 ")
         _gate_trend = "AND t.above_ma200 = 1 AND t.ret_6m > 0 "
-        _gate_roce = f"AND s.return_on_capital_employed >= {r_min} "
+        _gate_roce = f"AND s.return_on_capital_employed >= {r_ratio} "
         _gate_ev = f"AND s.ev_ebit_ratio > 4 AND s.ev_ebit_ratio <= {e_max} "
         try:
             rows = _fetchall(db, f"""
@@ -14139,9 +14147,9 @@ def _agent_screen_stocks(db, screen="magic", country="", roce_min=None,
             curr, prev = f(qs[0].get("fcf_curr")), f(qs[1].get("fcf_curr"))
             rc = f(qs[0].get("return_on_capital_employed"))
             if curr is not None and prev is not None and curr > 0 and prev < 0:
-                if roce_min is not None and (rc is None or rc < roce_min):
+                if roce_min is not None and (rc is None or rc * 100 < roce_min):
                     continue
-                if roce_max is not None and (rc is None or rc > roce_max):
+                if roce_max is not None and (rc is None or rc * 100 > roce_max):
                     continue
                 out.append(_compact(qs[0], fcf_prev=round(prev, 1), fcf_curr=round(curr, 1),
                                     quarter=str(qs[0].get("report_end_date"))[:10]))
@@ -14159,9 +14167,9 @@ def _agent_screen_stocks(db, screen="magic", country="", roce_min=None,
     U = [dict(r) for r in rows]
 
     def _ok_roce(s):
-        rc = f(s.get("return_on_capital_employed"))
-        if roce_min is not None and (rc is None or rc < roce_min): return False
-        if roce_max is not None and (rc is None or rc > roce_max): return False
+        rc = f(s.get("return_on_capital_employed"))  # kvot-skala
+        if roce_min is not None and (rc is None or rc * 100 < roce_min): return False
+        if roce_max is not None and (rc is None or rc * 100 > roce_max): return False
         return True
     U = [s for s in U if _ok_roce(s)]
     if ev_ebit_max is not None:
@@ -18788,7 +18796,7 @@ def _startup():
                             dbt.execute(ins_sql, (snap_date, "koplista_v1",
                                 stk.get("country"), stk.get("ticker"), stk.get("isin"),
                                 stk.get("name"), stk.get("price"),
-                                stk.get("roce"), stk.get("ev_ebit"),
+                                stk.get("roce_pct"), stk.get("ev_ebit"),
                                 stk.get("ret_6m_pct"), datetime.now().isoformat()))
                             saved += 1
                         except Exception:
