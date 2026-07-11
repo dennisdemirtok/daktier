@@ -4832,67 +4832,62 @@ def api_refresh_historical_reset():
         db.close()
 
 
+def _refresh_stocks_isin(db):
+    """Backfillar stocks.isin från borsdata_instrument_map (NULL/tom/YAHOO_%).
+    Var TIDIGARE bara en manuell endpoint som aldrig kördes → nya bolag
+    (t.ex. GEV efter spin-off) stod utan Börsdata-länk i månader. Körs nu i
+    metadata-jobbet + boot-selfheal. Returnerar {before, after, fixed}."""
+    from edge_db import _ph as ph_fn, _fetchone
+    ph = ph_fn()
+    before = _fetchone(db,
+        "SELECT COUNT(*) as n FROM stocks "
+        "WHERE (isin IS NULL OR isin = '' OR isin LIKE 'YAHOO_%')")
+    n_before = (dict(before)["n"] if before else 0) or 0
+    try:
+        db.execute("""
+            UPDATE stocks
+            SET isin = m.isin
+            FROM borsdata_instrument_map m
+            WHERE stocks.short_name = m.ticker
+            AND m.isin NOT LIKE 'YAHOO_%'
+            AND m.isin IS NOT NULL AND m.isin != ''
+            AND (stocks.isin IS NULL OR stocks.isin = '' OR stocks.isin LIKE 'YAHOO_%')
+        """)
+        db.commit()
+    except Exception:
+        try: db.rollback()
+        except Exception: pass
+        # SQLite fallback (stödjer ej UPDATE..FROM på äldre versioner)
+        rows = db.execute(
+            "SELECT s.short_name, m.isin "
+            "FROM stocks s JOIN borsdata_instrument_map m ON s.short_name = m.ticker "
+            "WHERE m.isin IS NOT NULL AND m.isin != '' AND m.isin NOT LIKE 'YAHOO_%' "
+            "AND (s.isin IS NULL OR s.isin = '' OR s.isin LIKE 'YAHOO_%')"
+        ).fetchall()
+        for r in rows:
+            rd = dict(r)
+            db.execute(
+                f"UPDATE stocks SET isin = {ph} WHERE short_name = {ph}",
+                (rd["isin"], rd["short_name"]))
+        db.commit()
+    after = _fetchone(db,
+        "SELECT COUNT(*) as n FROM stocks "
+        "WHERE (isin IS NULL OR isin = '' OR isin LIKE 'YAHOO_%')")
+    n_after = (dict(after)["n"] if after else 0) or 0
+    return {"before": n_before, "after": n_after, "fixed": n_before - n_after}
+
+
 @app.route("/api/borsdata/refresh-stocks-isin", methods=["POST"])
 def api_borsdata_refresh_stocks_isin():
-    """Uppdaterar stocks.isin från borsdata_instrument_map.
-
-    Kör när mapping uppdaterats — t.ex. efter att YAHOO_-fallbacks ersatts
-    av riktiga ISIN:er. Uppdaterar både:
-    - stocks med NULL/tom isin
-    - stocks med YAHOO_-prefix (gamla felaktiga fallbacks)
-
-    Returnerar antal stocks uppdaterade.
-    """
+    """Manuell trigger för _refresh_stocks_isin (körs även automatiskt:
+    månatliga metadata-jobbet + boot-selfheal)."""
     db = get_db()
     try:
-        from edge_db import _ph as ph_fn, _fetchall, _fetchone
-        ph = ph_fn()
-
-        # Räkna före
-        before = _fetchone(db,
-            "SELECT COUNT(*) as n FROM stocks "
-            "WHERE (isin IS NULL OR isin = '' OR isin LIKE 'YAHOO_%')")
-        n_before = (dict(before)["n"] if before else 0) or 0
-
-        # UPDATE stocks SET isin = m.isin from borsdata_instrument_map (Postgres)
-        # eller per-row för SQLite
-        try:
-            db.execute("""
-                UPDATE stocks
-                SET isin = m.isin
-                FROM borsdata_instrument_map m
-                WHERE stocks.short_name = m.ticker
-                AND m.isin NOT LIKE 'YAHOO_%'
-                AND m.isin IS NOT NULL AND m.isin != ''
-                AND (stocks.isin IS NULL OR stocks.isin = '' OR stocks.isin LIKE 'YAHOO_%')
-            """)
-            db.commit()
-        except Exception:
-            try: db.rollback()
-            except Exception: pass
-            # SQLite fallback
-            rows = db.execute(
-                "SELECT s.short_name, m.isin "
-                "FROM stocks s JOIN borsdata_instrument_map m ON s.short_name = m.ticker "
-                "WHERE m.isin IS NOT NULL AND m.isin != '' AND m.isin NOT LIKE 'YAHOO_%' "
-                "AND (s.isin IS NULL OR s.isin = '' OR s.isin LIKE 'YAHOO_%')"
-            ).fetchall()
-            for r in rows:
-                rd = dict(r)
-                db.execute(
-                    f"UPDATE stocks SET isin = {ph} WHERE short_name = {ph}",
-                    (rd["isin"], rd["short_name"]))
-            db.commit()
-
-        after = _fetchone(db,
-            "SELECT COUNT(*) as n FROM stocks "
-            "WHERE (isin IS NULL OR isin = '' OR isin LIKE 'YAHOO_%')")
-        n_after = (dict(after)["n"] if after else 0) or 0
-
+        res = _refresh_stocks_isin(db)
         return jsonify({
-            "stocks_with_bad_isin_before": n_before,
-            "stocks_with_bad_isin_after": n_after,
-            "fixed": n_before - n_after,
+            "stocks_with_bad_isin_before": res["before"],
+            "stocks_with_bad_isin_after": res["after"],
+            "fixed": res["fixed"],
         })
     finally:
         db.close()
@@ -13638,22 +13633,26 @@ def _forward_log_evaluate(db, today=None):
     return summary
 
 
-def _agent_get_full_stock(db, query):
-    """Hämtar ALLA tillgängliga nyckeltal för EN aktie + composite + book-modeller.
-    Bättre än search_stocks när Claude vill djupanalysera ETT bolag.
+def _agent_resolve_stock(db, query):
+    """CENTRAL aktie-resolver för ALLA agentverktyg (exakt → fuzzy).
+    Returnerar (rad_dict | None, felmeddelande | None).
 
-    v3: inkluderar nu Börsdata-data när tillgänglig (riktig FCF, EBIT, skuld
-    + sektor från Börsdata istället för keyword-gissning + 10 års reports).
-    """
-    from edge_db import _ph, _score_book_models, _attach_hist
+    Rankning (GEV-buggen 2026-07-11: syntetisk 'YAHOO_GEV'-dubblett i CA/CAD
+    vann över äkta US-raden eftersom äkta radens isin var tom):
+      1. karantänerade ISIN utesluts helt (korrupt data)
+      2. nordisk ISIN först (country-fältet är opålitligt — SAND-fallet)
+      3. RIKTIG ISIN (YAHOO_% räknas som ISIN-LÖS) före ISIN-lös
+      4. exakt ticker/short_name-match
+      5. störst market_cap (skiljer äkta rad från tom dubblett)
+      6. flest ägare
+
+    ISIN-fallback: är vald rads isin tom/YAHOO_ → slå upp riktig ISIN i
+    borsdata_instrument_map på ticker MED namn-sanity (minst ett gemensamt
+    ord) — annars förblir Börsdata-rapporter/trend osynliga för bolaget."""
+    from edge_db import _ph
     ph = _ph()
     qx = (query or "").strip()
     q = f"%{qx}%"
-    # ROBUST RESOLVER (Step 1): exakt ticker/short_name → fuzzy, men:
-    #  - prioritera nordisk börs (SE/FI/DK/NO) — annars matchar "SAND" en
-    #    kanadensisk penny stock i st.f. Sandvik; "NET" → Cloudflare ej NETI B
-    #  - EXKLUDERA karantänerade ISIN (korrupt data, t.ex. SSAB) — fel bolag
-    #    får ALDRIG smyga in i en live-logg.
     try:
         from data_quarantine import is_quarantined
     except Exception:
@@ -13662,13 +13661,10 @@ def _agent_get_full_stock(db, query):
     def _isin_nordic(isin):
         return isinstance(isin, str) and isin[:2] in ("SE", "FI", "DK", "NO", "IS")
 
+    def _real_isin(isin):
+        return bool(isin) and not str(isin).startswith("YAHOO_")
+
     def _pick(cands, want=None):
-        """Returnerar (bästa_kandidat, quarantine_hit). quarantine_hit=True om en
-        NAMN-matchande kandidat fanns men var karantänerad → anropet ska INTE
-        falla igenom till fuzzy (annars smyger fel bolag in, t.ex. SSAB B →
-        Viking Supply 'VSSAB B'). Rankar nordisk ISIN-prefix först (country-fältet
-        är opålitligt — kanadensisk SAND låg felmärkt som country=SE), sedan exakt
-        ticker-likhet, sedan ägarantal."""
         raw = [dict(c) for c in (cands or [])]
         q_hit = any(is_quarantined(c.get("isin")) for c in raw)
         clean = [c for c in raw if not is_quarantined(c.get("isin"))]
@@ -13681,11 +13677,10 @@ def _agent_get_full_stock(db, query):
             tk = (c.get("ticker") or c.get("short_name") or "").upper()
             sn = (c.get("short_name") or "").upper()
             exact = 0 if wu and (tk == wu or sn == wu) else 1
-            # Nordisk ISIN först → sedan VILKEN som helst ISIN före ISIN-lös dubblett
-            # (en rad utan ISIN saknar Börsdata-fundamenta → agenten skulle gissa).
             return (0 if _isin_nordic(isin) else 1,
-                    0 if isin else 1,
+                    0 if _real_isin(isin) else 1,
                     exact,
+                    -(c.get("market_cap") or 0),
                     -(c.get("number_of_owners") or 0))
         clean.sort(key=keyf)
         return clean[0], q_hit
@@ -13696,12 +13691,10 @@ def _agent_get_full_stock(db, query):
         (qx, qx),
     ).fetchall()
     best, q_hit = _pick(cands, qx)
-    # Om en EXAKT namn-/ticker-match fanns men var karantänerad → returnera
-    # karantänfel direkt. Fall ALDRIG igenom till fuzzy (skulle plocka junk).
     if not best and q_hit:
-        return {"error": f"'{query}' matchar ett karantänerat instrument (korrupt/felmärkt data). "
-                         f"Ingen ren ersättare med samma ticker. Manuell granskning krävs — "
-                         f"analysen avbryts hellre än att rapportera fel bolag."}
+        return None, (f"'{query}' matchar ett karantänerat instrument (korrupt/felmärkt data). "
+                      f"Ingen ren ersättare med samma ticker. Manuell granskning krävs — "
+                      f"analysen avbryts hellre än att rapportera fel bolag.")
     if not best:
         cands = db.execute(
             f"SELECT * FROM stocks WHERE (name LIKE {ph} OR short_name LIKE {ph} OR ticker LIKE {ph}) "
@@ -13710,10 +13703,47 @@ def _agent_get_full_stock(db, query):
         ).fetchall()
         best, q_hit = _pick(cands, qx)
         if not best and q_hit:
-            return {"error": f"'{query}' matchar endast karantänerade instrument (korrupt data). "
-                             f"Analysen avbryts hellre än att rapportera fel bolag."}
+            return None, (f"'{query}' matchar endast karantänerade instrument (korrupt data). "
+                          f"Analysen avbryts hellre än att rapportera fel bolag.")
     if not best:
-        return {"error": f"Ingen ren aktie hittad för '{query}' (ev. karantänerad/korrupt data)"}
+        return None, f"Ingen ren aktie hittad för '{query}' (ev. karantänerad/korrupt data)"
+
+    # ISIN-fallback via instrument_map (läker t.ex. GEV: äkta rad utan isin)
+    isin = best.get("isin") or ""
+    if not _real_isin(isin):
+        try:
+            tk = best.get("short_name") or best.get("ticker") or ""
+            def _words(s):
+                return {w for w in str(s or "").upper().replace(".", " ").split() if len(w) > 2}
+            mrows = db.execute(
+                f"SELECT isin, name FROM borsdata_instrument_map "
+                f"WHERE UPPER(ticker) = UPPER({ph}) AND isin IS NOT NULL "
+                f"AND isin != '' AND isin NOT LIKE 'YAHOO_%' LIMIT 4",
+                (tk,)).fetchall()
+            for mr in mrows:
+                md = dict(mr)
+                if _words(best.get("name")) & _words(md.get("name")):
+                    best["isin"] = md["isin"]
+                    best["isin_source"] = "instrument_map (stocks.isin saknades)"
+                    break
+        except Exception:
+            try: db.rollback()
+            except Exception: pass
+    return best, None
+
+
+def _agent_get_full_stock(db, query):
+    """Hämtar ALLA tillgängliga nyckeltal för EN aktie + composite + book-modeller.
+    Bättre än search_stocks när Claude vill djupanalysera ETT bolag.
+
+    v3: inkluderar nu Börsdata-data när tillgänglig (riktig FCF, EBIT, skuld
+    + sektor från Börsdata istället för keyword-gissning + 10 års reports).
+    """
+    from edge_db import _ph, _score_book_models, _attach_hist
+    ph = _ph()
+    best, _err = _agent_resolve_stock(db, query)
+    if _err:
+        return {"error": _err}
     d = best
     sc = {}  # FIX: init före try — annars UnboundLocalError i v2-blocket nedan
              # om _attach_hist/_score_book_models kastar (kraschade hela analysen).
@@ -14101,31 +14131,31 @@ def _agent_get_sector_peers(db, query, limit=10):
 
 
 def _agent_get_quarterly_trends(db, query):
-    """Returnerar 10 kvartals vinst-/försäljnings-/marginal-utveckling för en aktie."""
-    from edge_db import _ph, get_historical_quarterly
-    ph = _ph()
-    q = f"%{query}%"
-    row = db.execute(
-        f"SELECT orderbook_id, name FROM stocks WHERE name LIKE {ph} OR short_name LIKE {ph} OR ticker LIKE {ph} "
-        f"ORDER BY number_of_owners DESC LIMIT 1",
-        (q, q, q),
-    ).fetchone()
-    if not row:
-        return {"error": f"Ingen aktie hittad för '{query}'"}
-    oid = row["orderbook_id"]
-    name = row["name"]
+    """Returnerar 10 kvartals vinst-/försäljnings-/marginal-utveckling för en aktie.
+    Använder centrala resolvern — naiv LIKE-först-träff gav FEL BOLAGS kvartal
+    (GEV → Gevo/StorageVault-siffror som inte stämde mot SEC)."""
+    from edge_db import get_historical_quarterly
+    best, _err = _agent_resolve_stock(db, query)
+    if _err:
+        return {"error": _err}
+    oid = best.get("orderbook_id")
+    name = best.get("name")
+    resolved = {"ticker": best.get("short_name"), "name": name,
+                "country": best.get("country"), "currency": best.get("currency")}
     try:
         rows = get_historical_quarterly(db, oid)
     except Exception as e:
         return {"error": f"Kunde inte hämta kvartal: {e}"}
     if not rows:
-        return {"name": name, "quarterly_data": [], "note": "Ingen kvartalsdata synkad ännu"}
+        return {"name": name, "resolved": resolved, "quarterly_data": [],
+                "note": "Ingen kvartalsdata synkad ännu"}
     # Sortera nyaste först
     sorted_rows = sorted(rows, key=lambda r: ((r.get("financial_year") or 0),
                                                 int((r.get("quarter") or "Q0").replace("Q",""))),
                          reverse=True)[:10]
     return {
         "name": name,
+        "resolved": resolved,  # agenten SER vilket bolag som matchades
         "quarterly_data": [
             {"period": f"{r['quarter']} {r['financial_year']}",
              "sales": r.get("sales"), "net_profit": r.get("net_profit"),
@@ -14138,18 +14168,15 @@ def _agent_get_quarterly_trends(db, query):
 
 
 def _agent_get_owner_history(db, query):
-    """Returnerar veckovis ägarhistorik (52 veckor) för en aktie."""
+    """Returnerar veckovis ägarhistorik (52 veckor) för en aktie.
+    Central resolver — samma fel-bolag-risk som kvartalsverktyget hade."""
     from edge_db import _ph
     ph = _ph()
-    q = f"%{query}%"
-    row = db.execute(
-        f"SELECT orderbook_id, name, number_of_owners FROM stocks WHERE name LIKE {ph} OR short_name LIKE {ph} OR ticker LIKE {ph} "
-        f"ORDER BY number_of_owners DESC LIMIT 1",
-        (q, q, q),
-    ).fetchone()
-    if not row:
-        return {"error": f"Ingen aktie hittad för '{query}'"}
-    oid = row["orderbook_id"]
+    best, _err = _agent_resolve_stock(db, query)
+    if _err:
+        return {"error": _err}
+    row = best
+    oid = best.get("orderbook_id")
     hist = db.execute(
         f"SELECT week_date, number_of_owners FROM owner_history "
         f"WHERE orderbook_id = {ph} ORDER BY week_date DESC LIMIT 52",
@@ -19042,6 +19069,10 @@ def _startup():
                 try:
                     res = sync_borsdata_metadata(dbm)
                     print(f"[AUTO] Börsdata-metadata-sync klar: {res}")
+                    # Backfilla stocks.isin direkt efter ny mapping — annars
+                    # står nya bolag (GEV-fallet) utan Börsdata-länk i månader
+                    fx = _refresh_stocks_isin(dbm)
+                    print(f"[AUTO] stocks.isin-backfill: {fx}")
                 finally:
                     dbm.close()
             except Exception as e:
@@ -19133,6 +19164,18 @@ def _startup():
                     dbk.close()
             except Exception as e:
                 print(f"[selfheal] koplista-logg fel: {e}")
+            try:
+                # ISIN-backfill (billig UPDATE): läker Börsdata-länken för
+                # rader med tom/YAHOO_-isin (GEV-klassen av fel)
+                dbi = get_db()
+                try:
+                    fx = _refresh_stocks_isin(dbi)
+                    if fx.get("fixed"):
+                        print(f"[selfheal] stocks.isin-backfill: {fx}")
+                finally:
+                    dbi.close()
+            except Exception as e:
+                print(f"[selfheal] isin-backfill fel: {e}")
 
         threading.Thread(target=_boot_selfheal_dashboard, daemon=True).start()
 
