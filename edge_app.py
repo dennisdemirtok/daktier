@@ -19230,9 +19230,44 @@ def _startup():
         def _boot_selfheal_dashboard():
             import time as _t
             _t.sleep(20)  # låt appen bli klar först
-            if not _sched_claim("dashboard_selfheal", datetime.now().strftime("%Y-%m-%dT%H")):
-                return  # annan worker tog det denna timme
             from edge_db import _fetchone as _shf
+
+            # ── BILLIGA IDEMPOTENTA STEG — ALLTID, UTAN claim ──────────────
+            # Lärdom: claimen togs av en boot vars tråd dog vid nästa deploy
+            # → läkningen uteblev hela timmen. DELETE/UPDATE/upsert är
+            # idempotenta och billiga — dubbelkörning över workers är ofarlig.
+            try:
+                dbi0 = get_db()
+                try:
+                    jn = _cleanup_yahoo_rows(dbi0)
+                    if jn.get("deleted") or jn.get("blanked") or jn.get("map_deleted"):
+                        print(f"[selfheal] yahoo-janitor: {jn}")
+                    fx = _refresh_stocks_isin(dbi0)
+                    if fx.get("fixed"):
+                        print(f"[selfheal] stocks.isin-backfill: {fx}")
+                finally:
+                    dbi0.close()
+            except Exception as e:
+                print(f"[selfheal] janitor/isin fel: {e}")
+            try:
+                from edge_db import _ph as _shph0
+                dbk0 = get_db()
+                try:
+                    rk = _shf(dbk0, f"SELECT COUNT(*) AS n FROM screen_snapshots "
+                                    f"WHERE screen_name = 'koplista_v1' "
+                                    f"AND snapshot_date = {_shph0()}",
+                              (datetime.now().strftime("%Y-%m-%d"),))
+                    if not (dict(rk).get("n") if rk else 0):
+                        saved = _log_koplista_snapshot(dbk0)
+                        print(f"[selfheal] Köplista dagens kohort loggad: {saved}")
+                finally:
+                    dbk0.close()
+            except Exception as e:
+                print(f"[selfheal] koplista-logg fel: {e}")
+
+            # ── DYRA GENERATORER — claim per timme (API-kostnad) ───────────
+            if not _sched_claim("dashboard_selfheal", datetime.now().strftime("%Y-%m-%dT%H")):
+                return  # annan worker tog generator-delen denna timme
             def _age_h(table):
                 try:
                     dbs = get_db()
@@ -19288,40 +19323,6 @@ def _startup():
                     print("[selfheal] market_bullets klara")
             except Exception as e:
                 print(f"[selfheal] market_bullets fel: {e}")
-            try:
-                # Köplistans facit: säkerställ att dagens kohort är loggad
-                # (nattjobbet kan ha missats vid deploy/omstart).
-                from edge_db import _ph as _shph
-                dbk = get_db()
-                try:
-                    rk = _shf(dbk, f"SELECT COUNT(*) AS n FROM screen_snapshots "
-                                   f"WHERE screen_name = 'koplista_v1' "
-                                   f"AND snapshot_date = {_shph()}",
-                              (datetime.now().strftime("%Y-%m-%d"),))
-                    n_today = dict(rk).get("n") if rk else 0
-                    if not n_today:
-                        saved = _log_koplista_snapshot(dbk)
-                        print(f"[selfheal] Köplista dagens kohort loggad: {saved}")
-                finally:
-                    dbk.close()
-            except Exception as e:
-                print(f"[selfheal] koplista-logg fel: {e}")
-            try:
-                # ORDNING VIKTIG: Yahoo-janitorn FÖRE isin-backfillen — annars
-                # skulle en YAHOO_-dubblett (samma ticker) få äkta radens ISIN.
-                dbi = get_db()
-                try:
-                    jn = _cleanup_yahoo_rows(dbi)
-                    if jn.get("deleted") or jn.get("blanked") or jn.get("map_deleted"):
-                        print(f"[selfheal] yahoo-janitor: {jn}")
-                    fx = _refresh_stocks_isin(dbi)
-                    if fx.get("fixed"):
-                        print(f"[selfheal] stocks.isin-backfill: {fx}")
-                finally:
-                    dbi.close()
-            except Exception as e:
-                print(f"[selfheal] isin-backfill fel: {e}")
-
         threading.Thread(target=_boot_selfheal_dashboard, daemon=True).start()
 
         # 📋 Market-bullets var ALDRIG schemalagd — bara manuell endpoint.
