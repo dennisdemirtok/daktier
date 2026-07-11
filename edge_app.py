@@ -2080,6 +2080,97 @@ def api_stocks():
     return jsonify(result)
 
 
+def _log_koplista_snapshot(db):
+    """Loggar dagens Köplista (topp 10) i screen_snapshots (koplista_v1) —
+    grunden för det mätbara live-facitet. Idempotent per (datum, ticker)."""
+    from edge_db import _upsert_sql
+    kop = _agent_screen_stocks(db, screen="koplista", country="SE,US", limit=10)
+    snap_date = datetime.now().strftime("%Y-%m-%d")
+    ins_sql = _upsert_sql("screen_snapshots",
+        ["snapshot_date", "screen_name", "country", "ticker", "isin",
+         "name", "price", "quality_score", "value_score",
+         "momentum_score", "last_updated"],
+        ["snapshot_date", "screen_name", "ticker"])
+    saved = 0
+    for stk in (kop.get("stocks") or []):
+        if not stk.get("ticker"):
+            continue
+        try:
+            db.execute(ins_sql, (snap_date, "koplista_v1",
+                stk.get("country"), stk.get("ticker"), stk.get("isin"),
+                stk.get("name"), stk.get("price"),
+                stk.get("roce_pct"), stk.get("ev_ebit"),
+                stk.get("ret_6m_pct"), datetime.now().isoformat()))
+            saved += 1
+        except Exception:
+            try: db.rollback()
+            except Exception: pass
+    db.commit()
+    return saved
+
+
+@app.route("/api/koplista")
+def api_koplista():
+    """📈 DAKTIER-listan för dashboard-fliken: dagens lista + NY/UT-diff mot
+    senaste snapshot + live-facit per kohort (snittavkastning sedan loggdatum)."""
+    from edge_db import _fetchall, _fetchone, _ph
+    ph = _ph()
+    db = get_db()
+    try:
+        cur = _agent_screen_stocks(db, screen="koplista", country="SE,US", limit=25)
+        stocks = cur.get("stocks") or []
+        # NY/UT-diff mot senast loggade snapshot (exkl. dagens)
+        prev_t, prev_date = set(), None
+        today = datetime.now().strftime("%Y-%m-%d")
+        try:
+            r = _fetchone(db, f"SELECT MAX(snapshot_date) AS d FROM screen_snapshots "
+                              f"WHERE screen_name = 'koplista_v1' AND snapshot_date < {ph}",
+                          (today,))
+            d = dict(r).get("d") if r else None
+            prev_date = str(d)[:10] if d else None
+            if prev_date:
+                rows = _fetchall(db, f"SELECT ticker FROM screen_snapshots "
+                                     f"WHERE screen_name = 'koplista_v1' AND snapshot_date = {ph}",
+                                 (prev_date,))
+                prev_t = {dict(x)["ticker"] for x in rows}
+        except Exception:
+            try: db.rollback()
+            except Exception: pass
+        cur_top10 = {s.get("ticker") for s in stocks[:10] if s.get("ticker")}
+        for s in stocks:
+            s["is_new"] = bool(prev_t) and s.get("ticker") not in prev_t
+        dropped = sorted(prev_t - cur_top10) if prev_t else []
+        # Live-facit: per kohortdatum — snitt-% från loggat pris till senaste kurs
+        history = []
+        try:
+            rows = _fetchall(db, """
+                SELECT sn.snapshot_date AS d,
+                       AVG(CASE WHEN sn.price > 0 AND s.last_price > 0
+                                THEN 100.0 * (s.last_price / sn.price - 1) END) AS avg_ret,
+                       COUNT(*) AS n
+                FROM screen_snapshots sn
+                JOIN stocks s ON s.short_name = sn.ticker
+                WHERE sn.screen_name = 'koplista_v1'
+                GROUP BY sn.snapshot_date
+                ORDER BY sn.snapshot_date
+            """)
+            for r in rows:
+                d = dict(r)
+                history.append({"date": str(d["d"])[:10],
+                                "avg_ret_pct": (round(d["avg_ret"], 2)
+                                                if d.get("avg_ret") is not None else None),
+                                "n": d.get("n")})
+        except Exception:
+            try: db.rollback()
+            except Exception: pass
+        return jsonify({"stocks": stocks, "n": len(stocks),
+                        "prev_snapshot_date": prev_date, "dropped": dropped,
+                        "history": history, "rules": cur.get("rules") or "",
+                        "note": cur.get("note")})
+    finally:
+        db.close()
+
+
 @app.route("/api/trending")
 def api_trending():
     ck = f"trending|{request.query_string.decode()}"
@@ -10036,10 +10127,14 @@ giltig. Sätt INTE påhittade siffror — bara data du faktiskt har.
 när du hämtat kvartals-/historikdata (get_quarterly_trends /
 get_borsdata_history). Förstahandsval: kvartalsomsättning (bar, vänster) +
 rörelsemarginal % (line, höger) för de senaste 8 kvartalen — det visar
-trend + lönsamhet i EN bild. Bra tillägg när relevant: track-record som
-bar-chart (hit-rate per lins) och FCF-utveckling per år. Diagrammet ersätter
-INTE kvartalstabellen — de kompletterar. Grafa ENDAST tal du fått ur verktyg
-eller kontext — aldrig uppskattningar eller minnessiffror.
+trend + lönsamhet i EN bild. Diagrammet ersätter INTE kvartalstabellen —
+de kompletterar. Grafa ENDAST tal du fått ur verktyg eller kontext —
+aldrig uppskattningar eller minnessiffror.
+
+**Track-record-grafen:** när bolagskontexten innehåller per-lins-träffsäkerhet
+(hit-rate med n) → visa den som bar-chart: x = linserna (Swing/Quality/Value),
+en bar-serie "Träffsäkerhet %" + en line-serie "Slump 50%" med data [50,50,50].
+Det gör confidence VISUELL i stället för en siffra i löptext.
 
 **KRITISKT — Position-plan-konsistens (TVINGANDE):**
 Du får ALDRIG ge tre olika positions-rekommendationer i samma rapport.
@@ -11683,7 +11778,12 @@ icke-instruerande.
 
 **Steg 7 — FAS 1 output-struktur** (OBLIGATORISK)
 
-1. **Header**: Klassificering (1 mening med motivering)
+1. **Header**: Klassificering (1 mening med motivering). Om nästa
+   rapportdatum finns i bolagskontexten och ligger inom 45 dagar → visa
+   DIREKT under headern en badge-rad i exakt detta format:
+   > 📅 **Rapport om X dagar** (YYYY-MM-DD) — väg in i timing/entry.
+   Vid <10 dagar: rekommendera uttryckligen om man bör invänta rapporten
+   innan första tranchen (som huvudregel: ja för nya positioner).
 2. **Strategi-matris** som en ren tabell ( INGA färgcirklar) — kolumner
    Strategi | Signal | Motivering, med raderna Swing / Quality / Value och
    Signal som text (STARK KÖP / KÖP / KÖP-LIGHT / HÅLL / TA PROFIT / UNDVIK).
@@ -18832,30 +18932,8 @@ def _startup():
                 try:
                     res = compute_trend_snapshot(dbt)
                     print(f"[AUTO] Trend-snapshot klar: {res}")
-                    kop = _agent_screen_stocks(dbt, screen="koplista",
-                                               country="SE,US", limit=10)
-                    snap_date = datetime.now().strftime("%Y-%m-%d")
-                    ins_sql = _upsert_sql("screen_snapshots",
-                        ["snapshot_date", "screen_name", "country", "ticker", "isin",
-                         "name", "price", "quality_score", "value_score",
-                         "momentum_score", "last_updated"],
-                        ["snapshot_date", "screen_name", "ticker"])
-                    saved = 0
-                    for stk in (kop.get("stocks") or []):
-                        if not stk.get("ticker"):
-                            continue
-                        try:
-                            dbt.execute(ins_sql, (snap_date, "koplista_v1",
-                                stk.get("country"), stk.get("ticker"), stk.get("isin"),
-                                stk.get("name"), stk.get("price"),
-                                stk.get("roce_pct"), stk.get("ev_ebit"),
-                                stk.get("ret_6m_pct"), datetime.now().isoformat()))
-                            saved += 1
-                        except Exception:
-                            try: dbt.rollback()
-                            except Exception: pass
-                    dbt.commit()
-                    print(f"[AUTO] Köplista loggad: {saved} bolag ({snap_date})")
+                    saved = _log_koplista_snapshot(dbt)
+                    print(f"[AUTO] Köplista loggad: {saved} bolag")
                 finally:
                     dbt.close()
             except Exception as e:
@@ -18990,6 +19068,24 @@ def _startup():
                     print("[selfheal] market_bullets klara")
             except Exception as e:
                 print(f"[selfheal] market_bullets fel: {e}")
+            try:
+                # Köplistans facit: säkerställ att dagens kohort är loggad
+                # (nattjobbet kan ha missats vid deploy/omstart).
+                from edge_db import _ph as _shph
+                dbk = get_db()
+                try:
+                    rk = _shf(dbk, f"SELECT COUNT(*) AS n FROM screen_snapshots "
+                                   f"WHERE screen_name = 'koplista_v1' "
+                                   f"AND snapshot_date = {_shph()}",
+                              (datetime.now().strftime("%Y-%m-%d"),))
+                    n_today = dict(rk).get("n") if rk else 0
+                    if not n_today:
+                        saved = _log_koplista_snapshot(dbk)
+                        print(f"[selfheal] Köplista dagens kohort loggad: {saved}")
+                finally:
+                    dbk.close()
+            except Exception as e:
+                print(f"[selfheal] koplista-logg fel: {e}")
 
         threading.Thread(target=_boot_selfheal_dashboard, daemon=True).start()
 

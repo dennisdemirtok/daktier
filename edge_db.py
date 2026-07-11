@@ -2806,18 +2806,18 @@ def search_stocks(db, query="", country="", sort="owners", order="desc",
 
     if query:
         if _use_postgres():
-            where_parts.append("(name ILIKE %s OR short_name ILIKE %s OR isin ILIKE %s)")
+            where_parts.append("(s.name ILIKE %s OR s.short_name ILIKE %s OR s.isin ILIKE %s)")
         else:
-            where_parts.append("(name LIKE ? OR short_name LIKE ? OR isin LIKE ?)")
+            where_parts.append("(s.name LIKE ? OR s.short_name LIKE ? OR s.isin LIKE ?)")
         q = f"%{query}%"
         params.extend([q, q, q])
 
     if country:
-        where_parts.append(f"country = {ph}")
+        where_parts.append(f"s.country = {ph}")
         params.append(country)
 
     if min_owners > 0:
-        where_parts.append(f"number_of_owners >= {ph}")
+        where_parts.append(f"s.number_of_owners >= {ph}")
         params.append(min_owners)
 
     where_clause = "WHERE " + " AND ".join(where_parts) if where_parts else ""
@@ -2846,6 +2846,7 @@ def search_stocks(db, query="", country="", sort="owners", order="desc",
         "ocf": "operating_cash_flow",
         "roe": "return_on_equity",
         "roce": "return_on_capital_employed",
+        "trend": "t.pct_vs_ma200",
         "price_ytd": "ytd_change_pct",
         "price_1d": "one_day_change_pct",
         "price_1w": "one_week_change_pct",
@@ -2864,10 +2865,10 @@ def search_stocks(db, query="", country="", sort="owners", order="desc",
     null_sensitive = {
         "operating_cash_flow", "return_on_equity", "return_on_capital_employed",
         "pe_ratio", "direct_yield", "rsi14", "ytd_change_pct", "market_cap",
-        "short_selling_ratio",
+        "short_selling_ratio", "t.pct_vs_ma200",
     }
 
-    total_row = _fetchone(db, f"SELECT COUNT(*) as cnt FROM stocks {where_clause}", params if params else None)
+    total_row = _fetchone(db, f"SELECT COUNT(*) as cnt FROM stocks s {where_clause}", params if params else None)
     total = total_row["cnt"] if _use_postgres() else total_row[0]
 
     # When ranking a null-sensitive column descending, exclude NULL rows from
@@ -2880,8 +2881,13 @@ def search_stocks(db, query="", country="", sort="owners", order="desc",
         else:
             extra_where = f" WHERE {sort_col} IS NOT NULL"
 
+    # Trend-kolumn (pris vs MA200 + 6m-momentum) ur trend_snapshot.
+    # JOIN på s.isin = PK-säkert (aldrig raddubbletter); saknad trend → NULL.
     sql = f"""
-        SELECT * FROM stocks
+        SELECT s.*, t.pct_vs_ma200 AS pct_vs_ma200, t.ret_6m AS trend_ret_6m,
+               t.above_ma200 AS above_ma200
+        FROM stocks s
+        LEFT JOIN trend_snapshot t ON t.isin = s.isin
         {where_clause}{extra_where}
         ORDER BY {sort_col} {order_dir} {nulls_clause}
         LIMIT {ph} OFFSET {ph}

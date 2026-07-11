@@ -20,8 +20,20 @@
             --green-dark: #006c46;
             --red: #be0033;
             --red-light: rgba(190,0,51,0.08);
-            --blue: #0035c7;
-            --blue-light: rgba(0,53,199,0.08);
+            /* ── DAKTIER brand (ur loggan: marinblå + cyan) ── */
+            --brand-navy: #16365C;
+            --brand-navy-deep: #0E2440;
+            --brand-cyan: #38B6D9;
+            --brand-cyan-light: rgba(56,182,217,0.12);
+            --blue: var(--brand-navy);
+            --blue-light: rgba(22,54,92,0.08);
+            /* ── Typskala (genomgående, Inter) ── */
+            --fs-xs: 11px;
+            --fs-sm: 12.5px;
+            --fs-base: 14px;
+            --fs-md: 16px;
+            --fs-lg: 20px;
+            --fs-xl: 28px;
             --orange: #FF8A00;
             --orange-light: rgba(255,138,0,0.08);
             --purple: #7C3AED;
@@ -69,7 +81,7 @@
         .topnav-burger { display: none; background: none; border: none; cursor: pointer; color: var(--ink-soft); padding: 8px; border-radius: 8px; }
         .topnav-burger:hover { background: var(--surface-low); }
         .brand { display: flex; align-items: center; gap: 9px; cursor: pointer; padding: 4px 14px 4px 4px; margin-right: 6px; user-select: none; }
-        .brand-logo { width: 30px; height: 30px; background: linear-gradient(135deg, #0f172a, #1e3a8a); border-radius: 9px; display: flex; align-items: center; justify-content: center; color: #fff; font-weight: 800; font-size: 15px; box-shadow: 0 2px 6px rgba(30,58,138,0.25); }
+        .brand-logo { width: 30px; height: 30px; background: linear-gradient(135deg, var(--brand-navy-deep), var(--brand-navy)); border-radius: 9px; display: flex; align-items: center; justify-content: center; color: #fff; font-weight: 800; font-size: 15px; box-shadow: 0 2px 6px rgba(22,54,92,0.28); }
         .brand-name { font-size: 16px; font-weight: 800; letter-spacing: -0.4px; color: var(--ink); }
         .topnav-menu { display: flex; align-items: center; gap: 2px; }
         .topnav-item { display: inline-flex; align-items: center; gap: 7px; padding: 8px 14px; border: none; background: none; cursor: pointer;
@@ -949,7 +961,12 @@ window.showWelcome = function() {
             <span class="material-symbols-outlined">menu</span>
         </button>
         <div class="brand" onclick="navTo('agent')">
-            <div class="brand-logo">D</div>
+            <div class="brand-logo" aria-hidden="true">
+                <svg viewBox="0 0 24 24" width="17" height="17" fill="none">
+                    <path d="M12 2.5l4.4 5.4h-2.6v3.6h-3.6V7.9H7.6z" fill="#ffffff"/>
+                    <path d="M12 21.5l-4.4-5.4h2.6v-3.6h3.6v3.6h2.6z" fill="var(--brand-cyan)"/>
+                </svg>
+            </div>
             <span class="brand-name">DAKTIER</span>
         </div>
         <nav class="topnav-menu" id="topnavMenu"></nav>
@@ -1214,6 +1231,18 @@ async function fetchData(append = false) {
             ck = cacheKey('signals', params);
             dataKey = 'signals';
             renderFn = renderSignalsTable;
+        } else if (currentTab === 'koplista') {
+            // Köplistan: egen vy (lista + diff + facit-kurva) — ingen paginering
+            renderKoplistaLoading();
+            try {
+                const r = await fetch('/api/koplista');
+                if (!r.ok) throw new Error('HTTP ' + r.status);
+                renderKoplista(await r.json());
+            } catch (e) {
+                renderKoplistaError(e);
+            }
+            isLoadingMore = false;
+            return;
         } else if (currentTab === 'stocks') {
             params = {q:searchQuery, country:countryFilter, sort:sortCol, order:sortOrder, limit:PAGE_SIZE, offset:currentOffset, min_owners:minOwners};
             url = '/api/stocks?' + new URLSearchParams(params);
@@ -1562,6 +1591,7 @@ function switchTab(tab, el) {
 const NAV_SECTIONS = {
     agent:     { label: 'Agent',         icon: 'forum',                 tab: 'agent',     sub: [] },
     dashboard: { label: 'Dashboard',     icon: 'space_dashboard',       tab: 'dashboard', sub: [] },
+    koplista:  { label: 'Köplistan',     icon: 'fact_check',            tab: 'koplista',  sub: [] },
     owners:    { label: 'Ägarmomentum',  icon: 'local_fire_department', tab: 'hotmovers', sub: [] },
     stocks:    { label: 'Aktier',        icon: 'bar_chart',             tab: 'stocks',    sub: [
                     { label: 'Alla aktier', icon: 'bar_chart',       tab: 'stocks' },
@@ -1581,9 +1611,9 @@ const NAV_SECTIONS = {
                 ] },
 };
 // Edge Signals sist (lägre prioritet, användaren osäker på den)
-const PRIMARY_ORDER = ['agent', 'dashboard', 'owners', 'stocks', 'edge'];
+const PRIMARY_ORDER = ['agent', 'dashboard', 'koplista', 'owners', 'stocks', 'edge'];
 const TAB_TO_SECTION = {
-    agent: 'agent', dashboard: 'dashboard', hotmovers: 'owners',
+    agent: 'agent', dashboard: 'dashboard', koplista: 'koplista', hotmovers: 'owners',
     stocks: 'stocks', metrics: 'stocks', ocf: 'stocks', insiders: 'stocks', backtest: 'stocks',
     signals: 'edge', portfolio: 'settings',
     // legacy/borttagna tabbar mappar till dashboard
@@ -1592,7 +1622,7 @@ const TAB_TO_SECTION = {
 
 // ── v3.9: Hash-baserad URL-routing (delbara/bokmärkbara URL:er per vy) ──
 const TAB_HASH = {
-    agent: '/agent', dashboard: '/dashboard', hotmovers: '/agarmomentum',
+    agent: '/agent', dashboard: '/dashboard', koplista: '/koplistan', hotmovers: '/agarmomentum',
     stocks: '/aktier', metrics: '/aktier/nyckeltal', ocf: '/aktier/kassaflode',
     insiders: '/aktier/insiders', backtest: '/aktier/utredning',
     signals: '/edge-signals', portfolio: '/installningar/simulering',
@@ -2132,6 +2162,115 @@ function renderSignalsTable() {
 
 // ── Render Stocks Table ──────────────────────────────
 
+// ══ 📈 KÖPLISTAN — kvalitet × värdering × trend (följbar, med live-facit) ══
+let _kopChart = null;
+function renderKoplistaLoading() {
+    document.getElementById('content').innerHTML =
+        '<div class="loading-wrap"><div class="spinner"></div><div style="margin-top:10px;color:var(--text-muted);font-size:var(--fs-sm)">Hämtar dagens Köplista…</div></div>';
+}
+function renderKoplistaError(e) {
+    document.getElementById('content').innerHTML = `
+        <div style="background:#fef2f2;border:1px solid #fecaca;border-radius:var(--radius);padding:18px;color:#991b1b;font-size:var(--fs-base)">
+            Kunde inte hämta Köplistan (${(e && e.message) || 'okänt fel'}).
+            <button class="refresh-btn" style="margin-left:10px" onclick="fetchData()">Försök igen</button>
+        </div>`;
+}
+function renderKoplista(d) {
+    const stocks = (d && d.stocks) || [];
+    const top10 = stocks.slice(0, 10);
+    const bubblare = stocks.slice(10);
+    const fmtP = v => v == null ? '–' : (v > 0 ? '+' : '') + Number(v).toFixed(1) + '%';
+    const cls = v => v > 0 ? 'num-pos' : v < 0 ? 'num-neg' : 'num-zero';
+
+    const rowHtml = (s, i) => `<tr>
+        <td style="font-weight:700;color:var(--brand-navy)">${i + 1}</td>
+        <td>${FLAGS[s.country] || ''} <span class="stock-name" onclick="openStockByTicker('${(s.ticker || '').replace(/'/g, "\\'")}')">${s.name || s.ticker}</span>
+            ${s.is_new ? '<span style="background:var(--brand-cyan);color:#fff;font-size:10px;font-weight:800;padding:2px 7px;border-radius:10px;margin-left:6px;vertical-align:middle">NY</span>' : ''}
+            <br><span class="stock-ticker">${s.ticker || ''}</span></td>
+        <td style="text-align:right">${s.price != null ? Number(s.price).toFixed(2) : '–'} ${s.currency || ''}</td>
+        <td style="text-align:right;font-weight:600">${s.roce_pct != null ? Number(s.roce_pct).toFixed(0) + '%' : '–'}</td>
+        <td style="text-align:right">${s.ev_ebit != null ? Number(s.ev_ebit).toFixed(1) : '–'}</td>
+        <td style="text-align:right;font-weight:600" class="${cls(s.vs_ma200_pct)}">${fmtP(s.vs_ma200_pct)}</td>
+        <td style="text-align:right" class="${cls(s.ret_6m_pct)}">${fmtP(s.ret_6m_pct)}</td>
+    </tr>`;
+
+    const emptyNote = !stocks.length ? `
+        <div style="background:var(--brand-cyan-light);border-radius:var(--radius);padding:16px;font-size:var(--fs-base);color:var(--brand-navy)">
+            ${(d && d.note) || 'Inga bolag klarar gaten just nu — listan uppdateras varje natt efter prissynken.'}
+        </div>` : '';
+
+    const droppedHtml = (d.dropped && d.dropped.length) ? `
+        <div style="margin-top:10px;font-size:var(--fs-sm);color:var(--text-muted)">
+            <strong style="color:#991b1b">Ut ur listan</strong> (sedan ${d.prev_snapshot_date}):
+            ${d.dropped.map(t => `<span style="background:#fef2f2;color:#991b1b;padding:2px 8px;border-radius:10px;margin-left:4px;font-weight:600">${t}</span>`).join('')}
+        </div>` : '';
+
+    const hist = (d.history || []).filter(h => h.avg_ret_pct != null);
+    const histBlock = hist.length ? `
+        <div style="background:var(--white);border-radius:var(--radius);padding:16px;margin-top:14px;box-shadow:var(--shadow-hover)">
+            <div style="font-size:var(--fs-md);font-weight:700;color:var(--brand-navy);margin-bottom:2px">Live-facit per kohort</div>
+            <div style="font-size:var(--fs-sm);color:var(--text-muted);margin-bottom:10px">Snittavkastning för listans bolag sedan respektive loggdatum — mätt på riktiga listor, inte backtest.</div>
+            <div style="height:220px"><canvas id="kopHistChart"></canvas></div>
+        </div>` : `
+        <div style="margin-top:14px;font-size:var(--fs-sm);color:var(--text-muted)">
+            📊 Live-facit byggs upp från och med idag — varje dags lista loggas och följs upp mot verklig avkastning.
+        </div>`;
+
+    document.getElementById('content').innerHTML = `
+        <div style="background:linear-gradient(135deg,var(--brand-navy-deep),var(--brand-navy));border-radius:var(--radius);padding:18px 20px;color:#fff;margin-bottom:14px">
+            <div style="font-size:var(--fs-lg);font-weight:800;letter-spacing:0.2px">📈 DAKTIER-listan</div>
+            <div style="font-size:var(--fs-sm);opacity:0.85;margin-top:4px">Kvalitet × värdering × trend — en följbar långsiktig lista med tydliga köp- och säljregler. Uppdateras varje natt.</div>
+            <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:12px;font-size:var(--fs-xs);font-weight:700">
+                <span style="background:rgba(255,255,255,0.14);padding:4px 10px;border-radius:12px">ROCE ≥ 15%</span>
+                <span style="background:rgba(255,255,255,0.14);padding:4px 10px;border-radius:12px">EV/EBIT 4–25</span>
+                <span style="background:var(--brand-cyan);padding:4px 10px;border-radius:12px">Pris &gt; MA200</span>
+                <span style="background:var(--brand-cyan);padding:4px 10px;border-radius:12px">6m-momentum &gt; 0</span>
+                <span style="background:rgba(255,255,255,0.14);padding:4px 10px;border-radius:12px">Exit: −10% under MA200 eller fundament viker</span>
+            </div>
+        </div>
+        ${emptyNote}
+        ${stocks.length ? `
+        <div class="table-container">
+            <table><thead><tr>
+                <th style="width:36px">#</th><th>Bolag</th>
+                <th style="text-align:right">Pris</th>
+                <th style="text-align:right" title="Avkastning på sysselsatt kapital">ROCE</th>
+                <th style="text-align:right" title="Bolagsvärde / rörelseresultat">EV/EBIT</th>
+                <th style="text-align:right" title="Pris vs 200-dagars glidande medelvärde">vs MA200</th>
+                <th style="text-align:right">6 mån</th>
+            </tr></thead><tbody>${top10.map(rowHtml).join('')}</tbody></table>
+        </div>
+        ${bubblare.length ? `<details style="margin-top:10px"><summary style="cursor:pointer;font-size:var(--fs-sm);font-weight:600;color:var(--brand-navy)">Bubblare (plats 11–${stocks.length})</summary>
+            <div class="table-container" style="margin-top:8px"><table><tbody>${bubblare.map((s, i) => rowHtml(s, i + 10)).join('')}</tbody></table></div></details>` : ''}
+        ${droppedHtml}` : ''}
+        ${histBlock}
+        <div style="margin-top:14px;font-size:var(--fs-xs);color:var(--text-muted)">
+            Beslutsstöd, inte personlig rådgivning. Följ upp månadsvis — inte dagligen. Historisk avkastning garanterar inget.
+        </div>`;
+
+    if (hist.length && window.Chart) {
+        try { if (_kopChart) { _kopChart.destroy(); _kopChart = null; } } catch (e) {}
+        const ctx = document.getElementById('kopHistChart');
+        if (ctx) {
+            _kopChart = new Chart(ctx.getContext('2d'), {
+                type: 'line',
+                data: { labels: hist.map(h => h.date),
+                        datasets: [{ label: 'Snitt % sedan loggdatum', data: hist.map(h => h.avg_ret_pct),
+                                     borderColor: '#38B6D9', backgroundColor: 'rgba(56,182,217,0.12)',
+                                     fill: true, tension: 0.25, pointRadius: 3 }] },
+                options: { responsive: true, maintainAspectRatio: false,
+                           plugins: { legend: { display: false } },
+                           scales: { y: { ticks: { callback: v => v + '%' } } } }
+            });
+        }
+    }
+}
+function openStockByTicker(ticker) {
+    if (!ticker) return;
+    const inp = document.getElementById('navStockSearch');
+    if (inp) { inp.value = ticker; inp.dispatchEvent(new Event('input')); inp.focus(); }
+}
+
 function renderStocksTable() {
     const rows = allLoadedRows.map((s, i) => {
         const flag = FLAGS[s.country] || '🏳️';
@@ -2150,6 +2289,7 @@ function renderStocksTable() {
             <td style="text-align:right" class="${pctClass(chYtd)}">${fmtPct(chYtd)}</td>
             <td style="text-align:right" class="${pctClass(ch1y)}">${fmtPct(ch1y)}</td>
             <td style="text-align:right">${shortPct > 0 ? (shortPct*100).toFixed(1)+'%' : '-'}</td>
+            <td style="text-align:right;font-weight:600" class="${pctClass(s.pct_vs_ma200)}">${s.pct_vs_ma200 != null ? (s.pct_vs_ma200 > 0 ? '+' : '') + s.pct_vs_ma200.toFixed(0) + '%' : '–'}</td>
             <td style="text-align:right">${s.last_price ? s.last_price.toFixed(2) : '-'}</td>
         </tr>`;
     }).join('');
@@ -2166,6 +2306,7 @@ function renderStocksTable() {
                 <th onclick="doSort('change_ytd')" class="${thClass('change_ytd')}" style="text-align:right">YTD${sortArrow('change_ytd')}</th>
                 <th onclick="doSort('change_1y')" class="${thClass('change_1y')}" style="text-align:right">1Y${sortArrow('change_1y')}</th>
                 <th onclick="doSort('short')" class="${thClass('short')}" style="text-align:right">Kort %${sortArrow('short')}</th>
+                <th onclick="doSort('trend')" class="${thClass('trend')}" style="text-align:right" title="Pris vs 200-dagars glidande medelvärde — positivt = stigande trend">Trend${sortArrow('trend')}</th>
                 <th onclick="doSort('price')" class="${thClass('price')}" style="text-align:right">Pris${sortArrow('price')}</th>
             </tr></thead><tbody>${rows}</tbody></table>
         </div>
