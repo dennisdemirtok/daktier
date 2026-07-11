@@ -6322,9 +6322,11 @@ RÅTEXT:
                "content-type": "application/json"}
     try:
         import httpx
-        with httpx.Client(timeout=90.0) as client:
+        # 12000: hela dagens digest på svenska + thinking räknas mot taket
+        # (4000 klippte JSON:en → parse_failed → bullets frös på 15 juni)
+        with httpx.Client(timeout=180.0) as client:
             r = client.post("https://api.anthropic.com/v1/messages", headers=headers,
-                            json={"model": _sonnet(), "max_tokens": 4000,
+                            json={"model": _sonnet(), "max_tokens": 12000,
                                   "messages": [{"role": "user", "content": prompt}]})
         if r.status_code != 200:
             print(f"[bullets] Claude HTTP {r.status_code}", file=sys.stderr)
