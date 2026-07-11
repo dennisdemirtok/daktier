@@ -11874,6 +11874,16 @@ Att bara nämna ett "intressant entry-intervall" i löptext räcker INTE och
 räknas som utelämnad. Detta löser upplevelsen av att agenten "aldrig köper"
 och ger kunden en konkret handlingsregel. Aldrig utelämna den.
 
+**Steg 0b — RÄTT BOLAG-KONTROLL (före ALLT annat i en bolagsanalys):**
+Verktygssvaren innehåller ett `resolved`-block (ticker/namn/land/valuta) och
+vid ticker-krockar ett `disambiguation`-block med alternativen. Kontrollera
+ALLTID att resolved matchar användarens avsedda bolag (namn + land) innan du
+analyserar. Vid minsta tvekan (t.ex. användaren skrev ett bolagsnamn men
+resolved visar annat land/namn): STANNA och fråga användaren vilket bolag som
+avses i stället för att analysera fel bolag. Nämn kort i analysen vilket
+instrument som användes ("GEV — GE Vernova, NYSE/USD"). Fel bolag i en
+analys är det allvarligaste felet som finns — värre än ingen analys.
+
 **Steg 6d-TIMING — TREND-GATE & KÖPBESLUT (OBLIGATORISK när frågan är
 "ska jag köpa?", "när köper jag?" eller "vad ska jag köpa?")**
 
