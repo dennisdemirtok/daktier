@@ -9523,6 +9523,40 @@ def _gather_brief_data(db):
     return brief
 
 
+def _brief_db_get(today):
+    """Dagens brief ur meta-tabellen — in-memory-cachen är PER gunicorn-worker
+    (POST cachade i worker A, GET träffade worker B → onödig omgenerering)."""
+    import json as jsonlib
+    try:
+        from edge_db import _fetchone, _ph
+        db = get_db()
+        try:
+            row = _fetchone(db, f"SELECT value FROM meta WHERE key = {_ph()}",
+                            (f"brief:{today}",))
+        finally:
+            db.close()
+        if row:
+            return jsonlib.loads(dict(row)["value"])
+    except Exception:
+        pass
+    return None
+
+
+def _brief_db_put(today, data):
+    import json as jsonlib
+    try:
+        from edge_db import _upsert_sql
+        db = get_db()
+        try:
+            db.execute(_upsert_sql("meta", ["key", "value"], ["key"]),
+                       (f"brief:{today}", jsonlib.dumps(data, ensure_ascii=False)))
+            db.commit()
+        finally:
+            db.close()
+    except Exception as e:
+        print(f"[brief] db-cache skrivfel: {e}", file=sys.stderr)
+
+
 @app.route("/api/ai-morning-brief", methods=["GET", "POST"])
 def api_morning_brief():
     """Dagens AI-morgonbrief med portföljanalys + stockpick."""
@@ -9533,11 +9567,21 @@ def api_morning_brief():
     if request.method == "GET":
         if morning_brief_cache["date"] == today and morning_brief_cache["data"]:
             return jsonify({"cached": True, **morning_brief_cache["data"]})
+        dbb = _brief_db_get(today)
+        if dbb:
+            morning_brief_cache["date"] = today
+            morning_brief_cache["data"] = dbb
+            return jsonify({"cached": True, **dbb})
         return jsonify({"cached": False, "loading": morning_brief_cache["loading"]})
 
     # POST — generera ny
     if morning_brief_cache["date"] == today and morning_brief_cache["data"]:
         return jsonify({"cached": True, **morning_brief_cache["data"]})
+    dbb = _brief_db_get(today)
+    if dbb:
+        morning_brief_cache["date"] = today
+        morning_brief_cache["data"] = dbb
+        return jsonify({"cached": True, **dbb})
     if morning_brief_cache["loading"]:
         return jsonify({"status": "loading"})
 
@@ -9591,6 +9635,7 @@ Svara i EXAKT detta JSON-format (inget annat):
             analysis = jsonlib.loads(text[start:end])
             morning_brief_cache["date"] = today
             morning_brief_cache["data"] = analysis
+            _brief_db_put(today, analysis)  # cross-worker-cache
             return jsonify({"cached": True, **analysis})
         return jsonify({"error": "Kunde inte parsa AI-svar"}), 500
     except Exception as e:
