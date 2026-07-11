@@ -568,6 +568,16 @@ def _sonnet():
         return _MODEL_FALLBACK["sonnet"]
 
 
+def _first_text(resp_json):
+    """Första text-blocket ur ett Messages-svar. Sonnet 5 (adaptive thinking)
+    lägger thinking-block FÖRST i content — content[0]['text'] kraschar då.
+    Denna dödade morgonbrief + portföljanalys tyst efter modellbytet."""
+    for b in (resp_json or {}).get("content", []) or []:
+        if isinstance(b, dict) and b.get("type") == "text" and b.get("text"):
+            return b["text"]
+    return ""
+
+
 def _is_market_open():
     """Kolla om NÅGON börs är öppen (SE 9:00-17:30 CET, US 15:30-22:00 CET)."""
     import pytz
@@ -4582,7 +4592,7 @@ Score-guide:
             return jsonify({"error": f"Claude API error: {resp.status_code}"}), 500
 
         result = resp.json()
-        text = result["content"][0]["text"]
+        text = _first_text(result)
 
         # Parsa JSON från svaret
         import json
@@ -5925,22 +5935,33 @@ REGLER:
     }
     payload = {
         "model": _sonnet(),
-        # 4500: med date + source_url per item blev 3000 för snålt — modellen
-        # hann bara skriva 2 av 8-12 items innan taket.
-        "max_tokens": 4500,
+        # 10000: Sonnet 5:s adaptive thinking räknas MOT taket — 4500 åts
+        # upp av tänkande + 8-12 items med date/source_url.
+        "max_tokens": 10000,
         "messages": [{"role": "user", "content": prompt}],
         "tools": [{"type": "web_search_20250305", "name": "web_search",
                    "max_uses": 5}],
     }
     try:
         import httpx
-        with httpx.Client(timeout=120.0) as client:
-            r = client.post("https://api.anthropic.com/v1/messages",
-                            headers=headers, json=payload)
-        if r.status_code != 200:
-            print(f"[market news] HTTP {r.status_code}: {r.text[:200]}", file=sys.stderr)
+        resp = None
+        with httpx.Client(timeout=180.0) as client:
+            for _round in range(4):
+                r = client.post("https://api.anthropic.com/v1/messages",
+                                headers=headers, json=payload)
+                if r.status_code != 200:
+                    print(f"[market news] HTTP {r.status_code}: {r.text[:200]}", file=sys.stderr)
+                    return None, 0.0
+                resp = r.json()
+                # pause_turn: web_search (server-verktyg) pausade turen —
+                # skicka tillbaka innehållet och låt modellen fortsätta.
+                if resp.get("stop_reason") != "pause_turn":
+                    break
+                payload = dict(payload)
+                payload["messages"] = payload["messages"] + [
+                    {"role": "assistant", "content": resp.get("content") or []}]
+        if resp is None:
             return None, 0.0
-        resp = r.json()
     except Exception as e:
         print(f"[market news] request fel: {e}", file=sys.stderr)
         return None, 0.0
@@ -6557,17 +6578,27 @@ REGLER:
 - Saklig ton, inga köp/sälj-råd på enskilda aktier."""
     headers = {"x-api-key": CLAUDE_API_KEY, "anthropic-version": "2023-06-01",
                "content-type": "application/json"}
-    payload = {"model": _sonnet(), "max_tokens": 3000,
+    # 8000: adaptive thinking räknas mot taket (3000 kvävde svaret)
+    payload = {"model": _sonnet(), "max_tokens": 8000,
                "messages": [{"role": "user", "content": prompt}],
                "tools": [{"type": "web_search_20250305", "name": "web_search", "max_uses": 6}]}
     try:
         import httpx
-        with httpx.Client(timeout=120.0) as client:
-            r = client.post("https://api.anthropic.com/v1/messages", headers=headers, json=payload)
-        if r.status_code != 200:
-            print(f"[macro pulse] HTTP {r.status_code}: {r.text[:200]}", file=sys.stderr)
+        resp = None
+        with httpx.Client(timeout=180.0) as client:
+            for _round in range(4):
+                r = client.post("https://api.anthropic.com/v1/messages", headers=headers, json=payload)
+                if r.status_code != 200:
+                    print(f"[macro pulse] HTTP {r.status_code}: {r.text[:200]}", file=sys.stderr)
+                    return None, 0.0
+                resp = r.json()
+                if resp.get("stop_reason") != "pause_turn":
+                    break
+                payload = dict(payload)
+                payload["messages"] = payload["messages"] + [
+                    {"role": "assistant", "content": resp.get("content") or []}]
+        if resp is None:
             return None, 0.0
-        resp = r.json()
     except Exception as e:
         print(f"[macro pulse] request fel: {e}", file=sys.stderr)
         return None, 0.0
@@ -9457,13 +9488,13 @@ Svara i EXAKT detta JSON-format (inget annat):
         resp = httpx.post(
             "https://api.anthropic.com/v1/messages",
             headers={"x-api-key": CLAUDE_API_KEY, "anthropic-version": "2023-06-01", "content-type": "application/json"},
-            json={"model": _sonnet(), "max_tokens": 2048, "messages": [{"role": "user", "content": prompt}]},
+            json={"model": _sonnet(), "max_tokens": 6000, "messages": [{"role": "user", "content": prompt}]},
             timeout=60.0,
         )
         if resp.status_code != 200:
             return jsonify({"error": f"Claude API error: {resp.status_code}"}), 500
 
-        text = resp.json()["content"][0]["text"]
+        text = _first_text(resp.json())
         start = text.find("{"); end = text.rfind("}") + 1
         if start >= 0 and end > start:
             analysis = jsonlib.loads(text[start:end])
@@ -9547,14 +9578,14 @@ Score-guide: 80-100=STARK_KOP, 60-79=KOP, 40-59=NEUTRAL, 20-39=SALJ, 0-19=STARK_
             resp = httpx.post(
                 "https://api.anthropic.com/v1/messages",
                 headers={"x-api-key": CLAUDE_API_KEY, "anthropic-version": "2023-06-01", "content-type": "application/json"},
-                json={"model": _sonnet(), "max_tokens": 4096, "messages": [{"role": "user", "content": prompt}]},
+                json={"model": _sonnet(), "max_tokens": 8000, "messages": [{"role": "user", "content": prompt}]},
                 timeout=120.0,
             )
             if resp.status_code != 200:
                 ai_toplist_state["progress"] = f"Fel: HTTP {resp.status_code}"
                 return
 
-            text = resp.json()["content"][0]["text"]
+            text = _first_text(resp.json())
             start = text.find("{"); end = text.rfind("}") + 1
             parsed = jsonlib.loads(text[start:end])
 
@@ -9625,13 +9656,13 @@ Svara EXAKT i JSON (inget annat):
         resp = httpx.post(
             "https://api.anthropic.com/v1/messages",
             headers={"x-api-key": CLAUDE_API_KEY, "anthropic-version": "2023-06-01", "content-type": "application/json"},
-            json={"model": _sonnet(), "max_tokens": 2048, "messages": [{"role": "user", "content": content}]},
+            json={"model": _sonnet(), "max_tokens": 6000, "messages": [{"role": "user", "content": content}]},
             timeout=60.0,
         )
         if resp.status_code != 200:
             return jsonify({"error": f"Claude API error: {resp.status_code}"}), 500
 
-        text = resp.json()["content"][0]["text"]
+        text = _first_text(resp.json())
         start = text.find("{"); end = text.rfind("}") + 1
         parsed = jsonlib.loads(text[start:end])
 
@@ -9670,12 +9701,12 @@ Svara EXAKT i JSON:
         resp2 = httpx.post(
             "https://api.anthropic.com/v1/messages",
             headers={"x-api-key": CLAUDE_API_KEY, "anthropic-version": "2023-06-01", "content-type": "application/json"},
-            json={"model": _sonnet(), "max_tokens": 2048, "messages": [{"role": "user", "content": rec_prompt}]},
+            json={"model": _sonnet(), "max_tokens": 6000, "messages": [{"role": "user", "content": rec_prompt}]},
             timeout=60.0,
         )
         recs = []
         if resp2.status_code == 200:
-            text2 = resp2.json()["content"][0]["text"]
+            text2 = _first_text(resp2.json())
             s2 = text2.find("{"); e2 = text2.rfind("}") + 1
             if s2 >= 0: recs = jsonlib.loads(text2[s2:e2]).get("recommendations", [])
 
