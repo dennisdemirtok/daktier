@@ -4832,6 +4832,119 @@ def api_refresh_historical_reset():
         db.close()
 
 
+def _cleanup_yahoo_rows(db):
+    """Sanerar kvarlämnade YAHOO_-artefakter (gammal borttagen fallback som
+    skapade pseudo-ISIN för sekundärlistningar — gav GEV-dubbletten CA/CAD):
+    - stocks-rad med isin LIKE 'YAHOO_%' och ANNAN rad med samma short_name
+      → dubbletten RADERAS (skräp som kan vinna resolvern/synas i sök)
+    - ensam YAHOO_-rad → isin blankas (rankas då korrekt som ISIN-lös)
+    - map-rader med YAHOO_-isin raderas.
+    Returnerar {deleted, blanked, map_deleted}."""
+    from edge_db import _ph, _fetchall
+    ph = _ph()
+    deleted = blanked = map_deleted = 0
+    try:
+        rows = _fetchall(db,
+            "SELECT orderbook_id, short_name, isin FROM stocks WHERE isin LIKE 'YAHOO_%'")
+        for r in rows:
+            d = dict(r)
+            twin = db.execute(
+                f"SELECT 1 FROM stocks WHERE short_name = {ph} "
+                f"AND orderbook_id != {ph} AND last_price > 0 LIMIT 1",
+                (d["short_name"], d["orderbook_id"])).fetchone()
+            if twin:
+                db.execute(f"DELETE FROM stocks WHERE orderbook_id = {ph}",
+                           (d["orderbook_id"],))
+                deleted += 1
+            else:
+                db.execute(f"UPDATE stocks SET isin = '' WHERE orderbook_id = {ph}",
+                           (d["orderbook_id"],))
+                blanked += 1
+        cur = db.execute("DELETE FROM borsdata_instrument_map WHERE isin LIKE 'YAHOO_%'")
+        try:
+            map_deleted = cur.rowcount if cur.rowcount and cur.rowcount > 0 else 0
+        except Exception:
+            map_deleted = 0
+        db.commit()
+    except Exception as e:
+        print(f"[yahoo-janitor] fel: {e}", file=sys.stderr)
+        try: db.rollback()
+        except Exception: pass
+    return {"deleted": deleted, "blanked": blanked, "map_deleted": map_deleted}
+
+
+_BD_BACKFILL_STATE = {"running": False, "progress": 0, "total": 0,
+                      "current": "", "last_result": None, "started_at": None}
+
+
+@app.route("/api/borsdata/full-backfill", methods=["POST"])
+def api_borsdata_full_backfill():
+    """FULL-ARKIV (admin): hämtar rapporter för ALLA bolag i instrument_map
+    (ordinarie synken tar bara >=100 Avanza-ägare). Bakgrundsjobb, timmar.
+    Cancel-readiness: säkra hela datasetet lokalt innan ev. uppsägning."""
+    if not session.get("is_admin"):
+        return jsonify({"error": "admin_required"}), 403
+    if _BD_BACKFILL_STATE["running"]:
+        return jsonify({"status": "already_running", **_BD_BACKFILL_STATE}), 202
+
+    def _run():
+        _BD_BACKFILL_STATE.update(running=True, progress=0, total=0, current="",
+                                  started_at=datetime.now().isoformat())
+        try:
+            from edge_db import backfill_borsdata_full
+            dbb = get_db()
+            try:
+                def cb(i, total, isin):
+                    _BD_BACKFILL_STATE.update(progress=i, total=total, current=isin)
+                res = backfill_borsdata_full(dbb, progress_callback=cb)
+                _BD_BACKFILL_STATE["last_result"] = res
+                print(f"[backfill] KLAR: {res}")
+            finally:
+                dbb.close()
+        except Exception as e:
+            _BD_BACKFILL_STATE["last_result"] = {"error": str(e)[:300]}
+            print(f"[backfill] fel: {e}", file=sys.stderr)
+        finally:
+            _BD_BACKFILL_STATE["running"] = False
+
+    threading.Thread(target=_run, daemon=True).start()
+    return jsonify({"status": "started",
+                    "note": "Tar timmar (rate limit). Följ via GET /api/borsdata/backfill-status; "
+                            "beslutsunderlag via GET /api/borsdata/archive-status."}), 202
+
+
+@app.route("/api/borsdata/backfill-status")
+def api_borsdata_backfill_status():
+    if not session.get("is_admin"):
+        return jsonify({"error": "admin_required"}), 403
+    return jsonify(_BD_BACKFILL_STATE)
+
+
+@app.route("/api/borsdata/archive-status")
+def api_borsdata_archive_status():
+    """Cancel-readiness-rapport (admin): hur komplett är lokala arkivet?"""
+    if not session.get("is_admin"):
+        return jsonify({"error": "admin_required"}), 403
+    from edge_db import borsdata_archive_status
+    db = get_db()
+    try:
+        return jsonify(borsdata_archive_status(db))
+    finally:
+        db.close()
+
+
+@app.route("/api/borsdata/cleanup-yahoo", methods=["POST"])
+def api_borsdata_cleanup_yahoo():
+    """Manuell YAHOO_-sanering (admin). Körs även i boot-selfheal."""
+    if not session.get("is_admin"):
+        return jsonify({"error": "admin_required"}), 403
+    db = get_db()
+    try:
+        return jsonify(_cleanup_yahoo_rows(db))
+    finally:
+        db.close()
+
+
 def _refresh_stocks_isin(db):
     """Backfillar stocks.isin från borsdata_instrument_map (NULL/tom/YAHOO_%).
     Var TIDIGARE bara en manuell endpoint som aldrig kördes → nya bolag
@@ -13690,7 +13803,16 @@ def _agent_resolve_stock(db, query):
         f"AND last_price > 0 ORDER BY number_of_owners DESC LIMIT 8",
         (qx, qx),
     ).fetchall()
+    _exact_n = len(cands or [])
     best, q_hit = _pick(cands, qx)
+    if best is not None and _exact_n > 1:
+        # Ticker-krock (t.ex. samma ticker på flera börser): redovisa ALLA
+        # kandidater så agenten kan verifiera mot användarens avsikt.
+        best["_alternatives"] = [
+            {"ticker": dict(c).get("short_name"), "name": dict(c).get("name"),
+             "country": dict(c).get("country"), "currency": dict(c).get("currency")}
+            for c in cands
+            if dict(c).get("orderbook_id") != best.get("orderbook_id")][:4]
     if not best and q_hit:
         return None, (f"'{query}' matchar ett karantänerat instrument (korrupt/felmärkt data). "
                       f"Ingen ren ersättare med samma ticker. Manuell granskning krävs — "
@@ -13845,6 +13967,16 @@ def _agent_get_full_stock(db, query):
     }
     out = {k: d.get(k) for k in keep if k in d}
     out["v2"] = v2
+    # ALDRIG FEL AKTIE: redovisa vilket bolag som matchades + ev. krockar
+    out["resolved"] = {"ticker": d.get("short_name"), "name": d.get("name"),
+                       "country": d.get("country"), "currency": d.get("currency"),
+                       "isin": d.get("isin") or None,
+                       "isin_source": d.get("isin_source")}
+    if d.get("_alternatives"):
+        out["disambiguation"] = {
+            "note": "FLERA instrument matchade tickern — valet ovan rankades högst "
+                    "(riktig ISIN + störst börsvärde). Verifiera mot användarens avsikt.",
+            "alternatives": d["_alternatives"]}
 
     # ── P0-3 (KRITISK): verifiera priset mot realtidskälla innan analys ──
     # Fångar stale pre-rapport-pris (AVGO-typfelet). Muterar out["last_price"]
@@ -19165,10 +19297,13 @@ def _startup():
             except Exception as e:
                 print(f"[selfheal] koplista-logg fel: {e}")
             try:
-                # ISIN-backfill (billig UPDATE): läker Börsdata-länken för
-                # rader med tom/YAHOO_-isin (GEV-klassen av fel)
+                # ORDNING VIKTIG: Yahoo-janitorn FÖRE isin-backfillen — annars
+                # skulle en YAHOO_-dubblett (samma ticker) få äkta radens ISIN.
                 dbi = get_db()
                 try:
+                    jn = _cleanup_yahoo_rows(dbi)
+                    if jn.get("deleted") or jn.get("blanked") or jn.get("map_deleted"):
+                        print(f"[selfheal] yahoo-janitor: {jn}")
                     fx = _refresh_stocks_isin(dbi)
                     if fx.get("fixed"):
                         print(f"[selfheal] stocks.isin-backfill: {fx}")

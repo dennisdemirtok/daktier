@@ -4654,6 +4654,183 @@ def sync_report_calendar(db, days_back=14, days_forward=120, limit=None):
             "errors": errors, "instruments_checked": len(all_ins_ids)}
 
 
+def backfill_borsdata_full(db, progress_callback=None, min_years=8, min_quarters=30):
+    """FULL-ARKIV: hämtar år+kvartalsrapporter för ALLA bolag i
+    borsdata_instrument_map — oavsett Avanza-ägare (ordinarie synken filtrerar
+    på >=100 ägare, så långsvansen arkiveras aldrig av den).
+
+    Syfte: säkra HELA datasetet lokalt (cancel-readiness för Börsdata-abonnemang
+    + resiliens). Idempotent/återupptagbar: bolag som redan har >=min_years
+    årsrapporter OCH >=min_quarters kvartal hoppas över — avbruten körning
+    fortsätter där den slutade.
+
+    Returnerar {done, skipped, errors, total, rows}."""
+    try:
+        from borsdata_fetcher import (fetch_reports, fetch_global_reports,
+                                      fetch_all_instruments, fetch_global_instruments,
+                                      extract_v21_metrics, BORSDATA_KEY)
+    except ImportError:
+        return {"error": "borsdata_fetcher saknas"}
+    if not BORSDATA_KEY:
+        return {"error": "BORSDATA_API_KEY saknas"}
+    import time as _t
+    from datetime import datetime as _dt
+    ph = _ph()
+    now_iso = _dt.utcnow().isoformat()
+
+    # STEG 0: mappa ALLA Börsdata-instrument (nordiska + globala) med riktig
+    # ISIN — inte bara Avanza-korsade med >=100 ägare (ordinarie synkens map-
+    # bygge missade t.ex. GEV). Utan detta steg arkiverar backfillen bara
+    # delmängden och cancel-planen får hål.
+    try:
+        insts = list(fetch_all_instruments() or [])
+        for gi in (fetch_global_instruments() or []):
+            gi["_is_global"] = True
+            insts.append(gi)
+        map_cols = ["isin", "ins_id", "ticker", "yahoo_ticker", "name", "market_id",
+                    "sector_id", "branch_id", "country_id", "stock_price_currency",
+                    "report_currency", "listing_date", "is_global", "fetched_at"]
+        map_sql = _upsert_sql("borsdata_instrument_map", map_cols, ["isin"])
+        mapped = 0
+        for inst in insts:
+            isin = inst.get("isin")
+            if not isin or str(isin).startswith("YAHOO_"):
+                continue
+            try:
+                db.execute(map_sql,
+                    (isin, inst.get("insId"), inst.get("ticker"), inst.get("yahoo"),
+                     inst.get("name"), inst.get("marketId"), inst.get("sectorId"),
+                     inst.get("branchId"), inst.get("countryId"),
+                     inst.get("stockPriceCurrency"), inst.get("reportCurrency"),
+                     inst.get("listingDate"),
+                     1 if inst.get("_is_global") else 0, now_iso))
+                mapped += 1
+            except Exception:
+                try: db.rollback()
+                except Exception: pass
+        db.commit()
+        print(f"[backfill] steg 0: {mapped} instrument mappade (alla med riktig ISIN)")
+    except Exception as e:
+        print(f"[backfill] steg 0 map-fel (fortsätter med befintlig map): {e}")
+
+    targets = _fetchall(db,
+        "SELECT isin, ins_id, is_global FROM borsdata_instrument_map "
+        "WHERE isin IS NOT NULL AND isin != '' AND isin NOT LIKE 'YAHOO_%' "
+        "ORDER BY isin")
+    # Befintlig täckning per isin (en query — inte en per bolag)
+    cov = _fetchall(db,
+        "SELECT isin, "
+        "SUM(CASE WHEN report_type='year' THEN 1 ELSE 0 END) AS ny, "
+        "SUM(CASE WHEN report_type='quarter' THEN 1 ELSE 0 END) AS nq "
+        "FROM borsdata_reports GROUP BY isin")
+    covmap = {r["isin"]: (r["ny"] or 0, r["nq"] or 0) for r in cov}
+
+    _report_cols = ["isin", "ins_id", "report_type", "period_year", "period_q",
+                    "report_end_date", "currency",
+                    "revenues", "gross_income", "operating_income", "profit_before_tax",
+                    "net_profit", "eps",
+                    "operating_cash_flow", "investing_cash_flow", "financing_cash_flow",
+                    "free_cash_flow", "cash_flow_year",
+                    "total_assets", "current_assets", "non_current_assets", "tangible_assets",
+                    "intangible_assets", "financial_assets", "total_equity", "total_liabilities",
+                    "current_liabilities", "non_current_liabilities",
+                    "cash_and_equivalents", "net_debt", "shares_outstanding", "dividend",
+                    "stock_price_avg", "stock_price_high", "stock_price_low",
+                    "broken_fiscal_year", "fetched_at"]
+    _report_sql = _upsert_sql("borsdata_reports", _report_cols,
+                              ["isin", "report_type", "period_year", "period_q"])
+
+    done = skipped = errors = rows = 0
+    total = len(targets)
+    for i, t in enumerate(targets):
+        d = dict(t)
+        isin, ins_id, is_global = d["isin"], d["ins_id"], d.get("is_global")
+        ny, nq = covmap.get(isin, (0, 0))
+        if ny >= min_years and nq >= min_quarters:
+            skipped += 1
+            continue
+        if progress_callback and i % 25 == 0:
+            progress_callback(i, total, isin)
+        try:
+            for report_type in ("year", "quarter"):
+                if is_global:
+                    reports = fetch_global_reports(ins_id, report_type)
+                else:
+                    reports = fetch_reports(ins_id, report_type)
+                for r in (reports or []):
+                    metrics = extract_v21_metrics(r)
+                    period_year = r.get("year")
+                    period_q = r.get("period") if report_type == "quarter" else 0
+                    if report_type == "quarter" and period_q in (None, 0, 5):
+                        continue
+                    db.execute(_report_sql,
+                        (isin, ins_id, report_type, period_year, period_q,
+                         metrics.get("report_end_date"), metrics.get("currency"),
+                         metrics.get("revenues"), metrics.get("gross_income"),
+                         metrics.get("operating_income"), metrics.get("profit_before_tax"),
+                         metrics.get("net_profit"), metrics.get("earnings_per_share"),
+                         metrics.get("operating_cash_flow"), metrics.get("investing_cash_flow"),
+                         metrics.get("financing_cash_flow"), metrics.get("free_cash_flow"),
+                         metrics.get("cash_flow_year"),
+                         metrics.get("total_assets"), metrics.get("current_assets"),
+                         metrics.get("non_current_assets"), metrics.get("tangible_assets"),
+                         metrics.get("intangible_assets"), metrics.get("financial_assets"),
+                         metrics.get("total_equity"), metrics.get("total_liabilities"),
+                         metrics.get("current_liabilities"), metrics.get("non_current_liabilities"),
+                         metrics.get("cash_and_equivalents"), metrics.get("net_debt"),
+                         metrics.get("shares_outstanding"), metrics.get("dividend"),
+                         metrics.get("stock_price_avg"), metrics.get("stock_price_high"),
+                         metrics.get("stock_price_low"),
+                         metrics.get("broken_fiscal_year"), now_iso))
+                    rows += 1
+                _t.sleep(0.12)  # Börsdata rate limit: 100 anrop / 10s
+            db.commit()
+            done += 1
+        except Exception as e:
+            errors += 1
+            if errors <= 5:
+                print(f"[backfill] {isin} fel: {e}")
+            try: db.rollback()
+            except Exception: pass
+    db.commit()
+    return {"done": done, "skipped": skipped, "errors": errors,
+            "total": total, "rows": rows}
+
+
+def borsdata_archive_status(db):
+    """Cancel-readiness-rapport: hur komplett är det LOKALA Börsdata-arkivet?
+    Beslutsunderlag innan ev. uppsägning av API-abonnemanget."""
+    out = {}
+    try:
+        r = _fetchone(db, "SELECT COUNT(*) AS n FROM borsdata_instrument_map "
+                          "WHERE isin NOT LIKE 'YAHOO_%' AND isin IS NOT NULL AND isin != ''")
+        out["instruments_i_map"] = dict(r)["n"] if r else 0
+        cov = _fetchall(db,
+            "SELECT isin, "
+            "SUM(CASE WHEN report_type='year' THEN 1 ELSE 0 END) AS ny, "
+            "SUM(CASE WHEN report_type='quarter' THEN 1 ELSE 0 END) AS nq "
+            "FROM borsdata_reports GROUP BY isin")
+        ys = [dict(c) for c in cov]
+        out["bolag_med_rapporter"] = len(ys)
+        out["bolag_min_8_ar"] = sum(1 for c in ys if (c["ny"] or 0) >= 8)
+        out["bolag_min_20_kvartal"] = sum(1 for c in ys if (c["nq"] or 0) >= 20)
+        r = _fetchone(db, "SELECT COUNT(*) AS n FROM borsdata_reports")
+        out["rapportrader_totalt"] = dict(r)["n"] if r else 0
+        pr = _fetchall(db, "SELECT isin, COUNT(*) AS n FROM borsdata_prices GROUP BY isin")
+        pl = [dict(p)["n"] for p in pr]
+        out["bolag_med_priser"] = len(pl)
+        out["bolag_min_1500_prisdagar"] = sum(1 for n in pl if n >= 1500)
+        r = _fetchone(db, "SELECT COUNT(DISTINCT isin) AS n FROM borsdata_kpi_history")
+        out["bolag_med_kpi_historik"] = dict(r)["n"] if r else 0
+        r = _fetchone(db, "SELECT MAX(fetched_at) AS t FROM borsdata_reports")
+        out["senaste_rapport_sync"] = str(dict(r).get("t"))[:19] if r else None
+        cover = out["instruments_i_map"] or 1
+        out["arkiv_tackning_pct"] = round(100.0 * out["bolag_med_rapporter"] / cover, 1)
+    except Exception as e:
+        out["error"] = str(e)[:300]
+    return out
+
+
 def sync_borsdata_metadata(db):
     """Synkar sektor + bransch-metadata (en gång)."""
     try:
