@@ -557,6 +557,17 @@ def _latest_models():
     return out
 
 
+def _sonnet():
+    """Senaste sonnet via resolvern. ALDRIG hårdkodade modell-ID:n i anrop —
+    claude-sonnet-4-20250514 pensionerades 2026-06-15 och alla generatorer
+    (nyheter/makro/brief) failade TYST i en månad. Resolvern är cachad 6h
+    med aktiv fallback."""
+    try:
+        return _latest_models().get("sonnet") or _MODEL_FALLBACK["sonnet"]
+    except Exception:
+        return _MODEL_FALLBACK["sonnet"]
+
+
 def _is_market_open():
     """Kolla om NÅGON börs är öppen (SE 9:00-17:30 CET, US 15:30-22:00 CET)."""
     import pytz
@@ -4560,7 +4571,7 @@ Score-guide:
                 "content-type": "application/json",
             },
             json={
-                "model": "claude-sonnet-4-20250514",
+                "model": _sonnet(),
                 "max_tokens": 1024,
                 "messages": [{"role": "user", "content": prompt}],
             },
@@ -5626,7 +5637,7 @@ DATA FÖR IDAG:
                 "Content-Type": "application/json",
             },
             json={
-                "model": "claude-sonnet-4-20250514",
+                "model": _sonnet(),
                 "max_tokens": 1500,
                 "messages": [{"role": "user", "content": prompt}],
             },
@@ -5722,7 +5733,7 @@ DATA:
             "https://api.anthropic.com/v1/messages",
             headers={"x-api-key": CLAUDE_API_KEY, "anthropic-version": "2023-06-01",
                       "Content-Type": "application/json"},
-            json={"model": "claude-sonnet-4-20250514", "max_tokens": 1500,
+            json={"model": _sonnet(), "max_tokens": 1500,
                    "messages": [{"role": "user", "content": prompt}]},
             timeout=60,
         )
@@ -5767,7 +5778,7 @@ DATA:
             "https://api.anthropic.com/v1/messages",
             headers={"x-api-key": CLAUDE_API_KEY, "anthropic-version": "2023-06-01",
                       "Content-Type": "application/json"},
-            json={"model": "claude-sonnet-4-20250514", "max_tokens": 800,
+            json={"model": _sonnet(), "max_tokens": 800,
                    "messages": [{"role": "user", "content": prompt}]},
             timeout=60,
         )
@@ -5825,7 +5836,7 @@ INGA rubriker eller h1/h2. Bara den HTML-struktur jag specificerat."""
             "https://api.anthropic.com/v1/messages",
             headers={"x-api-key": CLAUDE_API_KEY, "anthropic-version": "2023-06-01",
                       "Content-Type": "application/json"},
-            json={"model": "claude-sonnet-4-20250514", "max_tokens": 1000,
+            json={"model": _sonnet(), "max_tokens": 1000,
                    "messages": [{"role": "user", "content": prompt}]},
             timeout=45,
         )
@@ -5913,7 +5924,7 @@ REGLER:
         "content-type": "application/json",
     }
     payload = {
-        "model": "claude-sonnet-4-20250514",
+        "model": _sonnet(),
         # 4500: med date + source_url per item blev 3000 för snålt — modellen
         # hann bara skriva 2 av 8-12 items innan taket.
         "max_tokens": 4500,
@@ -6082,7 +6093,7 @@ def _get_or_generate_market_news(db, max_age_hours=6, force=False):
                 f"INSERT INTO market_news (market_recap, items_json, n_items, model, cost_usd) "
                 f"VALUES ({ph}, {ph}, {ph}, {ph}, {ph})",
                 (recap, _json.dumps(items, ensure_ascii=False, default=str),
-                 len(items), "claude-sonnet-4-20250514", cost))
+                 len(items), _sonnet(), cost))
             db.commit()
         except Exception as e:
             print(f"[market news] spara fel: {e}", file=sys.stderr)
@@ -6201,7 +6212,7 @@ RÅTEXT:
         import httpx
         with httpx.Client(timeout=90.0) as client:
             r = client.post("https://api.anthropic.com/v1/messages", headers=headers,
-                            json={"model": "claude-sonnet-4-20250514", "max_tokens": 4000,
+                            json={"model": _sonnet(), "max_tokens": 4000,
                                   "messages": [{"role": "user", "content": prompt}]})
         if r.status_code != 200:
             print(f"[bullets] Claude HTTP {r.status_code}", file=sys.stderr)
@@ -6546,7 +6557,7 @@ REGLER:
 - Saklig ton, inga köp/sälj-råd på enskilda aktier."""
     headers = {"x-api-key": CLAUDE_API_KEY, "anthropic-version": "2023-06-01",
                "content-type": "application/json"}
-    payload = {"model": "claude-sonnet-4-20250514", "max_tokens": 3000,
+    payload = {"model": _sonnet(), "max_tokens": 3000,
                "messages": [{"role": "user", "content": prompt}],
                "tools": [{"type": "web_search_20250305", "name": "web_search", "max_uses": 6}]}
     try:
@@ -6624,7 +6635,7 @@ def _get_or_generate_macro_pulse(db, max_age_hours=72, force=False):
                  _json.dumps(parsed.get("sections") or [], ensure_ascii=False, default=str),
                  _json.dumps(parsed.get("indicators") or [], ensure_ascii=False, default=str),
                  _json.dumps(parsed.get("sources") or [], ensure_ascii=False, default=str),
-                 "claude-sonnet-4-20250514", cost))
+                 _sonnet(), cost))
             db.commit()
         except Exception as e:
             print(f"[macro pulse] spara fel: {e}", file=sys.stderr)
@@ -6686,7 +6697,7 @@ DATA:
             "https://api.anthropic.com/v1/messages",
             headers={"x-api-key": CLAUDE_API_KEY, "anthropic-version": "2023-06-01",
                       "Content-Type": "application/json"},
-            json={"model": "claude-sonnet-4-20250514", "max_tokens": 1200,
+            json={"model": _sonnet(), "max_tokens": 1200,
                    "messages": [{"role": "user", "content": prompt}]},
             timeout=60,
         )
@@ -9446,7 +9457,7 @@ Svara i EXAKT detta JSON-format (inget annat):
         resp = httpx.post(
             "https://api.anthropic.com/v1/messages",
             headers={"x-api-key": CLAUDE_API_KEY, "anthropic-version": "2023-06-01", "content-type": "application/json"},
-            json={"model": "claude-sonnet-4-20250514", "max_tokens": 2048, "messages": [{"role": "user", "content": prompt}]},
+            json={"model": _sonnet(), "max_tokens": 2048, "messages": [{"role": "user", "content": prompt}]},
             timeout=60.0,
         )
         if resp.status_code != 200:
@@ -9536,7 +9547,7 @@ Score-guide: 80-100=STARK_KOP, 60-79=KOP, 40-59=NEUTRAL, 20-39=SALJ, 0-19=STARK_
             resp = httpx.post(
                 "https://api.anthropic.com/v1/messages",
                 headers={"x-api-key": CLAUDE_API_KEY, "anthropic-version": "2023-06-01", "content-type": "application/json"},
-                json={"model": "claude-sonnet-4-20250514", "max_tokens": 4096, "messages": [{"role": "user", "content": prompt}]},
+                json={"model": _sonnet(), "max_tokens": 4096, "messages": [{"role": "user", "content": prompt}]},
                 timeout=120.0,
             )
             if resp.status_code != 200:
@@ -9614,7 +9625,7 @@ Svara EXAKT i JSON (inget annat):
         resp = httpx.post(
             "https://api.anthropic.com/v1/messages",
             headers={"x-api-key": CLAUDE_API_KEY, "anthropic-version": "2023-06-01", "content-type": "application/json"},
-            json={"model": "claude-sonnet-4-20250514", "max_tokens": 2048, "messages": [{"role": "user", "content": content}]},
+            json={"model": _sonnet(), "max_tokens": 2048, "messages": [{"role": "user", "content": content}]},
             timeout=60.0,
         )
         if resp.status_code != 200:
@@ -9659,7 +9670,7 @@ Svara EXAKT i JSON:
         resp2 = httpx.post(
             "https://api.anthropic.com/v1/messages",
             headers={"x-api-key": CLAUDE_API_KEY, "anthropic-version": "2023-06-01", "content-type": "application/json"},
-            json={"model": "claude-sonnet-4-20250514", "max_tokens": 2048, "messages": [{"role": "user", "content": rec_prompt}]},
+            json={"model": _sonnet(), "max_tokens": 2048, "messages": [{"role": "user", "content": rec_prompt}]},
             timeout=60.0,
         )
         recs = []
@@ -9989,6 +10000,15 @@ Regler: `x` = kategorier (tid/bolag). Varje `series` har `name`, `type` ("bar"
 eller "line"), `data` (samma längd som `x`) och `axis` ("left"/"right"). Använd
 "right"-axel för en serie i annan skala (t.ex. pris vs volym). JSON MÅSTE vara
 giltig. Sätt INTE påhittade siffror — bara data du faktiskt har.
+
+**OBLIGATORISKT i fullständiga bolagsanalyser (FAS 1):** minst ETT diagram
+när du hämtat kvartals-/historikdata (get_quarterly_trends /
+get_borsdata_history). Förstahandsval: kvartalsomsättning (bar, vänster) +
+rörelsemarginal % (line, höger) för de senaste 8 kvartalen — det visar
+trend + lönsamhet i EN bild. Bra tillägg när relevant: track-record som
+bar-chart (hit-rate per lins) och FCF-utveckling per år. Diagrammet ersätter
+INTE kvartalstabellen — de kompletterar. Grafa ENDAST tal du fått ur verktyg
+eller kontext — aldrig uppskattningar eller minnessiffror.
 
 **KRITISKT — Position-plan-konsistens (TVINGANDE):**
 Du får ALDRIG ge tre olika positions-rekommendationer i samma rapport.
@@ -14313,7 +14333,8 @@ def _agent_get_filings(ticker, topic="", form="10-K", max_excerpts=12):
 # i batch_analyses-tabellen för dashboard-topplistor.
 # ══════════════════════════════════════════════════════════════
 
-BATCH_MODEL = "claude-sonnet-4-20250514"  # ej Opus — för dyrt på batch
+def _batch_model():
+    return _sonnet()  # ej Opus — för dyrt på batch; resolvern ger senaste sonnet
 BATCH_COST_BUDGET_USD = 10.0  # v3.2: höjt från 5 för 30+ bolag
 BATCH_SIZE = 3
 BATCH_DELAY_BETWEEN_BATCHES = 3.0
@@ -14514,7 +14535,7 @@ def _consistency_check(analysis_md, stock_data):
                        headers={"x-api-key": CLAUDE_API_KEY,
                                 "anthropic-version": "2023-06-01",
                                 "content-type": "application/json"},
-                       json={"model": "claude-sonnet-4-20250514", "max_tokens": 700,
+                       json={"model": _sonnet(), "max_tokens": 700,
                              "messages": [{"role": "user", "content": prompt}]})
         if r.status_code != 200:
             return [], False, 0.0
@@ -14863,7 +14884,7 @@ def _analyze_single_ticker_for_batch(ticker, run_id):
     }
     # Använd hela DAKTIER-prompten som static system (cachad)
     payload = {
-        "model": BATCH_MODEL,
+        "model": _batch_model(),
         "max_tokens": 6000,
         "system": [
             {"type": "text", "text": _AGENT_KNOWLEDGE_BASE,
@@ -15218,7 +15239,7 @@ def api_batch_run():
     return jsonify({"run_id": run_id, "tickers": len(tickers),
                     "status": "started",
                     "budget_usd": BATCH_COST_BUDGET_USD,
-                    "model": BATCH_MODEL}), 202
+                    "model": _batch_model()}), 202
 
 
 @app.route("/api/batch/status")
@@ -15284,7 +15305,7 @@ def api_batch_status():
         "classification_distribution": [_row_to_dict(r) for r in dist_rows] if dist_rows else [],
         "flag_distribution": _row_to_dict(flags_row),
         "budget_per_run_usd": BATCH_COST_BUDGET_USD,
-        "model": BATCH_MODEL,
+        "model": _batch_model(),
     })
 
 
@@ -17472,7 +17493,7 @@ DEL 9 — DAGENS DB-SNAPSHOT (uppdateras var 5 min)
             if resp.status_code != 200:
                 # Fallback till en mindre kapabel modell om Opus 4.5 inte finns
                 if _iter == 0 and resp.status_code in (404, 400) and MODEL.startswith("claude-opus"):
-                    MODEL = "claude-sonnet-4-20250514"
+                    MODEL = _sonnet()
                     payload["model"] = MODEL
                     resp = httpx.post("https://api.anthropic.com/v1/messages",
                                       headers=headers, json=payload, timeout=60.0)
@@ -18872,6 +18893,94 @@ def _startup():
 
         scheduler.add_job(scheduled_borsdata_metadata, 'cron', day=1,
                           hour=5, minute=0, id='borsdata_metadata_monthly')
+
+        # 🩹 SJÄLVLÄKNING VID BOOT: om AI-genererade dashboard-sektioner är
+        # gamla (>24h) → regenerera direkt i bakgrunden. Skyddar mot att en
+        # trasig generator (t.ex. pensionerad modell 15 juni) lämnar
+        # dashboarden frusen tills någon manuellt upptäcker det.
+        def _boot_selfheal_dashboard():
+            import time as _t
+            _t.sleep(20)  # låt appen bli klar först
+            if not _sched_claim("dashboard_selfheal", datetime.now().strftime("%Y-%m-%dT%H")):
+                return  # annan worker tog det denna timme
+            from edge_db import _fetchone as _shf
+            def _age_h(table):
+                try:
+                    dbs = get_db()
+                    try:
+                        r = _shf(dbs, f"SELECT MAX(generated_at) AS g FROM {table}")
+                        g = dict(r).get("g") if r else None
+                    finally:
+                        dbs.close()
+                    if not g:
+                        return 9999
+                    gs = str(g).replace("T", " ").split(".")[0]
+                    dt = datetime.fromisoformat(gs)
+                    return (datetime.utcnow() - dt).total_seconds() / 3600
+                except Exception:
+                    return None  # tabell saknas/fel — rör inte
+
+            try:
+                if (_age_h("market_news") or 0) > 24:
+                    print("[selfheal] market_news gammal — regenererar...")
+                    dbn = get_db()
+                    try:
+                        _get_or_generate_market_news(dbn, force=True)
+                    finally:
+                        dbn.close()
+                    print("[selfheal] market_news klar")
+            except Exception as e:
+                print(f"[selfheal] market_news fel: {e}")
+            try:
+                if (_age_h("macro_pulse") or 0) > 24:
+                    print("[selfheal] macro_pulse gammal — regenererar...")
+                    dbm2 = get_db()
+                    try:
+                        _get_or_generate_macro_pulse(dbm2, force=True)
+                    finally:
+                        dbm2.close()
+                    print("[selfheal] macro_pulse klar")
+            except Exception as e:
+                print(f"[selfheal] macro_pulse fel: {e}")
+            try:
+                dbb2 = get_db()
+                try:
+                    rb = _shf(dbb2, "SELECT MAX(bullet_date) AS d FROM market_bullets")
+                    bd = str(dict(rb).get("d") or "")[:10] if rb else ""
+                finally:
+                    dbb2.close()
+                if bd < (datetime.utcnow() - timedelta(days=2)).strftime("%Y-%m-%d"):
+                    print(f"[selfheal] market_bullets gamla ({bd}) — synkar...")
+                    dbb3 = get_db()
+                    try:
+                        _sync_recent_bullets(dbb3, days=4)
+                    finally:
+                        dbb3.close()
+                    print("[selfheal] market_bullets klara")
+            except Exception as e:
+                print(f"[selfheal] market_bullets fel: {e}")
+
+        threading.Thread(target=_boot_selfheal_dashboard, daemon=True).start()
+
+        # 📋 Market-bullets var ALDRIG schemalagd — bara manuell endpoint.
+        # Dagligt sync-jobb (vardagar 07:30, efter US-stängning) med claim.
+        def scheduled_market_bullets():
+            if not _sched_claim("market_bullets", datetime.now().strftime("%Y-%m-%d")):
+                return
+            try:
+                print(f"[AUTO] Market-bullets sync start {datetime.now().strftime('%H:%M')}")
+                dbb = get_db()
+                try:
+                    res = _sync_recent_bullets(dbb, days=4)
+                    print(f"[AUTO] Market-bullets klar: {res}")
+                finally:
+                    dbb.close()
+            except Exception as e:
+                print(f"[AUTO] Market-bullets fel: {e}")
+
+        scheduler.add_job(scheduled_market_bullets, 'cron',
+                          day_of_week='mon-fri', hour=7, minute=30,
+                          id='market_bullets_daily')
 
         scheduler.start()
         print("  ✓ Auto-refresh scheduler aktiv (var 15:e min under marknadstid)")
