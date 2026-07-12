@@ -4824,8 +4824,16 @@ def borsdata_archive_status(db):
         out["bolag_med_kpi_historik"] = dict(r)["n"] if r else 0
         r = _fetchone(db, "SELECT MAX(fetched_at) AS t FROM borsdata_reports")
         out["senaste_rapport_sync"] = str(dict(r).get("t"))[:19] if r else None
+        # Täckning = andel av KÄNDA instrument (map) som har rapporter —
+        # inte kvoten rapport-isins/map (blev >100% när map var o-expanderad)
+        r = _fetchone(db,
+            "SELECT COUNT(*) AS n FROM borsdata_instrument_map m "
+            "WHERE m.isin NOT LIKE 'YAHOO_%' AND m.isin IS NOT NULL AND m.isin != '' "
+            "AND EXISTS (SELECT 1 FROM borsdata_reports r WHERE r.isin = m.isin)")
+        in_map_covered = (dict(r)["n"] if r else 0) or 0
+        out["map_instrument_med_rapporter"] = in_map_covered
         cover = out["instruments_i_map"] or 1
-        out["arkiv_tackning_pct"] = round(100.0 * out["bolag_med_rapporter"] / cover, 1)
+        out["arkiv_tackning_pct"] = round(100.0 * in_map_covered / cover, 1)
     except Exception as e:
         out["error"] = str(e)[:300]
     return out

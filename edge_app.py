@@ -4953,6 +4953,14 @@ def _run_archive_backfill_thread():
                             ("backfill:heartbeat", _j.dumps({
                                 "ts": datetime.now().isoformat(), "done": True,
                                 "result": res})))
+                # Markera fullkörningen som slutförd BARA om den gick igenom
+                # hela listan utan avbrott och med få fel — annars återupptas
+                # den vid nästa boot/dag.
+                if (isinstance(res, dict) and not res.get("error")
+                        and res.get("total")
+                        and (res.get("errors") or 0) <= max(10, 0.03 * res["total"])):
+                    dbb.execute(_upsert_sql("meta", ["key", "value"], ["key"]),
+                                ("backfill:full_done", datetime.now().isoformat()))
                 dbb.commit()
             except Exception:
                 try: dbb.rollback()
@@ -4969,27 +4977,26 @@ def _run_archive_backfill_thread():
 
 
 def _maybe_start_archive_backfill(reason):
-    """Startar arkiv-backfillen om arkivet är inkomplett och ingen körning
-    pågår. Claim per DAG: avbruten körning (deploy) återupptas nästa boot/dag
-    tack vare skip-komplett-logiken i backfill_borsdata_full."""
+    """Startar arkiv-backfillen om full-körningen inte är slutförd (meta-flagga
+    'backfill:full_done' — INTE täckningskvot: map:en är liten tills steg 0
+    kört, så en kvot-gate blir höna-och-ägg och startar aldrig).
+    Veckotoppen kör alltid (nynoteringar; snabb tack vare skip-logiken).
+    Claim per DAG: avbruten körning (deploy) återupptas nästa boot/dag."""
     if _BD_BACKFILL_STATE["running"]:
         return False
-    try:
-        from edge_db import _fetchone
-        db = get_db()
+    if reason != "veckotopp":
         try:
-            m = _fetchone(db, "SELECT COUNT(*) AS n FROM borsdata_instrument_map "
-                              "WHERE isin IS NOT NULL AND isin != '' AND isin NOT LIKE 'YAHOO_%'")
-            n_map = (dict(m).get("n") if m else 0) or 1
-            c = _fetchone(db, "SELECT COUNT(DISTINCT isin) AS n FROM borsdata_reports")
-            n_cov = (dict(c).get("n") if c else 0) or 0
-        finally:
-            db.close()
-        # <97% täckning ELLER första körningen ej gjord → kör
-        if n_cov >= 0.97 * n_map and n_map > 1000:
-            return False
-    except Exception:
-        pass
+            from edge_db import _fetchone, _ph
+            db = get_db()
+            try:
+                r = _fetchone(db, f"SELECT value FROM meta WHERE key = {_ph()}",
+                              ("backfill:full_done",))
+            finally:
+                db.close()
+            if r:
+                return False  # fullarkivet redan slutfört — bara veckotopp framöver
+        except Exception:
+            pass
     if not _sched_claim("archive_backfill", datetime.now().strftime("%Y-%m-%d")):
         return False
     print(f"[backfill] startar automatiskt ({reason})")
