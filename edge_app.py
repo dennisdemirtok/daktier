@@ -4886,28 +4886,7 @@ def api_borsdata_full_backfill():
         return jsonify({"error": "admin_required"}), 403
     if _BD_BACKFILL_STATE["running"]:
         return jsonify({"status": "already_running", **_BD_BACKFILL_STATE}), 202
-
-    def _run():
-        _BD_BACKFILL_STATE.update(running=True, progress=0, total=0, current="",
-                                  started_at=datetime.now().isoformat())
-        try:
-            from edge_db import backfill_borsdata_full
-            dbb = get_db()
-            try:
-                def cb(i, total, isin):
-                    _BD_BACKFILL_STATE.update(progress=i, total=total, current=isin)
-                res = backfill_borsdata_full(dbb, progress_callback=cb)
-                _BD_BACKFILL_STATE["last_result"] = res
-                print(f"[backfill] KLAR: {res}")
-            finally:
-                dbb.close()
-        except Exception as e:
-            _BD_BACKFILL_STATE["last_result"] = {"error": str(e)[:300]}
-            print(f"[backfill] fel: {e}", file=sys.stderr)
-        finally:
-            _BD_BACKFILL_STATE["running"] = False
-
-    threading.Thread(target=_run, daemon=True).start()
+    threading.Thread(target=_run_archive_backfill_thread, daemon=True).start()
     return jsonify({"status": "started",
                     "note": "Tar timmar (rate limit). Följ via GET /api/borsdata/backfill-status; "
                             "beslutsunderlag via GET /api/borsdata/archive-status."}), 202
@@ -4915,22 +4894,107 @@ def api_borsdata_full_backfill():
 
 @app.route("/api/borsdata/backfill-status")
 def api_borsdata_backfill_status():
-    if not session.get("is_admin"):
-        return jsonify({"error": "admin_required"}), 403
-    return jsonify(_BD_BACKFILL_STATE)
+    """Read-only status (alla inloggade). OBS: state är per worker — meta-
+    heartbeaten är sanningen om en ANNAN worker kör jobbet."""
+    out = dict(_BD_BACKFILL_STATE)
+    try:
+        from edge_db import _fetchone, _ph
+        db = get_db()
+        try:
+            r = _fetchone(db, f"SELECT value FROM meta WHERE key = {_ph()}",
+                          ("backfill:heartbeat",))
+        finally:
+            db.close()
+        if r:
+            import json as _j
+            out["heartbeat"] = _j.loads(dict(r)["value"])
+    except Exception:
+        pass
+    return jsonify(out)
 
 
 @app.route("/api/borsdata/archive-status")
 def api_borsdata_archive_status():
-    """Cancel-readiness-rapport (admin): hur komplett är lokala arkivet?"""
-    if not session.get("is_admin"):
-        return jsonify({"error": "admin_required"}), 403
+    """Cancel-readiness-rapport (read-only, alla inloggade)."""
     from edge_db import borsdata_archive_status
     db = get_db()
     try:
         return jsonify(borsdata_archive_status(db))
     finally:
         db.close()
+
+
+def _run_archive_backfill_thread():
+    """Kör full-arkiv-backfillen i bakgrundstråd + heartbeat till meta
+    (cross-worker-synlig status). Efter körning: isin-refresh så nya
+    map-rader länkas till stocks direkt."""
+    from edge_db import backfill_borsdata_full, _upsert_sql
+    import json as _j
+    _BD_BACKFILL_STATE.update(running=True, progress=0, total=0, current="",
+                              started_at=datetime.now().isoformat())
+    try:
+        dbb = get_db()
+        try:
+            def cb(i, total, isin):
+                _BD_BACKFILL_STATE.update(progress=i, total=total, current=isin)
+                try:
+                    dbb.execute(_upsert_sql("meta", ["key", "value"], ["key"]),
+                                ("backfill:heartbeat", _j.dumps({
+                                    "ts": datetime.now().isoformat(),
+                                    "progress": i, "total": total, "current": isin})))
+                    dbb.commit()
+                except Exception:
+                    try: dbb.rollback()
+                    except Exception: pass
+            res = backfill_borsdata_full(dbb, progress_callback=cb)
+            _BD_BACKFILL_STATE["last_result"] = res
+            try:
+                dbb.execute(_upsert_sql("meta", ["key", "value"], ["key"]),
+                            ("backfill:heartbeat", _j.dumps({
+                                "ts": datetime.now().isoformat(), "done": True,
+                                "result": res})))
+                dbb.commit()
+            except Exception:
+                try: dbb.rollback()
+                except Exception: pass
+            fx = _refresh_stocks_isin(dbb)
+            print(f"[backfill] KLAR: {res} | isin-refresh: {fx}")
+        finally:
+            dbb.close()
+    except Exception as e:
+        _BD_BACKFILL_STATE["last_result"] = {"error": str(e)[:300]}
+        print(f"[backfill] fel: {e}", file=sys.stderr)
+    finally:
+        _BD_BACKFILL_STATE["running"] = False
+
+
+def _maybe_start_archive_backfill(reason):
+    """Startar arkiv-backfillen om arkivet är inkomplett och ingen körning
+    pågår. Claim per DAG: avbruten körning (deploy) återupptas nästa boot/dag
+    tack vare skip-komplett-logiken i backfill_borsdata_full."""
+    if _BD_BACKFILL_STATE["running"]:
+        return False
+    try:
+        from edge_db import _fetchone
+        db = get_db()
+        try:
+            m = _fetchone(db, "SELECT COUNT(*) AS n FROM borsdata_instrument_map "
+                              "WHERE isin IS NOT NULL AND isin != '' AND isin NOT LIKE 'YAHOO_%'")
+            n_map = (dict(m).get("n") if m else 0) or 1
+            c = _fetchone(db, "SELECT COUNT(DISTINCT isin) AS n FROM borsdata_reports")
+            n_cov = (dict(c).get("n") if c else 0) or 0
+        finally:
+            db.close()
+        # <97% täckning ELLER första körningen ej gjord → kör
+        if n_cov >= 0.97 * n_map and n_map > 1000:
+            return False
+    except Exception:
+        pass
+    if not _sched_claim("archive_backfill", datetime.now().strftime("%Y-%m-%d")):
+        return False
+    print(f"[backfill] startar automatiskt ({reason})")
+    threading.Thread(target=_run_archive_backfill_thread, daemon=True).start()
+    return True
 
 
 @app.route("/api/borsdata/cleanup-yahoo", methods=["POST"])
@@ -19250,6 +19314,12 @@ def _startup():
             except Exception as e:
                 print(f"[selfheal] janitor/isin fel: {e}")
             try:
+                # Full-arkivet (cancel-readiness): starta/återuppta automatiskt
+                # tills arkivet är komplett (claim/dag; skip-komplett = resume)
+                _maybe_start_archive_backfill("boot-selfheal")
+            except Exception as e:
+                print(f"[selfheal] backfill-start fel: {e}")
+            try:
                 from edge_db import _ph as _shph0
                 dbk0 = get_db()
                 try:
@@ -19344,6 +19414,18 @@ def _startup():
         scheduler.add_job(scheduled_market_bullets, 'cron',
                           day_of_week='mon-fri', hour=7, minute=30,
                           id='market_bullets_daily')
+
+        # 🗄️ Arkiv-topp-upp (söndagar 06:00): fångar nynoteringar + luckor.
+        # Snabb när arkivet är komplett (skip-logiken hoppar färdiga bolag).
+        def scheduled_archive_topup():
+            try:
+                _maybe_start_archive_backfill("veckotopp")
+            except Exception as e:
+                print(f"[AUTO] arkiv-topp-upp fel: {e}")
+
+        scheduler.add_job(scheduled_archive_topup, 'cron',
+                          day_of_week='sun', hour=6, minute=0,
+                          id='archive_topup_weekly')
 
         scheduler.start()
         print("  ✓ Auto-refresh scheduler aktiv (var 15:e min under marknadstid)")
