@@ -9828,7 +9828,7 @@ Svara i EXAKT detta JSON-format (inget annat):
             "https://api.anthropic.com/v1/messages",
             headers={"x-api-key": CLAUDE_API_KEY, "anthropic-version": "2023-06-01", "content-type": "application/json"},
             json={"model": _sonnet(), "max_tokens": 6000, "messages": [{"role": "user", "content": prompt}]},
-            timeout=60.0,
+            timeout=180.0,
         )
         if resp.status_code != 200:
             return jsonify({"error": f"Claude API error: {resp.status_code}"}), 500
@@ -9997,7 +9997,7 @@ Svara EXAKT i JSON (inget annat):
             "https://api.anthropic.com/v1/messages",
             headers={"x-api-key": CLAUDE_API_KEY, "anthropic-version": "2023-06-01", "content-type": "application/json"},
             json={"model": _sonnet(), "max_tokens": 6000, "messages": [{"role": "user", "content": content}]},
-            timeout=60.0,
+            timeout=180.0,
         )
         if resp.status_code != 200:
             return jsonify({"error": f"Claude API error: {resp.status_code}"}), 500
@@ -10042,7 +10042,7 @@ Svara EXAKT i JSON:
             "https://api.anthropic.com/v1/messages",
             headers={"x-api-key": CLAUDE_API_KEY, "anthropic-version": "2023-06-01", "content-type": "application/json"},
             json={"model": _sonnet(), "max_tokens": 6000, "messages": [{"role": "user", "content": rec_prompt}]},
-            timeout=60.0,
+            timeout=180.0,
         )
         recs = []
         if resp2.status_code == 200:
@@ -18244,7 +18244,7 @@ DEL 9 — DAGENS DB-SNAPSHOT (uppdateras var 5 min)
             }
             resp = httpx.post(
                 "https://api.anthropic.com/v1/messages",
-                headers=headers, json=payload, timeout=60.0,
+                headers=headers, json=payload, timeout=180.0,
             )
             if resp.status_code != 200:
                 # Fallback till en mindre kapabel modell om Opus 4.5 inte finns
@@ -19131,6 +19131,22 @@ DEL 9 — DAGENS DB-SNAPSHOT (uppdateras var 5 min)
 
 # ── Startup (runs for both gunicorn and direct execution) ──
 
+def _sched_release(job_id):
+    """Släpper en claim efter MISSLYCKAT jobb så nästa försök (annan worker,
+    boot-selfheal, nästa slot) kan ta om det. Utan release förbrukade ett
+    tyst fel dagens claim → innehållet frös till nästa dag."""
+    try:
+        from edge_db import _ph
+        db = get_db()
+        try:
+            db.execute(f"DELETE FROM meta WHERE key = {_ph()}", (f"sched:{job_id}",))
+            db.commit()
+        finally:
+            db.close()
+    except Exception as e:
+        print(f"[sched] release-fel {job_id}: {e}", file=sys.stderr)
+
+
 def _sched_claim(job_id, period_key):
     """Cross-process-vakt för schemalagda jobb. Varje gunicorn-worker (3 st) kör
     en egen APScheduler, så utan vakt körs varje cron-jobb 3× parallellt (3×
@@ -19680,47 +19696,13 @@ def _startup():
             except Exception as e:
                 print(f"[selfheal] koplista-logg fel: {e}")
 
-            # ── DYRA GENERATORER — claim per timme (API-kostnad) ───────────
-            if not _sched_claim("dashboard_selfheal", datetime.now().strftime("%Y-%m-%dT%H")):
-                return  # annan worker tog generator-delen denna timme
-            def _age_h(table):
-                try:
-                    dbs = get_db()
-                    try:
-                        r = _shf(dbs, f"SELECT MAX(generated_at) AS g FROM {table}")
-                        g = dict(r).get("g") if r else None
-                    finally:
-                        dbs.close()
-                    if not g:
-                        return 9999
-                    gs = str(g).replace("T", " ").split(".")[0]
-                    dt = datetime.fromisoformat(gs)
-                    return (datetime.utcnow() - dt).total_seconds() / 3600
-                except Exception:
-                    return None  # tabell saknas/fel — rör inte
-
+            # ── DYRA GENERATORER — samma kodväg som schemat (claims per
+            # dag/slot inuti). Tim-claimen togs bort: den åts upp av boots
+            # vars trådar dog vid nästa deploy → dashboarden frös i dagar.
             try:
-                if (_age_h("market_news") or 0) > 24:
-                    print("[selfheal] market_news gammal — regenererar...")
-                    dbn = get_db()
-                    try:
-                        _get_or_generate_market_news(dbn, force=True)
-                    finally:
-                        dbn.close()
-                    print("[selfheal] market_news klar")
+                scheduled_dashboard_content()
             except Exception as e:
-                print(f"[selfheal] market_news fel: {e}")
-            try:
-                if (_age_h("macro_pulse") or 0) > 24:
-                    print("[selfheal] macro_pulse gammal — regenererar...")
-                    dbm2 = get_db()
-                    try:
-                        _get_or_generate_macro_pulse(dbm2, force=True)
-                    finally:
-                        dbm2.close()
-                    print("[selfheal] macro_pulse klar")
-            except Exception as e:
-                print(f"[selfheal] macro_pulse fel: {e}")
+                print(f"[selfheal] dashboard-content fel: {e}")
             try:
                 dbb2 = get_db()
                 try:
@@ -19815,33 +19797,49 @@ def _startup():
             now = datetime.now()
             slot = "am" if now.hour < 12 else "pm"
             if _sched_claim("news_gen", f"{now:%Y-%m-%d}:{slot}"):
+                ok = False
                 try:
                     print(f"[AUTO] nyhetsgenerering start ({slot})")
                     dbn = get_db()
                     try:
-                        _get_or_generate_market_news(dbn, force=True)
+                        res = _get_or_generate_market_news(dbn, force=True)
+                        ok = bool(res and not res.get("error") and res.get("items"))
                     finally:
                         dbn.close()
-                    print("[AUTO] nyheter genererade")
+                    print(f"[AUTO] nyheter: {'OK' if ok else 'FAIL'}")
                 except Exception as e:
                     print(f"[AUTO] nyhetsgen fel: {e}")
+                if not ok:
+                    _sched_release("news_gen")  # nästa försök får ta om
             if slot == "am" and _sched_claim("macro_gen", f"{now:%Y-%m-%d}"):
+                ok = False
                 try:
                     dbm3 = get_db()
                     try:
-                        _get_or_generate_macro_pulse(dbm3, force=True)
+                        res = _get_or_generate_macro_pulse(dbm3, force=True)
+                        ok = bool(res and not (isinstance(res, dict) and res.get("error")))
                     finally:
                         dbm3.close()
-                    print("[AUTO] makro-puls genererad")
+                    print(f"[AUTO] makro-puls: {'OK' if ok else 'FAIL'}")
                 except Exception as e:
                     print(f"[AUTO] makrogen fel: {e}")
+                if not ok:
+                    _sched_release("macro_gen")
             if slot == "am":
                 try:
                     today = f"{now:%Y-%m-%d}"
                     if not _brief_db_get(today) and _sched_claim("morning_brief", today):
-                        with app.test_request_context("/api/ai-morning-brief", method="POST"):
-                            api_morning_brief()
-                        print("[AUTO] morgonbrief genererad")
+                        ok = False
+                        try:
+                            with app.test_request_context("/api/ai-morning-brief", method="POST"):
+                                rv = api_morning_brief()
+                            code = rv[1] if isinstance(rv, tuple) else 200
+                            ok = (code == 200)
+                        except Exception as e:
+                            print(f"[AUTO] brief inner fel: {e}")
+                        print(f"[AUTO] morgonbrief: {'OK' if ok else 'FAIL'}")
+                        if not ok:
+                            _sched_release("morning_brief")
                 except Exception as e:
                     print(f"[AUTO] brief fel: {e}")
 
