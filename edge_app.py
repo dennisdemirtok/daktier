@@ -6138,7 +6138,19 @@ INGA rubriker eller h1/h2. Bara den HTML-struktur jag specificerat."""
 # per-bolag-nyheter. Robust (ingen scraping), alltid dagsfärskt.
 # ══════════════════════════════════════════════════════════════
 
-_NEWS_GEN_STATE = {"running": False}
+_NEWS_GEN_STATE = {"running": False, "started_at": None}
+
+
+def _news_fresh_items(items, max_days=3):
+    """HÅRT färskhetsfilter: items äldre än max_days dagar visas ALDRIG
+    (april-nyheter låg kvar i 'dagens nyheter'). Datum-lösa items behålls
+    (prompten sätter dagens datum vid osäkerhet). Nyast först."""
+    from datetime import datetime as _dt, timedelta as _td
+    cutoff = (_dt.now() - _td(days=max_days)).strftime("%Y-%m-%d")
+    out = [it for it in (items or [])
+           if not str(it.get("date") or "")[:10] or str(it.get("date"))[:10] >= cutoff]
+    out.sort(key=lambda it: str(it.get("date") or ""), reverse=True)
+    return out
 
 
 def _generate_market_news_digest():
@@ -6153,9 +6165,17 @@ def _generate_market_news_digest():
         print("[market news] CLAUDE_API_KEY saknas", file=sys.stderr)
         return None, 0.0
 
-    prompt = """Du är finansredaktör på en SVENSK finanssajt. Skriv ett kort dagligt
-nyhets-digest med FOKUS PÅ SVERIGE & NORDEN (de amerikanska nyheterna täcks
-separat — här vill vi INTE missa de svenska/nordiska bolagen vi följer).
+    _today = datetime.now().strftime("%Y-%m-%d")
+    prompt = f"""IDAG ÄR {_today}. Du är finansredaktör på en SVENSK finanssajt.
+Skriv ett kort dagligt nyhets-digest med FOKUS PÅ SVERIGE & NORDEN (de
+amerikanska nyheterna täcks separat — här vill vi INTE missa de
+svenska/nordiska bolagen vi följer).
+
+⏱️ FÄRSKHETSKRAV (ABSOLUT): ta ENDAST med nyheter publicerade de senaste
+48 TIMMARNA (dvs {_today} eller dagen innan). Web-sökningen kan visa äldre
+artiklar — HOPPA ÖVER dem oavsett hur relevanta de verkar. Hellre 5 färska
+nyheter än 12 gamla. Kan du inte verifiera att en nyhet är från senaste 48h
+→ ta INTE med den.""" + """
 
 Använd web_search. Sök på svenska källor och bolag:
 "Stockholmsbörsen idag", "OMXS30 nyheter", "Di.se senaste", "Placera nyheter",
@@ -6369,12 +6389,15 @@ def _get_or_generate_market_news(db, max_age_hours=6, force=False):
         return {"market_recap": None, "items": [], "regenerating": True}
 
     _NEWS_GEN_STATE["running"] = True
+    _NEWS_GEN_STATE["started_at"] = datetime.utcnow().isoformat()
     try:
         parsed, cost = _generate_market_news_digest()
         if not parsed:
             return {"market_recap": None, "items": [], "error": "generering misslyckades"}
         items = parsed.get("items", []) or []
         items = _cross_reference_news_tickers(db, items)
+        # Färskhetsfilter även VID GENERERING — hellre få färska än många gamla
+        items = _news_fresh_items(items, max_days=3)
         recap = parsed.get("market_recap", "")
         # Spara
         try:
@@ -14867,34 +14890,79 @@ def api_shadow_compare():
     lagrar miljoner — EDGAR absoluta USD → skuggan delas med 1e6 (eps
     jämförs rakt). diff_pct per mått + andel inom 2%/5%."""
     from edge_db import _fetchall
+    from datetime import date as _date
     db = get_db()
     try:
         _ensure_shadow_table(db)
-        rows = _fetchall(db, """
-            SELECT sh.ticker, sh.report_type, sh.period_year, sh.period_q,
-                   sh.revenues AS sh_rev, sh.net_profit AS sh_np, sh.eps AS sh_eps,
-                   br.revenues AS bd_rev, br.net_profit AS bd_np, br.eps AS bd_eps
-            FROM shadow_reports sh
-            JOIN borsdata_instrument_map m ON UPPER(m.ticker) = UPPER(sh.ticker)
-            JOIN borsdata_reports br ON br.isin = m.isin
-                 AND br.report_type = sh.report_type
-                 AND br.period_year = sh.period_year
-                 AND br.period_q = sh.period_q
-        """)
+        # MATCHNING PÅ RAPPORTENS SLUTDATUM (±7d), INTE år/kvartals-etiketter:
+        # brutna räkenskapsår (NVDA:s FY slutar i januari) gör att EDGAR:s fy
+        # och Börsdatas kalenderbaserade period_year pekar på OLIKA perioder.
+        sh_rows = [dict(r) for r in _fetchall(db,
+            "SELECT ticker, report_type, period_year, period_q, report_end_date, "
+            "revenues, net_profit, eps FROM shadow_reports "
+            "WHERE report_end_date IS NOT NULL")]
+        tickers = sorted({r["ticker"] for r in sh_rows})
+        bd_by_ticker = {}
+        if tickers:
+            from edge_db import _ph
+            ph = _ph()
+            marks = ",".join([ph] * len(tickers))
+            bd = _fetchall(db, f"""
+                SELECT UPPER(m.ticker) AS t, br.report_type, br.report_end_date,
+                       br.revenues, br.net_profit, br.eps
+                FROM borsdata_reports br
+                JOIN borsdata_instrument_map m ON m.isin = br.isin
+                WHERE UPPER(m.ticker) IN ({marks}) AND br.report_end_date IS NOT NULL
+            """, tuple(tickers))
+            for r in bd:
+                d = dict(r)
+                bd_by_ticker.setdefault((d["t"], d["report_type"]), []).append(d)
+
+        def _d(x):
+            try:
+                return _date.fromisoformat(str(x)[:10])
+            except Exception:
+                return None
+
+        _SPLITS = (2, 3, 4, 5, 10, 20)
+
         comps, agg = [], {"revenues": [0, 0, 0], "net_profit": [0, 0, 0], "eps": [0, 0, 0]}
-        for r in rows:
-            d = dict(r)
-            row = {"ticker": d["ticker"],
-                   "period": f"{d['report_type']} {d['period_year']} Q{d['period_q']}"}
-            for m, shv, bdv, scale in (("revenues", d["sh_rev"], d["bd_rev"], 1e6),
-                                       ("net_profit", d["sh_np"], d["bd_np"], 1e6),
-                                       ("eps", d["sh_eps"], d["bd_eps"], 1.0)):
+        for sh in sh_rows:
+            cands = bd_by_ticker.get((sh["ticker"].upper(), sh["report_type"])) or []
+            shd = _d(sh["report_end_date"])
+            if not shd:
+                continue
+            best, bestdiff = None, 99
+            for c in cands:
+                cd = _d(c["report_end_date"])
+                if cd is None:
+                    continue
+                dd = abs((cd - shd).days)
+                if dd <= 7 and dd < bestdiff:
+                    best, bestdiff = c, dd
+            if not best:
+                continue
+            row = {"ticker": sh["ticker"],
+                   "period": f"{sh['report_type']} slut {str(sh['report_end_date'])[:10]}"}
+            for m, shv, bdv, scale in (("revenues", sh["revenues"], best["revenues"], 1e6),
+                                       ("net_profit", sh["net_profit"], best["net_profit"], 1e6),
+                                       ("eps", sh["eps"], best["eps"], 1.0)):
                 if shv is None or bdv in (None, 0):
                     continue
                 shn = shv / scale
                 diff = 100.0 * (shn / bdv - 1) if bdv else None
-                row[m] = {"edgar": round(shn, 3), "borsdata": round(bdv, 3),
-                          "diff_pct": round(diff, 2) if diff is not None else None}
+                cell = {"edgar": round(shn, 3), "borsdata": round(bdv, 3),
+                        "diff_pct": round(diff, 2) if diff is not None else None}
+                # Split-detektion (EDGAR-original ojusterad vs Börsdata justerad)
+                if m == "eps" and diff is not None and abs(diff) > 20 and bdv:
+                    ratio = shn / bdv
+                    for s in _SPLITS:
+                        if 0.93 <= ratio / s <= 1.07 or 0.93 <= (1 / ratio) / s <= 1.07:
+                            cell["split_diff"] = f"~{s}:1 — trolig aktiesplit, ej datafel"
+                            break
+                row[m] = cell
+                if cell.get("split_diff"):
+                    continue  # split-artefakt räknas inte som miss
                 agg[m][2] += 1
                 if diff is not None and abs(diff) <= 2: agg[m][0] += 1
                 if diff is not None and abs(diff) <= 5: agg[m][1] += 1
@@ -16157,15 +16225,34 @@ def api_market_news():
     except Exception as e:
         print(f"[market news GET] {e}", file=sys.stderr)
 
-    # Trigga bakgrundsgenerering om stale/saknas och ingen körning pågår
+    # SERVE-FILTER: gamla items visas ALDRIG oavsett cache-läge
+    items = _news_fresh_items(items, max_days=3)
+
+    # Trigga bakgrundsgenerering om stale/saknas och ingen körning pågår.
+    # Fastnat-skydd: en död gen-tråd lämnade running=True för alltid i sin
+    # worker → regen blockerades i dagar. >15 min gammal körning ignoreras.
     regenerating = _NEWS_GEN_STATE.get("running", False)
+    if regenerating:
+        try:
+            st = _NEWS_GEN_STATE.get("started_at")
+            if st and (datetime.utcnow() - datetime.fromisoformat(st)).total_seconds() > 900:
+                _NEWS_GEN_STATE["running"] = False
+                regenerating = False
+        except Exception:
+            pass
     if (is_stale or not items) and not regenerating:
         def _bg():
+            db2 = None
             try:
                 db2 = get_db()
                 _get_or_generate_market_news(db2, force=True)
             except Exception as e:
                 print(f"[market news bg] {e}", file=sys.stderr)
+            finally:
+                try:
+                    if db2: db2.close()
+                except Exception:
+                    pass
         threading.Thread(target=_bg, daemon=True).start()
         regenerating = True
 
@@ -19658,16 +19745,32 @@ def _startup():
         def scheduled_market_bullets():
             if not _sched_claim("market_bullets", datetime.now().strftime("%Y-%m-%d")):
                 return
+            _hb = {"ts": datetime.now().isoformat()}
             try:
                 print(f"[AUTO] Market-bullets sync start {datetime.now().strftime('%H:%M')}")
                 dbb = get_db()
                 try:
                     res = _sync_recent_bullets(dbb, days=4)
+                    _hb["result"] = res
                     print(f"[AUTO] Market-bullets klar: {res}")
                 finally:
                     dbb.close()
             except Exception as e:
+                _hb["error"] = str(e)[:300]
                 print(f"[AUTO] Market-bullets fel: {e}")
+            # Cross-worker-synligt facit (per-worker-state dolde fel i dagar)
+            try:
+                from edge_db import _upsert_sql
+                import json as _j
+                dbh = get_db()
+                try:
+                    dbh.execute(_upsert_sql("meta", ["key", "value"], ["key"]),
+                                ("bullets:last_result", _j.dumps(_hb, default=str)))
+                    dbh.commit()
+                finally:
+                    dbh.close()
+            except Exception:
+                pass
 
         scheduler.add_job(scheduled_market_bullets, 'cron',
                           day_of_week='mon-fri', hour=7, minute=30,
@@ -19704,6 +19807,49 @@ def _startup():
 
         scheduler.add_job(scheduled_shadow_reports, 'cron',
                           hour=6, minute=15, id='shadow_reports_daily')
+
+        # 📰 DASHBOARD-INNEHÅLL PÅ SCHEMA — färskheten får ALDRIG bero på
+        # besök eller boots (läs-triggad regen fastnade tyst → dashboarden
+        # frös i 3 dagar utan deploy). Nyheter 2×/vardag, makro+brief 1×/dag.
+        def scheduled_dashboard_content():
+            now = datetime.now()
+            slot = "am" if now.hour < 12 else "pm"
+            if _sched_claim("news_gen", f"{now:%Y-%m-%d}:{slot}"):
+                try:
+                    print(f"[AUTO] nyhetsgenerering start ({slot})")
+                    dbn = get_db()
+                    try:
+                        _get_or_generate_market_news(dbn, force=True)
+                    finally:
+                        dbn.close()
+                    print("[AUTO] nyheter genererade")
+                except Exception as e:
+                    print(f"[AUTO] nyhetsgen fel: {e}")
+            if slot == "am" and _sched_claim("macro_gen", f"{now:%Y-%m-%d}"):
+                try:
+                    dbm3 = get_db()
+                    try:
+                        _get_or_generate_macro_pulse(dbm3, force=True)
+                    finally:
+                        dbm3.close()
+                    print("[AUTO] makro-puls genererad")
+                except Exception as e:
+                    print(f"[AUTO] makrogen fel: {e}")
+            if slot == "am":
+                try:
+                    today = f"{now:%Y-%m-%d}"
+                    if not _brief_db_get(today) and _sched_claim("morning_brief", today):
+                        with app.test_request_context("/api/ai-morning-brief", method="POST"):
+                            api_morning_brief()
+                        print("[AUTO] morgonbrief genererad")
+                except Exception as e:
+                    print(f"[AUTO] brief fel: {e}")
+
+        scheduler.add_job(scheduled_dashboard_content, 'cron',
+                          hour=6, minute=45, id='dash_content_am')
+        scheduler.add_job(scheduled_dashboard_content, 'cron',
+                          day_of_week='mon-fri', hour=13, minute=30,
+                          id='dash_content_pm')
 
         scheduler.start()
         print("  ✓ Auto-refresh scheduler aktiv (var 15:e min under marknadstid)")
