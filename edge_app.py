@@ -14664,6 +14664,257 @@ def _edgar_cik(ticker):
     return c["data"].get(tk)
 
 
+# ── SKUGG-PIPELINE: rapportdata UTAN Börsdata (SEC EDGAR companyfacts) ──────
+# Kalenderdriven: när ett US-bolag rapporterat (report_calendar / stocks.
+# next_company_report) hämtas strukturerad XBRL-data gratis från SEC och
+# sparas i shadow_reports — SEPARAT från borsdata_reports så jämförelsen
+# blir ren. /api/shadow/compare mäter träffsäkerheten mot Börsdata →
+# beslutsunderlag för att köra utan abonnemanget. (Norden: framtida källa.)
+
+_EDGAR_TAGS = {
+    "revenues": ["RevenueFromContractWithCustomerExcludingAssessedTax", "Revenues",
+                 "SalesRevenueNet", "RevenueFromContractWithCustomerIncludingAssessedTax"],
+    "operating_income": ["OperatingIncomeLoss"],
+    "net_profit": ["NetIncomeLoss"],
+    "eps": ["EarningsPerShareDiluted", "EarningsPerShareBasic"],
+    "total_assets": ["Assets"],
+    "total_equity": ["StockholdersEquity",
+                     "StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest"],
+    "cash_and_equivalents": ["CashAndCashEquivalentsAtCarryingValue"],
+    "operating_cash_flow": ["NetCashProvidedByUsedInOperatingActivities"],
+}
+
+
+def _ensure_shadow_table(db):
+    db.execute("""
+        CREATE TABLE IF NOT EXISTS shadow_reports (
+            ticker TEXT NOT NULL,
+            cik TEXT,
+            report_type TEXT NOT NULL,
+            period_year INTEGER NOT NULL,
+            period_q INTEGER NOT NULL,
+            report_end_date TEXT,
+            currency TEXT,
+            revenues DOUBLE PRECISION,
+            operating_income DOUBLE PRECISION,
+            net_profit DOUBLE PRECISION,
+            eps DOUBLE PRECISION,
+            total_assets DOUBLE PRECISION,
+            total_equity DOUBLE PRECISION,
+            cash_and_equivalents DOUBLE PRECISION,
+            operating_cash_flow DOUBLE PRECISION,
+            source TEXT DEFAULT 'sec_edgar',
+            fetched_at TEXT,
+            PRIMARY KEY (ticker, report_type, period_year, period_q)
+        )
+    """)
+    db.commit()
+
+
+def _edgar_companyfacts(ticker):
+    """Hela XBRL-faktapaketet för ett US-bolag (gratis, strukturerat)."""
+    cik = _edgar_cik(ticker)
+    if not cik:
+        return None
+    try:
+        r = requests.get(f"https://data.sec.gov/api/xbrl/companyfacts/CIK{cik}.json",
+                         headers=_EDGAR_UA, timeout=30)
+        if r.status_code != 200:
+            return None
+        return r.json()
+    except Exception as e:
+        print(f"[shadow] companyfacts {ticker}: {e}", file=sys.stderr)
+        return None
+
+
+def _extract_edgar_periods(facts):
+    """XBRL-fakta → {(rtype, year, q): {metric: värde, report_end_date}}.
+    Flödesmått kräver ~kvartals-/årslång period; balansmått (instant) mappas
+    via fiskal period (fp). Vid dubbletter (omräkningar) vinner senast filade.
+    OBS: EDGAR särredovisar sällan Q4-flöden (bara FY) — accepterat i testfas."""
+    from datetime import date as _date
+    gaap = (facts.get("facts") or {}).get("us-gaap") or {}
+    out, filedmap = {}, {}
+
+    def _put(key, metric, val, end, filed):
+        prev = filedmap.get((key, metric))
+        if prev is not None and prev >= (filed or ""):
+            return
+        filedmap[(key, metric)] = filed or ""
+        row = out.setdefault(key, {})
+        row[metric] = val
+        row.setdefault("report_end_date", end)
+
+    for metric, tags in _EDGAR_TAGS.items():
+        instant = metric in ("total_assets", "total_equity", "cash_and_equivalents")
+        for tag in tags:
+            node = gaap.get(tag)
+            if not node:
+                continue
+            got_any = False
+            for unit, items in (node.get("units") or {}).items():
+                if unit not in ("USD", "USD/shares"):
+                    continue
+                for it in items:
+                    fy, fp = it.get("fy"), it.get("fp") or ""
+                    end, start = it.get("end"), it.get("start")
+                    val, filed = it.get("val"), it.get("filed")
+                    if not end or val is None or not fy:
+                        continue
+                    if instant:
+                        if fp.startswith("Q"):
+                            _put(("quarter", int(fy), int(fp[1])), metric, val, end, filed)
+                            got_any = True
+                        elif fp == "FY":
+                            _put(("year", int(fy), 0), metric, val, end, filed)
+                            got_any = True
+                        continue
+                    if not start:
+                        continue
+                    try:
+                        days = (_date.fromisoformat(end) - _date.fromisoformat(start)).days
+                    except Exception:
+                        continue
+                    if 80 <= days <= 100 and fp.startswith("Q"):
+                        _put(("quarter", int(fy), int(fp[1])), metric, val, end, filed)
+                        got_any = True
+                    elif 350 <= days <= 380 and fp == "FY":
+                        _put(("year", int(fy), 0), metric, val, end, filed)
+                        got_any = True
+            if got_any:
+                break  # första taggen som gav data vinner (undvik dubbelräkning)
+    return out
+
+
+def sync_shadow_reports(db, tickers=None, days_back=7, max_companies=40):
+    """Kalenderdriven skugg-synk: US-bolag med rapportdatum inom fönstret
+    (report_calendar + stocks.next_company_report) eller explicit tickers.
+    Sparar senaste ~10 kvartal + 4 år per bolag. Idempotent (upsert)."""
+    from edge_db import _fetchall, _ph, _upsert_sql
+    import time as _t
+    _ensure_shadow_table(db)
+    ph = _ph()
+    tick = {str(t).strip().upper() for t in (tickers or []) if str(t).strip()}
+    if not tick:
+        today = datetime.now().date()
+        frm = (today - timedelta(days=days_back)).isoformat()
+        rows = _fetchall(db, f"""
+            SELECT DISTINCT s.short_name AS t FROM stocks s
+            LEFT JOIN report_calendar rc ON rc.ticker = s.short_name
+            WHERE s.country = 'US' AND s.last_price > 0 AND (
+                  (rc.report_date >= {ph} AND rc.report_date <= {ph})
+               OR (s.next_company_report >= {ph} AND s.next_company_report <= {ph}))
+        """, (frm, today.isoformat(), frm, today.isoformat()))
+        tick = {dict(r)["t"] for r in rows if dict(r).get("t")}
+    tick = sorted(tick)[:max_companies]
+
+    cols = ["ticker", "cik", "report_type", "period_year", "period_q",
+            "report_end_date", "currency", "revenues", "operating_income",
+            "net_profit", "eps", "total_assets", "total_equity",
+            "cash_and_equivalents", "operating_cash_flow", "source", "fetched_at"]
+    ins = _upsert_sql("shadow_reports", cols,
+                      ["ticker", "report_type", "period_year", "period_q"])
+    done = errors = saved = 0
+    for t in tick:
+        try:
+            facts = _edgar_companyfacts(t)
+            if not facts:
+                errors += 1
+                continue
+            periods = _extract_edgar_periods(facts)
+            keys = sorted(periods.keys(), key=lambda k: (k[1], k[2]), reverse=True)
+            use = ([k for k in keys if k[0] == "quarter"][:10]
+                   + [k for k in keys if k[0] == "year"][:4])
+            for k in use:
+                p = periods[k]
+                db.execute(ins, (t, str((facts.get("cik") or "")), k[0], k[1], k[2],
+                                 p.get("report_end_date"), "USD",
+                                 p.get("revenues"), p.get("operating_income"),
+                                 p.get("net_profit"), p.get("eps"),
+                                 p.get("total_assets"), p.get("total_equity"),
+                                 p.get("cash_and_equivalents"),
+                                 p.get("operating_cash_flow"),
+                                 "sec_edgar", datetime.utcnow().isoformat()))
+                saved += 1
+            db.commit()
+            done += 1
+            _t.sleep(0.15)  # SEC fair access
+        except Exception as e:
+            errors += 1
+            print(f"[shadow] {t}: {e}", file=sys.stderr)
+            try: db.rollback()
+            except Exception: pass
+    return {"companies": done, "errors": errors, "rows": saved,
+            "tickers": tick[:20]}
+
+
+@app.route("/api/shadow/sync", methods=["POST"])
+def api_shadow_sync():
+    """Manuell skugg-synk (inloggade — SEC är gratis). ?tickers=GEV,NVDA
+    eller tomt = kalenderfönstret senaste 7 dagarna."""
+    tickers = [t for t in (request.args.get("tickers") or "").split(",") if t.strip()]
+    db = get_db()
+    try:
+        res = sync_shadow_reports(db, tickers=tickers or None)
+        return jsonify(res)
+    finally:
+        db.close()
+
+
+@app.route("/api/shadow/compare")
+def api_shadow_compare():
+    """FACIT: EDGAR-skuggan vs Börsdata per (bolag, period). Börsdata
+    lagrar miljoner — EDGAR absoluta USD → skuggan delas med 1e6 (eps
+    jämförs rakt). diff_pct per mått + andel inom 2%/5%."""
+    from edge_db import _fetchall
+    db = get_db()
+    try:
+        _ensure_shadow_table(db)
+        rows = _fetchall(db, """
+            SELECT sh.ticker, sh.report_type, sh.period_year, sh.period_q,
+                   sh.revenues AS sh_rev, sh.net_profit AS sh_np, sh.eps AS sh_eps,
+                   br.revenues AS bd_rev, br.net_profit AS bd_np, br.eps AS bd_eps
+            FROM shadow_reports sh
+            JOIN borsdata_instrument_map m ON UPPER(m.ticker) = UPPER(sh.ticker)
+            JOIN borsdata_reports br ON br.isin = m.isin
+                 AND br.report_type = sh.report_type
+                 AND br.period_year = sh.period_year
+                 AND br.period_q = sh.period_q
+        """)
+        comps, agg = [], {"revenues": [0, 0, 0], "net_profit": [0, 0, 0], "eps": [0, 0, 0]}
+        for r in rows:
+            d = dict(r)
+            row = {"ticker": d["ticker"],
+                   "period": f"{d['report_type']} {d['period_year']} Q{d['period_q']}"}
+            for m, shv, bdv, scale in (("revenues", d["sh_rev"], d["bd_rev"], 1e6),
+                                       ("net_profit", d["sh_np"], d["bd_np"], 1e6),
+                                       ("eps", d["sh_eps"], d["bd_eps"], 1.0)):
+                if shv is None or bdv in (None, 0):
+                    continue
+                shn = shv / scale
+                diff = 100.0 * (shn / bdv - 1) if bdv else None
+                row[m] = {"edgar": round(shn, 3), "borsdata": round(bdv, 3),
+                          "diff_pct": round(diff, 2) if diff is not None else None}
+                agg[m][2] += 1
+                if diff is not None and abs(diff) <= 2: agg[m][0] += 1
+                if diff is not None and abs(diff) <= 5: agg[m][1] += 1
+            if len(row) > 2:
+                comps.append(row)
+        comps.sort(key=lambda c: -max(abs((c.get(m) or {}).get("diff_pct") or 0)
+                                      for m in ("revenues", "net_profit", "eps")))
+        summary = {m: {"jamforda_perioder": a[2],
+                       "inom_2pct": a[0], "inom_5pct": a[1],
+                       "traffsakerhet_2pct": round(100.0 * a[0] / a[2], 1) if a[2] else None}
+                   for m, a in agg.items()}
+        return jsonify({"summary": summary,
+                        "n_perioder": len(comps),
+                        "storsta_avvikelser": comps[:15],
+                        "note": "Börsdata i miljoner, EDGAR/1e6. Q4-flöden saknas ofta "
+                                "i EDGAR (bara FY) — jämförs ej."})
+    finally:
+        db.close()
+
+
 def _edgar_filing_text(ticker, form="10-K"):
     import time as _t, re as _re
     key = (ticker.upper(), form)
@@ -19433,6 +19684,26 @@ def _startup():
         scheduler.add_job(scheduled_archive_topup, 'cron',
                           day_of_week='sun', hour=6, minute=0,
                           id='archive_topup_weekly')
+
+        # 👥 Skugg-pipeline (06:15, efter daily_reports_sync): rapportdata via
+        # SEC EDGAR för US-bolag som rapporterat — parallellt facit mot
+        # Börsdata via /api/shadow/compare (cancel-beslutsunderlag).
+        def scheduled_shadow_reports():
+            if not _sched_claim("shadow_reports", datetime.now().strftime("%Y-%m-%d")):
+                return
+            try:
+                print(f"[AUTO] Skugg-rapportsynk start {datetime.now().strftime('%H:%M')}")
+                dbs2 = get_db()
+                try:
+                    res = sync_shadow_reports(dbs2, days_back=7)
+                    print(f"[AUTO] Skugg-rapportsynk klar: {res}")
+                finally:
+                    dbs2.close()
+            except Exception as e:
+                print(f"[AUTO] Skugg-rapportsynk fel: {e}")
+
+        scheduler.add_job(scheduled_shadow_reports, 'cron',
+                          hour=6, minute=15, id='shadow_reports_daily')
 
         scheduler.start()
         print("  ✓ Auto-refresh scheduler aktiv (var 15:e min under marknadstid)")
