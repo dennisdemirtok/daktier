@@ -1021,8 +1021,17 @@ def api_forward_pe_table():
 def api_status():
     db = get_db()
     stats = get_stats(db)
+    credit_err = None
+    try:
+        from edge_db import _fetchone, _ph
+        r = _fetchone(db, f"SELECT value FROM meta WHERE key = {_ph()}",
+                      ("anthropic:credit_error",))
+        credit_err = dict(r)["value"] if r else None
+    except Exception:
+        pass
     db.close()
     return jsonify({
+        "anthropic_credit_error": credit_err,  # ts när krediter tog slut, annars null
         "loading": state["loading"],
         "progress": state["progress"],
         "error": state["error"],
@@ -4680,6 +4689,7 @@ Score-guide:
         )
 
         if resp.status_code != 200:
+            _flag_credit_error(resp.text)
             return jsonify({"error": f"Claude API error: {resp.status_code}"}), 500
 
         result = resp.json()
@@ -6241,6 +6251,7 @@ REGLER:
                                 headers=headers, json=payload)
                 if r.status_code != 200:
                     print(f"[market news] HTTP {r.status_code}: {r.text[:200]}", file=sys.stderr)
+                    _flag_credit_error(r.text)
                     return None, 0.0
                 resp = r.json()
                 # pause_turn: web_search (server-verktyg) pausade turen —
@@ -6413,6 +6424,7 @@ def _get_or_generate_market_news(db, max_age_hours=6, force=False):
             print(f"[market news] spara fel: {e}", file=sys.stderr)
             try: db.rollback()
             except Exception: pass
+        _clear_credit_error()
         return {"market_recap": recap, "items": items,
                 "generated_at": datetime.utcnow().isoformat(),
                 "cached": False, "cost_usd": cost}
@@ -6532,6 +6544,7 @@ RÅTEXT:
                                   "messages": [{"role": "user", "content": prompt}]})
         if r.status_code != 200:
             print(f"[bullets] Claude HTTP {r.status_code}", file=sys.stderr)
+            _flag_credit_error(r.text)
             return None, 0.0
         resp = r.json()
     except Exception as e:
@@ -6885,6 +6898,7 @@ REGLER:
                 r = client.post("https://api.anthropic.com/v1/messages", headers=headers, json=payload)
                 if r.status_code != 200:
                     print(f"[macro pulse] HTTP {r.status_code}: {r.text[:200]}", file=sys.stderr)
+                    _flag_credit_error(r.text)
                     return None, 0.0
                 resp = r.json()
                 if resp.get("stop_reason") != "pause_turn":
@@ -18895,6 +18909,7 @@ DEL 9 — DAGENS DB-SNAPSHOT (uppdateras var 5 min)
                                 user_msg = "API-nyckel ogiltig"
                             elif resp.status_code in (502, 503, 504, 529):
                                 user_msg = "Anthropic överbelastat efter 3 försök — vänta 30s och försök igen"
+                            _flag_credit_error(err_text)
                             yield _sse({"type": "error", "error": f"{user_msg}: {err_text[:200]}"})
                             return
 
@@ -19130,6 +19145,42 @@ DEL 9 — DAGENS DB-SNAPSHOT (uppdateras var 5 min)
 
 
 # ── Startup (runs for both gunicorn and direct execution) ──
+
+def _flag_credit_error(err_text):
+    """Sätter varningsflagga i meta när Anthropic svarar 'credit balance too
+    low' — krediterna tog slut 12 juli och ALLT AI-innehåll frös TYST i
+    tre dagar. Flaggan exponeras i /api/status; rensas vid lyckat anrop."""
+    try:
+        s = str(err_text or "")
+        if "credit balance" not in s.lower():
+            return
+        from edge_db import _upsert_sql
+        db = get_db()
+        try:
+            db.execute(_upsert_sql("meta", ["key", "value"], ["key"]),
+                       ("anthropic:credit_error", datetime.now().isoformat()))
+            db.commit()
+        finally:
+            db.close()
+        print("[KREDITVARNING] Anthropic-krediter slut — AI-innehåll pausat",
+              file=sys.stderr)
+    except Exception:
+        pass
+
+
+def _clear_credit_error():
+    try:
+        from edge_db import _ph
+        db = get_db()
+        try:
+            db.execute(f"DELETE FROM meta WHERE key = {_ph()}",
+                       ("anthropic:credit_error",))
+            db.commit()
+        finally:
+            db.close()
+    except Exception:
+        pass
+
 
 def _sched_release(job_id):
     """Släpper en claim efter MISSLYCKAT jobb så nästa försök (annan worker,
