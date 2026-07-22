@@ -15245,6 +15245,33 @@ def api_shadow_sync_nordic():
         db.close()
 
 
+@app.route("/api/shadow/daily-log", methods=["GET"])
+def api_shadow_daily_log():
+    """Daglig skuggkörnings-logg (inloggade): vad 06:15-jobbet körde och
+    utfallet per bolag — uppföljningsunderlag inför Börsdata-beslutet."""
+    import json as _jl
+    from edge_db import _fetchall, _ph
+    n = min(int(request.args.get("days") or 7), 30)
+    db = get_db()
+    try:
+        ph = _ph()
+        rows = _fetchall(db,
+                         f"SELECT key, value FROM meta WHERE key LIKE {ph} "
+                         f"ORDER BY key DESC LIMIT {ph}",
+                         ("shadow:daily:%", n))
+        out = []
+        for r in rows:
+            d = dict(r)
+            try:
+                out.append({"datum": d["key"].split(":")[-1],
+                            **_jl.loads(d["value"])})
+            except Exception:
+                out.append({"datum": d["key"], "raw": str(d["value"])[:300]})
+        return jsonify({"dagar": out})
+    finally:
+        db.close()
+
+
 @app.route("/api/shadow/sync", methods=["POST"])
 def api_shadow_sync():
     """Manuell skugg-synk (inloggade — SEC är gratis). ?tickers=GEV,NVDA
@@ -20253,6 +20280,51 @@ def _startup():
                 try:
                     res = sync_shadow_reports(dbs2, days_back=7)
                     print(f"[AUTO] Skugg-rapportsynk klar: {res}")
+                    # NORDEN (live-parallelltest inför Börsdata-beslutet 5 aug):
+                    # bolag vars rapportdatum föll de senaste 3 dagarna hämtas
+                    # via pressrelease-pipelinen. Max 12/dag begränsar
+                    # Claude-kostnaden; isin-prefix = nordiskt land.
+                    res_n = None
+                    try:
+                        from edge_db import _fetchall as _fa2, _ph as _ph2
+                        p2 = _ph2()
+                        td = datetime.now().date()
+                        frm = (td - timedelta(days=3)).isoformat()
+                        nrows = _fa2(dbs2, f"""
+                            SELECT DISTINCT s.short_name AS t, s.market_cap AS mc
+                            FROM stocks s
+                            LEFT JOIN report_calendar rc ON rc.ticker = s.short_name
+                            WHERE SUBSTR(s.isin, 1, 2) IN ('SE','NO','DK','FI','IS')
+                              AND s.last_price > 0 AND (
+                                  (rc.report_date >= {p2} AND rc.report_date <= {p2})
+                               OR (s.next_company_report >= {p2} AND s.next_company_report <= {p2}))
+                        """, (frm, td.isoformat(), frm, td.isoformat()))
+                        ntick = [d["t"] for d in sorted(
+                                     (dict(r) for r in nrows),
+                                     key=lambda d: -(d.get("mc") or 0))
+                                 if d.get("t")][:12]
+                        if ntick:
+                            res_n = sync_shadow_reports_nordic(dbs2, ntick,
+                                                               history=1, days_back=10)
+                            print(f"[AUTO] Norden-skugga klar: {res_n}")
+                        else:
+                            print("[AUTO] Norden-skugga: inga rapportbolag i fönstret")
+                    except Exception as e2:
+                        res_n = {"error": str(e2)[:200]}
+                        print(f"[AUTO] Norden-skugga fel: {e2}")
+                    # Daglig facit-logg (läses vid uppföljning): vad kördes, utfall
+                    try:
+                        import json as _jm
+                        from edge_db import _upsert_sql as _ups2
+                        dbs2.execute(_ups2("meta", ["key", "value"], ["key"]),
+                                     (f"shadow:daily:{datetime.now():%Y-%m-%d}",
+                                      _jm.dumps({"ts": datetime.now().isoformat(),
+                                                 "us": res, "norden": res_n},
+                                                ensure_ascii=False, default=str)))
+                        dbs2.commit()
+                    except Exception:
+                        try: dbs2.rollback()
+                        except Exception: pass
                 finally:
                     dbs2.close()
             except Exception as e:
