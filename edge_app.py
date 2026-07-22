@@ -14917,18 +14917,27 @@ def _nasdaq_find_report_release(company_name, days_back=45):
         return {w for w in s.split() if len(w) > 1 and w not in _JUNK}
 
     want = _norm_words(company_name)
+    dbg = {}
     try:
         r = requests.get(
             "https://api.news.eu.nasdaq.com/news/query.action",
             params={"type": "json", "showCompanyName": "true",
                     "freeText": company_name, "limit": 40},
-            headers={"User-Agent": "Mozilla/5.0 (DAKTIER research)"}, timeout=25)
+            headers={"User-Agent": ("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+                                    "AppleWebKit/537.36 (KHTML, like Gecko) "
+                                    "Chrome/126.0 Safari/537.36"),
+                     "Accept": "application/json, text/plain, */*",
+                     "Referer": "https://www.nasdaqomxnordic.com/"},
+            timeout=25)
+        dbg["status"] = r.status_code
         if r.status_code != 200:
-            return None, None, None
+            dbg["body"] = r.text[:120]
+            return None, None, dbg
         txt = r.text
         i, j = txt.find("{"), txt.rfind("}")
         data = json.loads(txt[i:j + 1]) if i >= 0 else {}
         items = ((data.get("results") or {}).get("item")) or []
+        dbg["n_items"] = len(items)
         from datetime import datetime as _dt, timedelta as _td
         cutoff = (_dt.utcnow() - _td(days=days_back)).strftime("%Y-%m-%d")
         for it in items:
@@ -14950,11 +14959,13 @@ def _nasdaq_find_report_release(company_name, days_back=45):
             url = it.get("messageUrl") or ""
             if url.startswith("//"):
                 url = "https:" + url
-            return it.get("headline"), url, pub
-        return None, None, None
+            dbg["pub"] = pub
+            return it.get("headline"), url, dbg
+        return None, None, dbg
     except Exception as e:
+        dbg["exc"] = str(e)[:150]
         print(f"[nordic shadow] nasdaq-api {company_name}: {e}", file=sys.stderr)
-        return None, None, None
+        return None, None, dbg
 
 
 def _extract_nordic_report_with_claude(text, company, ticker):
@@ -15039,9 +15050,9 @@ def sync_shadow_reports_nordic(db, tickers):
                 errors += 1
                 continue
             company = best.get("name") or t
-            title, url, pub = _nasdaq_find_report_release(company)
+            title, url, meta = _nasdaq_find_report_release(company)
             if not url:
-                results.append({t: "ingen rapport-release funnen (45d)"})
+                results.append({t: f"ingen release: {json.dumps(meta, ensure_ascii=False)[:100]}"})
                 errors += 1
                 continue
             html = requests.get(url, headers={"User-Agent": _EDGAR_UA["User-Agent"]},
