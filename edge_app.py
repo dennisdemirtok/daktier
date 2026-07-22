@@ -14916,6 +14916,7 @@ def _nasdaq_find_report_release(company_name, days_back=45):
             s = s.replace(ch, " ")
         return {w for w in s.split() if len(w) > 1 and w not in _JUNK}
 
+    import json as _json
     want = _norm_words(company_name)
     dbg = {}
     try:
@@ -14935,7 +14936,7 @@ def _nasdaq_find_report_release(company_name, days_back=45):
             return None, None, dbg
         txt = r.text
         i, j = txt.find("{"), txt.rfind("}")
-        data = json.loads(txt[i:j + 1]) if i >= 0 else {}
+        data = _json.loads(txt[i:j + 1]) if i >= 0 else {}
         items = ((data.get("results") or {}).get("item")) or []
         dbg["n_items"] = len(items)
         from datetime import datetime as _dt, timedelta as _td
@@ -14972,6 +14973,7 @@ def _extract_nordic_report_with_claude(text, company, ticker):
     """Pressrelease-text → strukturerade kvartalssiffror I MILJONER av
     rapportvalutan. Returnerar (dict|None, cost)."""
     import re as _re
+    import json as _json2
     prompt = (f"Ur denna kvartalsrapport-pressrelease från {company} ({ticker}), "
               "extrahera SENASTE KVARTALETS siffror (inte ackumulerat halvår/9M om "
               "kvartalet redovisas separat — annars perioden som anges).\n\n"
@@ -15021,7 +15023,7 @@ def _extract_nordic_report_with_claude(text, company, ticker):
         return None, cost
     js = _re.sub(r"^```(?:json)?\s*|\s*```$", "", m.group(1).strip())
     try:
-        return json.loads(js), cost
+        return _json2.loads(js), cost
     except Exception as e:
         print(f"[nordic shadow] JSON parse: {e}", file=sys.stderr)
         return None, cost
@@ -15052,7 +15054,8 @@ def sync_shadow_reports_nordic(db, tickers):
             company = best.get("name") or t
             title, url, meta = _nasdaq_find_report_release(company)
             if not url:
-                results.append({t: f"ingen release: {json.dumps(meta, ensure_ascii=False)[:100]}"})
+                import json as _json3
+                results.append({t: f"ingen release: {_json3.dumps(meta, ensure_ascii=False)[:100]}"})
                 errors += 1
                 continue
             html = requests.get(url, headers={"User-Agent": _EDGAR_UA["User-Agent"]},
