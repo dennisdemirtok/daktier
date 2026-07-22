@@ -5067,7 +5067,7 @@ def _refresh_stocks_isin(db):
     # KARANTÄNERADE isins: ersätt med kanonisk ISIN från map (Sandvik-fallet:
     # raden bar korrupt CA-isin → karantänfiltret gjorde bolaget osynligt
     # för resolvern trots att äkta data finns under rätt ISIN)
-    q_fixed = 0
+    q_fixed, q_err, q_stuck = 0, None, []
     try:
         from data_quarantine import QUARANTINED_ISINS
         qlist = list(QUARANTINED_ISINS)
@@ -5092,7 +5092,14 @@ def _refresh_stocks_isin(db):
                            (rd["good_isin"], rd["orderbook_id"]))
                 q_fixed += 1
             db.commit()
+            # Diagnos: karantänerade rader som INTE gick att ersätta (ingen
+            # map-rad med samma ticker) — synliggör Sandvik-klassens fall
+            left = db.execute(
+                f"SELECT s.short_name, s.isin FROM stocks s "
+                f"WHERE s.isin IN ({marks})", tuple(qlist)).fetchall()
+            q_stuck = [f"{dict(r)['short_name']}={dict(r)['isin']}" for r in left]
         except Exception as e:
+            q_err = str(e)[:200]
             print(f"[isin-refresh] karantän-ersättning fel: {e}", file=sys.stderr)
             try: db.rollback()
             except Exception: pass
@@ -5101,7 +5108,8 @@ def _refresh_stocks_isin(db):
         "WHERE (isin IS NULL OR isin = '' OR isin LIKE 'YAHOO_%')")
     n_after = (dict(after)["n"] if after else 0) or 0
     return {"before": n_before, "after": n_after,
-            "fixed": n_before - n_after, "quarantine_replaced": q_fixed}
+            "fixed": n_before - n_after, "quarantine_replaced": q_fixed,
+            "quarantine_stuck": q_stuck[:10], "quarantine_error": q_err}
 
 
 @app.route("/api/borsdata/refresh-stocks-isin", methods=["POST"])
@@ -5115,6 +5123,9 @@ def api_borsdata_refresh_stocks_isin():
             "stocks_with_bad_isin_before": res["before"],
             "stocks_with_bad_isin_after": res["after"],
             "fixed": res["fixed"],
+            "quarantine_replaced": res.get("quarantine_replaced"),
+            "quarantine_stuck": res.get("quarantine_stuck"),
+            "quarantine_error": res.get("quarantine_error"),
         })
     finally:
         db.close()
@@ -14989,53 +15000,69 @@ def _nasdaq_find_report_release(company_name, days_back=45):
             data = _json.loads(txt[i:j + 1]) if i >= 0 else {}
             return ((data.get("results") or {}).get("item")) or []
 
-        # Steg 1: kategorifiltrerad fritextsök (Ericsson/Volvo-klassen)
+        # Kompaktnamn för symboltunga bolag: 'H&M B' normaliseras till NOLL
+        # sökord (alla fragment ≤1 tecken) — matcha då på alfanumeriskt
+        # kompaktnamn utan listningsklass ('H&M' → 'hm' ⊂ 'hennesmauritzabhm')
+        import re as _re2
+        _compact = lambda s: _re2.sub(r"[^a-z0-9]", "", str(s or "").lower())
+        cbase = _compact(_re2.sub(r"\s+(?:ser\.?\s*)?[A-D]$", "",
+                                  str(company_name).strip(), flags=_re2.I))
+
+        def _match(pool):
+            out, seen_pub = [], set()
+            for it in pool:
+                pub = str(it.get("published") or "")[:10]
+                if pub and pub < _from:
+                    continue
+                cat = (it.get("cnsCategory") or "").lower()
+                title = (it.get("headline") or "").lower()
+                if not (any(k in cat for k in _RAPPORT_KATEGORIER)
+                        or any(w in title for w in _RAPPORT_ORD)):
+                    continue
+                got = _norm_words(it.get("company"))
+                # Enordsnamn kräver EXAKT match ('Volvo'≠'Volvo Car' men
+                # ='Volvo, AB' efter junk-rensning); flerordsnamn tillåter
+                # delmängd ('Atlas Copco' ⊆ 'Atlas Copco Group'); ordlösa
+                # namn (H&M) matchar på kompaktnamn
+                name_ok = (want and got and (want == got or (len(want) >= 2 and want <= got))) \
+                    or (not want and len(cbase) >= 2 and cbase in _compact(it.get("company")))
+                if not name_ok:
+                    continue
+                url = it.get("messageUrl") or ""
+                if url.startswith("//"):
+                    url = "https:" + url
+                if not url or pub in seen_pub:
+                    continue  # sv+en-versionen samma dag = samma rapport
+                seen_pub.add(pub)
+                out.append((it.get("headline"), url, pub))
+            out.sort(key=lambda m: m[2] or "", reverse=True)
+            return out
+
+        # Steg 1: kategorifiltrerad fritextsök (Ericsson-klassen)
         for cat in _CATS:
             items.extend(_query({"freeText": company_name, "cnscategory": cat}))
-        # Steg 2 (Investor-klassen — 'Investor Relations' i varje rapport
-        # dränker fritext): company= med exakta registrerade namn-varianter
-        if not any(_norm_words(it.get("company")) and
-                   (want == _norm_words(it.get("company"))
-                    or (len(want) >= 2 and want <= _norm_words(it.get("company"))))
-                   for it in items):
+        matches = _match(items)
+        # Steg 2 (Volvo/Investor/Atlas-klassen — egna releaser rankas utanför
+        # fritext-toppen eller dränks i omnämnanden): company= med exakta
+        # registrerade namnvarianter. Körs på SAMMA matchlogik som steg 1 —
+        # gaten och huvudloopen divergerade tidigare så fallbacken skippades.
+        if not matches:
             base = str(company_name).strip()
-            for variant in (f"{base} AB", f"{base}, AB", base, f"AB {base}",
+            vc = {}
+            for variant in (f"{base}, AB", f"{base} AB", base, f"AB {base}",
                             f"{base} Aktiebolag"):
                 got_items = _query({"company": variant})
+                vc[variant] = len(got_items)
                 if got_items:
                     items.extend(got_items)
                     dbg["company_variant"] = variant
-                    break
+                    matches = _match(items)
+                    if matches:
+                        break
+            dbg["variant_counts"] = vc
         dbg["n_items"] = len(items)
         dbg["want"] = sorted(want)
         dbg["report_companies"] = [it.get("company") for it in items][:6]
-        from datetime import datetime as _dt, timedelta as _td
-        cutoff = (_dt.utcnow() - _td(days=days_back)).strftime("%Y-%m-%d")
-        matches, seen_pub = [], set()
-        for it in items:
-            pub = str(it.get("published") or "")[:10]
-            if pub and pub < _from:
-                continue
-            cat = (it.get("cnsCategory") or "").lower()
-            title = (it.get("headline") or "").lower()
-            is_report = (any(k in cat for k in _RAPPORT_KATEGORIER)
-                         or any(w in title for w in _RAPPORT_ORD))
-            if not is_report:
-                continue
-            got = _norm_words(it.get("company"))
-            # Enordsnamn kräver EXAKT match ('Volvo'≠'Volvo Car' men
-            # ='Volvo, AB' efter junk-rensning); flerordsnamn tillåter
-            # delmängd ('Atlas Copco' ⊆ 'Atlas Copco Group')
-            if not (want and got and (want == got or (len(want) >= 2 and want <= got))):
-                continue
-            url = it.get("messageUrl") or ""
-            if url.startswith("//"):
-                url = "https:" + url
-            if not url or pub in seen_pub:
-                continue  # sv+en-versionen samma dag = samma rapport
-            seen_pub.add(pub)
-            matches.append((it.get("headline"), url, pub))
-        matches.sort(key=lambda m: m[2] or "", reverse=True)
         dbg["n_matches"] = len(matches)
         return matches, dbg
     except Exception as e:
@@ -15137,7 +15164,7 @@ def sync_shadow_reports_nordic(db, tickers, history=1, days_back=45):
             matches, meta = _nasdaq_find_report_release(company, days_back=days_back)
             if not matches:
                 import json as _json3
-                results.append({t: f"ingen release: {_json3.dumps(meta, ensure_ascii=False)[:100]}"})
+                results.append({t: f"ingen release: {_json3.dumps(meta, ensure_ascii=False)[:400]}"})
                 errors += 1
                 continue
             saved_periods = []
@@ -15298,7 +15325,8 @@ def api_shadow_compare():
             bd_cur = (best.get("rep_cur") or best.get("cur") or "").upper()
             cur_mismatch = bool(sh_cur and bd_cur and sh_cur != bd_cur)
             row = {"ticker": sh["ticker"], "source": src,
-                   "period": f"{sh['report_type']} slut {str(sh['report_end_date'])[:10]}"}
+                   "period": f"{sh['report_type']} slut {str(sh['report_end_date'])[:10]}",
+                   "valutor": f"skugga={sh_cur or '?'} borsdata={bd_cur or '?'}"}
             if cur_mismatch:
                 row["currency_diff"] = (f"{sh_cur} (rapport) vs {bd_cur} (Börsdata) — "
                                         f"FX-omräkning krävs, räknas ej som miss")
