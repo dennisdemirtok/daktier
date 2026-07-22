@@ -14710,7 +14710,10 @@ def _edgar_cik(ticker):
 
 _EDGAR_TAGS = {
     "revenues": ["RevenueFromContractWithCustomerExcludingAssessedTax", "Revenues",
-                 "SalesRevenueNet", "RevenueFromContractWithCustomerIncludingAssessedTax"],
+                 "SalesRevenueNet", "RevenueFromContractWithCustomerIncludingAssessedTax",
+                 # Banker/finansbolag saknar ofta generiska Revenues-taggen:
+                 "RevenuesNetOfInterestExpense",
+                 "InterestAndDividendIncomeOperating"],
     "operating_income": ["OperatingIncomeLoss"],
     "net_profit": ["NetIncomeLoss"],
     "eps": ["EarningsPerShareDiluted", "EarningsPerShareBasic"],
@@ -14885,6 +14888,185 @@ def sync_shadow_reports(db, tickers=None, days_back=7, max_companies=40):
             "tickers": tick[:20]}
 
 
+# ── NORDISK SKUGG-KÄLLA: bolagens egna pressreleaser (Nasdaq-nyhetsflödet) ──
+# Nordiska bolag publicerar kvartalsrapporter som pressreleaser via Nasdaq/
+# Cision/MFN. Nasdaqs publika nyhets-API listar dem per bolag; releasens
+# HTML innehåller huvudsiffrorna i text → Claude extraherar strukturerat
+# (samma mönster som bullets: markörer + 'inga påhittade siffror').
+
+_RAPPORT_ORD = ("delårsrapport", "delarsrapport", "interim report", "kvartalsrapport",
+                "half-year", "halvårsrapport", "halvarsrapport", "bokslutskommunik",
+                "interim management", "year-end report", "q1", "q2", "q3", "q4")
+
+
+def _nasdaq_find_report_release(company_name, days_back=45):
+    """Senaste rapport-releasen för ett bolag ur Nasdaqs nyhets-API.
+    Returnerar (title, html_url, date) eller (None, None, None)."""
+    try:
+        r = requests.get(
+            "https://api.news.eu.nasdaq.com/news/query.action",
+            params={"type": "json", "showAttachments": "true",
+                    "showCompanyName": "true", "company": company_name,
+                    "limit": 40},
+            headers={"User-Agent": _EDGAR_UA["User-Agent"]}, timeout=25)
+        if r.status_code != 200:
+            return None, None, None
+        txt = r.text
+        # API:t svarar med JSONP-aktig wrapper ibland — plocka ut JSON-kroppen
+        i, j = txt.find("{"), txt.rfind("}")
+        data = json.loads(txt[i:j + 1]) if i >= 0 else {}
+        items = ((data.get("results") or {}).get("item")) or []
+        from datetime import datetime as _dt, timedelta as _td
+        cutoff = (_dt.utcnow() - _td(days=days_back)).strftime("%Y-%m-%d")
+        for it in items:
+            title = (it.get("headline") or "").lower()
+            pub = str(it.get("published") or "")[:10]
+            if pub and pub < cutoff:
+                continue
+            if any(w in title for w in _RAPPORT_ORD):
+                url = it.get("messageUrl") or ""
+                if url.startswith("//"):
+                    url = "https:" + url
+                return it.get("headline"), url, pub
+        return None, None, None
+    except Exception as e:
+        print(f"[nordic shadow] nasdaq-api {company_name}: {e}", file=sys.stderr)
+        return None, None, None
+
+
+def _extract_nordic_report_with_claude(text, company, ticker):
+    """Pressrelease-text → strukturerade kvartalssiffror I MILJONER av
+    rapportvalutan. Returnerar (dict|None, cost)."""
+    import re as _re
+    prompt = (f"Ur denna kvartalsrapport-pressrelease från {company} ({ticker}), "
+              "extrahera SENASTE KVARTALETS siffror (inte ackumulerat halvår/9M om "
+              "kvartalet redovisas separat — annars perioden som anges).\n\n"
+              "Svara EXAKT med ett JSON-block mellan markörerna:\n\n"
+              "---RAPPORT-JSON-START---\n"
+              "{\n"
+              '  "period_year": 2026, "period_q": 2,\n'
+              '  "report_end_date": "YYYY-MM-DD",\n'
+              '  "currency": "SEK",\n'
+              '  "unit_note": "vilken enhet källan använde, t.ex. MSEK",\n'
+              '  "revenues": 12345.0, "operating_income": 2345.0,\n'
+              '  "net_profit": 1234.0, "eps": 4.56,\n'
+              '  "operating_cash_flow": null, "total_assets": null, "total_equity": null\n'
+              "}\n"
+              "---RAPPORT-JSON-END---\n\n"
+              "REGLER:\n"
+              "- ALLA belopp i MILJONER av rapportvalutan (står det 'MSEK 12 345' → 12345.0; "
+              "står det tkr/TSEK → dela med 1000; miljarder → gånger 1000). eps i valuta/aktie.\n"
+              "- period_q: 1-4 för kvartal.\n"
+              "- null för allt som inte uttryckligen står i texten. INGA påhittade siffror, "
+              "inga beräkningar utom enhetskonvertering.\n"
+              "- report_end_date = kvartalets sista dag.\n\n"
+              "PRESSRELEASE:\n" + text[:28000])
+    headers = {"x-api-key": CLAUDE_API_KEY, "anthropic-version": "2023-06-01",
+               "content-type": "application/json"}
+    try:
+        import httpx
+        with httpx.Client(timeout=180.0) as client:
+            r = client.post("https://api.anthropic.com/v1/messages", headers=headers,
+                            json={"model": _sonnet(), "max_tokens": 6000,
+                                  "messages": [{"role": "user", "content": prompt}]})
+        if r.status_code != 200:
+            _flag_credit_error(r.text)
+            print(f"[nordic shadow] Claude HTTP {r.status_code}", file=sys.stderr)
+            return None, 0.0
+        resp = r.json()
+    except Exception as e:
+        print(f"[nordic shadow] Claude fel: {e}", file=sys.stderr)
+        return None, 0.0
+    try:
+        cost = _calc_sonnet_cost(resp.get("usage", {}))
+    except Exception:
+        cost = 0.0
+    full = "".join(b.get("text", "") for b in resp.get("content", []) if b.get("type") == "text")
+    m = _re.search(r"---RAPPORT-JSON-START---\s*(.*?)\s*---RAPPORT-JSON-END---", full, _re.DOTALL)
+    if not m:
+        return None, cost
+    js = _re.sub(r"^```(?:json)?\s*|\s*```$", "", m.group(1).strip())
+    try:
+        return json.loads(js), cost
+    except Exception as e:
+        print(f"[nordic shadow] JSON parse: {e}", file=sys.stderr)
+        return None, cost
+
+
+def sync_shadow_reports_nordic(db, tickers):
+    """Nordisk skugg-synk: ticker → bolagsnamn (stocks) → Nasdaq-release →
+    Claude-extraktion → shadow_reports (source='mfn_press', enhet miljoner)."""
+    from edge_db import _upsert_sql
+    _ensure_shadow_table(db)
+    cols = ["ticker", "cik", "report_type", "period_year", "period_q",
+            "report_end_date", "currency", "revenues", "operating_income",
+            "net_profit", "eps", "total_assets", "total_equity",
+            "cash_and_equivalents", "operating_cash_flow", "source", "fetched_at"]
+    ins = _upsert_sql("shadow_reports", cols,
+                      ["ticker", "report_type", "period_year", "period_q"])
+    results, done, errors = [], 0, 0
+    for t in tickers:
+        t = str(t).strip()
+        if not t:
+            continue
+        try:
+            best, _err = _agent_resolve_stock(db, t)
+            if not best:
+                results.append({t: "hittas ej i stocks"})
+                errors += 1
+                continue
+            company = best.get("name") or t
+            title, url, pub = _nasdaq_find_report_release(company)
+            if not url:
+                results.append({t: "ingen rapport-release funnen (45d)"})
+                errors += 1
+                continue
+            html = requests.get(url, headers={"User-Agent": _EDGAR_UA["User-Agent"]},
+                                timeout=30).text
+            text = _html_to_clean_text(html)
+            if not text or len(text) < 400:
+                results.append({t: "release-texten tom"})
+                errors += 1
+                continue
+            parsed, cost = _extract_nordic_report_with_claude(text, company, t)
+            if not parsed or not parsed.get("period_year"):
+                results.append({t: "extraktion misslyckades"})
+                errors += 1
+                continue
+            db.execute(ins, (
+                best.get("short_name") or t, None, "quarter",
+                int(parsed["period_year"]), int(parsed.get("period_q") or 0),
+                parsed.get("report_end_date"), parsed.get("currency"),
+                parsed.get("revenues"), parsed.get("operating_income"),
+                parsed.get("net_profit"), parsed.get("eps"),
+                parsed.get("total_assets"), parsed.get("total_equity"),
+                None, parsed.get("operating_cash_flow"),
+                "mfn_press", datetime.utcnow().isoformat()))
+            db.commit()
+            done += 1
+            results.append({t: f"OK Q{parsed.get('period_q')} {parsed.get('period_year')} "
+                               f"({str(title)[:50]})"})
+        except Exception as e:
+            errors += 1
+            results.append({t: f"fel: {str(e)[:80]}"})
+            try: db.rollback()
+            except Exception: pass
+    return {"done": done, "errors": errors, "results": results}
+
+
+@app.route("/api/shadow/sync-nordic", methods=["POST"])
+def api_shadow_sync_nordic():
+    """Nordisk skugg-synk (inloggade): ?tickers=VOLV B,ERIC B,..."""
+    tickers = [t for t in (request.args.get("tickers") or "").split(",") if t.strip()]
+    if not tickers:
+        return jsonify({"error": "ange ?tickers=VOLV B,ERIC B,..."}), 400
+    db = get_db()
+    try:
+        return jsonify(sync_shadow_reports_nordic(db, tickers))
+    finally:
+        db.close()
+
+
 @app.route("/api/shadow/sync", methods=["POST"])
 def api_shadow_sync():
     """Manuell skugg-synk (inloggade — SEC är gratis). ?tickers=GEV,NVDA
@@ -14913,7 +15095,8 @@ def api_shadow_compare():
         # och Börsdatas kalenderbaserade period_year pekar på OLIKA perioder.
         sh_rows = [dict(r) for r in _fetchall(db,
             "SELECT ticker, report_type, period_year, period_q, report_end_date, "
-            "revenues, net_profit, eps FROM shadow_reports "
+            "revenues, net_profit, eps, operating_income, total_assets, "
+            "total_equity, operating_cash_flow, source FROM shadow_reports "
             "WHERE report_end_date IS NOT NULL")]
         tickers = sorted({r["ticker"] for r in sh_rows})
         bd_by_ticker = {}
@@ -14926,11 +15109,12 @@ def api_shadow_compare():
             # småbolag i st.f. Bank of America (diff -2 000 000%).
             bd = _fetchall(db, f"""
                 SELECT UPPER(m.ticker) AS t, br.report_type, br.report_end_date,
-                       br.revenues, br.net_profit, br.eps
+                       br.revenues, br.net_profit, br.eps, br.operating_income,
+                       br.total_assets, br.total_equity, br.operating_cash_flow,
+                       m.stock_price_currency AS cur
                 FROM borsdata_reports br
                 JOIN borsdata_instrument_map m ON m.isin = br.isin
                 WHERE UPPER(m.ticker) IN ({marks}) AND br.report_end_date IS NOT NULL
-                  AND (m.stock_price_currency = 'USD' OR m.country_id = 5)
             """, tuple(tickers))
             for r in bd:
                 d = dict(r)
@@ -14943,15 +15127,29 @@ def api_shadow_compare():
                 return None
 
         _SPLITS = (2, 3, 4, 5, 10, 20)
+        _NORDIC_CUR = ("SEK", "NOK", "DKK", "EUR", "ISK")
+        _METRICS = ["revenues", "net_profit", "eps", "operating_income",
+                    "total_assets", "total_equity", "operating_cash_flow"]
 
-        comps, agg = [], {"revenues": [0, 0, 0], "net_profit": [0, 0, 0], "eps": [0, 0, 0]}
+        comps = []
+        agg = {m: [0, 0, 0] for m in _METRICS}
+        percomp = {}
         for sh in sh_rows:
+            src = sh.get("source") or "sec_edgar"
             cands = bd_by_ticker.get((sh["ticker"].upper(), sh["report_type"])) or []
             shd = _d(sh["report_end_date"])
             if not shd:
                 continue
             best, bestdiff = None, 99
             for c in cands:
+                # Valutafilter per källa (ticker-kollisioner över börser):
+                # EDGAR-rader får bara matcha USD-instrument, nordiska
+                # pressrelease-rader bara nordiska valutor.
+                cur = (c.get("cur") or "").upper()
+                if src == "sec_edgar" and cur != "USD":
+                    continue
+                if src == "mfn_press" and cur not in _NORDIC_CUR:
+                    continue
                 cd = _d(c["report_end_date"])
                 if cd is None:
                     continue
@@ -14960,18 +15158,20 @@ def api_shadow_compare():
                     best, bestdiff = c, dd
             if not best:
                 continue
-            row = {"ticker": sh["ticker"],
+            row = {"ticker": sh["ticker"], "source": src,
                    "period": f"{sh['report_type']} slut {str(sh['report_end_date'])[:10]}"}
-            for m, shv, bdv, scale in (("revenues", sh["revenues"], best["revenues"], 1e6),
-                                       ("net_profit", sh["net_profit"], best["net_profit"], 1e6),
-                                       ("eps", sh["eps"], best["eps"], 1.0)):
+            pc = percomp.setdefault(sh["ticker"].upper(), {m: [0, 0, 0] for m in _METRICS})
+            for m in _METRICS:
+                shv, bdv = sh.get(m), best.get(m)
                 if shv is None or bdv in (None, 0):
                     continue
+                # EDGAR = absoluta belopp (dela 1e6); pressrelease-extraktion
+                # levereras redan i MILJONER; eps skalas aldrig.
+                scale = 1e6 if (src == "sec_edgar" and m != "eps") else 1.0
                 shn = shv / scale
                 diff = 100.0 * (shn / bdv - 1) if bdv else None
-                cell = {"edgar": round(shn, 3), "borsdata": round(bdv, 3),
+                cell = {"skugga": round(shn, 3), "borsdata": round(bdv, 3),
                         "diff_pct": round(diff, 2) if diff is not None else None}
-                # Split-detektion (EDGAR-original ojusterad vs Börsdata justerad)
                 if m == "eps" and diff is not None and abs(diff) > 20 and bdv:
                     ratio = shn / bdv
                     for s in _SPLITS:
@@ -14981,22 +15181,29 @@ def api_shadow_compare():
                 row[m] = cell
                 if cell.get("split_diff"):
                     continue  # split-artefakt räknas inte som miss
-                agg[m][2] += 1
-                if diff is not None and abs(diff) <= 2: agg[m][0] += 1
-                if diff is not None and abs(diff) <= 5: agg[m][1] += 1
-            if len(row) > 2:
+                for a in (agg[m], pc[m]):
+                    a[2] += 1
+                    if diff is not None and abs(diff) <= 2: a[0] += 1
+                    if diff is not None and abs(diff) <= 5: a[1] += 1
+            if len(row) > 3:
                 comps.append(row)
-        comps.sort(key=lambda c: -max(abs((c.get(m) or {}).get("diff_pct") or 0)
-                                      for m in ("revenues", "net_profit", "eps")))
+        comps.sort(key=lambda c: -max([abs((c.get(m) or {}).get("diff_pct") or 0)
+                                       for m in _METRICS if isinstance(c.get(m), dict)] or [0]))
         summary = {m: {"jamforda_perioder": a[2],
                        "inom_2pct": a[0], "inom_5pct": a[1],
                        "traffsakerhet_2pct": round(100.0 * a[0] / a[2], 1) if a[2] else None}
                    for m, a in agg.items()}
+        per_bolag = {}
+        for t, mm in sorted(percomp.items()):
+            per_bolag[t] = {m: {"inom_2pct": a[0], "n": a[2],
+                                "pct": round(100.0 * a[0] / a[2], 1) if a[2] else None}
+                            for m, a in mm.items() if a[2]}
         return jsonify({"summary": summary,
+                        "per_bolag": per_bolag,
                         "n_perioder": len(comps),
                         "storsta_avvikelser": comps[:15],
-                        "note": "Börsdata i miljoner, EDGAR/1e6. Q4-flöden saknas ofta "
-                                "i EDGAR (bara FY) — jämförs ej."})
+                        "note": "Skala: EDGAR absolut/1e6, pressreleaser redan miljoner; "
+                                "Börsdata miljoner. Q4-flöden saknas ofta i EDGAR — jämförs ej."})
     finally:
         db.close()
 
