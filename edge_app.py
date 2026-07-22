@@ -14899,35 +14899,58 @@ _RAPPORT_ORD = ("delårsrapport", "delarsrapport", "interim report", "kvartalsra
                 "interim management", "year-end report", "q1", "q2", "q3", "q4")
 
 
+_RAPPORT_KATEGORIER = ("financial report", "interim report", "year-end", "annual")
+
+
 def _nasdaq_find_report_release(company_name, days_back=45):
     """Senaste rapport-releasen för ett bolag ur Nasdaqs nyhets-API.
-    Returnerar (title, html_url, date) eller (None, None, None)."""
+    freeText-sökning (company=-parametern kräver exakt registrerat namn och
+    gav 0 träffar) + BOLAGSNAMNS-VERIFIERING mot item.company — sökningen
+    'Volvo' returnerar även Bilia och Volvo Car. Returnerar (title, url, pub)."""
+    _JUNK = {"ab", "abp", "asa", "publ", "aktiebolag", "telefonaktiebolaget",
+             "lm", "the", "oyj", "a/s"}
+
+    def _norm_words(s):
+        s = str(s or "").lower().replace("(publ)", " ")
+        for ch in ",.()&":
+            s = s.replace(ch, " ")
+        return {w for w in s.split() if len(w) > 1 and w not in _JUNK}
+
+    want = _norm_words(company_name)
     try:
         r = requests.get(
             "https://api.news.eu.nasdaq.com/news/query.action",
-            params={"type": "json", "showAttachments": "true",
-                    "showCompanyName": "true", "company": company_name,
-                    "limit": 40},
-            headers={"User-Agent": _EDGAR_UA["User-Agent"]}, timeout=25)
+            params={"type": "json", "showCompanyName": "true",
+                    "freeText": company_name, "limit": 40},
+            headers={"User-Agent": "Mozilla/5.0 (DAKTIER research)"}, timeout=25)
         if r.status_code != 200:
             return None, None, None
         txt = r.text
-        # API:t svarar med JSONP-aktig wrapper ibland — plocka ut JSON-kroppen
         i, j = txt.find("{"), txt.rfind("}")
         data = json.loads(txt[i:j + 1]) if i >= 0 else {}
         items = ((data.get("results") or {}).get("item")) or []
         from datetime import datetime as _dt, timedelta as _td
         cutoff = (_dt.utcnow() - _td(days=days_back)).strftime("%Y-%m-%d")
         for it in items:
-            title = (it.get("headline") or "").lower()
             pub = str(it.get("published") or "")[:10]
             if pub and pub < cutoff:
                 continue
-            if any(w in title for w in _RAPPORT_ORD):
-                url = it.get("messageUrl") or ""
-                if url.startswith("//"):
-                    url = "https:" + url
-                return it.get("headline"), url, pub
+            cat = (it.get("cnsCategory") or "").lower()
+            title = (it.get("headline") or "").lower()
+            is_report = (any(k in cat for k in _RAPPORT_KATEGORIER)
+                         or any(w in title for w in _RAPPORT_ORD))
+            if not is_report:
+                continue
+            got = _norm_words(it.get("company"))
+            # Enordsnamn kräver EXAKT match ('Volvo'≠'Volvo Car' men
+            # ='Volvo, AB' efter junk-rensning); flerordsnamn tillåter
+            # delmängd ('Atlas Copco' ⊆ 'Atlas Copco Group')
+            if not (want and got and (want == got or (len(want) >= 2 and want <= got))):
+                continue
+            url = it.get("messageUrl") or ""
+            if url.startswith("//"):
+                url = "https:" + url
+            return it.get("headline"), url, pub
         return None, None, None
     except Exception as e:
         print(f"[nordic shadow] nasdaq-api {company_name}: {e}", file=sys.stderr)
