@@ -5064,11 +5064,44 @@ def _refresh_stocks_isin(db):
                 f"UPDATE stocks SET isin = {ph} WHERE short_name = {ph}",
                 (rd["isin"], rd["short_name"]))
         db.commit()
+    # KARANTÄNERADE isins: ersätt med kanonisk ISIN från map (Sandvik-fallet:
+    # raden bar korrupt CA-isin → karantänfiltret gjorde bolaget osynligt
+    # för resolvern trots att äkta data finns under rätt ISIN)
+    q_fixed = 0
+    try:
+        from data_quarantine import QUARANTINED_ISINS
+        qlist = list(QUARANTINED_ISINS)
+    except Exception:
+        try:
+            from data_quarantine import QUARANTINE
+            qlist = list(QUARANTINE.keys())
+        except Exception:
+            qlist = []
+    if qlist:
+        try:
+            marks = ",".join([ph] * len(qlist))
+            rows = db.execute(
+                f"SELECT s.orderbook_id, s.short_name, m.isin AS good_isin "
+                f"FROM stocks s JOIN borsdata_instrument_map m ON s.short_name = m.ticker "
+                f"WHERE s.isin IN ({marks}) AND m.isin NOT IN ({marks}) "
+                f"AND m.isin NOT LIKE 'YAHOO_%' AND m.isin IS NOT NULL AND m.isin != ''",
+                tuple(qlist) + tuple(qlist)).fetchall()
+            for r in rows:
+                rd = dict(r)
+                db.execute(f"UPDATE stocks SET isin = {ph} WHERE orderbook_id = {ph}",
+                           (rd["good_isin"], rd["orderbook_id"]))
+                q_fixed += 1
+            db.commit()
+        except Exception as e:
+            print(f"[isin-refresh] karantän-ersättning fel: {e}", file=sys.stderr)
+            try: db.rollback()
+            except Exception: pass
     after = _fetchone(db,
         "SELECT COUNT(*) as n FROM stocks "
         "WHERE (isin IS NULL OR isin = '' OR isin LIKE 'YAHOO_%')")
     n_after = (dict(after)["n"] if after else 0) or 0
-    return {"before": n_before, "after": n_after, "fixed": n_before - n_after}
+    return {"before": n_before, "after": n_after,
+            "fixed": n_before - n_after, "quarantine_replaced": q_fixed}
 
 
 @app.route("/api/borsdata/refresh-stocks-isin", methods=["POST"])
@@ -14944,6 +14977,10 @@ def _nasdaq_find_report_release(company_name, days_back=45):
         data = _json.loads(txt[i:j + 1]) if i >= 0 else {}
         items = ((data.get("results") or {}).get("item")) or []
         dbg["n_items"] = len(items)
+        dbg["want"] = sorted(want)
+        dbg["report_companies"] = [it.get("company") for it in items
+                                   if any(k in (it.get("cnsCategory") or "").lower()
+                                          for k in _RAPPORT_KATEGORIER)][:5]
         from datetime import datetime as _dt, timedelta as _td
         cutoff = (_dt.utcnow() - _td(days=days_back)).strftime("%Y-%m-%d")
         for it in items:
