@@ -4992,6 +4992,8 @@ def _maybe_start_archive_backfill(reason):
     kört, så en kvot-gate blir höna-och-ägg och startar aldrig).
     Veckotoppen kör alltid (nynoteringar; snabb tack vare skip-logiken).
     Claim per DAG: avbruten körning (deploy) återupptas nästa boot/dag."""
+    if os.environ.get("BORSDATA_DISABLED", "").strip().lower() in ("1", "true", "yes"):
+        return False
     if _BD_BACKFILL_STATE["running"]:
         return False
     if reason != "veckotopp":
@@ -15272,6 +15274,20 @@ def api_shadow_daily_log():
         db.close()
 
 
+@app.route("/api/shadow/flow-in", methods=["POST"])
+def api_shadow_flow_in():
+    """Manuell körning av Börsdata-oberoende-sömmarna (inloggade):
+    skugga→borsdata_reports + Avanza-dagsstängning→borsdata_prices."""
+    from edge_db import flow_shadow_into_reports, persist_daily_close_from_stocks
+    db = get_db()
+    try:
+        days = min(int(request.args.get("days") or 14), 120)
+        return jsonify({"flow": flow_shadow_into_reports(db, days=days),
+                        "priser": persist_daily_close_from_stocks(db)})
+    finally:
+        db.close()
+
+
 @app.route("/api/shadow/sync", methods=["POST"])
 def api_shadow_sync():
     """Manuell skugg-synk (inloggade — SEC är gratis). ?tickers=GEV,NVDA
@@ -19783,6 +19799,8 @@ def _startup():
         # användaren ser i ägarmomentum-listan analysbara — agenten ska aldrig
         # behöva gissa pga saknad data.
         def scheduled_fundamentals_sync():
+            if os.environ.get("BORSDATA_DISABLED", "").strip().lower() in ("1", "true", "yes"):
+                return
             if _GLOBAL_SYNC_STATE.get("running"):
                 return
             if not _sched_claim("fundamentals_sync", datetime.now().strftime("%Y-%m-%d")):
@@ -20037,7 +20055,15 @@ def _startup():
 
         # Nattlig Börsdata-prissync (04:00 lokal, efter hist sync) — inkrementellt
         # Hämtar bara nya datapunkter sedan senast (last_date+1), så det går snabbt.
+        # Efter Börsdata-uppsägningen: sätt BORSDATA_DISABLED=1 i Railway så
+        # tystnar API-jobben (annars 401-brus varje natt). Skugg-pipelinen,
+        # Avanza-syncarna och dagsstängnings-persisten påverkas INTE.
+        def _borsdata_disabled():
+            return os.environ.get("BORSDATA_DISABLED", "").strip().lower() in ("1", "true", "yes")
+
         def scheduled_borsdata_prices():
+            if _borsdata_disabled():
+                return
             if not _sched_claim("borsdata_prices", datetime.now().strftime("%Y-%m-%d")):
                 return
             try:
@@ -20081,9 +20107,32 @@ def _startup():
         scheduler.add_job(scheduled_trend_snapshot, 'cron', hour=5, minute=10,
                           id='trend_snapshot_daily')
 
+        # 💾 Daglig Avanza-stängning → borsdata_prices (23:45 vardagar, efter
+        # US-stängning). Prisserie-kontinuitet så MA200/trenden överlever
+        # Börsdata-uppsägningen; Börsdatas egna rader skrivs aldrig över.
+        def scheduled_daily_close_persist():
+            if not _sched_claim("daily_close_persist", datetime.now().strftime("%Y-%m-%d")):
+                return
+            try:
+                from edge_db import persist_daily_close_from_stocks
+                dbp2 = get_db()
+                try:
+                    res = persist_daily_close_from_stocks(dbp2)
+                    print(f"[AUTO] Dagsstängningar sparade: {res}")
+                finally:
+                    dbp2.close()
+            except Exception as e:
+                print(f"[AUTO] Dagsstängnings-persist fel: {e}")
+
+        scheduler.add_job(scheduled_daily_close_persist, 'cron',
+                          day_of_week='mon-fri', hour=23, minute=45,
+                          id='daily_close_persist')
+
         # Veckovis Börsdata-rapportsync (söndagar 04:30) — full
         # PLUS daglig snabb-sync 05:30 under earnings-säsong för senaste rapporterna.
         def scheduled_borsdata_reports():
+            if _borsdata_disabled():
+                return
             if not _sched_claim("borsdata_reports_weekly", datetime.now().strftime("%G-W%V")):
                 return
             try:
@@ -20100,6 +20149,8 @@ def _startup():
 
         # Daglig snabb-sync för senaste rapporter — bara bolag med rapport-datum <14d
         def scheduled_daily_reports_sync():
+            if _borsdata_disabled():
+                return
             if not _sched_claim("daily_reports_sync", datetime.now().strftime("%Y-%m-%d")):
                 return
             try:
@@ -20125,6 +20176,8 @@ def _startup():
 
         # Månatlig Börsdata-metadata-sync (1:a varje månad 05:00) — sektorer/branscher
         def scheduled_borsdata_metadata():
+            if _borsdata_disabled():
+                return
             if not _sched_claim("borsdata_metadata", datetime.now().strftime("%Y-%m")):
                 return
             try:
@@ -20312,6 +20365,16 @@ def _startup():
                     except Exception as e2:
                         res_n = {"error": str(e2)[:200]}
                         print(f"[AUTO] Norden-skugga fel: {e2}")
+                    # Skugga → borsdata_reports: nya kvartal blir synliga för
+                    # agentens verktyg/screens (arkivrader skrivs aldrig över)
+                    res_f = None
+                    try:
+                        from edge_db import flow_shadow_into_reports
+                        res_f = flow_shadow_into_reports(dbs2, days=14)
+                        print(f"[AUTO] Skugg-inflöde: {res_f}")
+                    except Exception as e3:
+                        res_f = {"error": str(e3)[:200]}
+                        print(f"[AUTO] Skugg-inflöde fel: {e3}")
                     # Daglig facit-logg (läses vid uppföljning): vad kördes, utfall
                     try:
                         import json as _jm
@@ -20319,7 +20382,8 @@ def _startup():
                         dbs2.execute(_ups2("meta", ["key", "value"], ["key"]),
                                      (f"shadow:daily:{datetime.now():%Y-%m-%d}",
                                       _jm.dumps({"ts": datetime.now().isoformat(),
-                                                 "us": res, "norden": res_n},
+                                                 "us": res, "norden": res_n,
+                                                 "infloede": res_f},
                                                 ensure_ascii=False, default=str)))
                         dbs2.commit()
                     except Exception:

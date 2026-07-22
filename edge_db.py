@@ -5045,6 +5045,99 @@ def compute_trend_snapshot(db):
     return {"rows": n, "snap_date": snap}
 
 
+def persist_daily_close_from_stocks(db):
+    """Avanza-stängning → borsdata_prices (isin, dagens datum, close).
+    Prisserie-kontinuitet EFTER Börsdata-uppsägningen: MA200/trend_snapshot
+    läser borsdata_prices, som annars svälter. INSERT-IGNORE = Börsdatas
+    egna rader skrivs ALDRIG över; Avanza fyller bara dagar som saknas."""
+    from datetime import date as _date
+    ph = _ph()
+    today = _date.today().isoformat()
+    sel = (f"SELECT isin, {ph}, last_price FROM stocks "
+           f"WHERE isin IS NOT NULL AND isin != '' AND isin NOT LIKE {ph} "
+           f"AND last_price IS NOT NULL AND last_price > 0")
+    try:
+        db.execute(f"INSERT INTO borsdata_prices (isin, date, close) {sel} "
+                   f"ON CONFLICT DO NOTHING", (today, "YAHOO_%"))
+        db.commit()
+    except Exception:
+        try: db.rollback()
+        except Exception: pass
+        db.execute(f"INSERT OR IGNORE INTO borsdata_prices (isin, date, close) {sel}",
+                   (today, "YAHOO_%"))
+        db.commit()
+    row = _fetchone(db, f"SELECT COUNT(*) AS n FROM borsdata_prices WHERE date = {ph}",
+                    (today,))
+    return {"date": today, "rows_today": (dict(row)["n"] if row else 0)}
+
+
+def flow_shadow_into_reports(db, days=14):
+    """Skuggrapporter (EDGAR/pressreleaser) → borsdata_reports så att agentens
+    kvartalsverktyg och screens ser NYA kvartal efter Börsdata-uppsägningen.
+    INSERT-IGNORE: befintliga Börsdata-rader vinner alltid — skuggan fyller
+    endast kvartal som saknas. Ticker→isin via stocks; TVETYDIGA tickers
+    (samma short_name → flera isin) hoppas över hellre än att riskera fel
+    bolag. ins_id=0 markerar skugg-härkomst (join mot shadow_reports ger allt)."""
+    from datetime import datetime as _dt, timedelta as _td
+    ph = _ph()
+    cutoff = (_dt.utcnow() - _td(days=days)).isoformat()
+    sh = [dict(r) for r in _fetchall(db,
+        f"SELECT * FROM shadow_reports WHERE fetched_at >= {ph} "
+        f"AND report_end_date IS NOT NULL AND period_year IS NOT NULL", (cutoff,))]
+    if not sh:
+        return {"scanned": 0, "inserted": 0}
+    tick2isin, ambiguous = {}, set()
+    marks = ",".join([ph] * len({r["ticker"] for r in sh}))
+    tickers = sorted({r["ticker"] for r in sh})
+    for r in _fetchall(db,
+            f"SELECT short_name, isin FROM stocks WHERE short_name IN ({marks}) "
+            f"AND isin IS NOT NULL AND isin != '' AND isin NOT LIKE {ph}",
+            tuple(tickers) + ("YAHOO_%",)):
+        d = dict(r)
+        t = d["short_name"]
+        if t in tick2isin and tick2isin[t] != d["isin"]:
+            ambiguous.add(t)
+        tick2isin[t] = d["isin"]
+    inserted = skipped = 0
+    for r in sh:
+        isin = tick2isin.get(r["ticker"])
+        if not isin or r["ticker"] in ambiguous:
+            skipped += 1
+            continue
+        scale = 1e6 if r.get("source") == "sec_edgar" else 1.0
+        sc = lambda v: (v / scale) if isinstance(v, (int, float)) else None
+        vals = (isin, 0, r.get("report_type") or "quarter",
+                int(r["period_year"]), int(r.get("period_q") or 0),
+                str(r.get("report_end_date"))[:10], r.get("currency"),
+                sc(r.get("revenues")), sc(r.get("operating_income")),
+                sc(r.get("net_profit")),
+                r.get("eps") if isinstance(r.get("eps"), (int, float)) else None,
+                sc(r.get("operating_cash_flow")), sc(r.get("total_assets")),
+                sc(r.get("total_equity")), sc(r.get("cash_and_equivalents")))
+        cols = ("isin, ins_id, report_type, period_year, period_q, "
+                "report_end_date, currency, revenues, operating_income, "
+                "net_profit, eps, operating_cash_flow, total_assets, "
+                "total_equity, cash_and_equivalents")
+        qmarks = ",".join([ph] * 15)
+        try:
+            db.execute(f"INSERT INTO borsdata_reports ({cols}) VALUES ({qmarks}) "
+                       f"ON CONFLICT DO NOTHING", vals)
+            inserted += 1
+        except Exception:
+            try: db.rollback()
+            except Exception: pass
+            try:
+                db.execute(f"INSERT OR IGNORE INTO borsdata_reports ({cols}) "
+                           f"VALUES ({qmarks})", vals)
+                inserted += 1
+            except Exception:
+                skipped += 1
+    db.commit()
+    # OBS: 'written' = rader som skrevs ELLER redan fanns (DO NOTHING skiljer ej)
+    return {"scanned": len(sh), "written_or_existing": inserted, "skipped": skipped,
+            "ambiguous_tickers": sorted(ambiguous)[:10]}
+
+
 def sync_borsdata_kpis(db, kpi_ids=None, isin_list=None, max_per_run=500):
     """Synkar KPI-historik. Default: top 15 KPIs (FCF, ROIC, P/E, etc.)."""
     try:
