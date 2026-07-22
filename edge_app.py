@@ -15174,6 +15174,7 @@ def sync_shadow_reports_nordic(db, tickers, history=1, days_back=45):
                 errors += 1
                 continue
             saved_periods = []
+            seen_pq = set()
             for title, url, pub in matches[:max(1, int(history))]:
                 try:
                     html = requests.get(url, headers={"User-Agent": _EDGAR_UA["User-Agent"]},
@@ -15186,6 +15187,17 @@ def sync_shadow_reports_nordic(db, tickers, history=1, days_back=45):
                     if not parsed or not parsed.get("period_year"):
                         saved_periods.append(f"{pub}: extraktion miss")
                         continue
+                    # Tomma extraktioner (alla huvudmått null) får INTE
+                    # upsert-klobbra en redan bra rad — sv+en-releaserna för
+                    # samma kvartal delar upsert-nyckel
+                    if all(parsed.get(k) is None for k in ("revenues", "net_profit", "eps")):
+                        saved_periods.append(f"{pub}: extraktion tom (inga huvudmått)")
+                        continue
+                    pq = (int(parsed["period_year"]), int(parsed.get("period_q") or 0))
+                    if pq in seen_pq:
+                        saved_periods.append(f"{pub}: dubblett Q{pq[1]} {pq[0]} — hoppas över")
+                        continue
+                    seen_pq.add(pq)
                     db.execute(ins, (
                         best.get("short_name") or t, None, "quarter",
                         int(parsed["period_year"]), int(parsed.get("period_q") or 0),
@@ -15265,11 +15277,22 @@ def api_shadow_compare():
             "total_equity, operating_cash_flow, source FROM shadow_reports "
             "WHERE report_end_date IS NOT NULL")]
         tickers = sorted({r["ticker"] for r in sh_rows})
+        # LINJESYSKON: resolvern kan välja VOLV A medan map:en bara har
+        # VOLV B — samma bolag, samma rapporter. Para på BAS-ticker (utan
+        # börsklass); valuta-/±7d-gaten skyddar mot äkta kollisioner.
+        import re as _re3
+        _base = lambda t: _re3.sub(r"\s+[A-D]$", "", str(t or "").upper()).strip()
         bd_by_ticker = {}
         if tickers:
             from edge_db import _ph
             ph = _ph()
-            marks = ",".join([ph] * len(tickers))
+            bases = {_base(t) for t in tickers}
+            allmap = _fetchall(db,
+                "SELECT DISTINCT UPPER(ticker) AS t FROM borsdata_instrument_map "
+                "WHERE ticker IS NOT NULL AND ticker != ''")
+            expanded = sorted({dict(r)["t"] for r in allmap
+                               if _base(dict(r)["t"]) in bases} | set(tickers))
+            marks = ",".join([ph] * len(expanded))
             # Endast US/USD-instrument: efter arkiv-expansionen innehåller
             # map:en ALLA börsers tickers — 'BAC' matchade ett nordiskt
             # småbolag i st.f. Bank of America (diff -2 000 000%).
@@ -15281,10 +15304,10 @@ def api_shadow_compare():
                 FROM borsdata_reports br
                 JOIN borsdata_instrument_map m ON m.isin = br.isin
                 WHERE UPPER(m.ticker) IN ({marks}) AND br.report_end_date IS NOT NULL
-            """, tuple(tickers))
+            """, tuple(expanded))
             for r in bd:
                 d = dict(r)
-                bd_by_ticker.setdefault((d["t"], d["report_type"]), []).append(d)
+                bd_by_ticker.setdefault((_base(d["t"]), d["report_type"]), []).append(d)
 
         def _d(x):
             try:
@@ -15302,7 +15325,7 @@ def api_shadow_compare():
         percomp = {}
         for sh in sh_rows:
             src = sh.get("source") or "sec_edgar"
-            cands = bd_by_ticker.get((sh["ticker"].upper(), sh["report_type"])) or []
+            cands = bd_by_ticker.get((_base(sh["ticker"]), sh["report_type"])) or []
             shd = _d(sh["report_end_date"])
             if not shd:
                 continue
