@@ -14920,10 +14920,15 @@ def _nasdaq_find_report_release(company_name, days_back=45):
     want = _norm_words(company_name)
     dbg = {}
     try:
+        from datetime import datetime as _dtx, timedelta as _tdx
+        _from = (_dtx.utcnow() - _tdx(days=days_back)).strftime("%Y-%m-%d")
         r = requests.get(
             "https://api.news.eu.nasdaq.com/news/query.action",
+            # limit=100 + fromDate: freeText matchar även OMNÄMNANDEN — 40
+            # senaste 'Volvo'-träffar var underleverantörsnyheter och AB
+            # Volvos egen rapport föll utanför fönstret
             params={"type": "json", "showCompanyName": "true",
-                    "freeText": company_name, "limit": 40},
+                    "freeText": company_name, "limit": 100, "fromDate": _from},
             headers={"User-Agent": ("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
                                     "AppleWebKit/537.36 (KHTML, like Gecko) "
                                     "Chrome/126.0 Safari/537.36"),
@@ -14975,8 +14980,13 @@ def _extract_nordic_report_with_claude(text, company, ticker):
     import re as _re
     import json as _json2
     prompt = (f"Ur denna kvartalsrapport-pressrelease från {company} ({ticker}), "
-              "extrahera SENASTE KVARTALETS siffror (inte ackumulerat halvår/9M om "
-              "kvartalet redovisas separat — annars perioden som anges).\n\n"
+              "extrahera SENASTE ENSKILDA KVARTALETS siffror.\n\n"
+              "⚠️ VANLIGT FEL ATT UNDVIKA: en 'januari–juni'-release innehåller "
+              "BÅDE halvårssiffror OCH kvartalssiffror. Ta ALLTID kvartalskolumnen "
+              "('Q2', 'andra kvartalet', 'April–June', 'Apr–Jun') — ALDRIG "
+              "halvår/ackumulerat. Endast om kvartalet bevisligen inte särredovisas "
+              "någonstans i texten: ta perioden som anges och sätt unit_note till "
+              "'ENDAST halvår redovisat'.\n\n"
               "Svara EXAKT med ett JSON-block mellan markörerna:\n\n"
               "---RAPPORT-JSON-START---\n"
               "{\n"
