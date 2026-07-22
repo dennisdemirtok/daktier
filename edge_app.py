@@ -15228,7 +15228,7 @@ def api_shadow_compare():
         # och Börsdatas kalenderbaserade period_year pekar på OLIKA perioder.
         sh_rows = [dict(r) for r in _fetchall(db,
             "SELECT ticker, report_type, period_year, period_q, report_end_date, "
-            "revenues, net_profit, eps, operating_income, total_assets, "
+            "currency, revenues, net_profit, eps, operating_income, total_assets, "
             "total_equity, operating_cash_flow, source FROM shadow_reports "
             "WHERE report_end_date IS NOT NULL")]
         tickers = sorted({r["ticker"] for r in sh_rows})
@@ -15244,7 +15244,7 @@ def api_shadow_compare():
                 SELECT UPPER(m.ticker) AS t, br.report_type, br.report_end_date,
                        br.revenues, br.net_profit, br.eps, br.operating_income,
                        br.total_assets, br.total_equity, br.operating_cash_flow,
-                       m.stock_price_currency AS cur
+                       m.stock_price_currency AS cur, br.currency AS rep_cur
                 FROM borsdata_reports br
                 JOIN borsdata_instrument_map m ON m.isin = br.isin
                 WHERE UPPER(m.ticker) IN ({marks}) AND br.report_end_date IS NOT NULL
@@ -15291,8 +15291,17 @@ def api_shadow_compare():
                     best, bestdiff = c, dd
             if not best:
                 continue
+            # VALUTAKONTROLL: EVO rapporterar EUR men Börsdata lagrar SEK →
+            # konsekvent -91% (EUR/SEK-kursen) på ALLA mått. Olika valutor =
+            # inte jämförbart rakt av — flagga i stället för att räkna miss.
+            sh_cur = (sh.get("currency") or "").upper()
+            bd_cur = (best.get("rep_cur") or best.get("cur") or "").upper()
+            cur_mismatch = bool(sh_cur and bd_cur and sh_cur != bd_cur)
             row = {"ticker": sh["ticker"], "source": src,
                    "period": f"{sh['report_type']} slut {str(sh['report_end_date'])[:10]}"}
+            if cur_mismatch:
+                row["currency_diff"] = (f"{sh_cur} (rapport) vs {bd_cur} (Börsdata) — "
+                                        f"FX-omräkning krävs, räknas ej som miss")
             pc = percomp.setdefault(sh["ticker"].upper(), {m: [0, 0, 0] for m in _METRICS})
             for m in _METRICS:
                 shv, bdv = sh.get(m), best.get(m)
@@ -15312,8 +15321,8 @@ def api_shadow_compare():
                             cell["split_diff"] = f"~{s}:1 — trolig aktiesplit, ej datafel"
                             break
                 row[m] = cell
-                if cell.get("split_diff"):
-                    continue  # split-artefakt räknas inte som miss
+                if cell.get("split_diff") or cur_mismatch:
+                    continue  # split-/valuta-artefakter räknas inte som miss
                 for a in (agg[m], pc[m]):
                     a[2] += 1
                     if diff is not None and abs(diff) <= 2: a[0] += 1
