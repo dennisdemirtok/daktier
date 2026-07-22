@@ -5080,12 +5080,15 @@ def _refresh_stocks_isin(db):
     if qlist:
         try:
             marks = ",".join([ph] * len(qlist))
+            # OBS: LIKE-mönstret som BUNDEN param — literalt '%' i SQL:en
+            # krockar med psycopg2:s %-formatering när params skickas
+            # ("tuple index out of range")
             rows = db.execute(
                 f"SELECT s.orderbook_id, s.short_name, m.isin AS good_isin "
                 f"FROM stocks s JOIN borsdata_instrument_map m ON s.short_name = m.ticker "
                 f"WHERE s.isin IN ({marks}) AND m.isin NOT IN ({marks}) "
-                f"AND m.isin NOT LIKE 'YAHOO_%' AND m.isin IS NOT NULL AND m.isin != ''",
-                tuple(qlist) + tuple(qlist)).fetchall()
+                f"AND m.isin NOT LIKE {ph} AND m.isin IS NOT NULL AND m.isin != ''",
+                tuple(qlist) + tuple(qlist) + ("YAHOO_%",)).fetchall()
             for r in rows:
                 rd = dict(r)
                 db.execute(f"UPDATE stocks SET isin = {ph} WHERE orderbook_id = {ph}",
@@ -15047,9 +15050,12 @@ def _nasdaq_find_report_release(company_name, days_back=45):
         # registrerade namnvarianter. Körs på SAMMA matchlogik som steg 1 —
         # gaten och huvudloopen divergerade tidigare så fallbacken skippades.
         if not matches:
-            base = str(company_name).strip()
+            # Basen MÅSTE rensas från börsklass: stocks-namnet är 'Volvo B' →
+            # varianten 'Volvo B, AB' finns inte; registrerat är 'Volvo, AB'
+            base = _re2.sub(r"\s+(?:ser\.?\s*)?[A-D]$", "",
+                            str(company_name).strip(), flags=_re2.I).strip()
             vc = {}
-            for variant in (f"{base}, AB", f"{base} AB", base, f"AB {base}",
+            for variant in (f"{base} AB", f"{base}, AB", base, f"AB {base}",
                             f"{base} Aktiebolag"):
                 got_items = _query({"company": variant})
                 vc[variant] = len(got_items)
@@ -15321,12 +15327,16 @@ def api_shadow_compare():
             # VALUTAKONTROLL: EVO rapporterar EUR men Börsdata lagrar SEK →
             # konsekvent -91% (EUR/SEK-kursen) på ALLA mått. Olika valutor =
             # inte jämförbart rakt av — flagga i stället för att räkna miss.
+            # Börsdatas rapportfält-currency anger ORIGINALvalutan men värdena
+            # är konverterade till NOTERINGSvalutan (EVO: fält=EUR, värden i
+            # SEK-skala) → jämför skuggans valuta mot stock_price_currency
             sh_cur = (sh.get("currency") or "").upper()
-            bd_cur = (best.get("rep_cur") or best.get("cur") or "").upper()
+            bd_cur = (best.get("cur") or "").upper()
             cur_mismatch = bool(sh_cur and bd_cur and sh_cur != bd_cur)
             row = {"ticker": sh["ticker"], "source": src,
                    "period": f"{sh['report_type']} slut {str(sh['report_end_date'])[:10]}",
-                   "valutor": f"skugga={sh_cur or '?'} borsdata={bd_cur or '?'}"}
+                   "valutor": (f"skugga={sh_cur or '?'} borsdata={bd_cur or '?'}"
+                               f"(rapportfält={(best.get('rep_cur') or '?')})")}
             if cur_mismatch:
                 row["currency_diff"] = (f"{sh_cur} (rapport) vs {bd_cur} (Börsdata) — "
                                         f"FX-omräkning krävs, räknas ej som miss")
