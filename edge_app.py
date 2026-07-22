@@ -14921,12 +14921,16 @@ def api_shadow_compare():
             from edge_db import _ph
             ph = _ph()
             marks = ",".join([ph] * len(tickers))
+            # Endast US/USD-instrument: efter arkiv-expansionen innehåller
+            # map:en ALLA börsers tickers — 'BAC' matchade ett nordiskt
+            # småbolag i st.f. Bank of America (diff -2 000 000%).
             bd = _fetchall(db, f"""
                 SELECT UPPER(m.ticker) AS t, br.report_type, br.report_end_date,
                        br.revenues, br.net_profit, br.eps
                 FROM borsdata_reports br
                 JOIN borsdata_instrument_map m ON m.isin = br.isin
                 WHERE UPPER(m.ticker) IN ({marks}) AND br.report_end_date IS NOT NULL
+                  AND (m.stock_price_currency = 'USD' OR m.country_id = 5)
             """, tuple(tickers))
             for r in bd:
                 d = dict(r)
