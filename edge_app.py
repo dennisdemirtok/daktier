@@ -14949,7 +14949,7 @@ def _nasdaq_find_report_release(company_name, days_back=45):
     gav 0 träffar) + BOLAGSNAMNS-VERIFIERING mot item.company — sökningen
     'Volvo' returnerar även Bilia och Volvo Car. Returnerar (title, url, pub)."""
     _JUNK = {"ab", "abp", "asa", "publ", "aktiebolag", "telefonaktiebolaget",
-             "lm", "the", "oyj", "a/s"}
+             "telefonab", "lm", "the", "oyj", "a/s", "hf", "plc"}
 
     def _norm_words(s):
         s = str(s or "").lower().replace("(publ)", " ")
@@ -14972,30 +14972,49 @@ def _nasdaq_find_report_release(company_name, days_back=45):
                                 "Chrome/126.0 Safari/537.36"),
                  "Accept": "application/json, text/plain, */*",
                  "Referer": "https://www.nasdaqomxnordic.com/"}
-        for cat in ("Half Year financial report", "Interim report (Q1 and Q3)",
-                    "Year-end report", "Annual Financial Report"):
-            r = requests.get(
-                "https://api.news.eu.nasdaq.com/news/query.action",
-                params={"type": "json", "showCompanyName": "true",
-                        "freeText": company_name, "limit": 25,
-                        "fromDate": _from, "cnscategory": cat},
-                headers=_hdrs, timeout=25)
+        _CATS = ("Half Year financial report", "Interim report (Q1 and Q3)",
+                 "Year-end report", "Annual Financial Report")
+
+        def _query(params):
+            r = requests.get("https://api.news.eu.nasdaq.com/news/query.action",
+                             params={"type": "json", "showCompanyName": "true",
+                                     "limit": 40, "fromDate": _from, **params},
+                             headers=_hdrs, timeout=25)
             dbg["status"] = r.status_code
             if r.status_code != 200:
                 dbg["body"] = r.text[:120]
-                continue
+                return []
             txt = r.text
             i, j = txt.find("{"), txt.rfind("}")
             data = _json.loads(txt[i:j + 1]) if i >= 0 else {}
-            items.extend(((data.get("results") or {}).get("item")) or [])
+            return ((data.get("results") or {}).get("item")) or []
+
+        # Steg 1: kategorifiltrerad fritextsök (Ericsson/Volvo-klassen)
+        for cat in _CATS:
+            items.extend(_query({"freeText": company_name, "cnscategory": cat}))
+        # Steg 2 (Investor-klassen — 'Investor Relations' i varje rapport
+        # dränker fritext): company= med exakta registrerade namn-varianter
+        if not any(_norm_words(it.get("company")) and
+                   (want == _norm_words(it.get("company"))
+                    or (len(want) >= 2 and want <= _norm_words(it.get("company"))))
+                   for it in items):
+            base = str(company_name).strip()
+            for variant in (f"{base} AB", f"{base}, AB", base, f"AB {base}",
+                            f"{base} Aktiebolag"):
+                got_items = _query({"company": variant})
+                if got_items:
+                    items.extend(got_items)
+                    dbg["company_variant"] = variant
+                    break
         dbg["n_items"] = len(items)
         dbg["want"] = sorted(want)
         dbg["report_companies"] = [it.get("company") for it in items][:6]
         from datetime import datetime as _dt, timedelta as _td
         cutoff = (_dt.utcnow() - _td(days=days_back)).strftime("%Y-%m-%d")
+        matches, seen_pub = [], set()
         for it in items:
             pub = str(it.get("published") or "")[:10]
-            if pub and pub < cutoff:
+            if pub and pub < _from:
                 continue
             cat = (it.get("cnsCategory") or "").lower()
             title = (it.get("headline") or "").lower()
@@ -15012,13 +15031,17 @@ def _nasdaq_find_report_release(company_name, days_back=45):
             url = it.get("messageUrl") or ""
             if url.startswith("//"):
                 url = "https:" + url
-            dbg["pub"] = pub
-            return it.get("headline"), url, dbg
-        return None, None, dbg
+            if not url or pub in seen_pub:
+                continue  # sv+en-versionen samma dag = samma rapport
+            seen_pub.add(pub)
+            matches.append((it.get("headline"), url, pub))
+        matches.sort(key=lambda m: m[2] or "", reverse=True)
+        dbg["n_matches"] = len(matches)
+        return matches, dbg
     except Exception as e:
         dbg["exc"] = str(e)[:150]
         print(f"[nordic shadow] nasdaq-api {company_name}: {e}", file=sys.stderr)
-        return None, None, dbg
+        return [], dbg
 
 
 def _extract_nordic_report_with_claude(text, company, ticker):
@@ -15086,9 +15109,11 @@ def _extract_nordic_report_with_claude(text, company, ticker):
         return None, cost
 
 
-def sync_shadow_reports_nordic(db, tickers):
-    """Nordisk skugg-synk: ticker → bolagsnamn (stocks) → Nasdaq-release →
-    Claude-extraktion → shadow_reports (source='mfn_press', enhet miljoner)."""
+def sync_shadow_reports_nordic(db, tickers, history=1, days_back=45):
+    """Nordisk skugg-synk: ticker → bolagsnamn (stocks) → Nasdaq-releaser →
+    Claude-extraktion → shadow_reports (source='mfn_press', enhet miljoner).
+    history>1 = BACKTEST: extrahera upp till N rapporter bakåt per bolag
+    (days_back~400 täcker Q2-26, Q1-26, bokslut-25, Q3-25)."""
     from edge_db import _upsert_sql
     _ensure_shadow_table(db)
     cols = ["ticker", "cik", "report_type", "period_year", "period_q",
@@ -15109,37 +15134,47 @@ def sync_shadow_reports_nordic(db, tickers):
                 errors += 1
                 continue
             company = best.get("name") or t
-            title, url, meta = _nasdaq_find_report_release(company)
-            if not url:
+            matches, meta = _nasdaq_find_report_release(company, days_back=days_back)
+            if not matches:
                 import json as _json3
                 results.append({t: f"ingen release: {_json3.dumps(meta, ensure_ascii=False)[:100]}"})
                 errors += 1
                 continue
-            html = requests.get(url, headers={"User-Agent": _EDGAR_UA["User-Agent"]},
-                                timeout=30).text
-            text = _html_to_clean_text(html)
-            if not text or len(text) < 400:
-                results.append({t: "release-texten tom"})
-                errors += 1
-                continue
-            parsed, cost = _extract_nordic_report_with_claude(text, company, t)
-            if not parsed or not parsed.get("period_year"):
-                results.append({t: "extraktion misslyckades"})
-                errors += 1
-                continue
-            db.execute(ins, (
-                best.get("short_name") or t, None, "quarter",
-                int(parsed["period_year"]), int(parsed.get("period_q") or 0),
-                parsed.get("report_end_date"), parsed.get("currency"),
-                parsed.get("revenues"), parsed.get("operating_income"),
-                parsed.get("net_profit"), parsed.get("eps"),
-                parsed.get("total_assets"), parsed.get("total_equity"),
-                None, parsed.get("operating_cash_flow"),
-                "mfn_press", datetime.utcnow().isoformat()))
-            db.commit()
-            done += 1
-            results.append({t: f"OK Q{parsed.get('period_q')} {parsed.get('period_year')} "
-                               f"({str(title)[:50]})"})
+            saved_periods = []
+            for title, url, pub in matches[:max(1, int(history))]:
+                try:
+                    html = requests.get(url, headers={"User-Agent": _EDGAR_UA["User-Agent"]},
+                                        timeout=30).text
+                    text = _html_to_clean_text(html)
+                    if not text or len(text) < 400:
+                        saved_periods.append(f"{pub}: tom text")
+                        continue
+                    parsed, cost = _extract_nordic_report_with_claude(text, company, t)
+                    if not parsed or not parsed.get("period_year"):
+                        saved_periods.append(f"{pub}: extraktion miss")
+                        continue
+                    db.execute(ins, (
+                        best.get("short_name") or t, None, "quarter",
+                        int(parsed["period_year"]), int(parsed.get("period_q") or 0),
+                        parsed.get("report_end_date"), parsed.get("currency"),
+                        parsed.get("revenues"), parsed.get("operating_income"),
+                        parsed.get("net_profit"), parsed.get("eps"),
+                        parsed.get("total_assets"), parsed.get("total_equity"),
+                        None, parsed.get("operating_cash_flow"),
+                        "mfn_press", datetime.utcnow().isoformat()))
+                    db.commit()
+                    saved_periods.append(f"Q{parsed.get('period_q')} {parsed.get('period_year')}"
+                                         + (f" ⚠{parsed.get('unit_note')}"
+                                            if "halvår" in str(parsed.get('unit_note') or '').lower() else ""))
+                except Exception as e:
+                    saved_periods.append(f"{pub}: fel {str(e)[:50]}")
+                    try: db.rollback()
+                    except Exception: pass
+            ok_n = sum(1 for s in saved_periods if s.startswith("Q"))
+            done += 1 if ok_n else 0
+            errors += 0 if ok_n else 1
+            results.append({t: f"{ok_n}/{len(matches[:max(1, int(history))])} rapporter: "
+                               + "; ".join(saved_periods)})
         except Exception as e:
             errors += 1
             results.append({t: f"fel: {str(e)[:80]}"})
@@ -15150,13 +15185,17 @@ def sync_shadow_reports_nordic(db, tickers):
 
 @app.route("/api/shadow/sync-nordic", methods=["POST"])
 def api_shadow_sync_nordic():
-    """Nordisk skugg-synk (inloggade): ?tickers=VOLV B,ERIC B,..."""
+    """Nordisk skugg-synk (inloggade): ?tickers=VOLV B,ERIC B,...
+    &history=4&days=400 = backtest på flera rapporter bakåt per bolag."""
     tickers = [t for t in (request.args.get("tickers") or "").split(",") if t.strip()]
     if not tickers:
         return jsonify({"error": "ange ?tickers=VOLV B,ERIC B,..."}), 400
+    history = int(request.args.get("history") or 1)
+    days = int(request.args.get("days") or (400 if history > 1 else 45))
     db = get_db()
     try:
-        return jsonify(sync_shadow_reports_nordic(db, tickers))
+        return jsonify(sync_shadow_reports_nordic(db, tickers,
+                                                  history=history, days_back=days))
     finally:
         db.close()
 
@@ -15292,6 +15331,12 @@ def api_shadow_compare():
             per_bolag[t] = {m: {"inom_2pct": a[0], "n": a[2],
                                 "pct": round(100.0 * a[0] / a[2], 1) if a[2] else None}
                             for m, a in mm.items() if a[2]}
+        # Diagnos: ?ticker=EVO → alla parade rader för ETT bolag
+        tick_f = (request.args.get("ticker") or "").strip().upper()
+        if tick_f:
+            rows_f = [c for c in comps if c.get("ticker", "").upper() == tick_f]
+            return jsonify({"ticker": tick_f, "rader": rows_f,
+                            "per_bolag": {tick_f: per_bolag.get(tick_f)}})
         return jsonify({"summary": summary,
                         "per_bolag": per_bolag,
                         "n_perioder": len(comps),
