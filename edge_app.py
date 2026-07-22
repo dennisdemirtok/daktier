@@ -7811,6 +7811,363 @@ body {{ font-family: -apple-system, BlinkMacSystemFont, "Inter", "Helvetica Neue
     }
 
 
+def _build_daily_email_v2(db, base_url="https://daktier-production.up.railway.app"):
+    """Morgonmejl v2 — återanvänder DASHBOARDENS innehåll (morgonbrief, makro,
+    nyheter, marknadspuls, Köplistan) i stället för att generera egen text.
+    E-postsäker layout: endast tabeller + inline-CSS (Gmail stryper flex/grid/
+    gradients — v1:s 'stolpighet' kom därifrån). Noll extra Claude-anrop."""
+    import json as _js
+    from edge_db import _fetchone as _f1, _fetchall as _fa, _ph as _phx
+    ph = _phx()
+    today = datetime.now().strftime("%Y-%m-%d")
+    _VECKODAG = ["måndag", "tisdag", "onsdag", "torsdag", "fredag", "lördag", "söndag"]
+    _MANAD = ["", "januari", "februari", "mars", "april", "maj", "juni", "juli",
+              "augusti", "september", "oktober", "november", "december"]
+    _now = datetime.now()
+    datum_lang = f"{_VECKODAG[_now.weekday()]} {_now.day} {_MANAD[_now.month]} {_now.year}"
+
+    def _jload(v):
+        if v is None:
+            return None
+        if isinstance(v, (dict, list)):
+            return v
+        try:
+            return _js.loads(v)
+        except Exception:
+            return None
+
+    def _esc(s):
+        return (str(s or "").replace("&", "&amp;").replace("<", "&lt;")
+                .replace(">", "&gt;"))
+
+    NAVY, CYAN, INK, MUT, LINE, BG = ("#16365C", "#38B6D9", "#1E293B",
+                                      "#64748B", "#E2E8F0", "#F7FAFC")
+    FONT = "-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif"
+
+    def _h2(txt):
+        return (f'<tr><td style="padding:26px 28px 10px 28px">'
+                f'<div style="font-family:{FONT};font-size:12px;font-weight:700;'
+                f'letter-spacing:1.5px;text-transform:uppercase;color:{NAVY};'
+                f'border-left:3px solid {CYAN};padding-left:10px">{txt}</div></td></tr>')
+
+    def _p(html_inner, pad="0 28px 6px 28px", size="14px", color=INK, lh="1.65"):
+        return (f'<tr><td style="padding:{pad}"><div style="font-family:{FONT};'
+                f'font-size:{size};line-height:{lh};color:{color}">{html_inner}</div></td></tr>')
+
+    def _badge(txt, bg, fg):
+        return (f'<span style="display:inline-block;background:{bg};color:{fg};'
+                f'font-family:{FONT};font-size:11px;font-weight:700;'
+                f'padding:2px 9px;border-radius:10px">{_esc(txt)}</span>')
+
+    def _pct_span(v):
+        try:
+            v = float(v)
+        except (TypeError, ValueError):
+            return ""
+        c = "#059669" if v >= 0 else "#DC2626"
+        return f'<span style="color:{c};font-weight:600">{"+" if v >= 0 else ""}{v:.1f}%</span>'
+
+    rows = []
+
+    # ── 1. MORGONLÄGE (dashboardens morgonbrief ur meta) ──────────────────
+    brief = None
+    for dk in (0, 1):
+        r = _f1(db, f"SELECT value FROM meta WHERE key = {ph}",
+                (f"brief:{(_now.date() - timedelta(days=dk)).isoformat()}",))
+        if r:
+            brief = _jload(dict(r)["value"])
+            if brief:
+                break
+    subject_hint = ""
+    if brief:
+        sig = (brief.get("overall_signal") or "").upper()
+        sig_col = {"OFFENSIV": ("#DCFCE7", "#166534"), "NEUTRAL": ("#E0F2FE", "#075985"),
+                   "DEFENSIV": ("#FEE2E2", "#991B1B")}.get(sig, ("#E2E8F0", "#334155"))
+        rows.append(_h2("Morgonläge"))
+        if sig:
+            rows.append(_p(_badge(sig, *sig_col), pad="4px 28px 8px 28px"))
+        if brief.get("market_summary"):
+            rows.append(_p(_esc(brief["market_summary"])))
+        sp = brief.get("dagens_stockpick") or {}
+        if sp.get("name"):
+            subject_hint = sp["name"]
+            rows.append(_p(
+                f'<table role="presentation" width="100%" cellpadding="0" cellspacing="0" '
+                f'style="background:{BG};border:1px solid {LINE};border-radius:8px">'
+                f'<tr><td style="padding:12px 14px;font-family:{FONT};font-size:13px;'
+                f'line-height:1.6;color:{INK}"><span style="color:{MUT};font-size:11px;'
+                f'font-weight:700;letter-spacing:1px">DAGENS STOCKPICK</span><br>'
+                f'<strong style="font-size:15px;color:{NAVY}">{_esc(sp["name"])}</strong>'
+                + (f' &nbsp;{_badge(sp.get("signal"), "#E0F2FE", "#075985")}' if sp.get("signal") else "")
+                + (f'<br>{_esc(sp.get("reason"))}' if sp.get("reason") else "")
+                + f'</td></tr></table>', pad="6px 28px 8px 28px"))
+        risks = [r0 for r0 in (brief.get("risks") or []) if r0][:2]
+        if risks:
+            rows.append(_p("<br>".join(f'⚠️ <span style="color:{MUT}">{_esc(r0)}</span>'
+                                       for r0 in risks), size="12px"))
+
+    # ── 2. MAKRO (senaste macro_pulse) ────────────────────────────────────
+    mp = _f1(db, "SELECT headline, sentiment, summary, sections_json, generated_at "
+                 "FROM macro_pulse ORDER BY generated_at DESC LIMIT 1")
+    if mp:
+        m = dict(mp)
+        sent = (m.get("sentiment") or "").lower()
+        s_col = {"risk-on": ("#DCFCE7", "#166534"),
+                 "risk-off": ("#FEE2E2", "#991B1B")}.get(sent, ("#E2E8F0", "#334155"))
+        rows.append(_h2("Makro"))
+        head = _esc(m.get("headline") or "")
+        if head:
+            rows.append(_p(f'<strong>{head}</strong> &nbsp;'
+                           + (_badge(sent or "neutral", *s_col)), size="14px"))
+        if m.get("summary"):
+            rows.append(_p(_esc(m["summary"]), size="13px", color="#334155"))
+        secs = _jload(m.get("sections_json")) or []
+        pts = []
+        for sec in secs:
+            for p0 in (sec.get("points") or []):
+                pts.append(p0)
+        if pts:
+            rows.append(_p("<br>".join(f'<span style="color:{CYAN}">▪</span> {_esc(p0)}'
+                                       for p0 in pts[:4]), size="12px", color="#334155"))
+
+    # ── 3. NYHETER NORDEN (senaste market_news) ───────────────────────────
+    mn = _f1(db, "SELECT market_recap, items_json, generated_at FROM market_news "
+                 "ORDER BY generated_at DESC LIMIT 1")
+    if mn:
+        n = dict(mn)
+        items = _jload(n.get("items_json")) or []
+        if n.get("market_recap") or items:
+            rows.append(_h2("Svenska &amp; nordiska nyheter"))
+            if n.get("market_recap"):
+                rows.append(_p(_esc(n["market_recap"]), size="13px", color="#334155"))
+            it_html = ""
+            for it in items[:5]:
+                tick = _esc(it.get("ticker") or "")
+                ch = it.get("change_pct")
+                it_html += (
+                    f'<tr><td style="padding:8px 0;border-bottom:1px solid {LINE};'
+                    f'font-family:{FONT};font-size:13px;line-height:1.55;color:{INK}">'
+                    f'<strong style="color:{NAVY}">{tick}</strong>'
+                    + (f' {_pct_span(ch)}' if ch is not None else "")
+                    + f' — {_esc(it.get("headline") or "")}'
+                    + (f'<br><span style="font-size:12px;color:{MUT}">{_esc(it.get("summary") or "")}</span>'
+                       if it.get("summary") else "")
+                    + '</td></tr>')
+            if it_html:
+                rows.append(_p(f'<table role="presentation" width="100%" cellpadding="0" '
+                               f'cellspacing="0">{it_html}</table>', pad="2px 28px 6px 28px"))
+
+    # ── 4. MARKNADSPULS US (dagens/gårdagens market_bullets) ──────────────
+    mb = _f1(db, f"SELECT bullet_date, market_overview, sections_json, summary "
+                 f"FROM market_bullets WHERE bullet_date >= {ph} "
+                 f"ORDER BY bullet_date DESC LIMIT 1",
+             ((_now.date() - timedelta(days=3)).isoformat(),))
+    if mb:
+        b = dict(mb)
+        ov = _jload(b.get("market_overview")) or {}
+        rows.append(_h2("Marknadspuls USA"))
+        idx_parts = []
+        for label, key in (("S&amp;P 500", "sp500"), ("Nasdaq", "nasdaq"), ("Dow", "dow")):
+            v = (ov.get(key) or {}).get("pct") if isinstance(ov.get(key), dict) else None
+            if v is not None:
+                idx_parts.append(f'{label} {_pct_span(v)}')
+        if idx_parts:
+            rows.append(_p(" &nbsp;·&nbsp; ".join(idx_parts), size="13px"))
+        if b.get("summary"):
+            rows.append(_p(_esc(b["summary"]), size="13px", color="#334155"))
+        secs = _jload(b.get("sections_json")) or []
+        bl_html = ""
+        cnt = 0
+        for sec in secs:
+            for it in (sec.get("items") or []):
+                if cnt >= 5:
+                    break
+                bl_html += (f'<tr><td style="padding:6px 0;border-bottom:1px solid {LINE};'
+                            f'font-family:{FONT};font-size:12px;line-height:1.55;color:{INK}">'
+                            f'<strong style="color:{NAVY}">{_esc(it.get("ticker") or "")}</strong> '
+                            f'{_esc((it.get("text") or "")[:180])}</td></tr>')
+                cnt += 1
+            if cnt >= 5:
+                break
+        if bl_html:
+            rows.append(_p(f'<table role="presentation" width="100%" cellpadding="0" '
+                           f'cellspacing="0">{bl_html}</table>', pad="2px 28px 6px 28px"))
+
+    # ── 5. RAPPORTER (senaste + kommande 7 dagar) ─────────────────────────
+    recent = []
+    try:
+        recent = _get_recent_reports_summary(db, days_back=10, limit=5) or []
+    except Exception:
+        pass
+    upc_se, upc_us = [], []
+    try:
+        upc_se = _get_upcoming_earnings(db, country_filter="SE", days_ahead=7, limit=6) or []
+        upc_us = _get_upcoming_earnings(db, country_filter="US", days_ahead=7, limit=6) or []
+    except Exception:
+        pass
+    if recent or upc_se or upc_us:
+        rows.append(_h2("Rapporter"))
+        rc_html = ""
+        for rpt in recent[:5]:
+            rd0 = rpt if isinstance(rpt, dict) else {}
+            rc_html += (f'<tr><td style="padding:6px 0;border-bottom:1px solid {LINE};'
+                        f'font-family:{FONT};font-size:12px;color:{INK}">'
+                        f'<strong style="color:{NAVY}">{_esc(rd0.get("ticker") or "")}</strong> '
+                        f'{_esc(rd0.get("name") or "")[:28]}'
+                        + (f' &nbsp;oms {_pct_span(rd0.get("rev_yoy_pct"))}'
+                           if rd0.get("rev_yoy_pct") is not None else "")
+                        + (f' &nbsp;vinst {_pct_span(rd0.get("profit_yoy_pct"))}'
+                           if rd0.get("profit_yoy_pct") is not None else "")
+                        + '</td></tr>')
+        if rc_html:
+            rows.append(_p("<span style='font-size:11px;color:" + MUT +
+                           ";font-weight:700;letter-spacing:1px'>SENASTE (YoY)</span>",
+                           pad="4px 28px 2px 28px"))
+            rows.append(_p(f'<table role="presentation" width="100%" cellpadding="0" '
+                           f'cellspacing="0">{rc_html}</table>', pad="0 28px 6px 28px"))
+        def _upc_line(lst):
+            out = []
+            for e in lst[:6]:
+                ed = e if isinstance(e, dict) else {}
+                dt = str(ed.get("next_company_report") or "")[5:10]
+                out.append(f'<strong>{_esc(ed.get("short_name") or "")}</strong>'
+                           f' <span style="color:{MUT}">({dt})</span>')
+            return " · ".join(out)
+        if upc_se:
+            rows.append(_p(f'🇸🇪 Kommande: {_upc_line(upc_se)}', size="12px"))
+        if upc_us:
+            rows.append(_p(f'🇺🇸 Kommande: {_upc_line(upc_us)}', size="12px"))
+
+    # ── 6. KÖPLISTAN (kvalitet × trend — dashboardens lista) ──────────────
+    kop = []
+    try:
+        kres = _agent_screen_stocks(db, screen="koplista", country="SE,US", limit=5)
+        kop = (kres or {}).get("stocks") or []
+    except Exception:
+        pass
+    if kop:
+        rows.append(_h2("Köplistan — kvalitet &amp; trend"))
+        k_html = (f'<tr>'
+                  f'<td style="font-family:{FONT};font-size:11px;color:{MUT};padding:4px 0">BOLAG</td>'
+                  f'<td style="font-family:{FONT};font-size:11px;color:{MUT};padding:4px 0" align="right">ROCE</td>'
+                  f'<td style="font-family:{FONT};font-size:11px;color:{MUT};padding:4px 0" align="right">EV/EBIT</td>'
+                  f'<td style="font-family:{FONT};font-size:11px;color:{MUT};padding:4px 0" align="right">vs MA200</td></tr>')
+        for s in kop:
+            roce = s.get("roce_pct")
+            evb = s.get("ev_ebit")
+            ma = s.get("vs_ma200_pct")
+            k_html += (f'<tr>'
+                       f'<td style="font-family:{FONT};font-size:13px;color:{INK};'
+                       f'padding:7px 0;border-top:1px solid {LINE}">'
+                       f'<strong style="color:{NAVY}">{_esc(s.get("ticker") or s.get("short_name") or "")}</strong>'
+                       f' <span style="color:{MUT};font-size:12px">{_esc((s.get("name") or "")[:22])}</span></td>'
+                       f'<td align="right" style="font-family:{FONT};font-size:12px;color:{INK};'
+                       f'padding:7px 0;border-top:1px solid {LINE}">'
+                       + (f'{float(roce):.0f}%' if isinstance(roce, (int, float)) else "–")
+                       + '</td>'
+                       f'<td align="right" style="font-family:{FONT};font-size:12px;color:{INK};'
+                       f'padding:7px 0;border-top:1px solid {LINE}">'
+                       + (f'{float(evb):.1f}' if isinstance(evb, (int, float)) else "–")
+                       + '</td>'
+                       f'<td align="right" style="font-family:{FONT};font-size:12px;'
+                       f'padding:7px 0;border-top:1px solid {LINE}">'
+                       + (_pct_span(ma) if isinstance(ma, (int, float)) else "–")
+                       + '</td></tr>')
+        rows.append(_p(f'<table role="presentation" width="100%" cellpadding="0" '
+                       f'cellspacing="0">{k_html}</table>', pad="2px 28px 2px 28px"))
+        rows.append(_p(f'Regler: ROCE ≥ 15 % · EV/EBIT 4–25 · pris &gt; MA200 · '
+                       f'6 m-momentum &gt; 0. Följ upp månadsvis.', size="11px", color=MUT))
+
+    # ── 7. INSIDERKÖP ─────────────────────────────────────────────────────
+    insiders = []
+    try:
+        insiders = _get_top_insider_buys(db, days_back=7, limit=5) or []
+    except Exception:
+        pass
+    if insiders:
+        rows.append(_h2("Insiderköp (SE, 7 dagar)"))
+        ins_html = ""
+        for i0 in insiders[:5]:
+            idd = i0 if isinstance(i0, dict) else {}
+            belopp = idd.get("total_value")
+            cur0 = idd.get("currency") or "SEK"
+            try:
+                belopp_s = f"{float(belopp) / 1e6:.1f} M{cur0}" if belopp else ""
+            except (TypeError, ValueError):
+                belopp_s = ""
+            ins_html += (f'<tr><td style="padding:5px 0;border-bottom:1px solid {LINE};'
+                         f'font-family:{FONT};font-size:12px;color:{INK}">'
+                         f'<strong style="color:{NAVY}">{_esc((idd.get("issuer") or "")[:26])}</strong> '
+                         f'{_esc((idd.get("person") or "")[:28])}'
+                         + (f' &nbsp;<span style="color:#059669;font-weight:600">{belopp_s}</span>'
+                            if belopp_s else "")
+                         + '</td></tr>')
+        rows.append(_p(f'<table role="presentation" width="100%" cellpadding="0" '
+                       f'cellspacing="0">{ins_html}</table>', pad="2px 28px 6px 28px"))
+
+    # ── 8. SYSTEMSTATUS (skuggpipeline — diskret) ─────────────────────────
+    sh_line = ""
+    try:
+        for dk in (0, 1, 2):
+            r = _f1(db, f"SELECT value FROM meta WHERE key = {ph}",
+                    (f"shadow:daily:{(_now.date() - timedelta(days=dk)).isoformat()}",))
+            if r:
+                sv = _jload(dict(r)["value"]) or {}
+                us_n = (sv.get("us") or {}).get("done", 0)
+                no_res = (sv.get("norden") or {}).get("results") or []
+                no_ok = sum(1 for res0 in no_res
+                            for _t, _m in res0.items()
+                            if str(_m).strip()[:1].isdigit() and not str(_m).startswith("0/"))
+                fl = (sv.get("infloede") or {}).get("written_or_existing", 0)
+                sh_line = (f'Rapporthämtning i morse: {us_n} US-bolag · '
+                           f'{no_ok}/{len(no_res)} nordiska · {fl} rader till arkivet')
+                break
+    except Exception:
+        pass
+    if sh_line:
+        rows.append(_p(f'<span style="color:{MUT}">🛠 {sh_line}</span>',
+                       pad="20px 28px 0 28px", size="11px"))
+
+    # ── Skal ──────────────────────────────────────────────────────────────
+    body_rows = "".join(rows) if rows else _p("Inget innehåll genererat ännu i dag — "
+                                              "öppna dashboarden för live-läget.")
+    html = f"""<!DOCTYPE html>
+<html lang="sv"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#F1F5F9">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#F1F5F9">
+<tr><td align="center" style="padding:24px 12px">
+<table role="presentation" width="620" cellpadding="0" cellspacing="0"
+       style="max-width:620px;width:100%;background:#FFFFFF;border-radius:12px;
+              border:1px solid {LINE};overflow:hidden">
+<tr><td style="background:{NAVY};padding:22px 28px">
+    <div style="font-family:{FONT};font-size:20px;font-weight:800;color:#FFFFFF;
+                letter-spacing:3px">DAKTIER</div>
+    <div style="font-family:{FONT};font-size:12px;color:{CYAN};margin-top:3px;
+                letter-spacing:0.5px">Morgonrapport · {datum_lang}</div>
+</td></tr>
+{body_rows}
+<tr><td align="center" style="padding:26px 28px 8px 28px">
+    <a href="{base_url}/" style="display:inline-block;background:{NAVY};color:#FFFFFF;
+       font-family:{FONT};font-size:13px;font-weight:700;text-decoration:none;
+       padding:11px 26px;border-radius:8px">Öppna DAKTIER →</a>
+</td></tr>
+<tr><td align="center" style="padding:6px 28px 24px 28px">
+    <div style="font-family:{FONT};font-size:11px;color:{MUT};line-height:1.6">
+    Automatiskt utskick från DAKTIER · Ingen finansiell rådgivning — gör alltid egen analys
+    </div>
+</td></tr>
+</table>
+</td></tr></table>
+</body></html>"""
+    stats = {"subject_hint": subject_hint,
+             "sections": len(rows),
+             "has_brief": bool(brief), "has_macro": bool(mp),
+             "has_news": bool(mn), "has_bullets": bool(mb),
+             "n_koplista": len(kop), "n_insiders": len(insiders)}
+    return html, stats
+
+
 def _send_email_via_resend(to_email, subject, html_body):
     """Skicka mail via Resend API. Returnerar (success, response)."""
     if not RESEND_API_KEY:
@@ -7845,12 +8202,14 @@ def api_email_daily_digest():
 
     db = get_db()
     try:
-        html, stats = _build_daily_digest_html(db)
+        html, stats = _build_daily_email_v2(db)
         if dry_run:
             return jsonify({"dry_run": True, "stats": stats, "html_length": len(html)})
 
         from datetime import datetime
-        subject = f"📊 Daktier Daily — {datetime.now().strftime('%Y-%m-%d')} ({stats['n_buy']} BUY · {stats['n_overheat']} OVERHEAT · {stats['n_oversold']} OVERSOLD)"
+        subject = f"☀️ DAKTIER Morgonrapport {datetime.now().strftime('%-d/%-m')}"
+        if stats.get("subject_hint"):
+            subject += f" — dagens pick: {stats['subject_hint']}"
         ok, resp = _send_email_via_resend(to_email, subject, html)
         return jsonify({
             "sent": ok,
@@ -20023,9 +20382,11 @@ def _startup():
                 print(f"[AUTO] Daily email start {datetime.now().strftime('%H:%M')}")
                 dbe = get_db()
                 try:
-                    html, stats = _build_daily_digest_html(dbe)
+                    html, stats = _build_daily_email_v2(dbe)
                     from datetime import datetime as dtm
-                    subject = f"📊 Daktier Daily — {dtm.now().strftime('%Y-%m-%d')} ({stats['n_buy']} BUY · {stats['n_overheat']} OVERHEAT)"
+                    subject = f"☀️ DAKTIER Morgonrapport {dtm.now().strftime('%-d/%-m')}"
+                    if stats.get("subject_hint"):
+                        subject += f" — dagens pick: {stats['subject_hint']}"
                     ok, resp = _send_email_via_resend(RESEND_TO_DEFAULT, subject, html)
                     print(f"[AUTO] Daily email: ok={ok}, stats={stats}")
                 finally:
@@ -20034,8 +20395,11 @@ def _startup():
                 import traceback
                 print(f"[AUTO] Daily email fel: {e}\n{traceback.format_exc()[:500]}")
 
+        # 07:30 vardagar — EFTER 06:15-skuggan och 06:45-innehållsgenereringen,
+        # så morgonbrief/nyheter/makro är dagsfärska i mejlet (v1 gick 17:30
+        # med morgoninnehåll = halvgammalt)
         scheduler.add_job(scheduled_daily_email, 'cron',
-                          day_of_week='mon-fri', hour=17, minute=30,
+                          day_of_week='mon-fri', hour=7, minute=30,
                           id='daily_email_digest')
 
         # Uppdatera fwd-returns på söndagar — utvärderar gamla snapshots
