@@ -7591,6 +7591,47 @@ def _build_daily_digest_html(db, base_url="https://daktier-production.up.railway
             <div style="font-size:13px;color:#374151;line-height:1.6">{ai_summary}</div>
         </div>"""
 
+    # Skuggpipelinens dagsfacit (morgonens 06:15-körning) — uppföljning inför
+    # Börsdata-uppsägningen: användaren ska se hämtningsstatus utan att öppna appen
+    shadow_section_html = ""
+    try:
+        import json as _jsd
+        from edge_db import _ph as _phd, _fetchone as _f1d
+        _pd = _phd()
+        _srow = None
+        for _dback in (0, 1, 2):
+            _key = f"shadow:daily:{(datetime.now().date() - timedelta(days=_dback)).isoformat()}"
+            _r = _f1d(db, f"SELECT value FROM meta WHERE key = {_pd}", (_key,))
+            if _r:
+                _srow = (_key.split(":")[-1], _jsd.loads(dict(_r)["value"]))
+                break
+        if _srow:
+            _sd, _sv = _srow
+            _us = _sv.get("us") or {}
+            _no = _sv.get("norden") or {}
+            _fl = _sv.get("infloede") or {}
+            _rows_h = ""
+            for _res in (_no.get("results") or [])[:12]:
+                for _t, _msg in _res.items():
+                    _ok = str(_msg).split(" rapporter")[0] if "rapporter" in str(_msg) else str(_msg)[:60]
+                    _color = "#059669" if str(_msg).strip().startswith(("1/", "2/", "3/", "4/")) and not str(_msg).startswith("0/") else "#b45309"
+                    _rows_h += (f'<div style="font-size:12px;padding:2px 0">'
+                                f'<span style="font-weight:600">{_t}</span>: '
+                                f'<span style="color:{_color}">{_ok}</span></div>')
+            if not _rows_h:
+                _rows_h = '<div style="font-size:12px;color:#6b7280">Inga nordiska rapportbolag i fönstret</div>'
+            shadow_section_html = f'''<div class="section">
+    <h2>🕵️ SKUGGPIPELINE ({_sd})</h2>
+    <div class="subtitle">Egen rapporthämtning (EDGAR + pressreleaser) — ersätter Börsdata.</div>
+    <div style="font-size:12px;color:#374151;margin-bottom:6px">
+        US: {_us.get("done", 0)} bolag synkade · Inflöde till rapporttabellen: {_fl.get("written_or_existing", 0)} rader ({_fl.get("skipped", 0)} skippade)
+    </div>
+    {_rows_h}
+</div>'''
+    except Exception as _e_sh:
+        shadow_section_html = (f'<div class="section"><h2>🕵️ SKUGGPIPELINE</h2>'
+                               f'<div style="font-size:12px;color:#b91c1c">Kunde inte läsa dagsloggen: {str(_e_sh)[:80]}</div></div>')
+
     html = f"""<!DOCTYPE html>
 <html><head><meta charset="UTF-8">
 <style>
@@ -7738,6 +7779,8 @@ body {{ font-family: -apple-system, BlinkMacSystemFont, "Inter", "Helvetica Neue
     <div class="subtitle">Finansinspektionen — chefer/styrelse som köpt egen aktie.</div>
     {insiders_html}
 </div>''' if insiders else ''}
+
+{shadow_section_html}
 
 <div style="text-align:center;margin-top:18px">
     <a href="{base_url}/" class="cta">Öppna Dashboard →</a>
