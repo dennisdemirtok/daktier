@@ -13941,9 +13941,17 @@ def _agent_resolve_stock(db, query):
             tk = (c.get("ticker") or c.get("short_name") or "").upper()
             sn = (c.get("short_name") or "").upper()
             exact = 0 if wu and (tk == wu or sn == wu) else 1
+            # ORD-träff före mcap: fuzzy '%Hennes%' matchade 'Moët HENNESsy'
+            # och mcap-tiebreaket lät LVMH slå H&M. Query-orden som HELA ord
+            # i namnet rankas före ren substring-träff.
+            nm = set((c.get("name") or "").upper()
+                     .replace("&", " ").replace(",", " ").replace(".", " ").split())
+            qw = set(wu.split()) if wu else set()
+            word = 0 if (qw and qw <= nm) else 1
             return (0 if _isin_nordic(isin) else 1,
                     0 if _real_isin(isin) else 1,
                     exact,
+                    word,
                     -(c.get("market_cap") or 0),
                     -(c.get("number_of_owners") or 0))
         clean.sort(key=keyf)
@@ -14955,32 +14963,34 @@ def _nasdaq_find_report_release(company_name, days_back=45):
     try:
         from datetime import datetime as _dtx, timedelta as _tdx
         _from = (_dtx.utcnow() - _tdx(days=days_back)).strftime("%Y-%m-%d")
-        r = requests.get(
-            "https://api.news.eu.nasdaq.com/news/query.action",
-            # limit=100 + fromDate: freeText matchar även OMNÄMNANDEN — 40
-            # senaste 'Volvo'-träffar var underleverantörsnyheter och AB
-            # Volvos egen rapport föll utanför fönstret
-            params={"type": "json", "showCompanyName": "true",
-                    "freeText": company_name, "limit": 100, "fromDate": _from},
-            headers={"User-Agent": ("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-                                    "AppleWebKit/537.36 (KHTML, like Gecko) "
-                                    "Chrome/126.0 Safari/537.36"),
-                     "Accept": "application/json, text/plain, */*",
-                     "Referer": "https://www.nasdaqomxnordic.com/"},
-            timeout=25)
-        dbg["status"] = r.status_code
-        if r.status_code != 200:
-            dbg["body"] = r.text[:120]
-            return None, None, dbg
-        txt = r.text
-        i, j = txt.find("{"), txt.rfind("}")
-        data = _json.loads(txt[i:j + 1]) if i >= 0 else {}
-        items = ((data.get("results") or {}).get("item")) or []
+        # KATEGORIFILTRERADE anrop (cnscategory-param): bred freeText-sökning
+        # gav OLIKA topp-100 per klient-IP och AB Volvos rapport föll utanför
+        # serverns fönster (bara omnämnanden). Med kategori = enbart rapporter.
+        items = []
+        _hdrs = {"User-Agent": ("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+                                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                                "Chrome/126.0 Safari/537.36"),
+                 "Accept": "application/json, text/plain, */*",
+                 "Referer": "https://www.nasdaqomxnordic.com/"}
+        for cat in ("Half Year financial report", "Interim report (Q1 and Q3)",
+                    "Year-end report", "Annual Financial Report"):
+            r = requests.get(
+                "https://api.news.eu.nasdaq.com/news/query.action",
+                params={"type": "json", "showCompanyName": "true",
+                        "freeText": company_name, "limit": 25,
+                        "fromDate": _from, "cnscategory": cat},
+                headers=_hdrs, timeout=25)
+            dbg["status"] = r.status_code
+            if r.status_code != 200:
+                dbg["body"] = r.text[:120]
+                continue
+            txt = r.text
+            i, j = txt.find("{"), txt.rfind("}")
+            data = _json.loads(txt[i:j + 1]) if i >= 0 else {}
+            items.extend(((data.get("results") or {}).get("item")) or [])
         dbg["n_items"] = len(items)
         dbg["want"] = sorted(want)
-        dbg["report_companies"] = [it.get("company") for it in items
-                                   if any(k in (it.get("cnsCategory") or "").lower()
-                                          for k in _RAPPORT_KATEGORIER)][:5]
+        dbg["report_companies"] = [it.get("company") for it in items][:6]
         from datetime import datetime as _dt, timedelta as _td
         cutoff = (_dt.utcnow() - _td(days=days_back)).strftime("%Y-%m-%d")
         for it in items:
