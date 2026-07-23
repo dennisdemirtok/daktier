@@ -5138,6 +5138,89 @@ def flow_shadow_into_reports(db, days=14):
             "ambiguous_tickers": sorted(ambiguous)[:10]}
 
 
+def sync_analyst_estimates(db, tickers=None, max_n=600, throttle=0.12):
+    """US-estimatrevisioner från Nasdaq.com:s öppna analyst-API (gratis,
+    endast US-noterat): konsensus-EPS nu/1v sedan/1m sedan för kvartal+helår.
+    Snapshot per dag → egen revisionshistorik byggs upp över tid.
+    Norden täcks EJ (inget gratis strukturerat estimatdata funnet)."""
+    import requests as _rq
+    import time as _t
+    from datetime import date as _date
+    ph = _ph()
+    db.execute("""
+        CREATE TABLE IF NOT EXISTS analyst_estimates (
+            snapshot_date TEXT NOT NULL,
+            ticker TEXT NOT NULL,
+            qtr_mean DOUBLE PRECISION, qtr_week_ago DOUBLE PRECISION,
+            qtr_month_ago DOUBLE PRECISION,
+            yr_mean DOUBLE PRECISION, yr_week_ago DOUBLE PRECISION,
+            yr_month_ago DOUBLE PRECISION,
+            qtr_up INTEGER, qtr_down INTEGER,
+            yr_up INTEGER, yr_down INTEGER,
+            PRIMARY KEY (snapshot_date, ticker)
+        )""")
+    db.commit()
+    today = _date.today().isoformat()
+    if not tickers:
+        rows = _fetchall(db, f"""
+            SELECT short_name FROM stocks
+            WHERE country = 'US' AND last_price > 0 AND market_cap > 0
+              AND isin IS NOT NULL AND isin != '' AND isin NOT LIKE {ph}
+            ORDER BY market_cap DESC LIMIT {int(max_n)}
+        """, ("YAHOO_%",))
+        tickers = [dict(r)["short_name"] for r in rows if dict(r).get("short_name")]
+    hdrs = {"User-Agent": ("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+                           "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36"),
+            "Accept": "application/json",
+            "Origin": "https://www.nasdaq.com", "Referer": "https://www.nasdaq.com/"}
+    ins = _upsert_sql("analyst_estimates",
+                      ["snapshot_date", "ticker", "qtr_mean", "qtr_week_ago",
+                       "qtr_month_ago", "yr_mean", "yr_week_ago", "yr_month_ago",
+                       "qtr_up", "qtr_down", "yr_up", "yr_down"],
+                      ["snapshot_date", "ticker"])
+    saved = errors = 0
+    for t in tickers:
+        try:
+            r = _rq.get(f"https://api.nasdaq.com/api/analyst/{t}/estimate-momentum",
+                        headers=hdrs, timeout=15)
+            if r.status_code != 200:
+                errors += 1
+                continue
+            d = (r.json() or {}).get("data") or {}
+            cc = d.get("changeInConsensus") or {}
+            def _num(x):
+                try:
+                    return float(x)
+                except (TypeError, ValueError):
+                    return None
+            cur, wk, mo = (cc.get(k) or {} for k in ("currentData", "weekData", "monthData"))
+            ec = d.get("estimatesChanged") or {}
+            def _cnt(k):
+                try:
+                    return int((ec.get(k) or {}).get("changeValue"))
+                except (TypeError, ValueError):
+                    return None
+            vals = (_num(cur.get("qtrMean")), _num(wk.get("qtrMean")), _num(mo.get("qtrMean")),
+                    _num(cur.get("yrMean")), _num(wk.get("yrMean")), _num(mo.get("yrMean")),
+                    _cnt("quarterDataUp"), _cnt("quarterDataDown"),
+                    _cnt("yearDataUp"), _cnt("yearDataDown"))
+            if all(v is None for v in vals):
+                errors += 1
+                continue
+            db.execute(ins, (today, t.upper()) + vals)
+            saved += 1
+            if saved % 50 == 0:
+                db.commit()
+        except Exception:
+            errors += 1
+            try: db.rollback()
+            except Exception: pass
+        _t.sleep(throttle)
+    db.commit()
+    return {"snapshot_date": today, "saved": saved, "errors": errors,
+            "universe": len(tickers)}
+
+
 def compute_factor_scores(db, min_mcap=3e8):
     """Multifaktormodell — percentilrank per (land, sektor)-bucket:
       F1 25% Vinstmomentum   (PROXY för estimatrevisioner: rapporterad TTM-EPS-
@@ -5213,6 +5296,22 @@ def compute_factor_scores(db, min_mcap=3e8):
             t["q_eps_yoy"] = (q0["eps"] - q4["eps"]) / abs(q4["eps"])
         ttm[isin] = t
 
+    # ── Äkta estimatrevisioner (US, Nasdaq-API) — senaste snapshot ───────
+    est = {}
+    try:
+        er = _fetchone(db, "SELECT MAX(snapshot_date) AS d FROM analyst_estimates")
+        ed = dict(er).get("d") if er else None
+        if ed:
+            t2i = {u["short_name"]: u["isin"] for u in uni if u.get("short_name")}
+            for r in _fetchall(db, f"SELECT * FROM analyst_estimates WHERE snapshot_date = {ph}", (ed,)):
+                d0 = dict(r)
+                isin0 = t2i.get(d0.get("ticker"))
+                if isin0:
+                    est[isin0] = d0
+    except Exception:
+        try: db.rollback()
+        except Exception: pass
+
     # ── Prisavkastning 3/9 mån (6/12 ur trend_snapshot) ───────────────────
     trend = {dict(r)["isin"]: dict(r) for r in _fetchall(db,
         f"SELECT isin, ret_6m, ret_12m FROM trend_snapshot WHERE isin IN ({marks})",
@@ -5256,6 +5355,23 @@ def compute_factor_scores(db, min_mcap=3e8):
         rev_g = None
         if t.get("rev") and t.get("rev_p"):
             rev_g = (t["rev"] - t["rev_p"]) / abs(t["rev_p"])
+        # F1: äkta konsensusrevisioner (US) — storlek (konsensusändring 1 mån)
+        # + riktning (nettoandel upp-revisioner); annars rapportproxy
+        e0 = est.get(isin)
+        f1_sub = {}
+        if e0:
+            sizes = []
+            for mk, ok_ in (("qtr_mean", "qtr_month_ago"), ("yr_mean", "yr_month_ago")):
+                a, b = e0.get(mk), e0.get(ok_)
+                if isinstance(a, (int, float)) and isinstance(b, (int, float)) and abs(b) > 1e-9:
+                    sizes.append((a - b) / abs(b))
+            ups = [e0.get(k) for k in ("qtr_up", "yr_up") if isinstance(e0.get(k), int)]
+            dns = [e0.get(k) for k in ("qtr_down", "yr_down") if isinstance(e0.get(k), int)]
+            if sizes:
+                f1_sub["rev_size"] = sum(sizes) / len(sizes)
+            if ups or dns:
+                tot = sum(ups) + sum(dns)
+                f1_sub["rev_net"] = ((sum(ups) - sum(dns)) / tot) if tot else 0.0
         f1_parts = [v for v in (eps_g, t.get("q_eps_yoy")) if v is not None]
         roe = u.get("return_on_equity")
         gm = (t["gross"] / t["rev"]) if t.get("gross") and t.get("rev") else None
@@ -5265,8 +5381,10 @@ def compute_factor_scores(db, min_mcap=3e8):
         evb = u.get("ev_ebit_ratio") if isinstance(u.get("ev_ebit_ratio"), (int, float)) and 0 < u["ev_ebit_ratio"] < 100 else None
         ps = (u["market_cap"] / (t["rev"] * 1e6)) if t.get("rev") and t["rev"] > 0 and u.get("market_cap") else None
         peg = (pe / (eps_g * 100)) if pe and eps_g and eps_g > 0.02 else None
+        if not f1_sub and f1_parts:
+            f1_sub["eps_mom"] = sum(f1_parts) / len(f1_parts)
         raw[isin] = {
-            "f1": (sum(f1_parts) / len(f1_parts)) if f1_parts else None,
+            "f1_sub": f1_sub,
             "f2": mom,
             "f3_sub": {"roe": roe if isinstance(roe, (int, float)) else None,
                        "gm": gm, "fcfm": fcfm, "ocfq": ocfq},
@@ -5307,12 +5425,13 @@ def compute_factor_scores(db, min_mcap=3e8):
 
     fpct = {isin: {} for isin in isins}
     for bk, members in buckets.items():
-        for fkey in ("f1", "f2"):
+        for fkey in ("f2",):
             pairs = [(i, raw[i][fkey]) for i in members if raw[i][fkey] is not None]
             pr = _pct_rank(pairs)
             for i, p in pr.items():
                 fpct[i][fkey] = p
-        for fkey, subs, invert in (("f3", ("roe", "gm", "fcfm", "ocfq"), False),
+        for fkey, subs, invert in (("f1", ("rev_size", "rev_net", "eps_mom"), False),
+                                   ("f3", ("roe", "gm", "fcfm", "ocfq"), False),
                                    ("f4", ("rev_g", "eps_g"), False),
                                    ("f5", ("evb", "pe", "peg", "ps"), True)):
             sub_pr = {}

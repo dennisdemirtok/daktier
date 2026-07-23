@@ -8126,7 +8126,8 @@ def _build_daily_email_v2(db, base_url="https://daktier-production.up.railway.ap
         rows.append(_p('5 faktorer, percentilrankade mot land+sektor (25/25/20/20/10): '
                        'vinstmomentum · prismomentum 3–12 m · lönsamhet · tillväxt · värdering. '
                        'Bortsållad under 20:e percentilen i någon faktor. '
-                       'Vinst/tillväxt = rapporterad data (ej analytikerestimat).',
+                       'Vinstmomentum: US = äkta konsensusrevisioner (Nasdaq), '
+                       'Norden = rapporterad EPS-utveckling. Tillväxt = rapporterad.',
                        size="11px", color=MUT))
 
     # ── 7. INSIDERKÖP ─────────────────────────────────────────────────────
@@ -15727,6 +15728,18 @@ def api_shadow_daily_log():
         db.close()
 
 
+@app.route("/api/analyst-estimates/sync", methods=["POST"])
+def api_analyst_estimates_sync():
+    """Manuell US-estimatsync (inloggade): ?max=100 begränsar universum."""
+    from edge_db import sync_analyst_estimates
+    mx = min(int(request.args.get("max") or 600), 1500)
+    db = get_db()
+    try:
+        return jsonify(sync_analyst_estimates(db, max_n=mx))
+    finally:
+        db.close()
+
+
 @app.route("/api/factor-scores/build", methods=["POST"])
 def api_factor_scores_build():
     """Bygg dagens multifaktor-snapshot (inloggade). Körs även 05:25 vardagar."""
@@ -20643,6 +20656,26 @@ def _startup():
         scheduler.add_job(scheduled_factor_scores, 'cron',
                           day_of_week='mon-fri', hour=5, minute=25,
                           id='factor_scores_daily')
+
+        # 📊 US-estimatrevisioner (04:45, före faktormodellen 05:25) — Nasdaq
+        # analyst-API, gratis; Norden saknar gratis källa (rapportproxy där)
+        def scheduled_analyst_estimates():
+            if not _sched_claim("analyst_estimates", datetime.now().strftime("%Y-%m-%d")):
+                return
+            try:
+                from edge_db import sync_analyst_estimates
+                dba = get_db()
+                try:
+                    res = sync_analyst_estimates(dba, max_n=600)
+                    print(f"[AUTO] Estimatrevisioner: {res}")
+                finally:
+                    dba.close()
+            except Exception as e:
+                print(f"[AUTO] Estimatrevisioner fel: {e}")
+
+        scheduler.add_job(scheduled_analyst_estimates, 'cron',
+                          day_of_week='mon-fri', hour=4, minute=45,
+                          id='analyst_estimates_daily')
 
         # Veckovis Börsdata-rapportsync (söndagar 04:30) — full
         # PLUS daglig snabb-sync 05:30 under earnings-säsong för senaste rapporterna.
