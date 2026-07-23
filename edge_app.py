@@ -15772,7 +15772,17 @@ def api_factor_scores():
             f"SELECT * FROM factor_scores WHERE snapshot_date = {ph} "
             f"AND n_factors = 5 {cfilter}"
             f"ORDER BY is_pick DESC, dq ASC, total_score DESC LIMIT {ph}",
-            (d,) + cargs + (limit,))]
+            (d,) + cargs + (limit * 2,))]
+        # A/B-aktieslag = samma bolag — visa bara bästa raden (INDU A+C etc)
+        import re as _red
+        seen_b, dedup = set(), []
+        for r0 in rows:
+            base = _red.sub(r"\s+[A-D]$", "", (r0.get("ticker") or "").upper())
+            if base in seen_b:
+                continue
+            seen_b.add(base)
+            dedup.append(r0)
+        rows = dedup[:limit]
         return jsonify({"snapshot_date": str(d), "countries": countries, "rows": rows,
                         "picks": [x for x in rows if x.get("is_pick")],
                         "modell": "F1 vinstmomentum*25 + F2 prismomentum*25 + "
