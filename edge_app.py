@@ -7811,6 +7811,79 @@ body {{ font-family: -apple-system, BlinkMacSystemFont, "Inter", "Helvetica Neue
     }
 
 
+def _get_report_day_reactions(db, days_back=2, limit=8):
+    """Bolag som lämnat rapport i dag/nyss: siffrorna (YoY ur rapportarkivet,
+    som skuggpipelinen fyller på) + AKTIENS REAKTION på rapportdagen
+    (dagens intradag ur stocks, historiska dagar ur prisserien)."""
+    from edge_db import _fetchall, _fetchone, _ph
+    ph = _ph()
+    out = []
+    try:
+        today = datetime.now().date()
+        frm = (today - timedelta(days=days_back)).isoformat()
+        cal = _fetchall(db, f"""
+            SELECT DISTINCT rc.ticker, rc.report_date, s.isin, s.name, s.country,
+                   s.currency, s.market_cap, s.one_day_change_pct
+            FROM report_calendar rc
+            JOIN stocks s ON s.short_name = rc.ticker
+            WHERE rc.report_date >= {ph} AND rc.report_date <= {ph}
+              AND s.last_price > 0
+            ORDER BY rc.report_date DESC, s.market_cap DESC
+        """, (frm, today.isoformat()))
+        for r in cal[: limit * 2]:
+            d = dict(r)
+            isin = d.get("isin")
+            rep = None
+            if isin:
+                rep = _fetchone(db, f"""
+                    SELECT report_type, period_year, period_q, report_end_date,
+                           revenues, net_profit, eps, currency
+                    FROM borsdata_reports
+                    WHERE isin = {ph} AND report_type = 'quarter'
+                    ORDER BY report_end_date DESC LIMIT 1
+                """, (isin,))
+            item = {"ticker": d["ticker"], "name": d.get("name"),
+                    "country": d.get("country"), "report_date": str(d.get("report_date"))[:10]}
+            if rep:
+                rd = dict(rep)
+                item.update({"period_q": rd.get("period_q"), "period_year": rd.get("period_year"),
+                             "revenues": rd.get("revenues"), "net_profit": rd.get("net_profit"),
+                             "eps": rd.get("eps"), "rep_currency": rd.get("currency")})
+                prev = _fetchone(db, f"""
+                    SELECT revenues, net_profit, eps FROM borsdata_reports
+                    WHERE isin = {ph} AND report_type = 'quarter'
+                      AND period_year = {ph} AND period_q = {ph}
+                """, (isin, (rd.get("period_year") or 0) - 1, rd.get("period_q")))
+                if prev:
+                    pd0 = dict(prev)
+                    for k in ("revenues", "net_profit", "eps"):
+                        a, b = rd.get(k), pd0.get(k)
+                        if isinstance(a, (int, float)) and isinstance(b, (int, float)) and abs(b) > 1e-9:
+                            item[f"{k}_yoy"] = round(100.0 * (a - b) / abs(b), 1)
+            # Reaktion: rapport i dag → intradag; annars stängning rapportdag
+            # vs föregående handelsdag
+            if item["report_date"] == today.isoformat():
+                item["reaction_pct"] = d.get("one_day_change_pct")
+                item["reaction_label"] = "i dag"
+            elif isin:
+                px = _fetchall(db, f"""
+                    SELECT date, close FROM borsdata_prices
+                    WHERE isin = {ph} AND date <= {ph} AND close > 0
+                    ORDER BY date DESC LIMIT 2
+                """, (isin, item["report_date"]))
+                if len(px) == 2:
+                    a, b = dict(px[0]), dict(px[1])
+                    if str(a["date"])[:10] == item["report_date"] and b.get("close"):
+                        item["reaction_pct"] = round(100.0 * (a["close"] / b["close"] - 1), 1)
+                        item["reaction_label"] = "på rapportdagen"
+            out.append(item)
+            if len(out) >= limit:
+                break
+    except Exception as e:
+        print(f"[report reactions] fel: {e}", file=sys.stderr)
+    return out
+
+
 def _build_daily_email_v2(db, base_url="https://daktier-production.up.railway.app"):
     """Morgonmejl v2 — återanvänder DASHBOARDENS innehåll (morgonbrief, makro,
     nyheter, marknadspuls, Köplistan) i stället för att generera egen text.
@@ -7868,43 +7941,47 @@ def _build_daily_email_v2(db, base_url="https://daktier-production.up.railway.ap
         return f'<span style="color:{c};font-weight:600">{"+" if v >= 0 else ""}{v:.1f}%</span>'
 
     rows = []
-
-    # ── 1. MORGONLÄGE (dashboardens morgonbrief ur meta) ──────────────────
-    brief = None
-    for dk in (0, 1):
-        r = _f1(db, f"SELECT value FROM meta WHERE key = {ph}",
-                (f"brief:{(_now.date() - timedelta(days=dk)).isoformat()}",))
-        if r:
-            brief = _jload(dict(r)["value"])
-            if brief:
-                break
     subject_hint = ""
-    if brief:
-        sig = (brief.get("overall_signal") or "").upper()
-        sig_col = {"OFFENSIV": ("#DCFCE7", "#166534"), "NEUTRAL": ("#E0F2FE", "#075985"),
-                   "DEFENSIV": ("#FEE2E2", "#991B1B")}.get(sig, ("#E2E8F0", "#334155"))
-        rows.append(_h2("Morgonläge"))
-        if sig:
-            rows.append(_p(_badge(sig, *sig_col), pad="4px 28px 8px 28px"))
-        if brief.get("market_summary"):
-            rows.append(_p(_esc(brief["market_summary"])))
-        sp = brief.get("dagens_stockpick") or {}
-        if sp.get("name"):
-            subject_hint = sp["name"]
-            rows.append(_p(
-                f'<table role="presentation" width="100%" cellpadding="0" cellspacing="0" '
-                f'style="background:{BG};border:1px solid {LINE};border-radius:8px">'
-                f'<tr><td style="padding:12px 14px;font-family:{FONT};font-size:13px;'
-                f'line-height:1.6;color:{INK}"><span style="color:{MUT};font-size:11px;'
-                f'font-weight:700;letter-spacing:1px">DAGENS STOCKPICK</span><br>'
-                f'<strong style="font-size:15px;color:{NAVY}">{_esc(sp["name"])}</strong>'
-                + (f' &nbsp;{_badge(sp.get("signal"), "#E0F2FE", "#075985")}' if sp.get("signal") else "")
-                + (f'<br>{_esc(sp.get("reason"))}' if sp.get("reason") else "")
-                + f'</td></tr></table>', pad="6px 28px 8px 28px"))
-        risks = [r0 for r0 in (brief.get("risks") or []) if r0][:2]
-        if risks:
-            rows.append(_p("<br>".join(f'⚠️ <span style="color:{MUT}">{_esc(r0)}</span>'
-                                       for r0 in risks), size="12px"))
+
+    # ── 1. DAGENS RAPPORTER (siffror + kursreaktion — mejlets stjärna) ────
+    # OBS: den interna briefens simulerade portföljer/stockpick är BORTTAGNA
+    # ur mejlet — oprövade modeller ska inte se ut som köpråd.
+    reactions = _get_report_day_reactions(db, days_back=2, limit=8)
+    if reactions:
+        subject_hint = f"{len(reactions)} rapportbolag"
+        rows.append(_h2("Rapporterna — siffror &amp; reaktion"))
+        rx_html = ""
+        for it in reactions:
+            qlbl = (f"Q{it.get('period_q')} {it.get('period_year')}"
+                    if it.get("period_q") else "rapport")
+            cur0 = it.get("rep_currency") or ""
+            parts = []
+            if isinstance(it.get("revenues"), (int, float)):
+                parts.append(f'oms {it["revenues"]:,.0f} M{cur0}'.replace(",", " ")
+                             + (f' ({_pct_span(it.get("revenues_yoy"))} YoY)'
+                                if it.get("revenues_yoy") is not None else ""))
+            if isinstance(it.get("net_profit"), (int, float)):
+                parts.append(f'vinst {it["net_profit"]:,.0f}'.replace(",", " ")
+                             + (f' ({_pct_span(it.get("net_profit_yoy"))})'
+                                if it.get("net_profit_yoy") is not None else ""))
+            if isinstance(it.get("eps"), (int, float)):
+                parts.append(f'EPS {it["eps"]:.2f}'
+                             + (f' ({_pct_span(it.get("eps_yoy"))})'
+                                if it.get("eps_yoy") is not None else ""))
+            reakt = ""
+            if isinstance(it.get("reaction_pct"), (int, float)):
+                reakt = (f' &nbsp;→&nbsp; aktien {_pct_span(it["reaction_pct"])} '
+                         f'<span style="color:{MUT};font-size:11px">{it.get("reaction_label")}</span>')
+            rx_html += (f'<tr><td style="padding:9px 0;border-bottom:1px solid {LINE};'
+                        f'font-family:{FONT};font-size:13px;line-height:1.6;color:{INK}">'
+                        f'<strong style="color:{NAVY}">{_esc(it.get("ticker"))}</strong> '
+                        f'<span style="color:{MUT}">{_esc((it.get("name") or "")[:26])}</span> '
+                        f'<span style="font-size:11px;color:{MUT}">({_esc(it.get("report_date"))})</span><br>'
+                        f'{qlbl}: ' + (" · ".join(parts) if parts else
+                                       '<span style="color:' + MUT + '">siffror hämtas — kommer i morgonmejlet</span>')
+                        + reakt + '</td></tr>')
+        rows.append(_p(f'<table role="presentation" width="100%" cellpadding="0" '
+                       f'cellspacing="0">{rx_html}</table>', pad="2px 28px 6px 28px"))
 
     # ── 2. MAKRO (senaste macro_pulse) ────────────────────────────────────
     mp = _f1(db, "SELECT headline, sentiment, summary, sections_json, generated_at "
@@ -7965,7 +8042,8 @@ def _build_daily_email_v2(db, base_url="https://daktier-production.up.railway.ap
     if mb:
         b = dict(mb)
         ov = _jload(b.get("market_overview")) or {}
-        rows.append(_h2("Marknadspuls USA"))
+        rows.append(_h2(f"Marknadspuls USA <span style='font-weight:400;color:{MUT}'>"
+                        f"· sessionen {str(b.get('bullet_date'))[:10]}</span>"))
         idx_parts = []
         for label, key in (("S&amp;P 500", "sp500"), ("Nasdaq", "nasdaq"), ("Dow", "dow")):
             v = (ov.get(key) or {}).get("pct") if isinstance(ov.get(key), dict) else None
@@ -8134,13 +8212,13 @@ def _build_daily_email_v2(db, base_url="https://daktier-production.up.railway.ap
     # ── 7. INSIDERKÖP ─────────────────────────────────────────────────────
     insiders = []
     try:
-        insiders = _get_top_insider_buys(db, days_back=7, limit=5) or []
+        insiders = _get_top_insider_buys(db, days_back=7, limit=3) or []
     except Exception:
         pass
     if insiders:
         rows.append(_h2("Insiderköp (SE, 7 dagar)"))
         ins_html = ""
-        for i0 in insiders[:5]:
+        for i0 in insiders[:3]:
             idd = i0 if isinstance(i0, dict) else {}
             belopp = idd.get("total_value")
             cur0 = idd.get("currency") or "SEK"
@@ -8215,7 +8293,7 @@ def _build_daily_email_v2(db, base_url="https://daktier-production.up.railway.ap
 </body></html>"""
     stats = {"subject_hint": subject_hint,
              "sections": len(rows),
-             "has_brief": bool(brief), "has_macro": bool(mp),
+             "n_reports": len(reactions), "has_macro": bool(mp),
              "has_news": bool(mn), "has_bullets": bool(mb),
              "n_koplista": len(kop), "n_insiders": len(insiders)}
     return html, stats
@@ -8262,7 +8340,7 @@ def api_email_daily_digest():
         from datetime import datetime
         subject = f"☀️ DAKTIER Morgonrapport {datetime.now().strftime('%-d/%-m')}"
         if stats.get("subject_hint"):
-            subject += f" — dagens pick: {stats['subject_hint']}"
+            subject += f" — {stats['subject_hint']}"
         ok, resp = _send_email_via_resend(to_email, subject, html)
         return jsonify({
             "sent": ok,
@@ -20504,7 +20582,7 @@ def _startup():
                     from datetime import datetime as dtm
                     subject = f"☀️ DAKTIER Morgonrapport {dtm.now().strftime('%-d/%-m')}"
                     if stats.get("subject_hint"):
-                        subject += f" — dagens pick: {stats['subject_hint']}"
+                        subject += f" — {stats['subject_hint']}"
                     ok, resp = _send_email_via_resend(RESEND_TO_DEFAULT, subject, html)
                     print(f"[AUTO] Daily email: ok={ok}, stats={stats}")
                 finally:
@@ -20870,8 +20948,10 @@ def _startup():
             except Exception:
                 pass
 
+        # 06:50 — FÖRE morgonmejlet 07:30: pulsdatat (stockanalysis-digesten)
+        # publiceras efter US-stängning och ska vara hämtat när mejlet byggs
         scheduler.add_job(scheduled_market_bullets, 'cron',
-                          day_of_week='mon-fri', hour=7, minute=30,
+                          day_of_week='mon-fri', hour=6, minute=50,
                           id='market_bullets_daily')
 
         # 🗄️ Arkiv-topp-upp (söndagar 06:00): fångar nynoteringar + luckor.
