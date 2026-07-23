@@ -7884,6 +7884,135 @@ def _get_report_day_reactions(db, days_back=2, limit=8):
     return out
 
 
+def _get_report_blurbs(db, reactions):
+    """1-2 meningars kontext per rapportbolag (Google-exempel-stilen):
+    1) återanvänd pulsens redaktionella text (US, stockanalysis-digesten),
+    2) återanvänd nyhetsgenereringens summary (Norden),
+    3) för resten: EN batchad Claude+web_search-körning — endast verifierbara
+    fakta ur sökresultaten, REGEL 0. Cachas i meta blurbs:<datum>.
+    Returnerar {BAS-TICKER: text}."""
+    import json as _jb
+    import re as _rb
+    from edge_db import _fetchone as _f1b, _ph as _phb, _upsert_sql as _upsb
+    ph = _phb()
+    today = datetime.now().strftime("%Y-%m-%d")
+    _base = lambda t: _rb.sub(r"\s+[A-D]$", "", str(t or "").upper()).strip()
+
+    out = {}
+    try:
+        r = _f1b(db, f"SELECT value FROM meta WHERE key = {ph}", (f"blurbs:{today}",))
+        if r:
+            out = _jb.loads(dict(r)["value"]) or {}
+    except Exception:
+        out = {}
+
+    def _jload2(v):
+        if isinstance(v, (dict, list)):
+            return v
+        try:
+            return _jb.loads(v)
+        except Exception:
+            return None
+
+    # 1+2) Redaktionell text som redan finns i huset
+    bull, news = {}, {}
+    try:
+        mb = _f1b(db, "SELECT sections_json FROM market_bullets "
+                      "ORDER BY bullet_date DESC LIMIT 1")
+        for sec in (_jload2(dict(mb).get("sections_json")) if mb else None) or []:
+            for it in (sec.get("items") or []):
+                tk = _base(it.get("ticker"))
+                if tk and it.get("text") and tk not in bull:
+                    bull[tk] = str(it["text"])[:420]
+    except Exception:
+        pass
+    try:
+        mn = _f1b(db, "SELECT items_json FROM market_news "
+                      "ORDER BY generated_at DESC LIMIT 1")
+        for it in (_jload2(dict(mn).get("items_json")) if mn else None) or []:
+            tk = _base(it.get("ticker"))
+            txt = it.get("summary") or it.get("headline")
+            if tk and txt and tk not in news:
+                news[tk] = str(txt)[:420]
+    except Exception:
+        pass
+
+    missing = []
+    for it in reactions:
+        tk = _base(it.get("ticker"))
+        if not tk or tk in out:
+            continue
+        if tk in bull:
+            out[tk] = bull[tk]
+        elif tk in news:
+            out[tk] = news[tk]
+        else:
+            missing.append(it)
+
+    # 3) Claude + web_search för resten — EN batch, max 6 bolag
+    if missing and CLAUDE_API_KEY:
+        namn = "\n".join(
+            f"- {m.get('name')} (ticker {m.get('ticker')}), rapportdatum {m.get('report_date')}"
+            + (f", våra siffror: oms {m.get('revenues')} M ({m.get('revenues_yoy')}% YoY), "
+               f"EPS {m.get('eps')}" if m.get("revenues") is not None else "")
+            for m in missing[:6])
+        prompt = (f"IDAG ÄR {today}. Följande bolag har nyss lämnat kvartalsrapport. "
+                  f"Sök upp vad respektive rapport innehöll och skriv 1-2 KORTA meningar "
+                  f"på svenska per bolag: viktigaste siffran/beskedet, ev. guidance/orsak, "
+                  f"och kursreaktionen om källorna anger den.\n\n{namn}\n\n"
+                  "REGLER: ENDAST fakta du hittar i sökresultaten eller siffrorna ovan — "
+                  "HITTA ALDRIG PÅ SIFFROR eller orsaker. Hittar du inget om ett bolag: "
+                  "utelämna det helt.\n\n"
+                  "Svara med ENDAST JSON mellan markörer:\n"
+                  "---BLURB-JSON-START---\n"
+                  '{"TICKER": "text", ...}\n'
+                  "---BLURB-JSON-END---")
+        headers = {"x-api-key": CLAUDE_API_KEY, "anthropic-version": "2023-06-01",
+                   "content-type": "application/json"}
+        payload = {"model": _sonnet(), "max_tokens": 8000,
+                   "messages": [{"role": "user", "content": prompt}],
+                   "tools": [{"type": "web_search_20250305", "name": "web_search",
+                              "max_uses": 6}]}
+        try:
+            import httpx
+            resp = None
+            with httpx.Client(timeout=180.0) as client:
+                for _round in range(4):
+                    rr = client.post("https://api.anthropic.com/v1/messages",
+                                     headers=headers, json=payload)
+                    if rr.status_code != 200:
+                        _flag_credit_error(rr.text)
+                        resp = None
+                        break
+                    resp = rr.json()
+                    if resp.get("stop_reason") != "pause_turn":
+                        break
+                    payload = dict(payload)
+                    payload["messages"] = payload["messages"] + [
+                        {"role": "assistant", "content": resp.get("content") or []}]
+            if resp:
+                full = "".join(b.get("text", "") for b in resp.get("content", [])
+                               if b.get("type") == "text")
+                m = _rb.search(r"---BLURB-JSON-START---\s*(.*?)\s*---BLURB-JSON-END---",
+                               full, _rb.DOTALL)
+                if m:
+                    js = _rb.sub(r"^```(?:json)?\s*|\s*```$", "", m.group(1).strip())
+                    for tk, txt in (_jb.loads(js) or {}).items():
+                        if txt:
+                            out[_base(tk)] = str(txt)[:420]
+        except Exception as e:
+            print(f"[blurbs] Claude fel: {e}", file=sys.stderr)
+
+    try:
+        db.execute(_upsb("meta", ["key", "value"], ["key"]),
+                   (f"blurbs:{today}", _jb.dumps(out, ensure_ascii=False)))
+        db.commit()
+    except Exception:
+        try: db.rollback()
+        except Exception: pass
+    return out
+
+
 def _build_daily_email_v2(db, base_url="https://daktier-production.up.railway.app"):
     """Morgonmejl v2 — återanvänder DASHBOARDENS innehåll (morgonbrief, makro,
     nyheter, marknadspuls, Köplistan) i stället för att generera egen text.
@@ -7949,6 +8078,12 @@ def _build_daily_email_v2(db, base_url="https://daktier-production.up.railway.ap
     reactions = _get_report_day_reactions(db, days_back=2, limit=8)
     if reactions:
         subject_hint = f"{len(reactions)} rapportbolag"
+        try:
+            blurbs = _get_report_blurbs(db, reactions)
+        except Exception:
+            blurbs = {}
+        import re as _rbb
+        _baseb = lambda t: _rbb.sub(r"\s+[A-D]$", "", str(t or "").upper()).strip()
         rows.append(_h2("Rapporterna — siffror &amp; reaktion"))
         rx_html = ""
         for it in reactions:
@@ -7972,6 +8107,9 @@ def _build_daily_email_v2(db, base_url="https://daktier-production.up.railway.ap
             if isinstance(it.get("reaction_pct"), (int, float)):
                 reakt = (f' &nbsp;→&nbsp; aktien {_pct_span(it["reaction_pct"])} '
                          f'<span style="color:{MUT};font-size:11px">{it.get("reaction_label")}</span>')
+            blurb = blurbs.get(_baseb(it.get("ticker")))
+            blurb_html = (f'<br><span style="font-size:12px;color:#334155">'
+                          f'{_esc(blurb)}</span>') if blurb else ""
             rx_html += (f'<tr><td style="padding:9px 0;border-bottom:1px solid {LINE};'
                         f'font-family:{FONT};font-size:13px;line-height:1.6;color:{INK}">'
                         f'<strong style="color:{NAVY}">{_esc(it.get("ticker"))}</strong> '
@@ -7979,7 +8117,7 @@ def _build_daily_email_v2(db, base_url="https://daktier-production.up.railway.ap
                         f'<span style="font-size:11px;color:{MUT}">({_esc(it.get("report_date"))})</span><br>'
                         f'{qlbl}: ' + (" · ".join(parts) if parts else
                                        '<span style="color:' + MUT + '">siffror hämtas — kommer i morgonmejlet</span>')
-                        + reakt + '</td></tr>')
+                        + reakt + blurb_html + '</td></tr>')
         rows.append(_p(f'<table role="presentation" width="100%" cellpadding="0" '
                        f'cellspacing="0">{rx_html}</table>', pad="2px 28px 6px 28px"))
 
