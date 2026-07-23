@@ -8086,6 +8086,7 @@ def _build_daily_email_v2(db, base_url="https://daktier-production.up.railway.ap
         if _fd:
             fs_rows = [dict(x) for x in _fa(db,
                 f"SELECT * FROM factor_scores WHERE snapshot_date = {ph} AND dq = 0 "
+                f"AND n_factors = 5 AND country IN ('SE','US') "
                 f"ORDER BY is_pick DESC, total_score DESC LIMIT 5", (_fd,))]
     except Exception:
         pass
@@ -15763,11 +15764,16 @@ def api_factor_scores():
         d = dict(r).get("d") if r else None
         if not d:
             return jsonify({"rows": [], "note": "inget snapshot ännu — kör POST /api/factor-scores/build"})
+        countries = (request.args.get("countries") or "SE,US").upper()
+        cfilter = "" if countries == "ALL" else \
+            f"AND country IN ({','.join([ph] * len(countries.split(',')))}) "
+        cargs = () if countries == "ALL" else tuple(countries.split(","))
         rows = [dict(x) for x in _fetchall(db,
             f"SELECT * FROM factor_scores WHERE snapshot_date = {ph} "
+            f"AND n_factors = 5 {cfilter}"
             f"ORDER BY is_pick DESC, dq ASC, total_score DESC LIMIT {ph}",
-            (d, limit))]
-        return jsonify({"snapshot_date": str(d), "rows": rows,
+            (d,) + cargs + (limit,))]
+        return jsonify({"snapshot_date": str(d), "countries": countries, "rows": rows,
                         "picks": [x for x in rows if x.get("is_pick")],
                         "modell": "F1 vinstmomentum*25 + F2 prismomentum*25 + "
                                   "F3 lönsamhet*20 + F4 tillväxt*20 + F5 värdering*10; "

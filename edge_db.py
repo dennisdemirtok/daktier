@@ -5221,7 +5221,7 @@ def sync_analyst_estimates(db, tickers=None, max_n=600, throttle=0.12):
             "universe": len(tickers)}
 
 
-def compute_factor_scores(db, min_mcap=3e8):
+def compute_factor_scores(db, min_mcap=1e9):
     """Multifaktormodell — percentilrank per (land, sektor)-bucket:
       F1 25% Vinstmomentum   (PROXY för estimatrevisioner: rapporterad TTM-EPS-
                               förändring + senaste kvartalets EPS YoY — analytiker-
@@ -5246,17 +5246,28 @@ def compute_factor_scores(db, min_mcap=3e8):
             f5_pct DOUBLE PRECISION,
             grades TEXT, total_score DOUBLE PRECISION,
             dq INTEGER DEFAULT 0, is_pick INTEGER DEFAULT 0,
+            n_factors INTEGER DEFAULT 0,
             PRIMARY KEY (snapshot_date, isin)
         )""")
     db.commit()
+    try:
+        db.execute("ALTER TABLE factor_scores ADD COLUMN n_factors INTEGER DEFAULT 0")
+        db.commit()
+    except Exception:
+        try: db.rollback()
+        except Exception: pass
 
-    # ── Universum ─────────────────────────────────────────────────────────
+    # ── Universum (sektor ur Börsdata-arkivets metadata — stocks.sector är
+    # ofta tom; utan sektor blir percentilerna landsvisa) ─────────────────
     uni = [dict(r) for r in _fetchall(db, f"""
-        SELECT isin, short_name, name, sector, country, market_cap,
-               pe_ratio, return_on_equity, ev_ebit_ratio, last_price
-        FROM stocks
-        WHERE isin IS NOT NULL AND isin != '' AND isin NOT LIKE {ph}
-          AND last_price > 0 AND market_cap >= {ph}
+        SELECT s.isin, s.short_name, s.name, s.country, s.market_cap,
+               s.pe_ratio, s.return_on_equity, s.ev_ebit_ratio, s.last_price,
+               COALESCE(NULLIF(s.sector, ''), bs.name) AS sector
+        FROM stocks s
+        LEFT JOIN borsdata_instrument_map m ON m.isin = s.isin
+        LEFT JOIN borsdata_sectors bs ON bs.sector_id = m.sector_id
+        WHERE s.isin IS NOT NULL AND s.isin != '' AND s.isin NOT LIKE {ph}
+          AND s.last_price > 0 AND s.market_cap >= {ph}
     """, ("YAHOO_%", min_mcap))]
     if not uni:
         return {"error": "tomt universum"}
@@ -5453,14 +5464,18 @@ def compute_factor_scores(db, min_mcap=3e8):
     results = []
     for isin in isins:
         f = fpct[isin]
-        complete = all(f.get(k) is not None for k in W)
+        n_f = sum(1 for k in W if f.get(k) is not None)
+        # Komplett = alla 5 faktorer + meningsfull skala (TTM-omsättning
+        # ≥ 50 M lokal valuta — tillväxtprocent under det är basårsbrus)
+        rev_ok = bool((ttm.get(isin) or {}).get("rev") and ttm[isin]["rev"] >= 50)
+        complete = (n_f == 5) and rev_ok
         wsum = sum(W[k] * f[k] for k in W if f.get(k) is not None)
         wtot = sum(W[k] for k in W if f.get(k) is not None)
         total_pct = (wsum / wtot) if wtot else None
         dq = 1 if any((f.get(k) is not None and f[k] < 20) for k in W) else 0
         results.append({
             "isin": isin, "u": by_isin[isin], "f": f, "complete": complete,
-            "total_pct": total_pct,
+            "n_factors": n_f, "total_pct": total_pct,
             "total_score": round(1 + 4 * total_pct / 100, 2) if total_pct is not None else None,
             "grades": "/".join(_grade(f.get(k)) for k in ("f1", "f2", "f3", "f4", "f5")),
             "dq": dq})
@@ -5472,7 +5487,7 @@ def compute_factor_scores(db, min_mcap=3e8):
     ins = _upsert_sql("factor_scores",
                       ["snapshot_date", "isin", "ticker", "name", "sector", "country",
                        "f1_pct", "f2_pct", "f3_pct", "f4_pct", "f5_pct",
-                       "grades", "total_score", "dq", "is_pick"],
+                       "grades", "total_score", "dq", "is_pick", "n_factors"],
                       ["snapshot_date", "isin"])
     n = 0
     for r in results:
@@ -5484,7 +5499,8 @@ def compute_factor_scores(db, min_mcap=3e8):
                          *(round(f[k], 1) if f.get(k) is not None else None
                            for k in ("f1", "f2", "f3", "f4", "f5")),
                          r["grades"], r["total_score"], r["dq"],
-                         1 if r["isin"] in picks else 0))
+                         1 if r["isin"] in picks else 0,
+                         5 if r["complete"] else r["n_factors"]))
         n += 1
     db.commit()
     return {"snapshot_date": today, "scored": n, "universe": len(uni),
