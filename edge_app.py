@@ -15728,8 +15728,11 @@ def _nasdaq_find_report_release(company_name, days_back=45):
             base = _re2.sub(r"\s+(?:ser\.?\s*)?[A-D]$", "",
                             str(company_name).strip(), flags=_re2.I).strip()
             vc = {}
-            for variant in (f"{base} AB", f"{base}, AB", base, f"AB {base}",
-                            f"{base} Aktiebolag"):
+            # Nordiska bolagsformer: svenska AB, norska ASA (Equinor/Hydro/Vår
+            # Energi missades — bara AB-former provades), finska Oyj/Abp, danska A/S
+            for variant in (f"{base} AB", f"{base}, AB", f"{base} ASA",
+                            f"{base} Oyj", f"{base} Abp", f"{base} A/S",
+                            base, f"AB {base}", f"{base} Aktiebolag"):
                 got_items = _query({"company": variant})
                 vc[variant] = len(got_items)
                 if got_items:
@@ -21108,7 +21111,11 @@ def _startup():
         # SEC EDGAR för US-bolag som rapporterat — parallellt facit mot
         # Börsdata via /api/shadow/compare (cancel-beslutsunderlag).
         def scheduled_shadow_reports():
-            if not _sched_claim("shadow_reports", datetime.now().strftime("%Y-%m-%d")):
+            # am/pm-slot: 06:15 fångar gårdagens rapporter, 12:45 fångar
+            # SAMMA DAGS morgonrapporter (svenska publiceras 07:00-08:30 —
+            # efter morgonkörningen)
+            slot = "am" if datetime.now().hour < 10 else "pm"
+            if not _sched_claim("shadow_reports", f"{datetime.now():%Y-%m-%d}:{slot}"):
                 return
             try:
                 print(f"[AUTO] Skugg-rapportsynk start {datetime.now().strftime('%H:%M')}")
@@ -21162,8 +21169,10 @@ def _startup():
                     try:
                         import json as _jm
                         from edge_db import _upsert_sql as _ups2
+                        _logkey = (f"shadow:daily:{datetime.now():%Y-%m-%d}"
+                                   + ("" if slot == "am" else "-pm"))
                         dbs2.execute(_ups2("meta", ["key", "value"], ["key"]),
-                                     (f"shadow:daily:{datetime.now():%Y-%m-%d}",
+                                     (_logkey,
                                       _jm.dumps({"ts": datetime.now().isoformat(),
                                                  "us": res, "norden": res_n,
                                                  "infloede": res_f},
@@ -21179,6 +21188,9 @@ def _startup():
 
         scheduler.add_job(scheduled_shadow_reports, 'cron',
                           hour=6, minute=15, id='shadow_reports_daily')
+        scheduler.add_job(scheduled_shadow_reports, 'cron',
+                          day_of_week='mon-fri', hour=12, minute=45,
+                          id='shadow_reports_midday')
 
         # 📰 DASHBOARD-INNEHÅLL PÅ SCHEMA — färskheten får ALDRIG bero på
         # besök eller boots (läs-triggad regen fastnade tyst → dashboarden
