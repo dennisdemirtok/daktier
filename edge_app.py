@@ -8078,6 +8078,57 @@ def _build_daily_email_v2(db, base_url="https://daktier-production.up.railway.ap
         rows.append(_p(f'Regler: ROCE ≥ 15 % · EV/EBIT 4–25 · pris &gt; MA200 · '
                        f'6 m-momentum &gt; 0. Följ upp månadsvis.', size="11px", color=MUT))
 
+    # ── 6b. KVANTMODELLEN (multifaktor — månadens picks + topp 5) ─────────
+    fs_rows = []
+    try:
+        r = _f1(db, "SELECT MAX(snapshot_date) AS d FROM factor_scores")
+        _fd = dict(r).get("d") if r else None
+        if _fd:
+            fs_rows = [dict(x) for x in _fa(db,
+                f"SELECT * FROM factor_scores WHERE snapshot_date = {ph} AND dq = 0 "
+                f"ORDER BY is_pick DESC, total_score DESC LIMIT 5", (_fd,))]
+    except Exception:
+        pass
+    if fs_rows:
+        rows.append(_h2("Kvantmodellen — sektorranking"))
+        picks = [x for x in fs_rows if x.get("is_pick")]
+        if picks:
+            pick_html = ""
+            for p0 in picks[:2]:
+                pick_html += (
+                    f'<table role="presentation" width="100%" cellpadding="0" cellspacing="0" '
+                    f'style="background:{BG};border:1px solid {CYAN};border-radius:8px;margin-bottom:6px">'
+                    f'<tr><td style="padding:10px 14px;font-family:{FONT};font-size:13px;color:{INK}">'
+                    f'<span style="color:{CYAN};font-size:11px;font-weight:800;letter-spacing:1px">★ MÅNADENS PICK</span><br>'
+                    f'<strong style="font-size:15px;color:{NAVY}">{_esc(p0.get("ticker") or "")}</strong> '
+                    f'<span style="color:{MUT}">{_esc((p0.get("name") or "")[:26])}</span>'
+                    f' &nbsp;<strong>{p0.get("total_score")}</strong>/5'
+                    f' &nbsp;<span style="color:{MUT};font-size:12px">{_esc(p0.get("grades") or "")}</span>'
+                    f'</td></tr></table>')
+            rows.append(_p(pick_html, pad="6px 28px 4px 28px"))
+        t_html = (f'<tr>'
+                  f'<td style="font-family:{FONT};font-size:11px;color:{MUT};padding:4px 0">BOLAG</td>'
+                  f'<td style="font-family:{FONT};font-size:11px;color:{MUT};padding:4px 0" align="right">POÄNG</td>'
+                  f'<td style="font-family:{FONT};font-size:11px;color:{MUT};padding:4px 0" align="right">VINST·MOM·LÖNS·TILLV·VÄRD</td></tr>')
+        for s in fs_rows:
+            t_html += (f'<tr><td style="font-family:{FONT};font-size:13px;color:{INK};'
+                       f'padding:6px 0;border-top:1px solid {LINE}">'
+                       f'<strong style="color:{NAVY}">{_esc(s.get("ticker") or "")}</strong>'
+                       + (' <span style="color:#B45309">★</span>' if s.get("is_pick") else "")
+                       + f'</td>'
+                       f'<td align="right" style="font-family:{FONT};font-size:13px;font-weight:700;'
+                       f'color:{NAVY};padding:6px 0;border-top:1px solid {LINE}">{s.get("total_score")}</td>'
+                       f'<td align="right" style="font-family:{FONT};font-size:12px;'
+                       f'letter-spacing:2px;color:{INK};padding:6px 0;border-top:1px solid {LINE}">'
+                       f'{_esc(s.get("grades") or "")}</td></tr>')
+        rows.append(_p(f'<table role="presentation" width="100%" cellpadding="0" '
+                       f'cellspacing="0">{t_html}</table>', pad="2px 28px 2px 28px"))
+        rows.append(_p('5 faktorer, percentilrankade mot land+sektor (25/25/20/20/10): '
+                       'vinstmomentum · prismomentum 3–12 m · lönsamhet · tillväxt · värdering. '
+                       'Bortsållad under 20:e percentilen i någon faktor. '
+                       'Vinst/tillväxt = rapporterad data (ej analytikerestimat).',
+                       size="11px", color=MUT))
+
     # ── 7. INSIDERKÖP ─────────────────────────────────────────────────────
     insiders = []
     try:
@@ -15676,6 +15727,44 @@ def api_shadow_daily_log():
         db.close()
 
 
+@app.route("/api/factor-scores/build", methods=["POST"])
+def api_factor_scores_build():
+    """Bygg dagens multifaktor-snapshot (inloggade). Körs även 05:25 vardagar."""
+    from edge_db import compute_factor_scores
+    db = get_db()
+    try:
+        return jsonify(compute_factor_scores(db))
+    finally:
+        db.close()
+
+
+@app.route("/api/factor-scores", methods=["GET"])
+def api_factor_scores():
+    """Senaste multifaktor-snapshot: topplista + månadens picks."""
+    from edge_db import _fetchall, _fetchone, _ph
+    ph = _ph()
+    limit = min(int(request.args.get("limit") or 20), 100)
+    db = get_db()
+    try:
+        r = _fetchone(db, "SELECT MAX(snapshot_date) AS d FROM factor_scores")
+        d = dict(r).get("d") if r else None
+        if not d:
+            return jsonify({"rows": [], "note": "inget snapshot ännu — kör POST /api/factor-scores/build"})
+        rows = [dict(x) for x in _fetchall(db,
+            f"SELECT * FROM factor_scores WHERE snapshot_date = {ph} "
+            f"ORDER BY is_pick DESC, dq ASC, total_score DESC LIMIT {ph}",
+            (d, limit))]
+        return jsonify({"snapshot_date": str(d), "rows": rows,
+                        "picks": [x for x in rows if x.get("is_pick")],
+                        "modell": "F1 vinstmomentum*25 + F2 prismomentum*25 + "
+                                  "F3 lönsamhet*20 + F4 tillväxt*20 + F5 värdering*10; "
+                                  "percentiler per land+sektor; DQ < 20:e percentilen. "
+                                  "F1/F4 är RAPPORTERAD data (estimatrevisioner/forward "
+                                  "finns ej i systemet)."})
+    finally:
+        db.close()
+
+
 @app.route("/api/shadow/flow-in", methods=["POST"])
 def api_shadow_flow_in():
     """Manuell körning av Börsdata-oberoende-sömmarna (inloggade):
@@ -20534,6 +20623,26 @@ def _startup():
         scheduler.add_job(scheduled_daily_close_persist, 'cron',
                           day_of_week='mon-fri', hour=23, minute=45,
                           id='daily_close_persist')
+
+        # 🧮 Multifaktor-snapshot (05:25, efter trend 05:10): percentilrank
+        # per land+sektor → factor_scores; topp 2 = månadens picks (mejlet)
+        def scheduled_factor_scores():
+            if not _sched_claim("factor_scores", datetime.now().strftime("%Y-%m-%d")):
+                return
+            try:
+                from edge_db import compute_factor_scores
+                dbq = get_db()
+                try:
+                    res = compute_factor_scores(dbq)
+                    print(f"[AUTO] Faktormodell klar: {res}")
+                finally:
+                    dbq.close()
+            except Exception as e:
+                print(f"[AUTO] Faktormodell fel: {e}")
+
+        scheduler.add_job(scheduled_factor_scores, 'cron',
+                          day_of_week='mon-fri', hour=5, minute=25,
+                          id='factor_scores_daily')
 
         # Veckovis Börsdata-rapportsync (söndagar 04:30) — full
         # PLUS daglig snabb-sync 05:30 under earnings-säsong för senaste rapporterna.

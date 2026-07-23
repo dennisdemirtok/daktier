@@ -5138,6 +5138,241 @@ def flow_shadow_into_reports(db, days=14):
             "ambiguous_tickers": sorted(ambiguous)[:10]}
 
 
+def compute_factor_scores(db, min_mcap=3e8):
+    """Multifaktormodell — percentilrank per (land, sektor)-bucket:
+      F1 25% Vinstmomentum   (PROXY för estimatrevisioner: rapporterad TTM-EPS-
+                              förändring + senaste kvartalets EPS YoY — analytiker-
+                              estimat finns inte i systemets data, HITTA ALDRIG PÅ)
+      F2 25% Prismomentum    (3/6/9/12 mån, vikter 35/30/20/15 — färskast tyngst)
+      F3 20% Lönsamhet       (ROE, bruttomarginal, FCF-marginal, OCF/nettovinst)
+      F4 20% Tillväxt        (TTM omsättnings- + EPS-tillväxt, rapporterad — ej forward)
+      F5 10% Värdering       (EV/EBIT, P/E, PEG, P/S — inverterad percentil, lågt=bra)
+    DQ om någon faktor < 20:e percentilen. Betyg A≥80 B≥60 C≥40 D≥20 F<20.
+    Total = 1 + 4 × viktad percentil/100 (skala 1–5). Topp 2 ej-DQ med
+    kompletta faktorer = månadens picks. Snapshot → factor_scores."""
+    from datetime import date as _date, timedelta as _td
+    ph = _ph()
+    today = _date.today().isoformat()
+    db.execute("""
+        CREATE TABLE IF NOT EXISTS factor_scores (
+            snapshot_date TEXT NOT NULL,
+            isin TEXT NOT NULL,
+            ticker TEXT, name TEXT, sector TEXT, country TEXT,
+            f1_pct DOUBLE PRECISION, f2_pct DOUBLE PRECISION,
+            f3_pct DOUBLE PRECISION, f4_pct DOUBLE PRECISION,
+            f5_pct DOUBLE PRECISION,
+            grades TEXT, total_score DOUBLE PRECISION,
+            dq INTEGER DEFAULT 0, is_pick INTEGER DEFAULT 0,
+            PRIMARY KEY (snapshot_date, isin)
+        )""")
+    db.commit()
+
+    # ── Universum ─────────────────────────────────────────────────────────
+    uni = [dict(r) for r in _fetchall(db, f"""
+        SELECT isin, short_name, name, sector, country, market_cap,
+               pe_ratio, return_on_equity, ev_ebit_ratio, last_price
+        FROM stocks
+        WHERE isin IS NOT NULL AND isin != '' AND isin NOT LIKE {ph}
+          AND last_price > 0 AND market_cap >= {ph}
+    """, ("YAHOO_%", min_mcap))]
+    if not uni:
+        return {"error": "tomt universum"}
+    by_isin = {u["isin"]: u for u in uni}
+    isins = list(by_isin.keys())
+
+    # ── TTM-aggregat ur rapporterna (senaste 8 kvartal per bolag) ────────
+    marks = ",".join([ph] * len(isins))
+    qrows = _fetchall(db, f"""
+        SELECT isin, report_end_date, revenues, gross_income, net_profit, eps,
+               operating_cash_flow, free_cash_flow
+        FROM borsdata_reports
+        WHERE report_type = 'quarter' AND isin IN ({marks})
+          AND report_end_date IS NOT NULL
+    """, tuple(isins))
+    byq = {}
+    for r in qrows:
+        d = dict(r)
+        byq.setdefault(d["isin"], []).append(d)
+    ttm = {}
+    for isin, lst in byq.items():
+        lst.sort(key=lambda x: str(x["report_end_date"]), reverse=True)
+        cur, prev = lst[:4], lst[4:8]
+        if len(cur) < 4:
+            continue
+        def _s(rows_, k):
+            vs = [x[k] for x in rows_ if isinstance(x.get(k), (int, float))]
+            return sum(vs) if len(vs) == len(rows_) and rows_ else None
+        t = {"rev": _s(cur, "revenues"), "rev_p": _s(prev, "revenues") if len(prev) == 4 else None,
+             "eps": _s(cur, "eps"), "eps_p": _s(prev, "eps") if len(prev) == 4 else None,
+             "gross": _s(cur, "gross_income"), "np": _s(cur, "net_profit"),
+             "ocf": _s(cur, "operating_cash_flow"), "fcf": _s(cur, "free_cash_flow")}
+        q0, q4 = cur[0], (lst[4] if len(lst) > 4 else None)
+        t["q_eps_yoy"] = None
+        if q4 and isinstance(q0.get("eps"), (int, float)) and \
+           isinstance(q4.get("eps"), (int, float)) and abs(q4["eps"]) > 1e-9:
+            t["q_eps_yoy"] = (q0["eps"] - q4["eps"]) / abs(q4["eps"])
+        ttm[isin] = t
+
+    # ── Prisavkastning 3/9 mån (6/12 ur trend_snapshot) ───────────────────
+    trend = {dict(r)["isin"]: dict(r) for r in _fetchall(db,
+        f"SELECT isin, ret_6m, ret_12m FROM trend_snapshot WHERE isin IN ({marks})",
+        tuple(isins))}
+    def _px_at(days_back):
+        target = (_date.today() - _td(days=days_back))
+        lo, hi = (target - _td(days=14)).isoformat(), target.isoformat()
+        try:
+            rows = _fetchall(db, f"""
+                SELECT DISTINCT ON (isin) isin, close FROM borsdata_prices
+                WHERE date >= {ph} AND date <= {ph} AND isin IN ({marks})
+                ORDER BY isin, date DESC""", (lo, hi) + tuple(isins))
+        except Exception:
+            try: db.rollback()
+            except Exception: pass
+            rows = _fetchall(db, f"""
+                SELECT p.isin, p.close FROM borsdata_prices p
+                JOIN (SELECT isin, MAX(date) AS d FROM borsdata_prices
+                      WHERE date >= {ph} AND date <= {ph} AND isin IN ({marks})
+                      GROUP BY isin) m ON m.isin = p.isin AND m.d = p.date
+            """, (lo, hi) + tuple(isins))
+        return {dict(r)["isin"]: dict(r)["close"] for r in rows
+                if isinstance(dict(r).get("close"), (int, float)) and dict(r)["close"] > 0}
+    px3, px9 = _px_at(91), _px_at(274)
+
+    # ── Råvärden per bolag ────────────────────────────────────────────────
+    raw = {}
+    for isin, u in by_isin.items():
+        t = ttm.get(isin) or {}
+        tr = trend.get(isin) or {}
+        lp = u.get("last_price")
+        r3 = (lp / px3[isin] - 1) * 100 if isin in px3 and lp else None
+        r9 = (lp / px9[isin] - 1) * 100 if isin in px9 and lp else None
+        r6, r12 = tr.get("ret_6m"), tr.get("ret_12m")
+        mom_parts = [(0.35, r3), (0.30, r6), (0.20, r9), (0.15, r12)]
+        avail = [(w, v) for w, v in mom_parts if isinstance(v, (int, float))]
+        mom = (sum(w * v for w, v in avail) / sum(w for w, _ in avail)) if avail else None
+        eps_g = None
+        if t.get("eps") is not None and t.get("eps_p") is not None and abs(t["eps_p"]) > 1e-9:
+            eps_g = (t["eps"] - t["eps_p"]) / abs(t["eps_p"])
+        rev_g = None
+        if t.get("rev") and t.get("rev_p"):
+            rev_g = (t["rev"] - t["rev_p"]) / abs(t["rev_p"])
+        f1_parts = [v for v in (eps_g, t.get("q_eps_yoy")) if v is not None]
+        roe = u.get("return_on_equity")
+        gm = (t["gross"] / t["rev"]) if t.get("gross") and t.get("rev") else None
+        fcfm = (t["fcf"] / t["rev"]) if t.get("fcf") is not None and t.get("rev") else None
+        ocfq = (t["ocf"] / t["np"]) if t.get("ocf") is not None and t.get("np") and t["np"] > 0 else None
+        pe = u.get("pe_ratio") if isinstance(u.get("pe_ratio"), (int, float)) and 0 < u["pe_ratio"] < 200 else None
+        evb = u.get("ev_ebit_ratio") if isinstance(u.get("ev_ebit_ratio"), (int, float)) and 0 < u["ev_ebit_ratio"] < 100 else None
+        ps = (u["market_cap"] / (t["rev"] * 1e6)) if t.get("rev") and t["rev"] > 0 and u.get("market_cap") else None
+        peg = (pe / (eps_g * 100)) if pe and eps_g and eps_g > 0.02 else None
+        raw[isin] = {
+            "f1": (sum(f1_parts) / len(f1_parts)) if f1_parts else None,
+            "f2": mom,
+            "f3_sub": {"roe": roe if isinstance(roe, (int, float)) else None,
+                       "gm": gm, "fcfm": fcfm, "ocfq": ocfq},
+            "f4_sub": {"rev_g": rev_g, "eps_g": eps_g},
+            "f5_sub": {"evb": evb, "pe": pe, "peg": peg, "ps": ps},
+        }
+
+    # ── Percentiler inom (land, sektor); < 10 bolag → landsbucket ────────
+    def _bucket_key(u, granular=True):
+        sec = (u.get("sector") or "").strip() or "okänd"
+        return (u.get("country") or "?", sec) if granular else (u.get("country") or "?",)
+    counts = {}
+    for u in uni:
+        counts[_bucket_key(u)] = counts.get(_bucket_key(u), 0) + 1
+    def bucket_of(u):
+        return _bucket_key(u) if counts.get(_bucket_key(u), 0) >= 10 else _bucket_key(u, False)
+
+    def _pct_rank(pairs):
+        """[(isin, värde)] → {isin: percentil 0-100} (min-rank, stabil för ties)."""
+        vals = sorted(pairs, key=lambda x: x[1])
+        n = len(vals)
+        if n < 2:
+            return {i: 50.0 for i, _ in pairs}
+        out, i = {}, 0
+        while i < n:
+            j = i
+            while j + 1 < n and vals[j + 1][1] == vals[i][1]:
+                j += 1
+            p = 100.0 * i / (n - 1)
+            for k in range(i, j + 1):
+                out[vals[k][0]] = p
+            i = j + 1
+        return out
+
+    buckets = {}
+    for u in uni:
+        buckets.setdefault(bucket_of(u), []).append(u["isin"])
+
+    fpct = {isin: {} for isin in isins}
+    for bk, members in buckets.items():
+        for fkey in ("f1", "f2"):
+            pairs = [(i, raw[i][fkey]) for i in members if raw[i][fkey] is not None]
+            pr = _pct_rank(pairs)
+            for i, p in pr.items():
+                fpct[i][fkey] = p
+        for fkey, subs, invert in (("f3", ("roe", "gm", "fcfm", "ocfq"), False),
+                                   ("f4", ("rev_g", "eps_g"), False),
+                                   ("f5", ("evb", "pe", "peg", "ps"), True)):
+            sub_pr = {}
+            for sk in subs:
+                pairs = [(i, raw[i][f"{fkey}_sub"][sk]) for i in members
+                         if raw[i][f"{fkey}_sub"][sk] is not None]
+                sub_pr[sk] = _pct_rank(pairs)
+            for i in members:
+                ps_ = [sub_pr[sk][i] for sk in subs if i in sub_pr.get(sk, {})]
+                if ps_:
+                    v = sum(ps_) / len(ps_)
+                    fpct[i][fkey] = (100.0 - v) if invert else v
+
+    # ── Betyg, total, DQ, picks ───────────────────────────────────────────
+    W = {"f1": 0.25, "f2": 0.25, "f3": 0.20, "f4": 0.20, "f5": 0.10}
+    def _grade(p):
+        return ("A" if p >= 80 else "B" if p >= 60 else "C" if p >= 40 else
+                "D" if p >= 20 else "F") if p is not None else "–"
+    results = []
+    for isin in isins:
+        f = fpct[isin]
+        complete = all(f.get(k) is not None for k in W)
+        wsum = sum(W[k] * f[k] for k in W if f.get(k) is not None)
+        wtot = sum(W[k] for k in W if f.get(k) is not None)
+        total_pct = (wsum / wtot) if wtot else None
+        dq = 1 if any((f.get(k) is not None and f[k] < 20) for k in W) else 0
+        results.append({
+            "isin": isin, "u": by_isin[isin], "f": f, "complete": complete,
+            "total_pct": total_pct,
+            "total_score": round(1 + 4 * total_pct / 100, 2) if total_pct is not None else None,
+            "grades": "/".join(_grade(f.get(k)) for k in ("f1", "f2", "f3", "f4", "f5")),
+            "dq": dq})
+    eligible = [r for r in results if r["complete"] and not r["dq"]
+                and r["total_score"] is not None]
+    eligible.sort(key=lambda r: -r["total_pct"])
+    picks = {r["isin"] for r in eligible[:2]}
+
+    ins = _upsert_sql("factor_scores",
+                      ["snapshot_date", "isin", "ticker", "name", "sector", "country",
+                       "f1_pct", "f2_pct", "f3_pct", "f4_pct", "f5_pct",
+                       "grades", "total_score", "dq", "is_pick"],
+                      ["snapshot_date", "isin"])
+    n = 0
+    for r in results:
+        if r["total_score"] is None:
+            continue
+        u, f = r["u"], r["f"]
+        db.execute(ins, (today, r["isin"], u.get("short_name"), u.get("name"),
+                         u.get("sector"), u.get("country"),
+                         *(round(f[k], 1) if f.get(k) is not None else None
+                           for k in ("f1", "f2", "f3", "f4", "f5")),
+                         r["grades"], r["total_score"], r["dq"],
+                         1 if r["isin"] in picks else 0))
+        n += 1
+    db.commit()
+    return {"snapshot_date": today, "scored": n, "universe": len(uni),
+            "complete": sum(1 for r in results if r["complete"]),
+            "picks": [by_isin[i].get("short_name") for i in picks]}
+
+
 def sync_borsdata_kpis(db, kpi_ids=None, isin_list=None, max_per_run=500):
     """Synkar KPI-historik. Default: top 15 KPIs (FCF, ROIC, P/E, etc.)."""
     try:
