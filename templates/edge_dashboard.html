@@ -1235,9 +1235,14 @@ async function fetchData(append = false) {
             // Köplistan: egen vy (lista + diff + facit-kurva) — ingen paginering
             renderKoplistaLoading();
             try {
-                const r = await fetch('/api/koplista');
+                const [r, rf] = await Promise.all([
+                    fetch('/api/koplista'),
+                    fetch('/api/factor-scores?limit=10').catch(() => null)
+                ]);
                 if (!r.ok) throw new Error('HTTP ' + r.status);
-                renderKoplista(await r.json());
+                let fsData = null;
+                try { if (rf && rf.ok) fsData = await rf.json(); } catch (e2) {}
+                renderKoplista(await r.json(), fsData);
             } catch (e) {
                 renderKoplistaError(e);
             }
@@ -2175,7 +2180,7 @@ function renderKoplistaError(e) {
             <button class="refresh-btn" style="margin-left:10px" onclick="fetchData()">Försök igen</button>
         </div>`;
 }
-function renderKoplista(d) {
+function renderKoplista(d, fs) {
     const stocks = (d && d.stocks) || [];
     const top10 = stocks.slice(0, 10);
     const bubblare = stocks.slice(10);
@@ -2203,6 +2208,42 @@ function renderKoplista(d) {
         <div style="margin-top:10px;font-size:var(--fs-sm);color:var(--text-muted)">
             <strong style="color:#991b1b">Ut ur listan</strong> (sedan ${d.prev_snapshot_date}):
             ${d.dropped.map(t => `<span style="background:#fef2f2;color:#991b1b;padding:2px 8px;border-radius:10px;margin-left:4px;font-weight:600">${t}</span>`).join('')}
+        </div>` : '';
+
+    // 🧮 Kvantmodellen — 5-faktor sektorranking (egen sektion under listan)
+    const fsRows = (fs && fs.rows) || [];
+    const gradeChip = g => {
+        const c = { A: ['#DCFCE7', '#166534'], B: ['#E0F2FE', '#075985'],
+                    C: ['#F1F5F9', '#475569'], D: ['#FFF7ED', '#9A3412'],
+                    F: ['#FEE2E2', '#991B1B'] }[g] || ['#F1F5F9', '#94A3B8'];
+        return `<span style="display:inline-block;width:20px;text-align:center;background:${c[0]};color:${c[1]};font-weight:800;font-size:11px;border-radius:5px;padding:2px 0;margin-left:3px">${g}</span>`;
+    };
+    const gradesHtml = gr => (gr || '').split('/').map(gradeChip).join('');
+    const fsRowHtml = (s, i) => `<tr>
+        <td style="font-weight:700;color:var(--brand-navy)">${i + 1}</td>
+        <td>${FLAGS[s.country] || ''} <span class="stock-name" onclick="openStockByTicker('${(s.ticker || '').replace(/'/g, "\\'")}')">${s.name || s.ticker}</span>
+            ${s.is_pick ? '<span style="background:#B45309;color:#fff;font-size:10px;font-weight:800;padding:2px 7px;border-radius:10px;margin-left:6px;vertical-align:middle">★ MÅNADENS PICK</span>' : ''}
+            <br><span class="stock-ticker">${s.ticker || ''} · ${s.sector || 'sektor okänd'}</span></td>
+        <td style="text-align:right;font-weight:800;color:var(--brand-navy);font-size:var(--fs-md)">${s.total_score != null ? Number(s.total_score).toFixed(2) : '–'}</td>
+        <td style="text-align:right;white-space:nowrap">${gradesHtml(s.grades)}</td>
+    </tr>`;
+    const kvantBlock = fsRows.length ? `
+        <div style="background:var(--white);border-radius:var(--radius);padding:16px;margin-top:14px;box-shadow:var(--shadow-hover)">
+            <div style="font-size:var(--fs-md);font-weight:700;color:var(--brand-navy);margin-bottom:2px">🧮 Kvantmodellen — sektorranking</div>
+            <div style="font-size:var(--fs-sm);color:var(--text-muted);margin-bottom:10px">
+                5 faktorer percentilrankade mot land + sektor (vikt 25/25/20/20/10):
+                vinstmomentum · prismomentum 3–12 m · lönsamhet · tillväxt · värdering.
+                Betyg A–F per faktor, bortsållad under 20:e percentilen. Topp 2 = månadens picks.
+            </div>
+            <div class="table-container"><table><thead><tr>
+                <th style="width:36px">#</th><th>Bolag</th>
+                <th style="text-align:right" title="1–5, viktad percentil">Poäng</th>
+                <th style="text-align:right" title="Vinstmomentum / Prismomentum / Lönsamhet / Tillväxt / Värdering">Betyg V·M·L·T·V</th>
+            </tr></thead><tbody>${fsRows.map(fsRowHtml).join('')}</tbody></table></div>
+            <div style="margin-top:8px;font-size:var(--fs-xs);color:var(--text-muted)">
+                Vinstmomentum: US = analytikernas konsensusrevisioner (Nasdaq) · Norden = rapporterad EPS-utveckling.
+                Snapshot ${fs.snapshot_date || ''} — uppdateras varje vardagsmorgon.
+            </div>
         </div>` : '';
 
     const hist = (d.history || []).filter(h => h.avg_ret_pct != null);

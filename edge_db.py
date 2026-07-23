@@ -5447,8 +5447,10 @@ def compute_factor_scores(db, min_mcap=1e9):
                                    ("f5", ("evb", "pe", "peg", "ps"), True)):
             sub_pr = {}
             for sk in subs:
-                pairs = [(i, raw[i][f"{fkey}_sub"][sk]) for i in members
-                         if raw[i][f"{fkey}_sub"][sk] is not None]
+                # .get(): f1_sub innehåller BARA befintliga nycklar (rev_size/
+                # rev_net för US med estimatdata, eps_mom annars)
+                pairs = [(i, raw[i][f"{fkey}_sub"].get(sk)) for i in members
+                         if raw[i][f"{fkey}_sub"].get(sk) is not None]
                 sub_pr[sk] = _pct_rank(pairs)
             for i in members:
                 ps_ = [sub_pr[sk][i] for sk in subs if i in sub_pr.get(sk, {})]
