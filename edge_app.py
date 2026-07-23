@@ -8382,7 +8382,8 @@ def _build_daily_email_v2(db, base_url="https://daktier-production.up.railway.ap
                     (f"shadow:daily:{(_now.date() - timedelta(days=dk)).isoformat()}",))
             if r:
                 sv = _jload(dict(r)["value"]) or {}
-                us_n = (sv.get("us") or {}).get("done", 0)
+                us_n = ((sv.get("us") or {}).get("companies")
+                        or (sv.get("us") or {}).get("done") or 0)
                 no_res = (sv.get("norden") or {}).get("results") or []
                 no_ok = sum(1 for res0 in no_res
                             for _t, _m in res0.items()
@@ -15739,6 +15740,14 @@ def _nasdaq_find_report_release(company_name, days_back=45):
                     items.extend(got_items)
                     dbg["company_variant"] = variant
                     matches = _match(items)
+                    if not matches:
+                        # company= IGNORERAR fromDate (returnerar blandad
+                        # historik) — kombon company+kategori ger bolagets
+                        # rapporter nyast först, som date-filtret klipper rätt
+                        for cat in _CATS:
+                            items.extend(_query({"company": variant,
+                                                 "cnscategory": cat}))
+                        matches = _match(items)
                     if matches:
                         break
             dbg["variant_counts"] = vc
@@ -15909,12 +15918,33 @@ def api_shadow_sync_nordic():
     """Nordisk skugg-synk (inloggade): ?tickers=VOLV B,ERIC B,...
     &history=4&days=400 = backtest på flera rapporter bakåt per bolag."""
     tickers = [t for t in (request.args.get("tickers") or "").split(",") if t.strip()]
-    if not tickers:
-        return jsonify({"error": "ange ?tickers=VOLV B,ERIC B,..."}), 400
     history = int(request.args.get("history") or 1)
     days = int(request.args.get("days") or (400 if history > 1 else 45))
     db = get_db()
     try:
+        if len(tickers) == 1 and tickers[0].upper() == "AUTO":
+            # Kalenderstyrt urval — samma logik som 06:15/12:45-jobbet
+            from edge_db import _fetchall as _faa, _ph as _pha
+            p2 = _pha()
+            td = datetime.now().date()
+            frm = (td - timedelta(days=3)).isoformat()
+            nrows = _faa(db, f"""
+                SELECT DISTINCT s.short_name AS t, s.market_cap AS mc
+                FROM stocks s
+                LEFT JOIN report_calendar rc ON rc.ticker = s.short_name
+                WHERE SUBSTR(s.isin, 1, 2) IN ('SE','NO','DK','FI','IS')
+                  AND s.last_price > 0 AND (
+                      (rc.report_date >= {p2} AND rc.report_date <= {p2})
+                   OR (s.next_company_report >= {p2} AND s.next_company_report <= {p2}))
+            """, (frm, td.isoformat(), frm, td.isoformat()))
+            tickers = [d["t"] for d in sorted((dict(r) for r in nrows),
+                                              key=lambda d: -(d.get("mc") or 0))
+                       if d.get("t")][:12]
+            if not tickers:
+                return jsonify({"note": "inga nordiska rapportbolag i kalenderfönstret",
+                                "results": []})
+        if not tickers:
+            return jsonify({"error": "ange ?tickers=VOLV B,... eller tickers=AUTO"}), 400
         return jsonify(sync_shadow_reports_nordic(db, tickers,
                                                   history=history, days_back=days))
     finally:
