@@ -2,7 +2,10 @@
 builder = "NIXPACKS"
 
 [deploy]
-startCommand = "gunicorn edge_app:app --bind 0.0.0.0:$PORT --workers 2 --threads 6 --worker-class gthread --timeout 240 --graceful-timeout 30"
+# MALLOC_ARENA_MAX=2: glibc skapar annars en malloc-arena per tråd → RSS
+# växer till Hobby-taket 8 GB (bill 2026-07: $80/mån bara minne). 1 worker
+# räcker för privat bruk och tar bort per-worker-cache-problemklassen.
+startCommand = "MALLOC_ARENA_MAX=2 gunicorn edge_app:app --bind 0.0.0.0:$PORT --workers 1 --threads 8 --worker-class gthread --timeout 240 --graceful-timeout 30"
 healthcheckPath = "/health"
 restartPolicyType = "ON_FAILURE"
 restartPolicyMaxRetries = 10
