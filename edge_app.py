@@ -15731,8 +15731,11 @@ def _nasdaq_find_report_release(company_name, days_back=45):
             vc = {}
             # Nordiska bolagsformer: svenska AB, norska ASA (Equinor/Hydro/Vår
             # Energi missades — bara AB-former provades), finska Oyj/Abp, danska A/S
+            # 'Corporation' = finska storbolagens registrerade engelska namn
+            # (Metso/Valmet/YIT missades trots Oyj-varianterna)
             for variant in (f"{base} AB", f"{base}, AB", f"{base} ASA",
                             f"{base} Oyj", f"{base} Abp", f"{base} A/S",
+                            f"{base} Corporation", f"{base} Corp.",
                             base, f"AB {base}", f"{base} Aktiebolag"):
                 got_items = _query({"company": variant})
                 vc[variant] = len(got_items)
@@ -15847,6 +15850,9 @@ def sync_shadow_reports_nordic(db, tickers, history=1, days_back=45):
             continue
         try:
             best, _err = _agent_resolve_stock(db, t)
+            if not best and t.upper().endswith(" SEK"):
+                # SDB-rader ('NOKIA SEK') — prova utan valutasuffixet
+                best, _err = _agent_resolve_stock(db, t[:-4].strip())
             if not best:
                 results.append({t: "hittas ej i stocks"})
                 errors += 1
