@@ -15830,6 +15830,134 @@ def _extract_nordic_report_with_claude(text, company, ticker):
         return None, cost
 
 
+def _newsweb_find_report_release(ticker, days_back=45):
+    """Norska rapporter via NewsWeb (Oslo Børs officiella kungörelsesystem,
+    öppet JSON-API). Matchar på issuerSign = börsens egen ticker — ingen
+    namnvariant-problematik som hos Nasdaq. Returnerar ([(title, msg_id,
+    pub)], dbg)."""
+    import json as _json
+    dbg = {}
+    base = re.sub(r"\s+[A-D]$", "", str(ticker or "").upper()).strip()
+    try:
+        frm = (datetime.utcnow() - timedelta(days=days_back)).strftime("%Y-%m-%d")
+        to = datetime.utcnow().strftime("%Y-%m-%d")
+        r = requests.get("https://api3.oslo.oslobors.no/v1/newsreader/list",
+                         params={"category": "", "issuer": "", "fromDate": frm,
+                                 "toDate": to},
+                         headers={"User-Agent": _EDGAR_UA["User-Agent"],
+                                  "Accept": "application/json"}, timeout=25)
+        dbg["status"] = r.status_code
+        if r.status_code != 200:
+            return [], dbg
+        msgs = ((r.json().get("data") or {}).get("messages")) or []
+        dbg["n_total"] = len(msgs)
+        _ORD = ("quarter", "interim", "half year", "half-year", "kvartal",
+                "halvår", "results for", "financial report", "q1", "q2", "q3", "q4")
+        _SKIP = ("invitation", "invitasjon", "presentation of",
+                 "webcast", "conference call")
+        matches, seen_pub = [], set()
+        for m in msgs:
+            if (m.get("issuerSign") or "").upper() != base:
+                continue
+            title = (m.get("title") or "")
+            tl = title.lower()
+            if not any(k in tl for k in _ORD):
+                continue
+            if any(k in tl for k in _SKIP):
+                continue  # inbjudningar/webcasts är inte rapporten
+            pub = str(m.get("publishedTime") or "")[:10]
+            if pub in seen_pub:
+                continue
+            seen_pub.add(pub)
+            matches.append((title, m.get("messageId") or m.get("id"), pub))
+        matches.sort(key=lambda x: x[2] or "", reverse=True)
+        dbg["n_matches"] = len(matches)
+        return matches, dbg
+    except Exception as e:
+        dbg["exc"] = str(e)[:150]
+        return [], dbg
+
+
+def sync_shadow_reports_newsweb(db, tickers, history=1, days_back=45):
+    """Norsk skugg-synk: NewsWeb-body → Claude-extraktion → shadow_reports
+    (source='newsweb_oslo'). Body-texten är pressreleasen; PDF-bilagor
+    används EJ i v1 (kort body → 'tom text' som vanligt)."""
+    from edge_db import _upsert_sql
+    _ensure_shadow_table(db)
+    cols = ["ticker", "cik", "report_type", "period_year", "period_q",
+            "report_end_date", "currency", "revenues", "operating_income",
+            "net_profit", "eps", "total_assets", "total_equity",
+            "cash_and_equivalents", "operating_cash_flow", "source", "fetched_at"]
+    ins = _upsert_sql("shadow_reports", cols,
+                      ["ticker", "report_type", "period_year", "period_q"])
+    results, done, errors = [], 0, 0
+    for t in tickers:
+        t = str(t).strip()
+        if not t:
+            continue
+        try:
+            best, _err = _agent_resolve_stock(db, t)
+            company = (best or {}).get("name") or t
+            tick_store = (best or {}).get("short_name") or t
+            matches, meta = _newsweb_find_report_release(t, days_back=days_back)
+            if not matches:
+                import json as _json3
+                results.append({t: f"ingen release: {_json3.dumps(meta, ensure_ascii=False)[:200]}"})
+                errors += 1
+                continue
+            saved_periods, seen_pq = [], set()
+            for title, msg_id, pub in matches[:max(1, int(history))]:
+                try:
+                    rd = requests.get(
+                        "https://api3.oslo.oslobors.no/v1/newsreader/message",
+                        params={"messageId": msg_id},
+                        headers={"User-Agent": _EDGAR_UA["User-Agent"],
+                                 "Accept": "application/json"}, timeout=25)
+                    dm = ((rd.json().get("data") or {}).get("message")) or {}
+                    text = str(dm.get("body") or "")
+                    if len(text) < 400:
+                        saved_periods.append(f"{pub}: tom body ({len(text)} tecken)")
+                        continue
+                    parsed, cost = _extract_nordic_report_with_claude(text, company, t)
+                    if not parsed or not parsed.get("period_year"):
+                        saved_periods.append(f"{pub}: extraktion miss")
+                        continue
+                    if all(parsed.get(k) is None for k in ("revenues", "net_profit", "eps")):
+                        saved_periods.append(f"{pub}: extraktion tom")
+                        continue
+                    pq = (int(parsed["period_year"]), int(parsed.get("period_q") or 0))
+                    if pq in seen_pq:
+                        saved_periods.append(f"{pub}: dubblett — hoppas över")
+                        continue
+                    seen_pq.add(pq)
+                    db.execute(ins, (
+                        tick_store, None, "quarter",
+                        pq[0], pq[1], parsed.get("report_end_date"),
+                        parsed.get("currency"),
+                        parsed.get("revenues"), parsed.get("operating_income"),
+                        parsed.get("net_profit"), parsed.get("eps"),
+                        parsed.get("total_assets"), parsed.get("total_equity"),
+                        None, parsed.get("operating_cash_flow"),
+                        "newsweb_oslo", datetime.utcnow().isoformat()))
+                    db.commit()
+                    saved_periods.append(f"Q{pq[1]} {pq[0]}")
+                except Exception as e:
+                    saved_periods.append(f"{pub}: fel {str(e)[:50]}")
+                    try: db.rollback()
+                    except Exception: pass
+            ok_n = sum(1 for s in saved_periods if s.startswith("Q"))
+            done += 1 if ok_n else 0
+            errors += 0 if ok_n else 1
+            results.append({t: f"{ok_n}/{len(matches[:max(1, int(history))])} rapporter: "
+                               + "; ".join(saved_periods)})
+        except Exception as e:
+            errors += 1
+            results.append({t: f"fel: {str(e)[:80]}"})
+            try: db.rollback()
+            except Exception: pass
+    return {"done": done, "errors": errors, "results": results}
+
+
 def sync_shadow_reports_nordic(db, tickers, history=1, days_back=45):
     """Nordisk skugg-synk: ticker → bolagsnamn (stocks) → Nasdaq-releaser →
     Claude-extraktion → shadow_reports (source='mfn_press', enhet miljoner).
@@ -15953,6 +16081,22 @@ def api_shadow_sync_nordic():
             return jsonify({"error": "ange ?tickers=VOLV B,... eller tickers=AUTO"}), 400
         return jsonify(sync_shadow_reports_nordic(db, tickers,
                                                   history=history, days_back=days))
+    finally:
+        db.close()
+
+
+@app.route("/api/shadow/sync-newsweb", methods=["POST"])
+def api_shadow_sync_newsweb():
+    """Norsk skugg-synk via NewsWeb (inloggade): ?tickers=EQNR,NHY&history=2"""
+    tickers = [t for t in (request.args.get("tickers") or "").split(",") if t.strip()]
+    if not tickers:
+        return jsonify({"error": "ange ?tickers=EQNR,NHY,..."}), 400
+    history = int(request.args.get("history") or 1)
+    days = int(request.args.get("days") or (400 if history > 1 else 45))
+    db = get_db()
+    try:
+        return jsonify(sync_shadow_reports_newsweb(db, tickers,
+                                                   history=history, days_back=days))
     finally:
         db.close()
 
@@ -16155,7 +16299,7 @@ def api_shadow_compare():
                 cur = (c.get("cur") or "").upper()
                 if src == "sec_edgar" and cur != "USD":
                     continue
-                if src == "mfn_press" and cur not in _NORDIC_CUR:
+                if src in ("mfn_press", "newsweb_oslo") and cur not in _NORDIC_CUR:
                     continue
                 cd = _d(c["report_end_date"])
                 if cd is None:
@@ -21170,7 +21314,8 @@ def _startup():
                         td = datetime.now().date()
                         frm = (td - timedelta(days=3)).isoformat()
                         nrows = _fa2(dbs2, f"""
-                            SELECT DISTINCT s.short_name AS t, s.market_cap AS mc
+                            SELECT DISTINCT s.short_name AS t, s.market_cap AS mc,
+                                   SUBSTR(s.isin, 1, 2) AS cc
                             FROM stocks s
                             LEFT JOIN report_calendar rc ON rc.ticker = s.short_name
                             WHERE SUBSTR(s.isin, 1, 2) IN ('SE','NO','DK','FI','IS')
@@ -21178,13 +21323,27 @@ def _startup():
                                   (rc.report_date >= {p2} AND rc.report_date <= {p2})
                                OR (s.next_company_report >= {p2} AND s.next_company_report <= {p2}))
                         """, (frm, td.isoformat(), frm, td.isoformat()))
-                        ntick = [d["t"] for d in sorted(
-                                     (dict(r) for r in nrows),
+                        srt = sorted((dict(r) for r in nrows),
                                      key=lambda d: -(d.get("mc") or 0))
-                                 if d.get("t")][:12]
+                        # Norska bolag → NewsWeb (Oslo Børs), övriga → Nasdaq
+                        no_tick = [d["t"] for d in srt if d.get("t")
+                                   and d.get("cc") == "NO"][:8]
+                        ntick = [d["t"] for d in srt if d.get("t")
+                                 and d.get("cc") != "NO"][:12]
+                        res_n = {"results": [], "done": 0, "errors": 0}
                         if ntick:
-                            res_n = sync_shadow_reports_nordic(dbs2, ntick,
-                                                               history=1, days_back=10)
+                            rn = sync_shadow_reports_nordic(dbs2, ntick,
+                                                            history=1, days_back=10)
+                            for k in ("done", "errors"):
+                                res_n[k] += rn.get(k) or 0
+                            res_n["results"] += rn.get("results") or []
+                        if no_tick:
+                            rw = sync_shadow_reports_newsweb(dbs2, no_tick,
+                                                             history=1, days_back=10)
+                            for k in ("done", "errors"):
+                                res_n[k] += rw.get(k) or 0
+                            res_n["results"] += rw.get("results") or []
+                        if ntick or no_tick:
                             print(f"[AUTO] Norden-skugga klar: {res_n}")
                         else:
                             print("[AUTO] Norden-skugga: inga rapportbolag i fönstret")
