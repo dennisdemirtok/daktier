@@ -16461,7 +16461,10 @@ def api_shadow_compare():
                 if m == "eps" and diff is not None and abs(diff) > 20 and bdv:
                     ratio = shn / bdv
                     for s in _SPLITS:
-                        if 0.93 <= ratio / s <= 1.07 or 0.93 <= (1 / ratio) / s <= 1.07:
+                        # ratio-vakt: skugg-eps exakt 0 → 1/ratio = div-by-zero
+                        # (kraschade HELA compare via globala handlern)
+                        if 0.93 <= ratio / s <= 1.07 or \
+                                (ratio and 0.93 <= (1 / ratio) / s <= 1.07):
                             cell["split_diff"] = f"~{s}:1 — trolig aktiesplit, ej datafel"
                             break
                 row[m] = cell
