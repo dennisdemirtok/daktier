@@ -15854,29 +15854,116 @@ def _newsweb_find_report_release(ticker, days_back=45):
         dbg["n_total"] = len(msgs)
         _ORD = ("quarter", "interim", "half year", "half-year", "kvartal",
                 "halvår", "results for", "financial report", "q1", "q2", "q3", "q4")
-        _SKIP = ("invitation", "invitasjon", "presentation of",
-                 "webcast", "conference call")
-        matches, seen_pub = [], set()
-        for m in msgs:
-            if (m.get("issuerSign") or "").upper() != base:
-                continue
-            title = (m.get("title") or "")
-            tl = title.lower()
-            if not any(k in tl for k in _ORD):
-                continue
-            if any(k in tl for k in _SKIP):
-                continue  # inbjudningar/webcasts är inte rapporten
-            pub = str(m.get("publishedTime") or "")[:10]
-            if pub in seen_pub:
-                continue
-            seen_pub.add(pub)
-            matches.append((title, m.get("messageId") or m.get("id"), pub))
-        matches.sort(key=lambda x: x[2] or "", reverse=True)
+        _CAT = ("HALF YEAR FINANCIAL REPORT", "ANNUAL FINANCIAL REPORT",
+                "INTERIM", "FINANCIAL REPORT")
+        _SKIP = ("invitation", "invitasjon", "påminnelse", "reminder",
+                 "presentation of", "webcast", "conference call")
+        mine = [m for m in msgs if (m.get("issuerSign") or "").upper() == base]
+        dbg["n_issuer"] = len(mine)
+
+        def _collect(pred):
+            out, seen_pub = [], set()
+            for m in mine:
+                title = (m.get("title") or "")
+                tl = title.lower()
+                if any(k in tl for k in _SKIP):
+                    continue
+                if not pred(m, tl):
+                    continue
+                pub = str(m.get("publishedTime") or "")[:10]
+                if pub in seen_pub:
+                    continue
+                seen_pub.add(pub)
+                out.append((title, m.get("messageId") or m.get("id"), pub))
+            out.sort(key=lambda x: x[2] or "", reverse=True)
+            return out
+
+        def _cats(m):
+            return " ".join((c.get("category_en") or "").upper()
+                            for c in (m.get("category") or []))
+        # Våg 1: officiell rapportkategori ELLER rapportord i titeln.
+        # Våg 2 (Hydro-klassen — rapport taggad 'INSIDE INFORMATION' med
+        # kreativ rubrik): bara 'results/resultat' i titeln; extraktionen
+        # validerar ändå (fel meddelande → tomt → hoppas över).
+        matches = _collect(lambda m, tl: any(c in _cats(m) for c in _CAT)
+                           or any(k in tl for k in _ORD))
+        if not matches:
+            matches = _collect(lambda m, tl: any(
+                k in tl for k in ("results", "resultat", "regnskap")))
+            dbg["wave2"] = True
         dbg["n_matches"] = len(matches)
         return matches, dbg
     except Exception as e:
         dbg["exc"] = str(e)[:150]
         return [], dbg
+
+
+def _extract_nordic_report_from_pdf(pdf_bytes, company, ticker):
+    """PDF-bilaga → kvartalssiffror via Claudes nativa PDF-läsning (samma
+    JSON-kontrakt som textextraktionen). Norska storbolag (Equinor/Vår
+    Energi) skriver kvalitativa release-bodies — siffrorna bor i PDF:en."""
+    import base64 as _b64
+    import re as _re
+    import json as _json2
+    prompt = (f"Bifogad PDF är kvartalsrapporten från {company} ({ticker}). "
+              "Extrahera SENASTE ENSKILDA KVARTALETS siffror ur tabellerna.\n\n"
+              "⚠️ Ta ALLTID kvartalskolumnen (Q2/April–June) — ALDRIG "
+              "halvår/ackumulerat, om inte kvartalet bevisligen saknas "
+              "(sätt då unit_note till 'ENDAST halvår redovisat').\n\n"
+              "Svara EXAKT med ett JSON-block mellan markörerna:\n"
+              "---RAPPORT-JSON-START---\n"
+              "{\n"
+              '  "period_year": 2026, "period_q": 2,\n'
+              '  "report_end_date": "YYYY-MM-DD",\n'
+              '  "currency": "NOK",\n'
+              '  "unit_note": "enhet källan använde",\n'
+              '  "revenues": 12345.0, "operating_income": 2345.0,\n'
+              '  "net_profit": 1234.0, "eps": 4.56,\n'
+              '  "operating_cash_flow": null, "total_assets": null, "total_equity": null\n'
+              "}\n"
+              "---RAPPORT-JSON-END---\n\n"
+              "REGLER: ALLA belopp i MILJONER av rapportvalutan (USD-rapport → "
+              "MUSD). eps i valuta/aktie. null för allt som inte står i "
+              "rapporten — INGA påhittade siffror.")
+    try:
+        import httpx
+        with httpx.Client(timeout=240.0) as client:
+            r = client.post(
+                "https://api.anthropic.com/v1/messages",
+                headers={"x-api-key": CLAUDE_API_KEY,
+                         "anthropic-version": "2023-06-01",
+                         "content-type": "application/json"},
+                json={"model": _sonnet(), "max_tokens": 6000,
+                      "messages": [{"role": "user", "content": [
+                          {"type": "document",
+                           "source": {"type": "base64",
+                                      "media_type": "application/pdf",
+                                      "data": _b64.b64encode(pdf_bytes).decode()}},
+                          {"type": "text", "text": prompt}]}]})
+        if r.status_code != 200:
+            _flag_credit_error(r.text)
+            print(f"[newsweb pdf] Claude HTTP {r.status_code}: {r.text[:150]}",
+                  file=sys.stderr)
+            return None, 0.0
+        resp = r.json()
+    except Exception as e:
+        print(f"[newsweb pdf] fel: {e}", file=sys.stderr)
+        return None, 0.0
+    try:
+        cost = _calc_sonnet_cost(resp.get("usage", {}))
+    except Exception:
+        cost = 0.0
+    full = "".join(b.get("text", "") for b in resp.get("content", [])
+                   if b.get("type") == "text")
+    m = _re.search(r"---RAPPORT-JSON-START---\s*(.*?)\s*---RAPPORT-JSON-END---",
+                   full, _re.DOTALL)
+    if not m:
+        return None, cost
+    try:
+        return _json2.loads(_re.sub(r"^```(?:json)?\s*|\s*```$", "",
+                                    m.group(1).strip())), cost
+    except Exception:
+        return None, cost
 
 
 def sync_shadow_reports_newsweb(db, tickers, history=1, days_back=45):
@@ -15916,10 +16003,36 @@ def sync_shadow_reports_newsweb(db, tickers, history=1, days_back=45):
                                  "Accept": "application/json"}, timeout=25)
                     dm = ((rd.json().get("data") or {}).get("message")) or {}
                     text = str(dm.get("body") or "")
-                    if len(text) < 400:
-                        saved_periods.append(f"{pub}: tom body ({len(text)} tecken)")
-                        continue
-                    parsed, cost = _extract_nordic_report_with_claude(text, company, t)
+                    parsed, via = None, "body"
+                    if len(text) >= 400:
+                        parsed, cost = _extract_nordic_report_with_claude(text, company, t)
+                    body_empty = (not parsed or not parsed.get("period_year")
+                                  or all(parsed.get(k) is None
+                                         for k in ("revenues", "net_profit", "eps")))
+                    if body_empty:
+                        # PDF-fallback: siffrorna bor i bilagan (Equinor-klassen).
+                        # Välj rapport-PDF:en, inte presentationen.
+                        atts = dm.get("attachments") or []
+                        import re as _rp
+                        cand = sorted(
+                            [a for a in atts
+                             if str(a.get("name", "")).lower().endswith(".pdf")
+                             and "presentation" not in str(a.get("name", "")).lower()],
+                            key=lambda a: 0 if _rp.search(
+                                r"report|rapport|regnskap|quarter|kvartal|interim",
+                                str(a.get("name", "")).lower()) else 1)
+                        if cand:
+                            pr = requests.get(
+                                "https://api3.oslo.oslobors.no/v1/newsreader/attachment",
+                                params={"messageId": msg_id,
+                                        "attachmentId": cand[0].get("id")},
+                                headers={"User-Agent": _EDGAR_UA["User-Agent"]},
+                                timeout=60)
+                            if pr.status_code == 200 and len(pr.content) < 12_000_000 \
+                                    and pr.content[:4] == b"%PDF":
+                                parsed, cost = _extract_nordic_report_from_pdf(
+                                    pr.content, company, t)
+                                via = "PDF"
                     if not parsed or not parsed.get("period_year"):
                         saved_periods.append(f"{pub}: extraktion miss")
                         continue
@@ -15941,7 +16054,7 @@ def sync_shadow_reports_newsweb(db, tickers, history=1, days_back=45):
                         None, parsed.get("operating_cash_flow"),
                         "newsweb_oslo", datetime.utcnow().isoformat()))
                     db.commit()
-                    saved_periods.append(f"Q{pq[1]} {pq[0]}")
+                    saved_periods.append(f"Q{pq[1]} {pq[0]}" + (" (PDF)" if via == "PDF" else ""))
                 except Exception as e:
                     saved_periods.append(f"{pub}: fel {str(e)[:50]}")
                     try: db.rollback()
