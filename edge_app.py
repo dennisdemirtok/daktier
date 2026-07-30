@@ -16376,6 +16376,8 @@ def api_shadow_compare():
             # Endast US/USD-instrument: efter arkiv-expansionen innehåller
             # map:en ALLA börsers tickers — 'BAC' matchade ett nordiskt
             # småbolag i st.f. Bank of America (diff -2 000 000%).
+            # ins_id != 0: vårt eget skugg-INFLÖDE bär ins_id=0 — får ALDRIG
+            # användas som facit (skuggan jämförd med sig själv = cirkelbevis)
             bd = _fetchall(db, f"""
                 SELECT UPPER(m.ticker) AS t, br.report_type, br.report_end_date,
                        br.revenues, br.net_profit, br.eps, br.operating_income,
@@ -16384,6 +16386,7 @@ def api_shadow_compare():
                 FROM borsdata_reports br
                 JOIN borsdata_instrument_map m ON m.isin = br.isin
                 WHERE UPPER(m.ticker) IN ({marks}) AND br.report_end_date IS NOT NULL
+                  AND br.ins_id != 0
             """, tuple(expanded))
             for r in bd:
                 d = dict(r)
@@ -16485,7 +16488,18 @@ def api_shadow_compare():
         tick_f = (request.args.get("ticker") or "").strip().upper()
         if tick_f:
             rows_f = [c for c in comps if c.get("ticker", "").upper() == tick_f]
-            return jsonify({"ticker": tick_f, "rader": rows_f,
+            base_f = _base(tick_f)
+            dbg_f = {
+                "n_shadow_rader": sum(1 for r0 in sh_rows
+                                      if _base(r0["ticker"]) == base_f),
+                "n_bd_kandidater": sum(len(v) for (b0, _rt), v in bd_by_ticker.items()
+                                       if b0 == base_f),
+                "bd_end_dates": sorted({str(c0["report_end_date"])[:10]
+                                        for (b0, _rt), v in bd_by_ticker.items()
+                                        if b0 == base_f for c0 in v},
+                                       reverse=True)[:6],
+            }
+            return jsonify({"ticker": tick_f, "rader": rows_f, "debug": dbg_f,
                             "per_bolag": {tick_f: per_bolag.get(tick_f)}})
         return jsonify({"summary": summary,
                         "per_bolag": per_bolag,
