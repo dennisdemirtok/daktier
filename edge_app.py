@@ -15881,12 +15881,16 @@ def _newsweb_find_report_release(ticker, days_back=45):
         def _cats(m):
             return " ".join((c.get("category_en") or "").upper()
                             for c in (m.get("category") or []))
-        # Våg 1: officiell rapportkategori ELLER rapportord i titeln.
+        # Våg 1a: officiell rapportkategori — VINNER per dag (Equinors rapport
+        # och utdelningsnotis kom samma dag; titelmatch fick inte ta platsen).
+        # Våg 1b: rapportord i titeln, endast dagar utan kategoriträff.
         # Våg 2 (Hydro-klassen — rapport taggad 'INSIDE INFORMATION' med
-        # kreativ rubrik): bara 'results/resultat' i titeln; extraktionen
-        # validerar ändå (fel meddelande → tomt → hoppas över).
-        matches = _collect(lambda m, tl: any(c in _cats(m) for c in _CAT)
-                           or any(k in tl for k in _ORD))
+        # kreativ rubrik): bara 'results/resultat'; extraktionen validerar.
+        matches = _collect(lambda m, tl: any(c in _cats(m) for c in _CAT))
+        _taken = {p for _, _, p in matches}
+        matches += [x for x in _collect(lambda m, tl: any(k in tl for k in _ORD))
+                    if x[2] not in _taken]
+        matches.sort(key=lambda x: x[2] or "", reverse=True)
         if not matches:
             matches = _collect(lambda m, tl: any(
                 k in tl for k in ("results", "resultat", "regnskap")))
