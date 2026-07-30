@@ -15836,8 +15836,9 @@ def _newsweb_find_report_release(ticker, days_back=45):
     namnvariant-problematik som hos Nasdaq. Returnerar ([(title, msg_id,
     pub)], dbg)."""
     import json as _json
+    import re as _re9
     dbg = {}
-    base = re.sub(r"\s+[A-D]$", "", str(ticker or "").upper()).strip()
+    base = _re9.sub(r"\s+[A-D]$", "", str(ticker or "").upper()).strip()
     try:
         frm = (datetime.utcnow() - timedelta(days=days_back)).strftime("%Y-%m-%d")
         to = datetime.utcnow().strftime("%Y-%m-%d")
