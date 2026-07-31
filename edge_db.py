@@ -5282,8 +5282,8 @@ def compute_daktier_portfolios(db):
     # TTM ur rapportarkivet (4 senaste kvartal + föregående 4)
     marks = ",".join([ph] * len(isins))
     qrows = _fetchall(db, f"""
-        SELECT isin, report_end_date, revenues, gross_income, operating_income,
-               net_profit, operating_cash_flow, free_cash_flow
+        SELECT isin, report_end_date, currency, ins_id, revenues, gross_income,
+               operating_income, net_profit, operating_cash_flow, free_cash_flow
         FROM borsdata_reports
         WHERE report_type = 'quarter' AND isin IN ({marks})
           AND report_end_date IS NOT NULL
@@ -5314,13 +5314,38 @@ def compute_daktier_portfolios(db):
         vs = [x.get(key) for x in rows_]
         return sum(vs) if len(vs) == 4 and all(isinstance(v, (int, float)) for v in vs) else None
 
-    cands = []
+    import statistics as _stat
+    cands, skippade_skala = [], 0
     for u in uni:
         isin = u["isin"]
-        lst = sorted(byq.get(isin, []), key=lambda x: str(x["report_end_date"]), reverse=True)
+        raw = byq.get(isin, [])
+        # EN rad per kvartal: arkivet har både Börsdata-rader och vårt eget
+        # skugginflöde (ins_id=0) — dubbletter dubblade TTM-summorna
+        per_q = {}
+        for r0 in raw:
+            k = str(r0["report_end_date"])[:10]
+            if k not in per_q or (r0.get("ins_id") or 0) != 0:
+                per_q[k] = r0
+        lst = sorted(per_q.values(), key=lambda x: str(x["report_end_date"]), reverse=True)
         if len(lst) < 8:
             continue
         cur, prev = lst[:4], lst[4:8]
+        # SKALKONTROLL (REGEL 0): TSM hade 39 890 · 1 134 103 · 33 266 · 32 469 —
+        # ett kvartal 34× grannarna (TWD-rader blandat med USD-skalade). Sådana
+        # serier ger fantasitillväxt → bolaget utesluts hellre än gissas på.
+        revs = [abs(x.get("revenues")) for x in lst[:8]
+                if isinstance(x.get("revenues"), (int, float)) and x.get("revenues")]
+        if len(revs) < 6:
+            continue
+        med = _stat.median(revs)
+        if med <= 0 or any(v > med * 3 or v < med / 3 for v in revs):
+            skippade_skala += 1
+            continue
+        # Valutakonsistens genom hela serien
+        curs = {(x.get("currency") or "").upper() for x in lst[:8] if x.get("currency")}
+        if len(curs) > 1:
+            skippade_skala += 1
+            continue
         rev, rev_p = _sum4(cur, "revenues"), _sum4(prev, "revenues")
         np_, np_p = _sum4(cur, "net_profit"), _sum4(prev, "net_profit")
         ocf = _sum4(cur, "operating_cash_flow")
@@ -5347,8 +5372,10 @@ def compute_daktier_portfolios(db):
         rev_dns = sum(v for k, v in (("yr_down", e0.get("yr_down")), ("qtr_down", e0.get("qtr_down")))
                       if isinstance(v, int))
         rev_net = ((rev_ups - rev_dns) / (rev_ups + rev_dns)) if (rev_ups + rev_dns) else None
+        fx = _FX_SEK.get((lst[0].get("currency") or u.get("currency") or "SEK").upper(), 1.0)
         cands.append({
-            **u, "mcap_sek": mcap_sek, "rev_ttm": rev, "np_ttm": np_, "ocf_ttm": ocf,
+            **u, "mcap_sek": mcap_sek, "rev_ttm": rev, "rev_sek": rev * 1e6 * fx,
+            "np_ttm": np_, "ocf_ttm": ocf,
             "rev_g": rev_g, "np_g": np_g,
             "ocf_margin": (ocf / rev) if ocf is not None else None,
             "gross_margin": (gross / rev) if gross else None,
@@ -5369,14 +5396,17 @@ def compute_daktier_portfolios(db):
         return rank
 
     # ── KÄRNA: kvalitetscompounders ──────────────────────────────────────
+    # Sanity-tak överallt: ROCE 882 % och tillväxt +1051 % är datafel, inte
+    # kvalitet — de kapade tidigare portföljen (REGEL 0: hitta aldrig på)
     karna_pool = [c for c in cands if
-        c["mcap_sek"] >= 3e10                                  # ≥ 30 mdr SEK
-        and c["rev_g"] > 0                                     # växande omsättning
-        and c["np_ttm"] is not None and c["np_ttm"] > 0        # vinst
-        and (c["np_g"] is None or c["np_g"] > -0.05)           # vinst ej fallande
-        and ((c["roce"] or 0) >= 0.12 or (c["roe"] or 0) >= 0.15)
+        c["mcap_sek"] >= 5e10 and c["rev_sek"] >= 5e9
+        and 0 < c["rev_g"] <= 0.80
+        and c["np_ttm"] is not None and c["np_ttm"] > 0
+        and (c["np_g"] is None or -0.05 < c["np_g"] <= 3.0)
+        and ((0.12 <= (c["roce"] or 0) <= 1.0) or (0.15 <= (c["roe"] or 0) <= 1.0))
         and c["ocf_ttm"] is not None and c["ocf_ttm"] > 0
         and (c["ocf_quality"] is None or c["ocf_quality"] >= 0.7)
+        and 0 < (c["ocf_margin"] or 0) <= 1.0
         and ((c.get("net_debt_ebitda_ratio") is None or c["net_debt_ebitda_ratio"] < 3.5)
              and (c.get("debt_to_equity_ratio") is None or c["debt_to_equity_ratio"] < 2.0))
         and c["above_ma200"] == 1
@@ -5396,11 +5426,14 @@ def compute_daktier_portfolios(db):
 
     # ── KRYDDA: tillväxt + momentum (risklagret) ─────────────────────────
     kr_pool = [c for c in cands if
-        c["mcap_sek"] >= 1e10                                  # ≥ 10 mdr SEK
-        and c["rev_g"] >= 0.15                                 # ≥ 15 % tillväxt
+        c["mcap_sek"] >= 3e10                                  # ≥ 30 mdr SEK
+        and c["rev_sek"] >= 2e9                                # ≥ 2 mdr SEK omsättning
+        and 0.15 <= c["rev_g"] <= 1.50                         # 15–150 % tillväxt
         and c["above_ma200"] == 1
-        and (c["ret_12m"] or 0) > 0
-        and (c["ocf_ttm"] is None or c["ocf_ttm"] > 0 or (c["gross_margin"] or 0) > 0.5)
+        and 0 < (c["ret_12m"] or 0) <= 400
+        # Verksamheten ska bära sig: positivt kassaflöde ELLER hög bruttomarginal
+        and ((c["ocf_margin"] or -9) > 0 or 0.4 < (c["gross_margin"] or 0) <= 1.0)
+        and (c["ocf_margin"] is None or c["ocf_margin"] > -0.5)  # ej kassaförbrännare
         and not c["is_inv"]
     ]
     if kr_pool:
@@ -5456,10 +5489,18 @@ def compute_daktier_portfolios(db):
             db.execute(ins, (today, "daktier_10", n, c["short_name"], c["name"],
                              c["isin"], c["last_price"], sleeve, w, " · ".join(bits)))
     db.commit()
+    # Städa bort de gamla modellerna ur vyn (koplista_10/kvant_10)
+    try:
+        db.execute(f"DELETE FROM model_portfolios WHERE model IN ({ph}, {ph})",
+                   ("koplista_10", "kvant_10"))
+        db.commit()
+    except Exception:
+        try: db.rollback()
+        except Exception: pass
     return {"snapshot_date": today, "karna": [c["short_name"] for c in karna],
             "krydda": [c["short_name"] for c in krydda],
             "kandidater": len(cands), "karna_pool": len(karna_pool),
-            "krydda_pool": len(kr_pool)}
+            "krydda_pool": len(kr_pool), "skippade_skalfel": skippade_skala}
 
 
 def compute_factor_scores(db, min_mcap=1e9):
