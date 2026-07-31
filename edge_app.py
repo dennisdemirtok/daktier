@@ -1946,6 +1946,16 @@ def api_stock_price_events(orderbook_id):
             ORDER BY date ASC""", (isin, frm))] if isin else []
         px = {str(p["date"])[:10]: p["close"] for p in prices}
         pdates = sorted(px.keys())
+        # Spikfilter: ensam punkt som avviker >50% från BÅDA grannarna är en
+        # korrupt rad (t.ex. decimalfel i en persist-körning) — inte en krasch
+        if len(pdates) >= 3:
+            bad = set()
+            for i in range(1, len(pdates) - 1):
+                c0, c1, c2 = px[pdates[i - 1]], px[pdates[i]], px[pdates[i + 1]]
+                if c0 and c2 and c1 and \
+                        abs(c1 / c0 - 1) > 0.5 and abs(c1 / c2 - 1) > 0.5:
+                    bad.add(pdates[i])
+            pdates = [d for d in pdates if d not in bad]
         # Rapportdatum (publicering) ur kalendern
         cal = [str(dict(r)["report_date"])[:10] for r in _fetchall(db, f"""
             SELECT DISTINCT report_date FROM report_calendar
