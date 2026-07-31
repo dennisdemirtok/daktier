@@ -3914,6 +3914,7 @@ function renderQuarterlyTrendsSection(s) {
                     <div>Marginal: ${dM == null ? '<span style="color:var(--text-muted)">–</span>'
                         : `<span style="font-weight:700;color:${dM > 0 ? '#00a870' : '#c0392b'}">${dM > 0 ? '+' : ''}${(dM * 100).toFixed(1)} p.e.</span>`}</div>
                     ${py ? `<div style="color:var(--text-muted)">Fjolår: ${fmtMoney(py.sales)} oms · ${fmtMoney(py.net_profit)} vinst</div>` : ''}
+                    <div class="q-react" data-qlabel="${r.quarter} ${r.financial_year}" style="font-weight:600"></div>
                 </div>
             </td></tr>`;
         return `<tr onclick="const d=document.getElementById('qdet-${ri}');if(d)d.style.display=d.style.display==='none'?'':'none'"
@@ -3987,8 +3988,8 @@ function renderQuarterlyTrendsSection(s) {
             ${roeStatHtml}
             ${salesYoyStatHtml}
         </div>
-        <div style="background:white;border:1px solid var(--border);border-radius:10px;overflow:hidden">
-            <table style="width:100%;border-collapse:collapse;font-size:12px">
+        <div style="background:white;border:1px solid var(--border);border-radius:10px;overflow-x:auto;-webkit-overflow-scrolling:touch">
+            <table style="width:100%;min-width:480px;border-collapse:collapse;font-size:12px">
                 <thead style="background:#f9fafb">
                     <tr style="border-bottom:1px solid var(--border)">
                         <th style="text-align:left;padding:8px 10px">Kvartal</th>
@@ -5043,7 +5044,9 @@ function openDrawer(s) {
         <div>
             <div style="font-size:20px;font-weight:700">${flag} ${s.name}</div>
             <div style="font-size:13px;color:var(--text-muted)">${s.short_name || ''} · ${s.country || ''} · ${s.market_place || ''}</div>
-            <div style="font-size:24px;font-weight:700;margin-top:6px">${s.last_price != null ? s.last_price.toFixed(2) + ' ' + (s.currency || 'SEK') : '-'}</div>
+            <div style="font-size:24px;font-weight:700;margin-top:6px">${s.last_price != null ? s.last_price.toFixed(2) + ' ' + (s.currency || 'SEK') : '-'}
+                ${s.one_day_change_pct != null ? (() => { const p = Number(s.one_day_change_pct) * 100;
+                    return `<span style="font-size:14px;font-weight:700;margin-left:8px;color:${p > 0 ? '#059669' : p < 0 ? '#DC2626' : 'var(--text-muted)'}">${p > 0 ? '▲ +' : p < 0 ? '▼ ' : ''}${p.toFixed(2)}% i dag</span>`; })() : ''}</div>
         </div>
     `;
 
@@ -5811,6 +5814,14 @@ function openDrawer(s) {
     };
     const mcapTxt = s.market_cap ? (s.market_cap >= 1e9
         ? (s.market_cap / 1e9).toFixed(1) + ' mdr' : (s.market_cap / 1e6).toFixed(0) + ' M') : null;
+    let nextRepChip = '';
+    if (s.next_company_report) {
+        const dd = Math.round((new Date(String(s.next_company_report).slice(0, 10)) - new Date()) / 86400000);
+        if (dd >= 0 && dd <= 120) {
+            nextRepChip = `<div class="dov-chip" style="border-color:var(--brand-cyan)">`
+                + `<div class="l">Rapport</div><div class="v" style="color:var(--brand-navy)">om ${dd} d</div></div>`;
+        }
+    }
     B.oversikt = `<div class="dov-chips">`
         + pchip('1 dag', s.one_day_change_pct, true)
         + pchip('1 vecka', s.one_week_change_pct, true)
@@ -5819,7 +5830,12 @@ function openDrawer(s) {
         + pchip('I år', s.ytd_change_pct, true)
         + pchip('P/E', s.pe_ratio != null ? Number(s.pe_ratio).toFixed(1) : null, false)
         + pchip('Börsvärde', mcapTxt, false)
-        + `</div>` + B.oversikt;
+        + nextRepChip
+        + `</div>`
+        + `<div class="drawer-section" id="dovChartSection" style="display:none">`
+        + `<div class="drawer-section-title">Kurs 12 mån · <span style="color:var(--brand-cyan)">Ⓡ</span> = rapportdag</div>`
+        + `<div style="height:190px"><canvas id="dovPriceChart"></canvas></div></div>`
+        + B.oversikt;
     const DTABS = [['oversikt', 'Översikt'], ['rapporter', 'Rapporter'],
                    ['nyckeltal', 'Nyckeltal'], ['analys', 'Analys'], ['agare', 'Ägare']];
     html = `<div class="dtab-bar">` + DTABS.map(([k, l], i) =>
@@ -5830,6 +5846,74 @@ function openDrawer(s) {
             + (B[k] || '<div class="dtab-empty">Inget innehåll för denna aktie ännu</div>')
             + `</div>`).join('');
     document.getElementById('drawerBody').innerHTML = html;
+
+    // ── Montrose-graf: kursserie + Ⓡ-rapportmarkörer (lazy) ──
+    if (s.orderbook_id && window.Chart) {
+        fetch(`/api/stock/${s.orderbook_id}/price-events?days=380`)
+            .then(r => r.json())
+            .then(pe => {
+                if (!pe || !pe.prices || pe.prices.length < 10) return;
+                const sec = document.getElementById('dovChartSection');
+                const cv = document.getElementById('dovPriceChart');
+                if (!sec || !cv) return;
+                sec.style.display = '';
+                const labels = pe.prices.map(p => p.d);
+                const closes = pe.prices.map(p => p.c);
+                const evByDate = {};
+                (pe.events || []).forEach(ev => { evByDate[ev.date] = ev; });
+                const markers = labels.map((d, i) => {
+                    const hit = (pe.events || []).find(ev => {
+                        const after = labels.find(x => x >= ev.date);
+                        return after === d;
+                    });
+                    return hit ? closes[i] : null;
+                });
+                try { if (window._dovChart) { window._dovChart.destroy(); } } catch (e) {}
+                window._dovChart = new Chart(cv.getContext('2d'), {
+                    type: 'line',
+                    data: { labels,
+                        datasets: [
+                            { data: closes, borderColor: '#16365C', borderWidth: 1.8,
+                              backgroundColor: 'rgba(56,182,217,0.08)', fill: true,
+                              pointRadius: 0, tension: 0.15, label: 'Kurs' },
+                            { data: markers, type: 'scatter', pointRadius: 5,
+                              pointHoverRadius: 7, pointBackgroundColor: '#38B6D9',
+                              pointBorderColor: '#16365C', pointBorderWidth: 1.5,
+                              label: 'Rapport' }
+                        ] },
+                    options: { responsive: true, maintainAspectRatio: false,
+                        interaction: { intersect: false, mode: 'index' },
+                        plugins: { legend: { display: false },
+                            tooltip: { callbacks: { label: (ctx) => {
+                                if (ctx.datasetIndex === 1 && ctx.raw != null) {
+                                    const ev = (pe.events || []).find(e2 => {
+                                        const after = labels.find(x => x >= e2.date);
+                                        return after === ctx.label;
+                                    });
+                                    if (ev) return `Ⓡ ${ev.quarter || 'Rapport'} · ${ev.date}`
+                                        + (ev.reaction_pct != null
+                                           ? ` · ${ev.reaction_pct > 0 ? '+' : ''}${ev.reaction_pct}%` : '');
+                                }
+                                return ' ' + Number(ctx.raw).toFixed(2);
+                            } } } },
+                        scales: { x: { display: true, ticks: { maxTicksLimit: 6,
+                                       callback: function(v) { return String(this.getLabelForValue(v)).slice(0, 7); } },
+                                       grid: { display: false } },
+                                  y: { ticks: { maxTicksLimit: 5 }, grid: { color: 'rgba(0,0,0,0.05)' } } } }
+                });
+                // Kursreaktion in i expanderade kvartalsrader (Rapporter-fliken)
+                (pe.events || []).forEach(ev => {
+                    if (!ev.quarter || ev.reaction_pct == null) return;
+                    document.querySelectorAll(`.q-react[data-qlabel="${ev.quarter}"]`).forEach(el => {
+                        const up = ev.reaction_pct > 0;
+                        el.innerHTML = `Aktien <span style="color:${up ? '#00a870' : '#c0392b'}">`
+                            + `${up ? '▲ +' : '▼ '}${ev.reaction_pct}%</span> `
+                            + `<span style="color:var(--text-muted);font-weight:400">på rapportdagen (${ev.date})</span>`;
+                    });
+                });
+            })
+            .catch(e => console.warn('[drawer] price-events fel:', e));
+    }
     document.getElementById('stockDrawer').classList.add('open');
     document.getElementById('drawerOverlay').classList.add('open');
     document.body.style.overflow = 'hidden';

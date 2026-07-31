@@ -1922,6 +1922,64 @@ def api_stock_detail(orderbook_id):
         db.close()
 
 
+@app.route("/api/stock/<orderbook_id>/price-events")
+def api_stock_price_events(orderbook_id):
+    """Kursserie + rapporthändelser för aktievyns Montrose-graf:
+    dagliga stängningar (borsdata_prices, inkl Avanza-persisten) + R-markörer
+    med kursreaktion på rapportdagen + kvartalsetikett (matchas mot närmast
+    föregående kvartalsslut i rapportarkivet)."""
+    from edge_db import _fetchone, _fetchall, _ph
+    ph = _ph()
+    days = min(int(request.args.get("days") or 400), 1200)
+    db = get_db()
+    try:
+        srow = _fetchone(db, f"SELECT isin, short_name, next_company_report "
+                             f"FROM stocks WHERE orderbook_id = {ph}", (orderbook_id,))
+        if not srow:
+            return jsonify({"error": "okänd aktie"}), 404
+        sd = dict(srow)
+        isin, tick = sd.get("isin"), sd.get("short_name")
+        frm = (datetime.now().date() - timedelta(days=days)).isoformat()
+        prices = [dict(r) for r in _fetchall(db, f"""
+            SELECT date, close FROM borsdata_prices
+            WHERE isin = {ph} AND date >= {ph} AND close > 0
+            ORDER BY date ASC""", (isin, frm))] if isin else []
+        px = {str(p["date"])[:10]: p["close"] for p in prices}
+        pdates = sorted(px.keys())
+        # Rapportdatum (publicering) ur kalendern
+        cal = [str(dict(r)["report_date"])[:10] for r in _fetchall(db, f"""
+            SELECT DISTINCT report_date FROM report_calendar
+            WHERE ticker = {ph} AND report_date >= {ph} AND report_date <= {ph}
+            ORDER BY report_date""", (tick, frm, datetime.now().date().isoformat()))]
+        # Kvartalsslut för etikettmatchning (närmast före publicering, ≤100d)
+        ends = [dict(r) for r in _fetchall(db, f"""
+            SELECT report_end_date, period_year, period_q FROM borsdata_reports
+            WHERE isin = {ph} AND report_type = 'quarter'
+              AND report_end_date IS NOT NULL
+            ORDER BY report_end_date DESC LIMIT 12""", (isin,))] if isin else []
+        events = []
+        for rd in cal:
+            # reaktion: stängning rapportdagen (eller närmast efter) vs närmast före
+            after = next((d for d in pdates if d >= rd), None)
+            before = next((d for d in reversed(pdates) if d < rd), None)
+            reaction = None
+            if after and before and px.get(before):
+                reaction = round(100.0 * (px[after] / px[before] - 1), 2)
+            qlabel = None
+            for e in ends:
+                ed = str(e["report_end_date"])[:10]
+                if ed < rd and (datetime.fromisoformat(rd)
+                                - datetime.fromisoformat(ed)).days <= 100:
+                    qlabel = f"Q{e['period_q']} {e['period_year']}"
+                    break
+            events.append({"date": rd, "reaction_pct": reaction, "quarter": qlabel})
+        return jsonify({"prices": [{"d": d, "c": px[d]} for d in pdates],
+                        "events": events,
+                        "next_report": str(sd.get("next_company_report") or "")[:10] or None})
+    finally:
+        db.close()
+
+
 @app.route("/api/stock/<orderbook_id>/extras")
 def api_stock_extras(orderbook_id):
     """Lazy-loaded sekundär data för drawer (efter att initial-rendering är klar).
