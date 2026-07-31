@@ -4979,6 +4979,14 @@ def compute_trend_snapshot(db):
     minskar historiskt djupa drawdowns, garanterar inget enskilt utfall."""
     from datetime import datetime as _dt, timedelta as _td
     ph = _ph()
+    # Window-funktionerna sveper hela pristabellen (~2,7 GB). Med Postgres
+    # RAM-tak på 1 GB (kostnadsfixen 2026-07-26) hinner de inte inom default
+    # statement_timeout → "canceling statement due to statement timeout".
+    try:
+        db.execute("SET statement_timeout = '900s'")
+    except Exception:
+        try: db.rollback()
+        except Exception: pass
     db.execute("""
         CREATE TABLE IF NOT EXISTS trend_snapshot (
             isin TEXT PRIMARY KEY,
