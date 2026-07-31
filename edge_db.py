@@ -5775,6 +5775,14 @@ def compute_daktier_portfolios(db):
             PRIMARY KEY (snapshot_date, isin, sleeve))""")
     db.commit()
     import json as _js
+    # Rensa dagens rader först — annars ligger tidigare körningars urval kvar
+    # (biotech-raderna från mjukvaruspåret syntes kvar efter sektorfixen)
+    try:
+        db.execute(f"DELETE FROM daktier_scores WHERE snapshot_date = {ph}", (today,))
+        db.commit()
+    except Exception:
+        try: db.rollback()
+        except Exception: pass
     sins = _upsert_sql("daktier_scores",
                        ["snapshot_date", "isin", "sleeve", "ticker", "name", "country",
                         "sector", "score", "rank", "vald", "spar", "delpoang", "motiv"],
@@ -5832,6 +5840,14 @@ def compute_daktier_portfolios(db):
             skal.append(f"OCF/vinst {c['ocf_quality']:.2f} < 0,7")
         if c["above_ma200"] != 1: skal.append("under MA200")
         if c["is_inv"] and (c["pb"] or 99) >= 1.0: skal.append("investmentbolag i premie")
+        if not (0 < (c["ocf_margin"] or 0) <= 1.0):
+            skal.append(f"OCF-marginal {(c['ocf_margin'] or 0)*100:.0f}% utanför 0-100%")
+        if c["np_g"] is not None and c["np_g"] > 3.0:
+            skal.append(f"vinstförändring {c['np_g']*100:.0f}% (misstänkt data)")
+        if (c.get("debt_to_equity_ratio") or 0) >= 2.0:
+            skal.append(f"skuldsättning D/E {c['debt_to_equity_ratio']:.1f}")
+        if (c.get("net_debt_ebitda_ratio") or 0) >= 3.5:
+            skal.append(f"nettoskuld/EBITDA {c['net_debt_ebitda_ratio']:.1f}")
         if not skal:
             kp = next((i + 1 for i, x in enumerate(karna_pool) if x["isin"] == c["isin"]), None)
             skal.append(f"kvalificerad men plats {kp or '?'} i Kärnan "
