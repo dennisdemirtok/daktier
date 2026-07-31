@@ -5053,9 +5053,16 @@ def persist_daily_close_from_stocks(db):
     from datetime import date as _date
     ph = _ph()
     today = _date.today().isoformat()
-    sel = (f"SELECT isin, {ph}, last_price FROM stocks "
-           f"WHERE isin IS NOT NULL AND isin != '' AND isin NOT LIKE {ph} "
-           f"AND last_price IS NOT NULL AND last_price > 0")
+    # EN rad per isin: stocks har dubbletter med SAMMA isin i olika valutor
+    # (Ericssons EUR-listning skrev 8.4 i stället för 94 SEK tre dagar i rad)
+    # — flest Avanza-ägare = den nordiska huvudlistningen
+    sel = (f"SELECT isin, {ph}, last_price FROM ("
+           f"  SELECT isin, last_price, ROW_NUMBER() OVER ("
+           f"    PARTITION BY isin ORDER BY COALESCE(number_of_owners, 0) DESC"
+           f"  ) AS rn FROM stocks "
+           f"  WHERE isin IS NOT NULL AND isin != '' AND isin NOT LIKE {ph} "
+           f"  AND last_price IS NOT NULL AND last_price > 0"
+           f") t WHERE rn = 1")
     try:
         db.execute(f"INSERT INTO borsdata_prices (isin, date, close) {sel} "
                    f"ON CONFLICT DO NOTHING", (today, "YAHOO_%"))

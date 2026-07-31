@@ -1303,30 +1303,14 @@ async function fetchData(append = false) {
             dataKey = 'stocks';
             renderFn = renderOcfTable;
         } else if (currentTab === 'portfolio') {
-            const simCk = cacheKey('portfolio', {});
-            cached = getCached(simCk);
-            const simData = cached || await (await fetch('/api/simulation')).json();
-            if (!cached) setCache(simCk, simData);
-            if (simData.active) {
-                renderSimulation(simData);
-            } else {
-                const pCk = cacheKey('portfolio_start', {});
-                const pCached = getCached(pCk);
-                data = pCached || await (await fetch('/api/portfolio')).json();
-                if (!pCached) setCache(pCk, data);
-                renderPortfolio(data);
-                const startCard = `<div style="background:linear-gradient(135deg,#e6f9f1,#e8eeff);border-radius:var(--radius);padding:24px;margin-bottom:20px;text-align:center;box-shadow:var(--shadow)">
-                    <div style="font-size:28px;margin-bottom:8px">🚀</div>
-                    <div style="font-size:18px;font-weight:700;margin-bottom:8px">Starta portföljsimulering</div>
-                    <div style="color:var(--text-sec);margin-bottom:16px">
-                        Lås in dagens aktier med <strong>1 000 000 kr</strong> per portfölj.<br>
-                        Likaviktad allokering. Avkastning mäts framåt från idag.
-                    </div>
-                    <button onclick="startSimulation()" style="background:var(--green);color:white;border:none;padding:12px 32px;border-radius:8px;font-size:16px;font-weight:600;cursor:pointer;font-family:inherit;transition:all 0.2s">
-                        Starta simulering
-                    </button>
-                </div>`;
-                document.getElementById('content').insertAdjacentHTML('afterbegin', startCard);
+            // 2026-07-31: gamla simuleringsportföljerna UTBYTTA — kändes svaga
+            // mot index. Nu: två modellportföljer, topp 10, dagligt utbyte.
+            try {
+                const mp = await (await fetch('/api/model-portfolios')).json();
+                renderModelPortfolios(mp);
+            } catch (e) {
+                document.getElementById('content').innerHTML =
+                    `<div style="padding:30px;color:var(--text-muted)">Kunde inte hämta modellportföljerna: ${e.message}</div>`;
             }
             return;
         } else if (currentTab === 'myportfolio') {
@@ -1626,7 +1610,7 @@ const NAV_SECTIONS = {
     edge:      { label: 'Edge Signals',  icon: 'electric_bolt',         tab: 'signals',   sub: [] },
     settings:  { label: 'Inställningar',  icon: 'settings',             tab: null,        sub: [
                     { label: 'Track record',     icon: 'query_stats', ext: '/track-record' },
-                    { label: 'Simulering',       icon: 'monitoring',  tab: 'portfolio' },
+                    { label: 'Portföljer',       icon: 'monitoring',  tab: 'portfolio' },
                     { label: 'Backtest-rapport', icon: 'description', ext: '/backtest-report' },
                     { label: 'Live Tracker',     icon: 'visibility',  ext: '/live-tracker' },
                     { label: 'Portfölj-Builder', icon: 'work',        ext: '/portfolio-builder' },
@@ -2187,6 +2171,102 @@ function renderSignalsTable() {
 
 // ══ 📈 KÖPLISTAN — kvalitet × värdering × trend (följbar, med live-facit) ══
 let _kopChart = null;
+let _mpCharts = [];
+function renderModelPortfolios(d) {
+    const models = (d && d.models) || {};
+    const CFG = {
+        koplista_10: { icon: '📈', label: 'Köplistan Topp 10',
+                       sub: 'Kvalitet × värdering × trend — ROCE ≥ 15 %, EV/EBIT 4–25, pris > MA200, 6m-momentum > 0' },
+        kvant_10:    { icon: '🧮', label: 'Kvantmodellen Topp 10',
+                       sub: '5-faktor sektorpercentil: vinstmomentum · prismomentum · lönsamhet · tillväxt · värdering' },
+    };
+    try { _mpCharts.forEach(c => c.destroy()); } catch (e) {}
+    _mpCharts = [];
+
+    const card = (key) => {
+        const m = models[key];
+        const cfg = CFG[key];
+        if (!m) return `<div class="mp-card"><div class="mp-head">${cfg.icon} ${cfg.label}</div>
+            <div style="padding:20px;color:var(--text-muted);font-size:13px">Första loggningen sker i morgon 05:35.</div></div>`;
+        const rows = (m.holdings || []).map(h => `
+            <div class="mp-row" onclick="openStockByTicker('${(h.ticker || '').replace(/'/g, "\\'")}')">
+                <span class="mp-rank">${h.rank}</span>
+                <span class="mp-name">${h.name || h.ticker}
+                    ${h.ny ? '<span class="mp-ny">NY</span>' : ''}
+                    <br><span class="mp-tick">${h.ticker || ''}</span></span>
+            </div>`).join('');
+        const utChips = (m.ut || []).length
+            ? `<div class="mp-ut"><strong>Ut i dag:</strong> ${m.ut.map(t =>
+                `<span class="mp-ut-chip">${t}</span>`).join('')}</div>` : '';
+        const serie = ((m.facit || {}).portfolj) || [];
+        const facitBlock = serie.length >= 2
+            ? `<div style="height:170px;margin-top:12px"><canvas id="mpChart-${key}"></canvas></div>`
+            : `<div style="margin-top:12px;font-size:12px;color:var(--text-muted)">
+                 📊 Live-facit byggs från i dag — kurvan (portfölj vs marknadssnitt) växer fram dag för dag. Inga backtester.</div>`;
+        return `<div class="mp-card">
+            <div class="mp-head">${cfg.icon} ${cfg.label}</div>
+            <div class="mp-sub">${cfg.sub}</div>
+            <div class="mp-list">${rows || '<div style="padding:14px;color:var(--text-muted);font-size:13px">Inga innehav loggade ännu.</div>'}</div>
+            ${utChips}${facitBlock}
+        </div>`;
+    };
+
+    document.getElementById('content').innerHTML = `
+        <style>
+            .mp-grid { display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:16px; }
+            .mp-card { background:var(--white);border:1px solid var(--line);border-radius:14px;padding:18px;box-shadow:var(--shadow-hover); }
+            .mp-head { font-size:var(--fs-md);font-weight:800;color:var(--brand-navy); }
+            .mp-sub { font-size:var(--fs-xs);color:var(--text-muted);margin:4px 0 12px 0;line-height:1.5; }
+            .mp-row { display:flex;align-items:center;gap:10px;padding:8px 6px;border-top:1px solid var(--line);cursor:pointer; }
+            .mp-row:hover { background:var(--bg); }
+            .mp-rank { width:24px;height:24px;border-radius:50%;background:var(--brand-navy);color:#fff;font-size:11px;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0; }
+            .mp-name { font-size:13.5px;font-weight:600;color:var(--ink); }
+            .mp-tick { font-size:11px;color:var(--text-muted);font-weight:400; }
+            .mp-ny { background:var(--brand-cyan);color:#fff;font-size:9.5px;font-weight:800;padding:2px 7px;border-radius:10px;margin-left:6px;vertical-align:middle; }
+            .mp-ut { margin-top:10px;font-size:var(--fs-sm);color:var(--text-muted); }
+            .mp-ut-chip { background:#fef2f2;color:#991b1b;padding:2px 8px;border-radius:10px;margin-left:4px;font-weight:600;font-size:11px; }
+        </style>
+        <div style="background:linear-gradient(135deg,var(--brand-navy-deep),var(--brand-navy));border-radius:var(--radius);padding:18px 20px;color:#fff;margin-bottom:14px">
+            <div style="font-size:var(--fs-lg);font-weight:800">📁 Modellportföljer</div>
+            <div style="font-size:var(--fs-sm);opacity:0.85;margin-top:4px">
+                Två regelstyrda topp 10-portföljer med <strong>dagligt utbyte</strong> — utanför toppen = ut ur portföljen.
+                Facit mäts likaviktat mot marknadssnittet (${d.benchmark || 'median, 500 största'}). Inga backtester — bara live.
+            </div>
+            ${d.snapshot_date ? `<div style="font-size:var(--fs-xs);opacity:0.7;margin-top:8px">Senaste snapshot: ${d.snapshot_date} · ${d.n_dagar || 1} loggade dagar</div>` : ''}
+        </div>
+        <div class="mp-grid">${card('koplista_10')}${card('kvant_10')}</div>
+        <div style="margin-top:14px;font-size:var(--fs-xs);color:var(--text-muted)">
+            Beslutsstöd, inte rådgivning. Dagligt utbyte = det reglerna säger — verklig handel medför courtage/skatt som inte simuleras.
+        </div>`;
+
+    if (window.Chart) {
+        for (const key of ['koplista_10', 'kvant_10']) {
+            const m = models[key];
+            const serie = ((m || {}).facit || {}).portfolj || [];
+            const bserie = ((m || {}).facit || {}).marknad || [];
+            const cv = document.getElementById('mpChart-' + key);
+            if (!cv || serie.length < 2) continue;
+            _mpCharts.push(new Chart(cv.getContext('2d'), {
+                type: 'line',
+                data: { labels: serie.map(p => p.date),
+                    datasets: [
+                        { label: 'Portfölj', data: serie.map(p => p.cum_pct),
+                          borderColor: '#38B6D9', backgroundColor: 'rgba(56,182,217,0.10)',
+                          fill: true, tension: 0.25, pointRadius: 0, borderWidth: 2 },
+                        { label: 'Marknadssnitt', data: bserie.map(p => p.cum_pct),
+                          borderColor: '#94a3b8', borderDash: [5, 4], fill: false,
+                          tension: 0.25, pointRadius: 0, borderWidth: 1.5 }
+                    ] },
+                options: { responsive: true, maintainAspectRatio: false, animation: false,
+                    plugins: { legend: { display: true, position: 'bottom',
+                                         labels: { boxWidth: 14, font: { size: 10 } } } },
+                    scales: { x: { ticks: { maxTicksLimit: 5 }, grid: { display: false } },
+                              y: { ticks: { callback: v => v + '%' } } } }
+            }));
+        }
+    }
+}
+
 function renderKoplistaLoading() {
     document.getElementById('content').innerHTML =
         '<div class="loading-wrap"><div class="spinner"></div><div style="margin-top:10px;color:var(--text-muted);font-size:var(--fs-sm)">Hämtar dagens Köplista…</div></div>';
@@ -3069,6 +3149,7 @@ function renderOcfTable() {
             <td>${i+1}</td>
             <td>${flag} <span class="stock-name" onclick="openDrawer(allLoadedRows[${i}])">${s.name}</span><br><span class="stock-ticker">${s.short_name || ''}</span></td>
             <td style="text-align:right;font-weight:700" class="${ocf>0?'num-pos':ocf<0?'num-neg':''}">${fmtM(ocf)}</td>
+            <td style="text-align:right;font-size:11.5px" class="ocf-delta" data-tk="${(s.short_name||'').replace(/"/g,'')}"><span style="color:var(--text-muted)">…</span></td>
             <td style="text-align:center">${qualityIcon}</td>
             <td style="text-align:right" class="${np>0?'num-pos':np<0?'num-neg':''}">${fmtM(np)}</td>
             <td style="text-align:right">${s.return_on_equity != null ? (s.return_on_equity*100).toFixed(1)+'%' : '-'}</td>
@@ -3087,6 +3168,7 @@ function renderOcfTable() {
                 <th style="width:40px">#</th>
                 <th onclick="doSort('name')" class="${thClass('name')}">Aktie${sortArrow('name')}</th>
                 <th onclick="doSort('ocf')" class="${thClass('ocf')}" style="text-align:right">OCF${sortArrow('ocf')}</th>
+                <th style="text-align:right" title="OCF TTM ur rapportarkivet (uppdateras dagligen) vs föregående 4 kvartal">Δ TTM</th>
                 <th style="text-align:center" title="★=OCF>Nettoresultat ●=positivt/negativt">Kval</th>
                 <th style="text-align:right">Nettores.</th>
                 <th onclick="doSort('roe')" class="${thClass('roe')}" style="text-align:right">ROE${sortArrow('roe')}</th>
@@ -3098,9 +3180,33 @@ function renderOcfTable() {
             </tr></thead><tbody>${rows}</tbody></table>
         </div>
         ${allLoadedRows.length < totalResults ? '<div class="load-more" id="loadMore"><div class="load-more-spinner"></div></div>' : ''}
-        <div class="table-footer">Visar ${allLoadedRows.length} av ${totalResults.toLocaleString('sv')} aktier sorterade efter operativt kassaflöde</div>
+        <div class="table-footer">Visar ${allLoadedRows.length} av ${totalResults.toLocaleString('sv')} aktier sorterade efter operativt kassaflöde · Δ TTM = rapportarkivets senaste 4 kvartal vs föregående 4 (dagsfärskt via rapportinflödet)</div>
     `;
     setupInfiniteScroll();
+    // Δ TTM-kolumnen: hämta OCF-deltan ur rapportarkivet (färskt varje dag)
+    try {
+        const tks = allLoadedRows.map(s => s.short_name).filter(Boolean).slice(0, 100);
+        if (tks.length) {
+            fetch('/api/ocf-deltas?tickers=' + encodeURIComponent(tks.join(',')))
+                .then(r => r.json())
+                .then(dd => {
+                    const map = (dd && dd.deltas) || {};
+                    document.querySelectorAll('.ocf-delta').forEach(el => {
+                        const d = map[el.dataset.tk];
+                        if (!d) { el.innerHTML = '<span style="color:var(--text-muted)">–</span>'; return; }
+                        if (d.delta_pct == null) {
+                            el.innerHTML = `<span style="color:var(--text-muted)" title="TTM ${d.ocf_ttm} M · senaste kvartal ${d.senaste_kvartal}">ny</span>`;
+                            return;
+                        }
+                        const up = d.delta_pct > 0;
+                        el.innerHTML = `<span style="color:${up ? 'var(--green)' : 'var(--red)'};font-weight:700"
+                            title="OCF TTM ${d.ocf_ttm} M vs ${d.prev_ttm} M föregående · senaste kvartal ${d.senaste_kvartal}">
+                            ${up ? '▲ +' : '▼ '}${d.delta_pct}%</span>`;
+                    });
+                })
+                .catch(() => {});
+        }
+    } catch (e) {}
 }
 
 // ── Stock Detail Drawer ──────────────────────────────
@@ -3913,6 +4019,7 @@ function renderQuarterlyTrendsSection(s) {
                     <div>Resultat: ${deltaTag(dN, 'YoY')}</div>
                     <div>Marginal: ${dM == null ? '<span style="color:var(--text-muted)">–</span>'
                         : `<span style="font-weight:700;color:${dM > 0 ? '#00a870' : '#c0392b'}">${dM > 0 ? '+' : ''}${(dM * 100).toFixed(1)} p.e.</span>`}</div>
+                    ${r.return_on_equity != null ? `<div>ROE: <span style="font-weight:700">${(r.return_on_equity < 1 ? r.return_on_equity * 100 : r.return_on_equity).toFixed(1)}%</span>${py && py.return_on_equity != null ? ` <span style="color:var(--text-muted)">(fjolår ${(py.return_on_equity < 1 ? py.return_on_equity * 100 : py.return_on_equity).toFixed(1)}%)</span>` : ''}</div>` : ''}
                     ${py ? `<div style="color:var(--text-muted)">Fjolår: ${fmtMoney(py.sales)} oms · ${fmtMoney(py.net_profit)} vinst</div>` : ''}
                     <div class="q-react" data-qlabel="${r.quarter} ${r.financial_year}" style="font-weight:600"></div>
                 </div>
@@ -5736,29 +5843,28 @@ function openDrawer(s) {
     // ── UTSPÄDNING (shares-bevakning) ──
     B.nyckeltal += renderDilutionSection(s);
 
-    // ── MACRO-OVERLAY (10y-ränta + sektor-relevans) ──
-    B.analys += renderMacroOverlay(s);
-
-    // ── BACKTEST-VALIDERING (alfa per setup historiskt) ──
-    B.analys += renderBacktestValidation(s);
-
-    // ── KVANT-RANG (Quality/Value/Momentum percent-ranks) ──
-    B.analys += renderQuantRank(s);
-
-    // ── KVALITETS-PERSISTENS (5y ROIC/ROE-stabilitet) ──
-    B.analys += renderQualityPersistence(s);
-
     // ── INVESTMENTBOLAG-PANEL (NAV/substansrabatt) — visas FÖRST om relevant ──
     B.nyckeltal += renderInvestmentCompanySection(s);
 
-    // ── BOKMODELLER (Graham, Buffett, Lynch, Greenblatt, Klarman, Taleb, Kelly m.fl.) ──
-    B.analys += renderBookModelSection(s);
-
-    // ── KÖPZON (simulerat riktpris) ──
+    // ── KÖPZON (simulerat riktpris) — actionable, ligger synlig ──
     B.analys += renderBuyZoneSection(s);
 
-    // ── PEER-JÄMFÖRELSE (lazy-loaded) ──
-    B.analys += renderPeersPlaceholder(s);
+    // ── FÖRDJUPNING hopfälld i EN grupp — Analys var en svårläst mur av
+    // kort (användarfeedback 2026-07-31): makro, backtest, kvantrang,
+    // kvalitetspersistens, bokmodeller, peers
+    let _fdj = '';
+    _fdj += renderMacroOverlay(s);
+    _fdj += renderBacktestValidation(s);
+    _fdj += renderQuantRank(s);
+    _fdj += renderQualityPersistence(s);
+    _fdj += renderBookModelSection(s);
+    _fdj += renderPeersPlaceholder(s);
+    if (_fdj.trim()) {
+        B.analys += `<details class="drawer-section" style="background:var(--bg);border:1px solid var(--line);border-radius:12px;padding:12px 16px">
+            <summary style="cursor:pointer;font-size:13px;font-weight:700;color:var(--brand-navy)">📚 Fördjupning — makro, screens, kvalitetshistorik, bokmodeller & peers</summary>
+            <div style="margin-top:12px">${_fdj}</div>
+        </details>`;
+    }
 
     // ── VINST/TILLVÄXT PER KVARTAL (Avanza har ej FCF — vi visar nettoresultat) ──
     // Skippa för investmentbolag — kvartalsvinst speglar inte värdet (NAV är primärt)
@@ -5836,6 +5942,7 @@ function openDrawer(s) {
         + `<div class="drawer-section-title">Kurs 12 mån · <span style="color:var(--brand-cyan)">Ⓡ</span> = rapportdag</div>`
         + `<div style="height:190px"><canvas id="dovPriceChart"></canvas></div></div>`
         + B.oversikt;
+    B.analys = `<div id="dovFactorCard"></div>` + B.analys;
     const DTABS = [['oversikt', 'Översikt'], ['rapporter', 'Rapporter'],
                    ['nyckeltal', 'Nyckeltal'], ['analys', 'Analys'], ['agare', 'Ägare']];
     html = `<div class="dtab-bar">` + DTABS.map(([k, l], i) =>
@@ -5882,6 +5989,23 @@ function openDrawer(s) {
                               label: 'Rapport' }
                         ] },
                     options: { responsive: true, maintainAspectRatio: false,
+                        animation: false,
+                        onClick: (evt, els) => {
+                            // Klick på Ⓡ-markör → Rapporter-fliken med kvartalet expanderat
+                            const hitEl = (els || []).find(el2 => el2.datasetIndex === 1);
+                            if (!hitEl) return;
+                            const lbl = labels[hitEl.index];
+                            const ev = (pe.events || []).find(e2 => {
+                                const after = labels.find(x => x >= e2.date);
+                                return after === lbl;
+                            });
+                            if (!ev || !ev.quarter) return;
+                            switchDrawerTab('rapporter');
+                            const qr = document.querySelector(`.q-react[data-qlabel="${ev.quarter}"]`);
+                            const det = qr ? qr.closest('tr') : null;
+                            if (det) { det.style.display = '';
+                                       det.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
+                        },
                         interaction: { intersect: false, mode: 'index' },
                         plugins: { legend: { display: false },
                             tooltip: { callbacks: { label: (ctx) => {
@@ -5901,6 +6025,30 @@ function openDrawer(s) {
                                        grid: { display: false } },
                                   y: { ticks: { maxTicksLimit: 5 }, grid: { color: 'rgba(0,0,0,0.05)' } } } }
                 });
+                // Kvantmodellens betygskort i Analys-fliken
+                const fc = document.getElementById('dovFactorCard');
+                if (fc && pe.factor && pe.factor.total_score != null) {
+                    const f = pe.factor;
+                    const gradeCol = g => ({A:'#059669',B:'#0891b2',C:'#64748b',D:'#d97706',F:'#dc2626'}[g] || '#94a3b8');
+                    const parts = String(f.grades || '').split('/');
+                    const fLbl = ['Vinstmom.', 'Prismom.', 'Lönsamhet', 'Tillväxt', 'Värdering'];
+                    fc.innerHTML = `<div class="drawer-section" style="background:linear-gradient(135deg,#f8fafc,#f1f9fc);border:1px solid var(--brand-cyan);border-radius:14px;padding:16px 18px">
+                        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+                            <div>
+                                <div class="drawer-section-title" style="border:none;margin:0;padding:0">🧮 Kvantmodellen ${f.is_pick ? '· <span style="color:#b45309">★ månadens pick</span>' : ''}</div>
+                                <div style="font-size:11px;color:var(--text-muted)">${f.sector || ''} · sektorpercentiler · ${String(f.snapshot_date).slice(0,10)}</div>
+                            </div>
+                            <div style="font-size:26px;font-weight:800;color:var(--brand-navy)">${Number(f.total_score).toFixed(2)}<span style="font-size:13px;color:var(--text-muted)">/5</span></div>
+                        </div>
+                        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px">
+                            ${parts.map((g, i) => `<div style="flex:1;min-width:78px;text-align:center;background:white;border:1px solid var(--line);border-radius:10px;padding:8px 6px">
+                                <div style="font-size:20px;font-weight:800;color:${gradeCol(g)}">${g}</div>
+                                <div style="font-size:10px;color:var(--text-muted);font-weight:600">${fLbl[i] || ''}</div>
+                            </div>`).join('')}
+                        </div>
+                        ${f.dq ? '<div style="margin-top:10px;font-size:12px;color:#b91c1c;font-weight:600">⚠ Diskvalificerad — under 20:e percentilen i minst en faktor</div>' : ''}
+                    </div>`;
+                }
                 // Kursreaktion in i expanderade kvartalsrader (Rapporter-fliken)
                 (pe.events || []).forEach(ev => {
                     if (!ev.quarter || ev.reaction_pct == null) return;

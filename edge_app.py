@@ -1946,15 +1946,18 @@ def api_stock_price_events(orderbook_id):
             ORDER BY date ASC""", (isin, frm))] if isin else []
         px = {str(p["date"])[:10]: p["close"] for p in prices}
         pdates = sorted(px.keys())
-        # Spikfilter: ensam punkt som avviker >50% från BÅDA grannarna är en
-        # korrupt rad (t.ex. decimalfel i en persist-körning) — inte en krasch
-        if len(pdates) >= 3:
+        # Spikfilter mot rullande median: fångar även SVITER av korrupta rader
+        # (Ericsson fick tre EUR-denominerade dagar i rad — valutadubblett i
+        # stocks; ensam-grannfiltret missade dem)
+        if len(pdates) >= 9:
+            import statistics as _st
+            closes_l = [px[d] for d in pdates]
             bad = set()
-            for i in range(1, len(pdates) - 1):
-                c0, c1, c2 = px[pdates[i - 1]], px[pdates[i]], px[pdates[i + 1]]
-                if c0 and c2 and c1 and \
-                        abs(c1 / c0 - 1) > 0.5 and abs(c1 / c2 - 1) > 0.5:
-                    bad.add(pdates[i])
+            for i, d in enumerate(pdates):
+                lo, hi = max(0, i - 4), min(len(closes_l), i + 5)
+                med = _st.median(closes_l[lo:i] + closes_l[i + 1:hi])
+                if med and abs(closes_l[i] / med - 1) > 0.4:
+                    bad.add(d)
             pdates = [d for d in pdates if d not in bad]
         # Rapportdatum (publicering) ur kalendern
         cal = [str(dict(r)["report_date"])[:10] for r in _fetchall(db, f"""
@@ -1983,8 +1986,20 @@ def api_stock_price_events(orderbook_id):
                     qlabel = f"Q{e['period_q']} {e['period_year']}"
                     break
             events.append({"date": rd, "reaction_pct": reaction, "quarter": qlabel})
+        # Kvantmodellens senaste betyg för Analys-flikens toppkort
+        factor = None
+        try:
+            fr = _fetchone(db, f"""
+                SELECT snapshot_date, f1_pct, f2_pct, f3_pct, f4_pct, f5_pct,
+                       grades, total_score, dq, is_pick, sector
+                FROM factor_scores WHERE isin = {ph}
+                ORDER BY snapshot_date DESC LIMIT 1""", (isin,)) if isin else None
+            if fr:
+                factor = dict(fr)
+        except Exception:
+            pass
         return jsonify({"prices": [{"d": d, "c": px[d]} for d in pdates],
-                        "events": events,
+                        "events": events, "factor": factor,
                         "next_report": str(sd.get("next_company_report") or "")[:10] or None})
     finally:
         db.close()
@@ -10498,29 +10513,34 @@ def api_stock_historical(orderbook_id):
 # ── AI Morning Brief ─────────────────────────────────────
 
 def _gather_brief_data(db):
-    """Samla portföljdata + top-signaler för morgonbrief."""
-    sim = _sim_get_state(db)
-    brief = {"active": sim.get("active", False), "portfolios": {}, "top_signals": []}
-    if not sim.get("active"):
-        return brief
-
-    for pname, pdata in sim.get("portfolios", {}).items():
-        cfg = {"trav": "Trav-modellen", "magic": "Magic Formula", "dsm": "DSM", "ace": "ACE", "meta": "Meta Score"}
-        brief["portfolios"][pname] = {
-            "label": cfg.get(pname, pname),
-            "holdings_count": len(pdata.get("holdings", [])),
-            "return_pct": round(pdata.get("total_return_pct", 0) * 100, 2),
-            "total_gain": round(pdata.get("total_gain", 0)),
-            "days_active": pdata.get("days_active", 0),
-            "top_3": [{"name": h["name"], "return": round(h["return_pct"] * 100, 1)} for h in pdata.get("holdings", [])[:3]],
-            "worst_3": [{"name": h["name"], "return": round(h["return_pct"] * 100, 1)} for h in pdata.get("holdings", [])[-3:]],
-        }
-
-    # Realized P&L
-    for pname in brief["portfolios"]:
-        r = sim.get("realized", {}).get(pname, {})
-        brief["portfolios"][pname]["win_rate"] = round(r.get("win_rate", 0) * 100)
-        brief["portfolios"][pname]["realized_kr"] = round(r.get("total_gain_kr", 0))
+    """Samla portföljdata + top-signaler för morgonbrief.
+    2026-07-31: de gamla simulerade strategiportföljerna UTBYTTA mot de två
+    modellportföljerna (koplista_10 + kvant_10) — användarens beslut: gamla
+    kändes svaga mot index och gav briefen brus i stället för beslutsstöd."""
+    from edge_db import _fetchall as _fab, _ph as _phb
+    phb = _phb()
+    brief = {"active": True, "portfolios": {}, "top_signals": []}
+    try:
+        rows = [dict(r) for r in _fab(db,
+            "SELECT * FROM model_portfolios ORDER BY snapshot_date DESC, model, rank")]
+        if rows:
+            latest = rows[0]["snapshot_date"]
+            for model, label in (("koplista_10", "Köplistan topp 10"),
+                                 ("kvant_10", "Kvantmodellen topp 10")):
+                hold = [r for r in rows
+                        if r["snapshot_date"] == latest and r["model"] == model]
+                if hold:
+                    brief["portfolios"][model] = {
+                        "label": label,
+                        "holdings": [h["ticker"] for h in
+                                     sorted(hold, key=lambda x: x["rank"])],
+                        "regel": ("ROCE≥15 × EV/EBIT 4-25 × pris>MA200 × 6m-mom>0"
+                                  if model == "koplista_10" else
+                                  "5-faktor sektorpercentil, topp 10, ej DQ"),
+                        "byts": "dagligen — utanför toppen = ut ur portföljen",
+                    }
+    except Exception:
+        pass
 
     signals, _ = get_signals(db, country="", min_owners=100, limit=10, sort="meta")
     brief["top_signals"] = [{"name": s["name"], "meta_score": round(s.get("meta_score", 0), 1),
@@ -10600,7 +10620,8 @@ def api_morning_brief():
 
         prompt = f"""Du är en erfaren svensk aktieanalytiker. Idag är {today}.
 
-Analysera följande 5 simulerade portföljer och ge rekommendationer:
+Analysera följande TVÅ modellportföljer (topp 10, dagligt utbyte — inga
+simulerade innehav, bara reglernas aktuella urval) och ge rekommendationer:
 
 {jsonlib.dumps(brief_data, indent=2, ensure_ascii=False)}
 
@@ -16326,6 +16347,236 @@ def api_analyst_estimates_sync():
         db.close()
 
 
+def _log_model_portfolios(db):
+    """Dagens topp 10 per modellportfölj → model_portfolios (snapshot per dag).
+    Två modeller (användarens beslut 2026-07-31 — de gamla simuleringarna
+    kändes svaga mot index och togs bort):
+      koplista_10: Köplistans rank topp 10 (kvalitet × värdering × trend)
+      kvant_10:    Kvantmodellens topp 10 (5-faktor sektorpercentil, ej DQ)
+    Medlemskap byts DAGLIGEN — åker du ur toppen åker du ur portföljen."""
+    from edge_db import _fetchall, _fetchone, _ph, _upsert_sql
+    ph = _ph()
+    db.execute("""
+        CREATE TABLE IF NOT EXISTS model_portfolios (
+            snapshot_date TEXT NOT NULL,
+            model TEXT NOT NULL,
+            rank INTEGER NOT NULL,
+            ticker TEXT, name TEXT, isin TEXT,
+            price DOUBLE PRECISION,
+            PRIMARY KEY (snapshot_date, model, rank)
+        )""")
+    db.commit()
+    today = datetime.now().strftime("%Y-%m-%d")
+    ins = _upsert_sql("model_portfolios",
+                      ["snapshot_date", "model", "rank", "ticker", "name",
+                       "isin", "price"],
+                      ["snapshot_date", "model", "rank"])
+    out = {}
+    # 1) Köplistan topp 10
+    try:
+        kres = _agent_screen_stocks(db, screen="koplista", country="SE,US", limit=10)
+        rows = (kres or {}).get("stocks") or []
+        for i, s in enumerate(rows[:10]):
+            srow = _fetchone(db, f"SELECT isin, last_price FROM stocks "
+                                 f"WHERE short_name = {ph} AND last_price > 0",
+                             (s.get("ticker"),))
+            sd = dict(srow) if srow else {}
+            db.execute(ins, (today, "koplista_10", i + 1, s.get("ticker"),
+                             s.get("name"), sd.get("isin"), sd.get("last_price")))
+        db.commit()
+        out["koplista_10"] = len(rows[:10])
+    except Exception as e:
+        out["koplista_10_fel"] = str(e)[:120]
+        try: db.rollback()
+        except Exception: pass
+    # 2) Kvantmodellen topp 10 (kompletta, ej DQ, SE/US, A/B-dedupe)
+    try:
+        r = _fetchone(db, "SELECT MAX(snapshot_date) AS d FROM factor_scores")
+        fd = dict(r).get("d") if r else None
+        n = 0
+        if fd:
+            import re as _rmp
+            frows = [dict(x) for x in _fetchall(db,
+                f"SELECT * FROM factor_scores WHERE snapshot_date = {ph} "
+                f"AND n_factors = 5 AND dq = 0 AND country IN ('SE','US') "
+                f"ORDER BY total_score DESC LIMIT 30", (fd,))]
+            seen_b = set()
+            for fr in frows:
+                base = _rmp.sub(r"\s+[A-D]$", "", (fr.get("ticker") or "").upper())
+                if base in seen_b:
+                    continue
+                seen_b.add(base)
+                srow = _fetchone(db, f"SELECT last_price FROM stocks "
+                                     f"WHERE short_name = {ph}", (fr.get("ticker"),))
+                n += 1
+                db.execute(ins, (today, "kvant_10", n, fr.get("ticker"),
+                                 fr.get("name"), fr.get("isin"),
+                                 (dict(srow) or {}).get("last_price") if srow else None))
+                if n >= 10:
+                    break
+            db.commit()
+        out["kvant_10"] = n
+    except Exception as e:
+        out["kvant_10_fel"] = str(e)[:120]
+        try: db.rollback()
+        except Exception: pass
+    return out
+
+
+@app.route("/api/ocf-deltas", methods=["GET"])
+def api_ocf_deltas():
+    """OCF TTM ur rapportarkivet (som skugginflödet fyller på dagligen) +
+    förändring mot föregående TTM-period — OCF-listans färskhets- och
+    riktningskolumn. ?tickers=A,B,C (max 100)."""
+    from edge_db import _fetchall, _ph
+    ph = _ph()
+    tickers = [t.strip() for t in (request.args.get("tickers") or "").split(",")
+               if t.strip()][:100]
+    if not tickers:
+        return jsonify({"error": "ange ?tickers=..."}), 400
+    db = get_db()
+    try:
+        marks = ",".join([ph] * len(tickers))
+        srows = [dict(r) for r in _fetchall(db,
+            f"SELECT short_name, isin FROM stocks WHERE short_name IN ({marks}) "
+            f"AND isin IS NOT NULL AND isin != '' AND isin NOT LIKE {ph}",
+            tuple(tickers) + ("YAHOO_%",))]
+        isin2t = {}
+        for s in srows:
+            isin2t.setdefault(s["isin"], s["short_name"])
+        if not isin2t:
+            return jsonify({"deltas": {}})
+        imarks = ",".join([ph] * len(isin2t))
+        qrows = [dict(r) for r in _fetchall(db, f"""
+            SELECT isin, report_end_date, operating_cash_flow
+            FROM borsdata_reports
+            WHERE isin IN ({imarks}) AND report_type = 'quarter'
+              AND report_end_date IS NOT NULL
+        """, tuple(isin2t.keys()))]
+        byq = {}
+        for q in qrows:
+            byq.setdefault(q["isin"], []).append(q)
+        out = {}
+        for isin, lst in byq.items():
+            lst.sort(key=lambda x: str(x["report_end_date"]), reverse=True)
+            cur = [x["operating_cash_flow"] for x in lst[:4]]
+            prev = [x["operating_cash_flow"] for x in lst[4:8]]
+            if len(cur) < 4 or any(not isinstance(v, (int, float)) for v in cur):
+                continue
+            ttm = sum(cur)
+            d = {"ocf_ttm": round(ttm, 1),
+                 "senaste_kvartal": str(lst[0]["report_end_date"])[:10]}
+            if len(prev) == 4 and all(isinstance(v, (int, float)) for v in prev) \
+                    and abs(sum(prev)) > 1e-9:
+                d["prev_ttm"] = round(sum(prev), 1)
+                d["delta_pct"] = round(100.0 * (ttm - sum(prev)) / abs(sum(prev)), 1)
+            out[isin2t[isin]] = d
+        return jsonify({"deltas": out,
+                        "note": "miljoner i rapportvalutan; TTM = senaste 4 kvartal "
+                                "ur rapportarkivet (uppdateras dagligen av skugginflödet)"})
+    finally:
+        db.close()
+
+
+@app.route("/api/model-portfolios", methods=["GET"])
+def api_model_portfolios():
+    """De två modellportföljerna: dagens topp 10, NY/UT mot förra snapshotet,
+    och LIVE-facit (likaviktad daglig avkastning ur prisarkivet) mot
+    marknadssnittet (median av ~500 största bolagens dagsavkastning).
+    Inga backtester — kurvan börjar dagen loggningen startade."""
+    from edge_db import _fetchall, _ph
+    import statistics as _st
+    ph = _ph()
+    db = get_db()
+    try:
+        rows = [dict(r) for r in _fetchall(db,
+            "SELECT * FROM model_portfolios ORDER BY snapshot_date, model, rank")]
+        if not rows:
+            return jsonify({"models": {}, "note": "första loggningen sker 05:35 — "
+                            "eller trigga POST /api/model-portfolios/log"})
+        bydate = {}
+        for r in rows:
+            bydate.setdefault(r["snapshot_date"], {}).setdefault(r["model"], []).append(r)
+        dates = sorted(bydate.keys())
+        latest, prev = dates[-1], (dates[-2] if len(dates) > 1 else None)
+        # Benchmark-universum: 500 största med isin
+        big = [dict(r)["isin"] for r in _fetchall(db,
+            f"SELECT isin FROM stocks WHERE isin IS NOT NULL AND isin != '' "
+            f"AND isin NOT LIKE {ph} AND last_price > 0 AND market_cap > 0 "
+            f"ORDER BY market_cap DESC LIMIT 500", ("YAHOO_%",))]
+
+        def _closes(isins, d1, d2):
+            if not isins:
+                return {}
+            marks = ",".join([ph] * len(isins))
+            got = _fetchall(db, f"""
+                SELECT isin, date, close FROM borsdata_prices
+                WHERE isin IN ({marks}) AND date IN ({ph}, {ph}) AND close > 0
+            """, tuple(isins) + (d1, d2))
+            m = {}
+            for g in got:
+                gd = dict(g)
+                m.setdefault(gd["isin"], {})[str(gd["date"])[:10]] = gd["close"]
+            return m
+
+        facit = {}
+        for model in ("koplista_10", "kvant_10"):
+            serie, cum, bcum, bserie = [], 1.0, 1.0, []
+            for i in range(len(dates) - 1):
+                d1, d2 = dates[i], dates[i + 1]
+                members = [m for m in (bydate[d1].get(model) or []) if m.get("isin")]
+                pm = _closes([m["isin"] for m in members], d1, d2)
+                rets = [pm[m["isin"]][d2] / pm[m["isin"]][d1] - 1
+                        for m in members
+                        if pm.get(m["isin"], {}).get(d1) and pm.get(m["isin"], {}).get(d2)]
+                bpm = _closes(big, d1, d2)
+                brets = [v[d2] / v[d1] - 1 for v in bpm.values()
+                         if v.get(d1) and v.get(d2)]
+                if rets:
+                    cum *= (1 + sum(rets) / len(rets))
+                if brets:
+                    bcum *= (1 + _st.median(brets))
+                serie.append({"date": d2, "cum_pct": round((cum - 1) * 100, 2)})
+                bserie.append({"date": d2, "cum_pct": round((bcum - 1) * 100, 2)})
+            facit[model] = {"portfolj": serie, "marknad": bserie}
+
+        models = {}
+        for model in ("koplista_10", "kvant_10"):
+            cur = bydate.get(latest, {}).get(model) or []
+            prevt = {m["ticker"] for m in (bydate.get(prev, {}).get(model) or [])} if prev else set()
+            curt = {m["ticker"] for m in cur}
+            models[model] = {
+                "holdings": [{"rank": m["rank"], "ticker": m["ticker"],
+                              "name": m["name"],
+                              "ny": bool(prev) and m["ticker"] not in prevt}
+                             for m in sorted(cur, key=lambda x: x["rank"])],
+                "ut": sorted(prevt - curt) if prev else [],
+                "facit": facit.get(model),
+            }
+        return jsonify({"snapshot_date": latest, "prev_date": prev,
+                        "n_dagar": len(dates), "models": models,
+                        "benchmark": "median dagsavkastning, 500 största bolagen (likaviktad)",
+                        "regler": {
+                            "koplista_10": "Kvalitet × värdering × trend: ROCE ≥ 15 %, "
+                                           "EV/EBIT 4–25, pris > MA200, 6m-momentum > 0. "
+                                           "Rank: kombinerad Greenblatt-stil. Topp 10, byts dagligen.",
+                            "kvant_10": "5-faktor sektorpercentil (vinstmomentum 25, prismomentum 25, "
+                                        "lönsamhet 20, tillväxt 20, värdering 10), inga DQ. "
+                                        "Topp 10, byts dagligen."}})
+    finally:
+        db.close()
+
+
+@app.route("/api/model-portfolios/log", methods=["POST"])
+def api_model_portfolios_log():
+    """Manuell loggning av dagens topp 10 (körs annars 05:35 vardagar)."""
+    db = get_db()
+    try:
+        return jsonify(_log_model_portfolios(db))
+    finally:
+        db.close()
+
+
 @app.route("/api/factor-scores/build", methods=["POST"])
 def api_factor_scores_build():
     """Bygg dagens multifaktor-snapshot (inloggade). Körs även 05:25 vardagar."""
@@ -21274,6 +21525,25 @@ def _startup():
         scheduler.add_job(scheduled_factor_scores, 'cron',
                           day_of_week='mon-fri', hour=5, minute=25,
                           id='factor_scores_daily')
+
+        # 📁 Modellportföljer (05:35, efter trend 05:10 + faktor 05:25):
+        # topp 10 per modell loggas — dagligt utbyte, live-facit mot marknaden
+        def scheduled_model_portfolios():
+            if not _sched_claim("model_portfolios", datetime.now().strftime("%Y-%m-%d")):
+                return
+            try:
+                dbm = get_db()
+                try:
+                    res = _log_model_portfolios(dbm)
+                    print(f"[AUTO] Modellportföljer loggade: {res}")
+                finally:
+                    dbm.close()
+            except Exception as e:
+                print(f"[AUTO] Modellportföljer fel: {e}")
+
+        scheduler.add_job(scheduled_model_portfolios, 'cron',
+                          day_of_week='mon-fri', hour=5, minute=35,
+                          id='model_portfolios_daily')
 
         # 📊 US-estimatrevisioner (04:45, före faktormodellen 05:25) — Nasdaq
         # analyst-API, gratis; Norden saknar gratis källa (rapportproxy där)
