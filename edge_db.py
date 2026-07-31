@@ -5439,8 +5439,15 @@ def derive_missing_q4(db, limit=4000):
         if len(saknas) != 1 or len(har) != 3:
             continue
         rest = arsv - sum(x["revenues"] for x in har)
-        # Rimlighetskontroll: ett kvartal ska ligga i häradet 5–60 % av året
+        # Rimlighetskontroll 1: ett kvartal ska ligga i häradet 5–60 % av året
         if not (0.05 * abs(arsv) <= abs(rest) <= 0.60 * abs(arsv)):
+            continue
+        # Rimlighetskontroll 2: det härledda kvartalet måste ligga i samma
+        # storleksordning som grannkvartalen. Om ÅRSSIFFRAN också är korrupt
+        # (Credo) ger subtraktionen ett orimligt Q4 som förvärrar felet.
+        import statistics as _st2
+        gran = _st2.median([abs(x["revenues"]) for x in har])
+        if gran <= 0 or not (gran / 2.5 <= abs(rest) <= gran * 2.5):
             continue
         try:
             db.execute(f"UPDATE borsdata_reports SET revenues = {ph} "
