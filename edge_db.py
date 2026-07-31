@@ -5373,7 +5373,12 @@ def compute_daktier_portfolios(db):
                       if isinstance(v, int))
         rev_net = ((rev_ups - rev_dns) / (rev_ups + rev_dns)) if (rev_ups + rev_dns) else None
         fx = _FX_SEK.get((lst[0].get("currency") or u.get("currency") or "SEK").upper(), 1.0)
+        # Uthållighet: hur många av de 8 senaste kvartalen gick med vinst?
+        kvartal_vinst = sum(1 for x in lst[:8]
+                            if isinstance(x.get("net_profit"), (int, float))
+                            and x["net_profit"] > 0)
         cands.append({
+            "kvartal_vinst": kvartal_vinst,
             **u, "mcap_sek": mcap_sek, "rev_ttm": rev, "rev_sek": rev * 1e6 * fx,
             "np_ttm": np_, "ocf_ttm": ocf,
             "rev_g": rev_g, "np_g": np_g,
@@ -5402,6 +5407,7 @@ def compute_daktier_portfolios(db):
         c["mcap_sek"] >= 5e10 and c["rev_sek"] >= 5e9
         and 0 < c["rev_g"] <= 0.80
         and c["np_ttm"] is not None and c["np_ttm"] > 0
+        and c["kvartal_vinst"] >= 7                            # uthålligt lönsam
         and (c["np_g"] is None or -0.05 < c["np_g"] <= 3.0)
         and ((0.12 <= (c["roce"] or 0) <= 1.0) or (0.15 <= (c["roe"] or 0) <= 1.0))
         and c["ocf_ttm"] is not None and c["ocf_ttm"] > 0
@@ -5412,16 +5418,40 @@ def compute_daktier_portfolios(db):
         and c["above_ma200"] == 1
         and not (c["is_inv"] and (c["pb"] or 99) >= 1.0)       # investmentbolag: bara rabatt
     ]
+    # TRÖSKELPOÄNG i stället för percentilrank: percentiler lyfter alltid
+    # ytterligheter (FICO ROCE 96 % slog Alphabets 30 %) — men kvalitet är
+    # inte "högst tal", det är UTHÅLLIGT bra. Över tröskeln = full poäng,
+    # sedan avgör storlek/stabilitet/uthållighet.
+    import math as _math
+
+    def _band(v, lo, hi):
+        """0 vid lo, 100 vid hi (och däröver)."""
+        if v is None:
+            return 0.0
+        if v >= hi:
+            return 100.0
+        if v <= lo:
+            return 0.0
+        return 100.0 * (v - lo) / (hi - lo)
+
     if karna_pool:
-        r_roce = _pctl([c["roce"] for c in karna_pool])
-        r_ocfm = _pctl([c["ocf_margin"] for c in karna_pool])
-        r_revg = _pctl([c["rev_g"] for c in karna_pool])
-        r_npg = _pctl([c["np_g"] for c in karna_pool])
-        r_val = _pctl([c["ev_ebit_ratio"] for c in karna_pool])
         for c in karna_pool:
-            c["score"] = (0.30 * r_roce(c["roce"]) + 0.25 * r_ocfm(c["ocf_margin"])
-                          + 0.20 * r_revg(c["rev_g"]) + 0.15 * r_npg(c["np_g"])
-                          + 0.10 * (100 - r_val(c["ev_ebit_ratio"])))
+            kvalitet = 0.5 * _band(c["roce"], 0.10, 0.25) + 0.5 * _band(c["roe"], 0.12, 0.30)
+            kassa = 0.6 * _band(c["ocf_margin"], 0.08, 0.28) + 0.4 * _band(c["ocf_quality"], 0.7, 1.2)
+            # Tillväxt-sweetspot: 8–25 % är hållbart. Över 45 % är ofta
+            # engångseffekt/cyklisk topp → poängen faller tillbaka.
+            g = c["rev_g"] or 0
+            tillvaxt = _band(g, 0.02, 0.15) if g <= 0.25 else max(20.0, 100 - (g - 0.25) * 220)
+            # Uthållighet: andel av 8 kvartal med vinst + växande omsättning
+            uthallig = 100.0 * (c.get("kvartal_vinst", 0) / 8.0)
+            # Storlek = stabilitet (log-skala, 50 mdr → 5 000 mdr SEK)
+            storlek = _band(_math.log10(max(c["mcap_sek"], 1)), 10.7, 12.7)
+            vardering = 100 - _band(c.get("ev_ebit_ratio"), 8, 45) if c.get("ev_ebit_ratio") else 50.0
+            c["score"] = (0.26 * kvalitet + 0.24 * kassa + 0.16 * tillvaxt
+                          + 0.16 * uthallig + 0.12 * storlek + 0.06 * vardering)
+            c["delpoang"] = {"kvalitet": round(kvalitet), "kassa": round(kassa),
+                             "tillvaxt": round(tillvaxt), "uthallig": round(uthallig),
+                             "storlek": round(storlek), "vardering": round(vardering)}
         karna_pool.sort(key=lambda c: -c["score"])
 
     # ── KRYDDA: tillväxt + momentum (risklagret) ─────────────────────────
@@ -5431,9 +5461,13 @@ def compute_daktier_portfolios(db):
         and 0.15 <= c["rev_g"] <= 1.50                         # 15–150 % tillväxt
         and c["above_ma200"] == 1
         and 0 < (c["ret_12m"] or 0) <= 400
-        # Verksamheten ska bära sig: positivt kassaflöde ELLER hög bruttomarginal
-        and ((c["ocf_margin"] or -9) > 0 or 0.4 < (c["gross_margin"] or 0) <= 1.0)
-        and (c["ocf_margin"] is None or c["ocf_margin"] > -0.5)  # ej kassaförbrännare
+        # Verksamheten ska BÄRA SIG: positivt kassaflöde krävs (Hut 8 hade
+        # -46 % OCF-marginal och -509 % vinstutveckling — det är inte krydda,
+        # det är kassaförbränning). Undantag: hög bruttomarginal + nära noll.
+        and ((c["ocf_margin"] or -9) > 0.02
+             or (0.5 < (c["gross_margin"] or 0) <= 1.0 and (c["ocf_margin"] or -9) > -0.10))
+        and (c["np_g"] is None or c["np_g"] > -0.30)           # vinst ej i fritt fall
+        and c["kvartal_vinst"] >= 3                            # ej permanent förlust
         and not c["is_inv"]
     ]
     if kr_pool:
@@ -5497,10 +5531,43 @@ def compute_daktier_portfolios(db):
     except Exception:
         try: db.rollback()
         except Exception: pass
+    # DIAGNOSTIK: varför saknas de bolag användaren förväntar sig?
+    _VANTADE = ("GOOGL", "MSFT", "AMZN", "V", "NVO", "NET", "MRVL", "MU", "CRDO",
+                "META", "AAPL", "ASML", "NVDA", "COST", "TSM")
+    diag = {}
+    by_t = {c["short_name"]: c for c in cands}
+    in_karna = {c["short_name"] for c in karna}
+    in_kr = {c["short_name"] for c in krydda}
+    for t in _VANTADE:
+        c = by_t.get(t)
+        if not c:
+            diag[t] = "ingen konsistent rapportserie (8 kvartal, samma valuta/skala)"
+            continue
+        if t in in_karna or t in in_kr:
+            diag[t] = "MED i portföljen"
+            continue
+        skal = []
+        if c["mcap_sek"] < 5e10: skal.append(f"mcap {c['mcap_sek']/1e9:.0f} mdr < 50")
+        if (c["rev_sek"] or 0) < 5e9: skal.append(f"oms {(c['rev_sek'] or 0)/1e9:.1f} mdr < 5")
+        if not (0 < (c["rev_g"] or -1) <= 0.80): skal.append(f"oms-tillväxt {(c['rev_g'] or 0)*100:.0f}%")
+        if not (c["np_ttm"] and c["np_ttm"] > 0): skal.append("ingen TTM-vinst")
+        if c["kvartal_vinst"] < 7: skal.append(f"vinst {c['kvartal_vinst']}/8 kvartal")
+        if not ((0.12 <= (c["roce"] or 0) <= 1.0) or (0.15 <= (c["roe"] or 0) <= 1.0)):
+            skal.append(f"ROCE {(c['roce'] or 0)*100:.0f}% / ROE {(c['roe'] or 0)*100:.0f}%")
+        if not (c["ocf_ttm"] and c["ocf_ttm"] > 0): skal.append("OCF ej positivt")
+        if c["ocf_quality"] is not None and c["ocf_quality"] < 0.7:
+            skal.append(f"OCF/vinst {c['ocf_quality']:.2f} < 0,7")
+        if c["above_ma200"] != 1: skal.append("under MA200")
+        if c["is_inv"] and (c["pb"] or 99) >= 1.0: skal.append("investmentbolag i premie")
+        if not skal:
+            skal.append(f"klarade filtren men rankades utanför topp 6 (poäng {c.get('score', 0):.0f})")
+        diag[t] = "; ".join(skal)
+
     return {"snapshot_date": today, "karna": [c["short_name"] for c in karna],
             "krydda": [c["short_name"] for c in krydda],
             "kandidater": len(cands), "karna_pool": len(karna_pool),
-            "krydda_pool": len(kr_pool), "skippade_skalfel": skippade_skala}
+            "krydda_pool": len(kr_pool), "skippade_skalfel": skippade_skala,
+            "diagnostik_vantade": diag}
 
 
 def compute_factor_scores(db, min_mcap=1e9):
