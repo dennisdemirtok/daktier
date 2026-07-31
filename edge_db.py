@@ -5439,7 +5439,8 @@ def compute_daktier_portfolios(db):
     marks = ",".join([ph] * len(isins))
     qrows = _fetchall(db, f"""
         SELECT isin, report_end_date, currency, ins_id, revenues, gross_income,
-               operating_income, net_profit, operating_cash_flow, free_cash_flow
+               operating_income, net_profit, operating_cash_flow, free_cash_flow,
+               net_debt
         FROM borsdata_reports
         WHERE report_type = 'quarter' AND isin IN ({marks})
           AND report_end_date IS NOT NULL
@@ -5528,7 +5529,13 @@ def compute_daktier_portfolios(db):
         kvartal_vinst = sum(1 for x in lst[:8]
                             if isinstance(x.get("net_profit"), (int, float))
                             and x["net_profit"] > 0)
+        # NETTOKASSA: Apple (D/E 2,6) och Cloudflare (3,0) har hög skuldkvot
+        # av återköp/konvertibler men MER KASSA ÄN SKULD. Ett bolag med
+        # nettokassa ska aldrig sorteras bort som skuldsatt.
+        nd = next((x.get("net_debt") for x in lst[:4]
+                   if isinstance(x.get("net_debt"), (int, float))), None)
         cands.append({
+            "net_debt_rap": nd, "nettokassa": (nd is not None and nd < 0),
             "kvartal_vinst": kvartal_vinst,
             **u, "mcap_sek": mcap_sek, "rev_ttm": rev, "rev_sek": rev * 1e6 * fx,
             "np_ttm": np_, "ocf_ttm": ocf,
@@ -5564,8 +5571,10 @@ def compute_daktier_portfolios(db):
         and c["ocf_ttm"] is not None and c["ocf_ttm"] > 0
         and (c["ocf_quality"] is None or c["ocf_quality"] >= 0.7)
         and 0 < (c["ocf_margin"] or 0) <= 1.0
-        and ((c.get("net_debt_ebitda_ratio") is None or c["net_debt_ebitda_ratio"] < 3.5)
-             and (c.get("debt_to_equity_ratio") is None or c["debt_to_equity_ratio"] < 2.0))
+        # Skuldkrav — men NETTOKASSA går alltid fri (Apple/Cloudflare)
+        and (c.get("nettokassa")
+             or ((c.get("net_debt_ebitda_ratio") is None or c["net_debt_ebitda_ratio"] < 3.5)
+                 and (c.get("debt_to_equity_ratio") is None or c["debt_to_equity_ratio"] < 2.0)))
         and c["above_ma200"] == 1
         and not (c["is_inv"] and (c["pb"] or 99) >= 1.0)       # investmentbolag: bara rabatt
     ]
@@ -5667,9 +5676,11 @@ def compute_daktier_portfolios(db):
         and 0.15 <= c["rev_g"] <= 1.50
         and c["above_ma200"] == 1
         and 0 < (c["ret_12m"] or 0) <= 400
-        # Skuldkrav skärpt: Atlanticus (holding, hög skuldgrad) ska inte in
-        and (c.get("debt_to_equity_ratio") is None or c["debt_to_equity_ratio"] < 1.5)
-        and (c.get("net_debt_ebitda_ratio") is None or c["net_debt_ebitda_ratio"] < 3.0)
+        # Skuldkrav skärpt: Atlanticus (holding, hög skuldgrad) ska inte in.
+        # Nettokassa går fri — Cloudflares konvertibler är inte skuldrisk.
+        and (c.get("nettokassa")
+             or ((c.get("debt_to_equity_ratio") is None or c["debt_to_equity_ratio"] < 1.5)
+                 and (c.get("net_debt_ebitda_ratio") is None or c["net_debt_ebitda_ratio"] < 3.0)))
         and not c["is_inv"]
         # Jämn utveckling — inte ryckiga engångsår (Ligand)
         and (c.get("jamnhet") is None or c["jamnhet"] >= 0.5)
@@ -5844,10 +5855,11 @@ def compute_daktier_portfolios(db):
             skal.append(f"OCF-marginal {(c['ocf_margin'] or 0)*100:.0f}% utanför 0-100%")
         if c["np_g"] is not None and c["np_g"] > 3.0:
             skal.append(f"vinstförändring {c['np_g']*100:.0f}% (misstänkt data)")
-        if (c.get("debt_to_equity_ratio") or 0) >= 2.0:
-            skal.append(f"skuldsättning D/E {c['debt_to_equity_ratio']:.1f}")
-        if (c.get("net_debt_ebitda_ratio") or 0) >= 3.5:
-            skal.append(f"nettoskuld/EBITDA {c['net_debt_ebitda_ratio']:.1f}")
+        if not c.get("nettokassa"):
+            if (c.get("debt_to_equity_ratio") or 0) >= 2.0:
+                skal.append(f"skuldsättning D/E {c['debt_to_equity_ratio']:.1f}")
+            if (c.get("net_debt_ebitda_ratio") or 0) >= 3.5:
+                skal.append(f"nettoskuld/EBITDA {c['net_debt_ebitda_ratio']:.1f}")
         if not skal:
             kp = next((i + 1 for i, x in enumerate(karna_pool) if x["isin"] == c["isin"]), None)
             skal.append(f"kvalificerad men plats {kp or '?'} i Kärnan "
