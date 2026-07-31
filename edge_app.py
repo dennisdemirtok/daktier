@@ -16429,6 +16429,79 @@ def _log_model_portfolios_gammal(db):
     return out
 
 
+@app.route("/api/diag/report-scale-audit", methods=["GET"])
+def api_report_scale_audit():
+    """Kartlägger skal-/valutablandning i rapportarkivet: bolag där kvartalens
+    omsättning avviker >3x från seriens median. Visar mönstret (källa, valuta,
+    faktor) så felet kan LAGAS i stället för att bolagen slängs."""
+    from edge_db import _fetchall, _ph
+    import statistics as _stat
+    ph = _ph()
+    limit = min(int(request.args.get("limit") or 40), 200)
+    db = get_db()
+    try:
+        rows = [dict(r) for r in _fetchall(db, """
+            SELECT isin, report_end_date, currency, ins_id, revenues
+            FROM borsdata_reports
+            WHERE report_type = 'quarter' AND report_end_date IS NOT NULL
+              AND revenues IS NOT NULL AND revenues != 0
+        """)]
+        byi = {}
+        for r in rows:
+            byi.setdefault(r["isin"], []).append(r)
+        tick = {dict(r)["isin"]: dict(r)["short_name"] for r in _fetchall(db,
+            f"SELECT isin, short_name FROM stocks WHERE isin IS NOT NULL "
+            f"AND isin != '' AND isin NOT LIKE {ph}", ("YAHOO_%",))}
+        bad, n_ok, n_multi_cur = [], 0, 0
+        for isin, lst in byi.items():
+            lst.sort(key=lambda x: str(x["report_end_date"]), reverse=True)
+            per_q = {}
+            for r0 in lst:
+                k = str(r0["report_end_date"])[:10]
+                if k not in per_q or (r0.get("ins_id") or 0) != 0:
+                    per_q[k] = r0
+            ser = sorted(per_q.values(), key=lambda x: str(x["report_end_date"]),
+                         reverse=True)[:8]
+            if len(ser) < 6:
+                continue
+            vals = [abs(x["revenues"]) for x in ser]
+            med = _stat.median(vals)
+            if med <= 0:
+                continue
+            outl = [x for x in ser if abs(x["revenues"]) > med * 3
+                    or abs(x["revenues"]) < med / 3]
+            curs = sorted({(x.get("currency") or "?").upper() for x in ser})
+            if len(curs) > 1:
+                n_multi_cur += 1
+            if not outl:
+                n_ok += 1
+                continue
+            faktorer = sorted({round(abs(x["revenues"]) / med, 1) for x in outl})
+            bad.append({
+                "ticker": tick.get(isin), "isin": isin,
+                "median_oms": round(med, 1),
+                "avvikande": [{"datum": str(x["report_end_date"])[:10],
+                               "oms": round(x["revenues"], 1),
+                               "valuta": x.get("currency"),
+                               "kalla": "skugga" if (x.get("ins_id") or 0) == 0 else "borsdata"}
+                              for x in outl[:4]],
+                "faktorer": faktorer, "valutor_i_serien": curs,
+                "n_avvikande": len(outl), "n_kvartal": len(ser)})
+        bad.sort(key=lambda b: -b["n_avvikande"])
+        # Mönsteranalys: vilka faktorer dominerar? (≈ växelkurser = valutablandning)
+        fdist = {}
+        for b in bad:
+            for f in b["faktorer"]:
+                fdist[f] = fdist.get(f, 0) + 1
+        return jsonify({
+            "bolag_med_skalfel": len(bad), "bolag_ok": n_ok,
+            "bolag_med_flera_valutor": n_multi_cur,
+            "vanligaste_faktorer": sorted(fdist.items(), key=lambda x: -x[1])[:15],
+            "exempel": bad[:limit]})
+    finally:
+        db.close()
+
+
 @app.route("/api/ocf-deltas", methods=["GET"])
 def api_ocf_deltas():
     """OCF TTM ur rapportarkivet (som skugginflödet fyller på dagligen) +
