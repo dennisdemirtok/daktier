@@ -16506,6 +16506,100 @@ def api_fix_data_status():
                     "steg": _FIXDATA_STATE["steg"], "senaste_körning": senast})
 
 
+_FROZEN_STATE = {"running": False, "steg": None}
+
+
+def _run_fix_frozen_thread(max_us):
+    """Lagar bolag med fruset omsättningsfält: nollställ → hämta om från
+    SEC EDGAR (US) → flöda in i rapportarkivet."""
+    import json as _jf
+    from edge_db import (find_frozen_revenue_isins, clear_frozen_revenues,
+                         flow_shadow_into_reports, _upsert_sql as _ups)
+    _FROZEN_STATE.update(running=True, steg="kartlägger")
+    dbf = get_db()
+    res = {}
+    try:
+        frozen = find_frozen_revenue_isins(dbf)
+        res["drabbade"] = len(frozen)
+        us = [f for f in frozen if (f.get("country") or "").upper() == "US"
+              and f.get("ticker")]
+        res["us_bolag"] = len(us)
+        _FROZEN_STATE["steg"] = f"nollställer {len(frozen)} bolag"
+        res["nollstallt"] = clear_frozen_revenues(dbf, [f["isin"] for f in frozen])
+        # US-bolagen kan hämtas om från SEC EDGAR — gratis och validerat
+        tick = [f["ticker"] for f in us][:max_us]
+        _FROZEN_STATE["steg"] = f"hämtar {len(tick)} US-bolag från EDGAR"
+        got = 0
+        for i in range(0, len(tick), 25):
+            batch = tick[i:i + 25]
+            try:
+                r = sync_shadow_reports(dbf, tickers=batch)
+                got += (r or {}).get("companies", 0)
+                _FROZEN_STATE["steg"] = f"EDGAR {i + len(batch)}/{len(tick)}"
+            except Exception as e:
+                print(f"[frozen] EDGAR-batch fel: {e}", file=sys.stderr)
+        res["edgar_hamtade"] = got
+        _FROZEN_STATE["steg"] = "flödar in"
+        res["infloede"] = flow_shadow_into_reports(dbf, days=3650)
+        _FROZEN_STATE["steg"] = "klar"
+    except Exception as e:
+        res["fel"] = str(e)[:300]
+        _FROZEN_STATE["steg"] = "fel"
+    finally:
+        try:
+            dbf.execute(_ups("meta", ["key", "value"], ["key"]),
+                        ("frozenfix:last", _jf.dumps(
+                            {"ts": datetime.now().isoformat(), **res},
+                            ensure_ascii=False, default=str)[:6000]))
+            dbf.commit()
+        except Exception:
+            try: dbf.rollback()
+            except Exception: pass
+        dbf.close()
+        _FROZEN_STATE["running"] = False
+        print(f"[FROZEN] klar: {str(res)[:300]}", file=sys.stderr)
+
+
+@app.route("/api/maintenance/fix-frozen-revenues", methods=["POST"])
+def api_fix_frozen_revenues():
+    """Lagar frusna omsättningsfält (Credo m.fl.). ?dry=1 kartlägger bara,
+    ?max_us=N begränsar EDGAR-omhämtningen."""
+    from edge_db import find_frozen_revenue_isins
+    if request.args.get("dry") in ("1", "true", "yes"):
+        db = get_db()
+        try:
+            f = find_frozen_revenue_isins(db)
+            return jsonify({"drabbade": len(f),
+                            "us": sum(1 for x in f if (x.get("country") or "").upper() == "US"),
+                            "exempel": f[:20]})
+        finally:
+            db.close()
+    if _FROZEN_STATE["running"]:
+        return jsonify({"status": "pågår", "steg": _FROZEN_STATE["steg"]})
+    mx = min(int(request.args.get("max_us") or 400), 1500)
+    import threading
+    threading.Thread(target=_run_fix_frozen_thread, args=(mx,), daemon=True).start()
+    return jsonify({"status": "startad", "max_us": mx,
+                    "följ": "GET /api/maintenance/fix-frozen-status"})
+
+
+@app.route("/api/maintenance/fix-frozen-status", methods=["GET"])
+def api_fix_frozen_status():
+    import json as _jf
+    from edge_db import _fetchone, _ph
+    db = get_db()
+    try:
+        row = _fetchone(db, f"SELECT value FROM meta WHERE key = {_ph()}",
+                        ("frozenfix:last",))
+        senast = _jf.loads(dict(row)["value"]) if row else None
+    except Exception:
+        senast = None
+    finally:
+        db.close()
+    return jsonify({"running": _FROZEN_STATE["running"],
+                    "steg": _FROZEN_STATE["steg"], "senaste": senast})
+
+
 @app.route("/api/maintenance/report-scale-audit", methods=["GET"])
 def api_report_scale_audit():
     """Kartlägger skal-/valutablandning i rapportarkivet: bolag där kvartalens

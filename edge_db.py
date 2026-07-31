@@ -5168,6 +5168,13 @@ def flow_shadow_into_reports(db, days=14):
         try:
             db.execute(f"INSERT INTO borsdata_reports ({cols}) VALUES ({qmarks}) "
                        f"ON CONFLICT DO NOTHING", vals)
+            # Fyll LUCKOR i befintliga rader (t.ex. nollställda frusna
+            # omsättningsfält) — skuggan skriver aldrig över befintliga värden
+            db.execute(
+                f"UPDATE borsdata_reports SET revenues = {ph} "
+                f"WHERE isin = {ph} AND report_type = {ph} AND period_year = {ph} "
+                f"AND period_q = {ph} AND revenues IS NULL AND {ph} IS NOT NULL",
+                (vals[7], isin, vals[2], vals[3], vals[4], vals[7]))
             inserted += 1
         except Exception:
             try: db.rollback()
@@ -5325,6 +5332,56 @@ def clean_price_outliers(db, threshold=2.5, dry_run=False):
     return {"granskade_isin": len(cand), "drabbade_bolag": len(drabbade),
             "borttagna_rader": borttagna, "dry_run": dry_run,
             "exempel": drabbade[:15]}
+
+
+def find_frozen_revenue_isins(db, min_q=4):
+    """Hittar bolag med FRUSET omsättningsfält — exakt samma värde i alla
+    kvartal (Credo: 52,2135 i fem kvartal i rad medan nettovinsten växte
+    11→20). 1 298 bolag drabbade. Orsak: felaktig fältmappning i importen.
+    Returnerar [(isin, ticker, country, varde, n_kvartal)]."""
+    ph = _ph()
+    rows = _fetchall(db, f"""
+        SELECT r.isin, MIN(s.short_name) AS ticker, MIN(s.country) AS country,
+               MIN(r.revenues) AS varde, COUNT(*) AS n
+        FROM borsdata_reports r
+        LEFT JOIN stocks s ON s.isin = r.isin
+        WHERE r.report_type = 'quarter' AND r.revenues IS NOT NULL
+        GROUP BY r.isin
+        HAVING COUNT(*) >= {ph}
+           AND COUNT(DISTINCT ROUND(r.revenues::numeric, 2)) = 1
+    """, (min_q,)) if _use_postgres() else _fetchall(db, f"""
+        SELECT r.isin, MIN(s.short_name) AS ticker, MIN(s.country) AS country,
+               MIN(r.revenues) AS varde, COUNT(*) AS n
+        FROM borsdata_reports r
+        LEFT JOIN stocks s ON s.isin = r.isin
+        WHERE r.report_type = 'quarter' AND r.revenues IS NOT NULL
+        GROUP BY r.isin
+        HAVING COUNT(*) >= {ph}
+           AND COUNT(DISTINCT ROUND(r.revenues, 2)) = 1
+    """, (min_q,))
+    return [dict(r) for r in rows]
+
+
+def clear_frozen_revenues(db, isins=None, limit=2000):
+    """Nollställer det frusna omsättningsfältet (sätter NULL) så att korrekt
+    data kan flöda in från SEC EDGAR/pressreleaser. Raderna behålls — bara
+    det korrupta fältet töms, övriga poster (vinst, kassaflöde) är korrekta."""
+    ph = _ph()
+    if isins is None:
+        isins = [d["isin"] for d in find_frozen_revenue_isins(db)][:limit]
+    n = 0
+    for chunk in [isins[i:i + 200] for i in range(0, len(isins), 200)]:
+        marks = ",".join([ph] * len(chunk))
+        try:
+            db.execute(f"UPDATE borsdata_reports SET revenues = NULL "
+                       f"WHERE report_type = 'quarter' AND isin IN ({marks})",
+                       tuple(chunk))
+            n += len(chunk)
+            db.commit()
+        except Exception:
+            try: db.rollback()
+            except Exception: pass
+    return {"nollstallda_bolag": n}
 
 
 def normalize_report_scales(db, dry_run=False):
