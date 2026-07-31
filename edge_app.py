@@ -16864,6 +16864,50 @@ def api_model_portfolios():
         db.close()
 
 
+@app.route("/api/daktier-scores", methods=["GET"])
+def api_daktier_scores():
+    """Hela DAKTIER-rankingen med delpoäng — inte bara topp 10.
+    ?sleeve=karna|krydda &limit=100 &q=sök"""
+    import json as _jd
+    from edge_db import _fetchall, _fetchone, _ph
+    ph = _ph()
+    sleeve = (request.args.get("sleeve") or "karna").lower()
+    limit = min(int(request.args.get("limit") or 60), 150)
+    q = (request.args.get("q") or "").strip().upper()
+    db = get_db()
+    try:
+        r = _fetchone(db, "SELECT MAX(snapshot_date) AS d FROM daktier_scores")
+        d = dict(r).get("d") if r else None
+        if not d:
+            return jsonify({"rows": [], "note": "ingen ranking ännu — "
+                            "kör POST /api/model-portfolios/log"})
+        qw, qa = "", []
+        if q:
+            qw = f" AND (UPPER(name) LIKE {ph} OR UPPER(ticker) LIKE {ph})"
+            qa = [f"%{q}%", f"%{q}%"]
+        rows = [dict(x) for x in _fetchall(db,
+            f"SELECT * FROM daktier_scores WHERE snapshot_date = {ph} "
+            f"AND sleeve = {ph}{qw} ORDER BY rank ASC LIMIT {ph}",
+            tuple([d, sleeve] + qa + [limit]))]
+        for x in rows:
+            try:
+                x["delpoang"] = _jd.loads(x.get("delpoang") or "{}")
+            except Exception:
+                x["delpoang"] = {}
+        n = _fetchone(db, f"SELECT COUNT(*) AS n FROM daktier_scores "
+                          f"WHERE snapshot_date = {ph} AND sleeve = {ph}", (d, sleeve))
+        return jsonify({"snapshot_date": str(d), "sleeve": sleeve,
+                        "rows": rows, "total": (dict(n)["n"] if n else 0),
+                        "vikter": {
+                            "karna": "kvalitet 24 % · kassaflöde 22 % · tillväxt 18 % "
+                                     "(varav 55 % flerårig) · stabilitet 14 % · "
+                                     "värdering 14 % · storlek 8 %",
+                            "krydda": "tillväxt 26 % · flerårig 20 % · momentum 20 % · "
+                                      "bruttomarginal 14 % · jämnhet 10 % · revisioner 10 %"}})
+    finally:
+        db.close()
+
+
 @app.route("/api/model-portfolios/log", methods=["POST"])
 def api_model_portfolios_log():
     """Manuell loggning av dagens topp 10 (körs annars 05:35 vardagar)."""

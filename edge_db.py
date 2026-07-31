@@ -5569,6 +5569,43 @@ def compute_daktier_portfolios(db):
         and c["above_ma200"] == 1
         and not (c["is_inv"] and (c["pb"] or 99) >= 1.0)       # investmentbolag: bara rabatt
     ]
+    # ── Flerårig tillväxt + stabilitet (användarfeedback 2026-07-31) ─────
+    # Texas Instruments klarade TTM-tillväxt men har platt omsättning sedan
+    # 2018 — ett år räcker inte. Ligand har ryckig kurva. Vi mäter därför
+    # 3-årig omsättningstillväxt (CAGR) och hur JÄMN utvecklingen varit.
+    yrows = _fetchall(db, f"""
+        SELECT isin, period_year, revenues, net_profit
+        FROM borsdata_reports
+        WHERE report_type = 'year' AND isin IN ({marks})
+          AND revenues IS NOT NULL AND revenues != 0
+    """, tuple(isins))
+    byy = {}
+    for r in yrows:
+        d = dict(r)
+        byy.setdefault(d["isin"], []).append(d)
+    fler = {}
+    for isin, ylist in byy.items():
+        ylist.sort(key=lambda x: -(x["period_year"] or 0))
+        ys = ylist[:5]
+        if len(ys) < 4:
+            continue
+        revs_y = [y["revenues"] for y in ys]
+        med_y = _stat.median([abs(v) for v in revs_y if v])
+        if not med_y or any(abs(v) > med_y * 4 or abs(v) < med_y / 4 for v in revs_y if v):
+            continue                                   # skalfel i årsserien
+        senast, aldst = revs_y[0], revs_y[-1]
+        n_ar = len(revs_y) - 1
+        cagr = ((senast / aldst) ** (1.0 / n_ar) - 1) if (aldst and aldst > 0 and senast > 0) else None
+        # Jämnhet: andel år där omsättningen ökade mot föregående år
+        upp = sum(1 for i in range(len(revs_y) - 1)
+                  if revs_y[i] and revs_y[i + 1] and revs_y[i] > revs_y[i + 1])
+        fler[isin] = {"cagr": cagr, "jamnhet": upp / max(1, len(revs_y) - 1),
+                      "n_ar": len(revs_y)}
+    for c in cands:
+        f0 = fler.get(c["isin"]) or {}
+        c["cagr_3y"] = f0.get("cagr")
+        c["jamnhet"] = f0.get("jamnhet")
+
     # TRÖSKELPOÄNG i stället för percentilrank: percentiler lyfter alltid
     # ytterligheter (FICO ROCE 96 % slog Alphabets 30 %) — men kvalitet är
     # inte "högst tal", det är UTHÅLLIGT bra. Över tröskeln = full poäng,
@@ -5589,47 +5626,78 @@ def compute_daktier_portfolios(db):
         for c in karna_pool:
             kvalitet = 0.5 * _band(c["roce"], 0.10, 0.25) + 0.5 * _band(c["roe"], 0.12, 0.30)
             kassa = 0.6 * _band(c["ocf_margin"], 0.08, 0.28) + 0.4 * _band(c["ocf_quality"], 0.7, 1.2)
-            # Tillväxt-sweetspot: 8–25 % är hållbart. Över 45 % är ofta
-            # engångseffekt/cyklisk topp → poängen faller tillbaka.
+            # TILLVÄXT: både senaste året OCH 3-års-CAGR. Texas Instruments
+            # klarade TTM men har platt omsättning sedan 2018 — ett år räcker
+            # inte. Sweetspot 8–25 %; över 45 % är ofta cyklisk topp.
             g = c["rev_g"] or 0
-            tillvaxt = _band(g, 0.02, 0.15) if g <= 0.25 else max(20.0, 100 - (g - 0.25) * 220)
-            # Uthållighet: andel av 8 kvartal med vinst + växande omsättning
-            uthallig = 100.0 * (c.get("kvartal_vinst", 0) / 8.0)
+            t_ttm = _band(g, 0.02, 0.15) if g <= 0.25 else max(20.0, 100 - (g - 0.25) * 220)
+            cg = c.get("cagr_3y")
+            t_flerar = _band(cg, 0.02, 0.15) if cg is not None else 35.0
+            tillvaxt = 0.45 * t_ttm + 0.55 * t_flerar
+            # STABILITET: uthållig vinst + JÄMN omsättningsutveckling (Ligands
+            # ryckiga kurva ska inte belönas som Aristas jämna trappa)
+            uthallig = (0.55 * 100.0 * (c.get("kvartal_vinst", 0) / 8.0)
+                        + 0.45 * (100.0 * c["jamnhet"] if c.get("jamnhet") is not None else 45.0))
             # Storlek = stabilitet (log-skala, 50 mdr → 5 000 mdr SEK)
             storlek = _band(_math.log10(max(c["mcap_sek"], 1)), 10.7, 12.7)
-            vardering = 100 - _band(c.get("ev_ebit_ratio"), 8, 45) if c.get("ev_ebit_ratio") else 50.0
-            c["score"] = (0.26 * kvalitet + 0.24 * kassa + 0.16 * tillvaxt
-                          + 0.16 * uthallig + 0.12 * storlek + 0.06 * vardering)
+            # VÄRDERING tyngre (6→14 %): "P/E får inte sticka för mycket".
+            # P/E 15 = full poäng, 60 = noll. EV/EBIT som stöd.
+            v_pe = (100 - _band(c.get("pe_ratio"), 15, 60)) if (c.get("pe_ratio") or 0) > 0 else 45.0
+            v_ev = (100 - _band(c.get("ev_ebit_ratio"), 8, 45)) if c.get("ev_ebit_ratio") else 45.0
+            vardering = 0.6 * v_pe + 0.4 * v_ev
+            c["score"] = (0.24 * kvalitet + 0.22 * kassa + 0.18 * tillvaxt
+                          + 0.14 * uthallig + 0.08 * storlek + 0.14 * vardering)
             c["delpoang"] = {"kvalitet": round(kvalitet), "kassa": round(kassa),
-                             "tillvaxt": round(tillvaxt), "uthallig": round(uthallig),
+                             "tillvaxt": round(tillvaxt), "stabilitet": round(uthallig),
                              "storlek": round(storlek), "vardering": round(vardering)}
         karna_pool.sort(key=lambda c: -c["score"])
 
     # ── KRYDDA: tillväxt + momentum (risklagret) ─────────────────────────
-    kr_pool = [c for c in cands if
-        c["mcap_sek"] >= 3e10                                  # ≥ 30 mdr SEK
-        and c["rev_sek"] >= 2e9                                # ≥ 2 mdr SEK omsättning
-        and 0.15 <= c["rev_g"] <= 1.50                         # 15–150 % tillväxt
+    # KRYDDAN har två spår (användarfeedback: Cloudflare hör hemma här,
+    # Ligand och Atlanticus gör det inte):
+    #  A) LÖNSAM TILLVÄXT — vinst finns, växer snabbt
+    #  B) MJUKVARA I VÄNDNING — förlust TILLÅTS om den KRYMPER och kassa-
+    #     flödet förbättras: hög bruttomarginal (≥60 %) = skalbar produkt.
+    #     Cloudflare: ökande omsättning, krympande förlust, stigande FCF.
+    kr_bas = [c for c in cands if
+        c["mcap_sek"] >= 3e10 and c["rev_sek"] >= 2e9
+        and 0.15 <= c["rev_g"] <= 1.50
         and c["above_ma200"] == 1
         and 0 < (c["ret_12m"] or 0) <= 400
-        # Verksamheten ska BÄRA SIG: positivt kassaflöde krävs (Hut 8 hade
-        # -46 % OCF-marginal och -509 % vinstutveckling — det är inte krydda,
-        # det är kassaförbränning). Undantag: hög bruttomarginal + nära noll.
-        and ((c["ocf_margin"] or -9) > 0.02
-             or (0.5 < (c["gross_margin"] or 0) <= 1.0 and (c["ocf_margin"] or -9) > -0.10))
-        and (c["np_g"] is None or c["np_g"] > -0.30)           # vinst ej i fritt fall
-        and c["kvartal_vinst"] >= 3                            # ej permanent förlust
+        # Skuldkrav skärpt: Atlanticus (holding, hög skuldgrad) ska inte in
+        and (c.get("debt_to_equity_ratio") is None or c["debt_to_equity_ratio"] < 1.5)
+        and (c.get("net_debt_ebitda_ratio") is None or c["net_debt_ebitda_ratio"] < 3.0)
         and not c["is_inv"]
+        # Jämn utveckling — inte ryckiga engångsår (Ligand)
+        and (c.get("jamnhet") is None or c["jamnhet"] >= 0.5)
     ]
+    kr_lonsam = [c for c in kr_bas if
+        (c["ocf_margin"] or -9) > 0.02
+        and (c["np_g"] is None or c["np_g"] > -0.30)
+        and c["kvartal_vinst"] >= 5]
+    kr_mjukvara = [c for c in kr_bas if
+        c not in kr_lonsam
+        and 0.60 <= (c["gross_margin"] or 0) <= 1.0            # skalbar produkt
+        and c["rev_g"] >= 0.18                                 # tydlig tillväxt
+        and (c["ocf_margin"] or -9) > -0.12                    # ej kassaförbrännare
+        # Förlusten ska KRYMPA (np_g > 0 betyder mindre negativt resultat)
+        and (c["np_g"] is not None and c["np_g"] > 0)]
+    kr_pool = kr_lonsam + kr_mjukvara
     if kr_pool:
-        k_revg = _pctl([c["rev_g"] for c in kr_pool])
-        k_mom = _pctl([c["ret_12m"] for c in kr_pool])
-        k_gm = _pctl([c["gross_margin"] for c in kr_pool])
-        k_rev = _pctl([c["rev_net"] for c in kr_pool])
         for c in kr_pool:
-            c["score"] = (0.35 * k_revg(c["rev_g"]) + 0.30 * k_mom(c["ret_12m"])
-                          + 0.20 * k_gm(c["gross_margin"])
-                          + 0.15 * (k_rev(c["rev_net"]) if c["rev_net"] is not None else 50.0))
+            tillv = _band(c["rev_g"], 0.15, 0.45)
+            cg = c.get("cagr_3y")
+            flerar = _band(cg, 0.10, 0.35) if cg is not None else 40.0
+            mom = _band(c["ret_12m"], 5, 90)
+            marg = _band(c["gross_margin"], 0.35, 0.75) if c.get("gross_margin") else 45.0
+            jamn = 100.0 * c["jamnhet"] if c.get("jamnhet") is not None else 45.0
+            revis = _band(c["rev_net"], -0.2, 0.6) if c.get("rev_net") is not None else 50.0
+            c["spar"] = "mjukvara" if c in kr_mjukvara else "lönsam"
+            c["score"] = (0.26 * tillv + 0.20 * flerar + 0.20 * mom
+                          + 0.14 * marg + 0.10 * jamn + 0.10 * revis)
+            c["delpoang"] = {"tillvaxt": round(tillv), "flerar": round(flerar),
+                             "momentum": round(mom), "bruttomarginal": round(marg),
+                             "jamnhet": round(jamn), "revisioner": round(revis)}
         kr_pool.sort(key=lambda c: -c["score"])
 
     karna = karna_pool[:6]
@@ -5682,6 +5750,42 @@ def compute_daktier_portfolios(db):
     except Exception:
         try: db.rollback()
         except Exception: pass
+    # HELA RANKINGEN sparas så listan kan granskas i appen
+    db.execute("""
+        CREATE TABLE IF NOT EXISTS daktier_scores (
+            snapshot_date TEXT NOT NULL, isin TEXT NOT NULL, sleeve TEXT NOT NULL,
+            ticker TEXT, name TEXT, country TEXT, sector TEXT,
+            score DOUBLE PRECISION, rank INTEGER, vald INTEGER DEFAULT 0,
+            spar TEXT, delpoang TEXT, motiv TEXT,
+            PRIMARY KEY (snapshot_date, isin, sleeve))""")
+    db.commit()
+    import json as _js
+    sins = _upsert_sql("daktier_scores",
+                       ["snapshot_date", "isin", "sleeve", "ticker", "name", "country",
+                        "sector", "score", "rank", "vald", "spar", "delpoang", "motiv"],
+                       ["snapshot_date", "isin", "sleeve"])
+    valda = {c["isin"] for c in karna} | {c["isin"] for c in krydda}
+    for sleeve, pool in (("karna", karna_pool), ("krydda", kr_pool)):
+        for i, c in enumerate(pool[:150]):
+            motiv = []
+            if c.get("rev_g") is not None: motiv.append(f"oms {c['rev_g']*100:+.0f}%")
+            if c.get("cagr_3y") is not None: motiv.append(f"3y {c['cagr_3y']*100:+.0f}%/år")
+            if c.get("np_g") is not None: motiv.append(f"vinst {c['np_g']*100:+.0f}%")
+            if c.get("roce"): motiv.append(f"ROCE {c['roce']*100:.0f}%")
+            if c.get("ocf_margin") is not None: motiv.append(f"OCF-marg {c['ocf_margin']*100:.0f}%")
+            if c.get("pe_ratio"): motiv.append(f"P/E {c['pe_ratio']:.0f}")
+            try:
+                db.execute(sins, (today, c["isin"], sleeve, c["short_name"], c["name"],
+                                  c.get("country"), c.get("sector"),
+                                  round(c.get("score") or 0, 1), i + 1,
+                                  1 if c["isin"] in valda else 0, c.get("spar"),
+                                  _js.dumps(c.get("delpoang") or {}, ensure_ascii=False),
+                                  " · ".join(motiv)))
+            except Exception:
+                try: db.rollback()
+                except Exception: pass
+    db.commit()
+
     # DIAGNOSTIK: varför saknas de bolag användaren förväntar sig?
     _VANTADE = ("GOOGL", "MSFT", "AMZN", "V", "NVO", "NET", "MRVL", "MU", "CRDO",
                 "META", "AAPL", "ASML", "NVDA", "COST", "TSM")

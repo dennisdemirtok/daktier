@@ -2198,6 +2198,61 @@ function renderSignalsTable() {
 // ══ 📈 KÖPLISTAN — kvalitet × värdering × trend (följbar, med live-facit) ══
 let _kopChart = null;
 let _mpCharts = [];
+
+async function loadScores(sleeve) {
+    const el = document.getElementById('scoreList');
+    if (!el) return;
+    const ck = document.getElementById('scChipKarna'), cr = document.getElementById('scChipKrydda');
+    if (ck) ck.classList.toggle('active', sleeve === 'karna');
+    if (cr) cr.classList.toggle('active', sleeve === 'krydda');
+    el.innerHTML = '<div style="padding:16px;color:var(--text-muted);font-size:13px">Laddar…</div>';
+    try {
+        const r = await fetch(`/api/daktier-scores?sleeve=${sleeve}&limit=80`);
+        const d = await r.json();
+        const rows = d.rows || [];
+        if (!rows.length) {
+            el.innerHTML = `<div style="padding:16px;color:var(--text-muted);font-size:13px">${d.note || 'Ingen ranking ännu.'}</div>`;
+            return;
+        }
+        // Delpoängs-nycklar varierar mellan lagren
+        const keys = Object.keys(rows[0].delpoang || {});
+        const LBL = {kvalitet:'Kval', kassa:'Kassa', tillvaxt:'Tillv', stabilitet:'Stab',
+                     storlek:'Storl', vardering:'Värd', flerar:'3-år', momentum:'Mom',
+                     bruttomarginal:'Brutto', jamnhet:'Jämn', revisioner:'Rev'};
+        const col = v => v >= 75 ? '#059669' : v >= 50 ? '#0891b2' : v >= 25 ? '#d97706' : '#dc2626';
+        el.innerHTML = `
+            <div style="overflow-x:auto"><table style="width:100%;min-width:560px;border-collapse:collapse;font-size:12.5px">
+                <thead><tr style="border-bottom:1px solid var(--line)">
+                    <th style="text-align:left;padding:6px 4px;font-size:10.5px;color:var(--text-muted)">#</th>
+                    <th style="text-align:left;padding:6px 4px;font-size:10.5px;color:var(--text-muted)">BOLAG</th>
+                    <th style="text-align:right;padding:6px 4px;font-size:10.5px;color:var(--text-muted)">POÄNG</th>
+                    ${keys.map(k => `<th style="text-align:center;padding:6px 3px;font-size:10.5px;color:var(--text-muted)" title="${k}">${LBL[k] || k}</th>`).join('')}
+                </tr></thead>
+                <tbody>${rows.map(x => `
+                    <tr style="border-bottom:1px solid var(--line);${x.vald ? 'background:var(--brand-cyan-light)' : ''}"
+                        onclick="openStockByTicker('${(x.ticker || '').replace(/'/g, "\\'")}')" title="${x.motiv || ''}">
+                        <td style="padding:6px 4px;color:var(--text-muted)">${x.rank}</td>
+                        <td style="padding:6px 4px">
+                            ${x.vald ? '<span style="color:var(--brand-cyan);font-weight:800">●</span> ' : ''}
+                            <span style="font-weight:600;cursor:pointer">${(x.name || x.ticker || '').slice(0,26)}</span>
+                            ${x.spar === 'mjukvara' ? '<span style="background:#ede9fe;color:#5b21b6;font-size:9px;font-weight:800;padding:1px 6px;border-radius:8px;margin-left:5px">MJUKVARA</span>' : ''}
+                            <br><span style="font-size:10.5px;color:var(--text-muted)">${x.ticker || ''} · ${(x.motiv || '').slice(0,62)}</span>
+                        </td>
+                        <td style="text-align:right;padding:6px 4px;font-weight:800;color:var(--brand-navy)">${x.score}</td>
+                        ${keys.map(k => {
+                            const v = (x.delpoang || {})[k];
+                            return `<td style="text-align:center;padding:6px 3px;font-weight:700;color:${v == null ? 'var(--text-muted)' : col(v)}">${v == null ? '–' : v}</td>`;
+                        }).join('')}
+                    </tr>`).join('')}</tbody>
+            </table></div>
+            <div style="margin-top:8px;font-size:11px;color:var(--text-muted)">
+                ${rows.length} av ${d.total} bolag · ● = i portföljen · Vikter: ${(d.vikter || {})[sleeve] || ''}
+            </div>`;
+    } catch (e) {
+        el.innerHTML = `<div style="padding:16px;color:var(--text-muted);font-size:13px">Kunde inte hämta rankingen: ${e.message}</div>`;
+    }
+}
+
 function renderModelPortfolios(d) {
     const models = (d && d.models) || {};
     const key = models.daktier_10 ? 'daktier_10' : Object.keys(models)[0];
@@ -2276,11 +2331,23 @@ function renderModelPortfolios(d) {
         </div>
         <div class="mp-grid">${sleeveBlock('karna')}${sleeveBlock('krydda')}</div>
         ${utChips}
+        <div class="mp-card" style="margin-top:16px">
+            <div class="mp-head">🏆 Hela rankingen — DAKTIER-poäng</div>
+            <div class="mp-sub">Alla bolag som klarar grundkraven, rankade. De 10 översta blir portföljen.</div>
+            <div class="filter-group tight" style="margin-bottom:10px">
+                <span class="filter-label">Lager</span>
+                <button class="filter-chip active" id="scChipKarna" onclick="loadScores('karna')">🏛 Kärnan</button>
+                <button class="filter-chip" id="scChipKrydda" onclick="loadScores('krydda')">🚀 Kryddan</button>
+            </div>
+            <div id="scoreList"><div style="padding:16px;color:var(--text-muted);font-size:13px">Laddar…</div></div>
+        </div>
         ${facitBlock}
         <div style="margin-top:14px;font-size:var(--fs-xs);color:var(--text-muted)">
             Kvalitet får kosta — inget hårt värderingstak i Kärnan (det uteslöt Alphabet/Microsoft-klassen och släppte in cykliska toppvinster).
             Investmentbolag tas in endast vid substansrabatt. Beslutsstöd, inte rådgivning — verklig handel medför courtage/skatt som inte simuleras.
         </div>`;
+
+    loadScores('karna');
 
     if (window.Chart) {
         for (const key2 of Object.keys(models)) {
