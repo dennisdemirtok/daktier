@@ -1302,6 +1302,19 @@ async function fetchData(append = false) {
             ck = cacheKey('ocf', params);
             dataKey = 'stocks';
             renderFn = renderOcfTable;
+        } else if (currentTab === 'fcf') {
+            const p = {sort: _fcfSort, limit: 60, min_owners: minOwners || 0};
+            if (searchQuery) p.q = searchQuery;
+            if (countryFilter) p.country = countryFilter;
+            try {
+                const rr = await fetch('/api/fcf-toplist?' + new URLSearchParams(p));
+                renderFcfTable(await rr.json());
+            } catch (e) {
+                document.getElementById('content').innerHTML =
+                    `<div style="padding:30px;color:var(--text-muted)">Kunde inte hämta FCF-listan: ${e.message}</div>`;
+            }
+            isLoadingMore = false;
+            return;
         } else if (currentTab === 'portfolio') {
             // 2026-07-31: gamla simuleringsportföljerna UTBYTTA — kändes svaga
             // mot index. Nu: två modellportföljer, topp 10, dagligt utbyte.
@@ -1520,6 +1533,15 @@ function renderFilterBar() {
             ${countries.map(c => `<button class="filter-chip ${activeCountry===c.v?'active':''}" onclick="setCountry('${c.v}')">${c.l}</button>`).join('')}
         </div>`;
         html += _ownersSelect([100, 1000, 5000]);
+    } else if (currentTab === 'fcf') {
+        html += `<input class="search-input" placeholder="Sök aktie" value="${searchQuery}" oninput="debounceSearch(this.value)" id="searchInput">`;
+        const countries = [{v:'',l:'🌍 Alla'},{v:'SE',l:'🇸🇪 SE'},{v:'US',l:'🇺🇸 US'},
+                           {v:'NO',l:'🇳🇴 NO'},{v:'DK',l:'🇩🇰 DK'},{v:'FI',l:'🇫🇮 FI'}];
+        html += `<div class="filter-group tight">
+            <span class="filter-label">Marknad</span>
+            ${countries.map(c => `<button class="filter-chip ${(countryFilter||'')===c.v?'active':''}" onclick="setCountry('${c.v}')">${c.l}</button>`).join('')}
+        </div>`;
+        html += _ownersSelect([0, 100, 1000, 5000]);
     }
 
     if (_hasActiveFilters()) {
@@ -1541,6 +1563,7 @@ const TAB_META = {
     insiders:    { title: 'Insiders',        sub: 'Insidertransaktioner i realtid' },
     metrics:     { title: 'Nyckeltal',       sub: 'Modeller för SE & US marknaden – från böckerna' },
     ocf:         { title: 'Kassaflöde',      sub: 'Topplista: operativt kassaflöde' },
+    fcf:         { title: 'Fritt kassaflöde', sub: 'EV/FCF (billigast kassaflöde) och störst FCF — TTM ur rapportarkivet' },
     portfolio:   { title: 'Portföljer',      sub: 'Två regelstyrda topp 10-modeller — dagligt utbyte, live-facit mot marknaden' },
     myportfolio: { title: 'Min Portfölj',    sub: 'Ditt bevakade innehav' },
     aitoplist:   { title: 'AI Topplista',    sub: 'AI-rankning av alla bolag' },
@@ -1604,6 +1627,7 @@ const NAV_SECTIONS = {
                     { label: 'Alla aktier', icon: 'bar_chart',       tab: 'stocks' },
                     { label: 'Nyckeltal',   icon: 'functions',       tab: 'metrics' },
                     { label: 'Kassaflöde',  icon: 'account_balance', tab: 'ocf' },
+                    { label: 'Fritt kassaflöde', icon: 'savings',    tab: 'fcf' },
                     { label: 'Insiders',    icon: 'person_search',   tab: 'insiders' },
                     { label: 'Utredning',   icon: 'analytics',       tab: 'backtest' },
                 ] },
@@ -1621,7 +1645,8 @@ const NAV_SECTIONS = {
 const PRIMARY_ORDER = ['agent', 'dashboard', 'koplista', 'owners', 'stocks', 'edge'];
 const TAB_TO_SECTION = {
     agent: 'agent', dashboard: 'dashboard', koplista: 'koplista', hotmovers: 'owners',
-    stocks: 'stocks', metrics: 'stocks', ocf: 'stocks', insiders: 'stocks', backtest: 'stocks',
+    stocks: 'stocks', metrics: 'stocks', ocf: 'stocks', fcf: 'stocks',
+    insiders: 'stocks', backtest: 'stocks',
     signals: 'edge', portfolio: 'settings',
     // legacy/borttagna tabbar mappar till dashboard
     trending: 'dashboard', aitoplist: 'dashboard', myportfolio: 'dashboard',
@@ -1631,6 +1656,7 @@ const TAB_TO_SECTION = {
 const TAB_HASH = {
     agent: '/agent', dashboard: '/dashboard', koplista: '/koplistan', hotmovers: '/agarmomentum',
     stocks: '/aktier', metrics: '/aktier/nyckeltal', ocf: '/aktier/kassaflode',
+    fcf: '/aktier/fritt-kassaflode',
     insiders: '/aktier/insiders', backtest: '/aktier/utredning',
     signals: '/edge-signals', portfolio: '/installningar/simulering',
 };
@@ -3134,6 +3160,64 @@ function renderSimulation(simData) {
 }
 
 // ── OCF Toplist ────────────────────────────────────
+
+let _fcfSort = 'ev_fcf';
+function setFcfSort(s) { _fcfSort = s; currentOffset = 0; fetchData(); }
+
+function renderFcfTable(d) {
+    const rows = (d && d.stocks) || [];
+    const isEv = (d.sort || 'ev_fcf') === 'ev_fcf';
+    const fmtM = v => v == null ? '–' : (Math.abs(v) >= 1e6 ? (v/1e6).toFixed(1)+' bn'
+        : Math.abs(v) >= 1000 ? (v/1000).toFixed(1)+' Md' : v.toFixed(0)+' M');
+    const body = rows.map((s, i) => {
+        const d0 = s.fcf_delta_pct;
+        const yl = s.fcf_yield_pct;
+        return `<tr>
+            <td>${i + 1}</td>
+            <td>${FLAGS[s.country] || ''} <span class="stock-name" onclick="openStockByTicker('${(s.short_name||'').replace(/'/g,"\\'")}')">${s.name}</span>
+                <br><span class="stock-ticker">${s.short_name || ''}${s.kalla !== 'FCF' ? ' · <span title="Fritt kassaflöde saknas i arkivet — operativt kassaflöde används" style="color:var(--orange)">OCF</span>' : ''}</span></td>
+            <td style="text-align:right;font-weight:700" class="${s.fcf_ttm>0?'num-pos':'num-neg'}">${fmtM(s.fcf_ttm)} <span style="font-size:10px;color:var(--text-muted)">${s.currency||''}</span></td>
+            <td style="text-align:right;font-size:11.5px">${d0 == null ? '–'
+                : `<span style="color:${d0>0?'var(--green)':'var(--red)'};font-weight:700" title="TTM mot föregående 4 kvartal">${d0>0?'▲ +':'▼ '}${d0}%</span>`}</td>
+            <td style="text-align:right;font-weight:${isEv?'700':'400'}">${s.ev_fcf != null ? s.ev_fcf.toFixed(1) : '–'}</td>
+            <td style="text-align:right">${yl != null ? `<span style="color:${yl>=8?'var(--green)':yl>=5?'var(--ink)':'var(--text-muted)'};font-weight:600">${yl}%</span>` : '–'}</td>
+            <td style="text-align:right">${s.fcf_marginal_pct != null ? s.fcf_marginal_pct + '%' : '–'}</td>
+            <td style="text-align:right">${s.net_debt != null ? fmtM(s.net_debt) : '–'}</td>
+            <td style="text-align:right">${s.return_on_capital_employed != null ? (s.return_on_capital_employed*100).toFixed(0)+'%' : '–'}</td>
+            <td style="text-align:right;font-weight:600" class="${pctClass(s.ytd_change_pct)}">${fmtPct(s.ytd_change_pct)}</td>
+        </tr>`;
+    }).join('');
+
+    document.getElementById('content').innerHTML = `
+        <div class="info-banner" style="background:linear-gradient(135deg,var(--brand-cyan-light),#e8f6ff)">
+            <div class="info-banner-icon">💵</div>
+            <div class="info-banner-text">
+                <strong>Fritt kassaflöde</strong> = pengarna kvar efter investeringar — det ägaren faktiskt kan få ut.<br>
+                <strong>EV/FCF</strong> = bolagsvärde (börsvärde + nettoskuld) delat med FCF. Lägre = billigare kassaflöde. <strong>Under 15</strong> är ofta attraktivt.<br>
+                <strong>FCF-yield</strong> = motsatsen, i procent — hur mycket kassaflöde du får per investerad krona inklusive skuld.
+            </div>
+        </div>
+        <div class="filter-group tight" style="margin-bottom:12px">
+            <span class="filter-label">Sortera</span>
+            <button class="filter-chip ${isEv?'active':''}" onclick="setFcfSort('ev_fcf')">💰 Billigast (EV/FCF)</button>
+            <button class="filter-chip ${!isEv?'active':''}" onclick="setFcfSort('fcf')">🏔 Störst FCF</button>
+        </div>
+        <div class="table-container">
+            <table><thead><tr>
+                <th style="width:40px">#</th>
+                <th>Bolag</th>
+                <th style="text-align:right" title="Fritt kassaflöde senaste 4 kvartalen">FCF (TTM)</th>
+                <th style="text-align:right" title="Mot föregående 4 kvartal">Δ TTM</th>
+                <th style="text-align:right" title="Bolagsvärde / fritt kassaflöde — lägre är billigare">EV/FCF</th>
+                <th style="text-align:right" title="FCF / bolagsvärde">Yield</th>
+                <th style="text-align:right" title="FCF i % av omsättning">Marginal</th>
+                <th style="text-align:right">Nettoskuld</th>
+                <th style="text-align:right">ROCE</th>
+                <th style="text-align:right">YTD</th>
+            </tr></thead><tbody>${body}</tbody></table>
+        </div>
+        <div class="table-footer">${rows.length} bolag ${isEv ? 'med EV/FCF under 100, billigast först' : 'med störst fritt kassaflöde'} · ${d.note || ''}</div>`;
+}
 
 function renderOcfTable() {
     const infoBanner = `<div class="info-banner" style="background:linear-gradient(135deg,var(--green-light),#e0f7fa)">

@@ -16579,6 +16579,138 @@ def api_report_scale_audit():
         db.close()
 
 
+@app.route("/api/fcf-toplist", methods=["GET"])
+def api_fcf_toplist():
+    """Topplista på fritt kassaflöde ur rapportarkivet (TTM = senaste 4 kvartal,
+    uppdateras dagligen av rapportinflödet).
+
+    ?sort=ev_fcf → billigast värderat kassaflöde (EV/FCF, lägst först)
+    ?sort=fcf    → störst absolut FCF (normaliserat till SEK för jämförbarhet)
+
+    EV = börsvärde + nettoskuld (ur senaste kvartalsrapporten). FCF-yield =
+    FCF/EV — hur mycket kassaflöde du får per investerad krona inklusive skuld.
+    """
+    from edge_db import _fetchall, _ph, _FX_SEK
+    import statistics as _stat
+    ph = _ph()
+    sort = (request.args.get("sort") or "ev_fcf").lower()
+    country = (request.args.get("country") or "").upper()
+    limit = min(int(request.args.get("limit") or 50), 200)
+    min_owners = int(request.args.get("min_owners") or 0)
+    q = (request.args.get("q") or "").strip()
+    db = get_db()
+    try:
+        cargs, cwhere = [], ""
+        if country:
+            cl = [c.strip() for c in country.split(",") if c.strip()]
+            cwhere = f" AND s.country IN ({','.join([ph] * len(cl))})"
+            cargs = cl
+        qwhere, qargs = "", []
+        if q:
+            qwhere = f" AND (UPPER(s.name) LIKE {ph} OR UPPER(s.short_name) LIKE {ph})"
+            qargs = [f"%{q.upper()}%", f"%{q.upper()}%"]
+        uni = [dict(r) for r in _fetchall(db, f"""
+            SELECT s.isin, s.short_name, s.name, s.country, s.currency,
+                   s.market_cap, s.last_price, s.number_of_owners,
+                   s.ytd_change_pct, s.return_on_capital_employed, s.pe_ratio
+            FROM stocks s
+            WHERE s.isin IS NOT NULL AND s.isin != '' AND s.isin NOT LIKE {ph}
+              AND s.last_price > 0 AND s.market_cap > 0
+              AND COALESCE(s.number_of_owners, 0) >= {ph}{cwhere}{qwhere}
+        """, tuple([ "YAHOO_%", min_owners ] + cargs + qargs))]
+        if not uni:
+            return jsonify({"stocks": [], "total": 0})
+        # En rad per ISIN (valutadubbletter) — flest ägare vinner
+        best = {}
+        for u in uni:
+            cur = best.get(u["isin"])
+            if not cur or (u.get("number_of_owners") or 0) > (cur.get("number_of_owners") or 0):
+                best[u["isin"]] = u
+        uni = list(best.values())
+        isins = [u["isin"] for u in uni]
+        marks = ",".join([ph] * len(isins))
+        qrows = [dict(r) for r in _fetchall(db, f"""
+            SELECT isin, report_end_date, currency, ins_id, free_cash_flow,
+                   operating_cash_flow, net_debt, revenues
+            FROM borsdata_reports
+            WHERE report_type = 'quarter' AND isin IN ({marks})
+              AND report_end_date IS NOT NULL
+        """, tuple(isins))]
+        byq = {}
+        for r in qrows:
+            byq.setdefault(r["isin"], []).append(r)
+        out = []
+        for u in uni:
+            raw = byq.get(u["isin"], [])
+            per_q = {}
+            for r0 in raw:
+                k = str(r0["report_end_date"])[:10]
+                if k not in per_q or (r0.get("ins_id") or 0) != 0:
+                    per_q[k] = r0
+            lst = sorted(per_q.values(), key=lambda x: str(x["report_end_date"]),
+                         reverse=True)[:8]
+            if len(lst) < 4:
+                continue
+            cur4 = lst[:4]
+            fcfs = [x.get("free_cash_flow") for x in cur4]
+            if not all(isinstance(v, (int, float)) for v in fcfs):
+                # FCF saknas i arkivet för många bolag → OCF som fallback
+                ocfs = [x.get("operating_cash_flow") for x in cur4]
+                if not all(isinstance(v, (int, float)) for v in ocfs):
+                    continue
+                fcf_ttm, kalla = sum(ocfs), "OCF (FCF saknas)"
+            else:
+                fcf_ttm, kalla = sum(fcfs), "FCF"
+            prev4 = lst[4:8]
+            pf = [x.get("free_cash_flow") if kalla == "FCF"
+                  else x.get("operating_cash_flow") for x in prev4]
+            fcf_prev = sum(pf) if (len(prev4) == 4 and
+                                   all(isinstance(v, (int, float)) for v in pf)) else None
+            fx = _FX_SEK.get((lst[0].get("currency") or u.get("currency") or "SEK").upper(), 1.0)
+            mfx = _FX_SEK.get((u.get("currency") or "SEK").upper(), 1.0)
+            nd = next((x.get("net_debt") for x in lst
+                       if isinstance(x.get("net_debt"), (int, float))), None)
+            mcap_m = (u["market_cap"] or 0) / 1e6          # miljoner, noteringsvaluta
+            # EV i rapportvalutan: börsvärde växlas till rapportvalutan
+            mcap_rep = mcap_m * mfx / fx if fx else mcap_m
+            ev = mcap_rep + (nd if nd is not None else 0)
+            ev_fcf = (ev / fcf_ttm) if (fcf_ttm and fcf_ttm > 0 and ev > 0) else None
+            out.append({
+                "isin": u["isin"], "short_name": u["short_name"], "name": u["name"],
+                "country": u["country"], "currency": lst[0].get("currency") or u.get("currency"),
+                "fcf_ttm": round(fcf_ttm, 1), "fcf_sek": fcf_ttm * 1e6 * fx,
+                "fcf_prev_ttm": round(fcf_prev, 1) if fcf_prev is not None else None,
+                "fcf_delta_pct": (round(100.0 * (fcf_ttm - fcf_prev) / abs(fcf_prev), 1)
+                                  if fcf_prev not in (None, 0) else None),
+                "ev": round(ev, 1) if ev else None,
+                "net_debt": round(nd, 1) if nd is not None else None,
+                "ev_fcf": round(ev_fcf, 1) if ev_fcf else None,
+                "fcf_yield_pct": round(100.0 / ev_fcf, 2) if ev_fcf else None,
+                "fcf_marginal_pct": (round(100.0 * fcf_ttm / sum(
+                    x["revenues"] for x in cur4), 1)
+                    if all(isinstance(x.get("revenues"), (int, float)) for x in cur4)
+                    and sum(x["revenues"] for x in cur4) > 0 else None),
+                "kalla": kalla, "senaste_kvartal": str(lst[0]["report_end_date"])[:10],
+                "market_cap": u["market_cap"], "last_price": u["last_price"],
+                "number_of_owners": u.get("number_of_owners"),
+                "ytd_change_pct": u.get("ytd_change_pct"),
+                "return_on_capital_employed": u.get("return_on_capital_employed"),
+                "pe_ratio": u.get("pe_ratio"),
+            })
+        if sort == "fcf":
+            rows = sorted([o for o in out if o["fcf_ttm"] > 0],
+                          key=lambda o: -o["fcf_sek"])
+        else:
+            rows = sorted([o for o in out if o["ev_fcf"] and 0 < o["ev_fcf"] < 100],
+                          key=lambda o: o["ev_fcf"])
+        return jsonify({"stocks": rows[:limit], "total": len(rows), "sort": sort,
+                        "note": "TTM ur rapportarkivet (dagligt inflöde). EV = börsvärde "
+                                "+ nettoskuld. Bolag utan FCF-rader använder OCF — visas "
+                                "i Källa-kolumnen."})
+    finally:
+        db.close()
+
+
 @app.route("/api/ocf-deltas", methods=["GET"])
 def api_ocf_deltas():
     """OCF TTM ur rapportarkivet (som skugginflödet fyller på dagligen) +
