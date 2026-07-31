@@ -2174,42 +2174,50 @@ let _kopChart = null;
 let _mpCharts = [];
 function renderModelPortfolios(d) {
     const models = (d && d.models) || {};
-    const CFG = {
-        koplista_10: { icon: '📈', label: 'Köplistan Topp 10',
-                       sub: 'Kvalitet × värdering × trend — ROCE ≥ 15 %, EV/EBIT 4–25, pris > MA200, 6m-momentum > 0' },
-        kvant_10:    { icon: '🧮', label: 'Kvantmodellen Topp 10',
-                       sub: '5-faktor sektorpercentil: vinstmomentum · prismomentum · lönsamhet · tillväxt · värdering' },
-    };
+    const key = models.daktier_10 ? 'daktier_10' : Object.keys(models)[0];
+    const m = models[key] || {};
     try { _mpCharts.forEach(c => c.destroy()); } catch (e) {}
     _mpCharts = [];
 
-    const card = (key) => {
-        const m = models[key];
-        const cfg = CFG[key];
-        if (!m) return `<div class="mp-card"><div class="mp-head">${cfg.icon} ${cfg.label}</div>
-            <div style="padding:20px;color:var(--text-muted);font-size:13px">Första loggningen sker i morgon 05:35.</div></div>`;
-        const rows = (m.holdings || []).map(h => `
-            <div class="mp-row" onclick="openStockByTicker('${(h.ticker || '').replace(/'/g, "\\'")}')">
-                <span class="mp-rank">${h.rank}</span>
-                <span class="mp-name">${h.name || h.ticker}
-                    ${h.ny ? '<span class="mp-ny">NY</span>' : ''}
-                    <br><span class="mp-tick">${h.ticker || ''}</span></span>
-            </div>`).join('');
-        const utChips = (m.ut || []).length
-            ? `<div class="mp-ut"><strong>Ut i dag:</strong> ${m.ut.map(t =>
-                `<span class="mp-ut-chip">${t}</span>`).join('')}</div>` : '';
-        const serie = ((m.facit || {}).portfolj) || [];
-        const facitBlock = serie.length >= 2
-            ? `<div style="height:170px;margin-top:12px"><canvas id="mpChart-${key}"></canvas></div>`
-            : `<div style="margin-top:12px;font-size:12px;color:var(--text-muted)">
-                 📊 Live-facit byggs från i dag — kurvan (portfölj vs marknadssnitt) växer fram dag för dag. Inga backtester.</div>`;
-        return `<div class="mp-card">
-            <div class="mp-head">${cfg.icon} ${cfg.label}</div>
-            <div class="mp-sub">${cfg.sub}</div>
-            <div class="mp-list">${rows || '<div style="padding:14px;color:var(--text-muted);font-size:13px">Inga innehav loggade ännu.</div>'}</div>
-            ${utChips}${facitBlock}
+    const SLEEVE = {
+        karna:  { icon: '🏛', label: 'Kärnan', color: 'var(--brand-navy)',
+                  sub: 'Kvalitetscompounders — växande omsättning & vinst, stark kassagenerering, låg skuld. Trygghet över tid.' },
+        krydda: { icon: '🚀', label: 'Kryddan', color: '#b45309',
+                  sub: 'Tillväxt & momentum — hög omsättningstillväxt, stigande estimat. Högre risk, högre uppsida.' },
+    };
+    const holdings = m.holdings || [];
+    const sleeveBlock = (sl) => {
+        const hs = holdings.filter(h => (h.sleeve || 'karna') === sl);
+        if (!hs.length) return '';
+        const cfg = SLEEVE[sl];
+        const wsum = hs.reduce((a, h) => a + (h.weight_pct || 0), 0);
+        return `<div class="mp-sleeve">
+            <div class="mp-sleeve-head" style="border-left:3px solid ${cfg.color}">
+                <div>
+                    <span style="font-size:14px;font-weight:800;color:${cfg.color}">${cfg.icon} ${cfg.label}</span>
+                    <span class="mp-weight">${Math.round(wsum)} % av portföljen · ${hs.length} bolag</span>
+                </div>
+                <div class="mp-sleeve-sub">${cfg.sub}</div>
+            </div>
+            ${hs.map(h => `
+                <div class="mp-row" onclick="openStockByTicker('${(h.ticker || '').replace(/'/g, "\\'")}')">
+                    <span class="mp-rank" style="background:${cfg.color}">${h.weight_pct ? h.weight_pct.toFixed(0) + '%' : h.rank}</span>
+                    <span class="mp-name">${h.name || h.ticker}
+                        ${h.ny ? '<span class="mp-ny">NY</span>' : ''}
+                        <br><span class="mp-tick">${h.ticker || ''}${h.motiv ? ' · ' + h.motiv : ''}</span></span>
+                </div>`).join('')}
         </div>`;
     };
+    const utChips = (m.ut || []).length
+        ? `<div class="mp-ut"><strong>Ut i dag:</strong> ${m.ut.map(t =>
+            `<span class="mp-ut-chip">${t}</span>`).join('')}</div>` : '';
+    const serie = ((m.facit || {}).portfolj) || [];
+    const facitBlock = serie.length >= 2
+        ? `<div class="mp-card" style="margin-top:16px"><div class="mp-head">📊 Live-facit</div>
+             <div class="mp-sub">Likaviktad daglig avkastning mot marknadssnittet — mätt framåt, inga backtester.</div>
+             <div style="height:220px"><canvas id="mpChart-${key}"></canvas></div></div>`
+        : `<div class="mp-card" style="margin-top:16px;font-size:13px;color:var(--text-muted)">
+             📊 Live-facit byggs från i dag — kurvan (portfölj vs marknadssnitt) växer fram dag för dag. Inga backtester.</div>`;
 
     document.getElementById('content').innerHTML = `
         <style>
@@ -2225,26 +2233,35 @@ function renderModelPortfolios(d) {
             .mp-ny { background:var(--brand-cyan);color:#fff;font-size:9.5px;font-weight:800;padding:2px 7px;border-radius:10px;margin-left:6px;vertical-align:middle; }
             .mp-ut { margin-top:10px;font-size:var(--fs-sm);color:var(--text-muted); }
             .mp-ut-chip { background:#fef2f2;color:#991b1b;padding:2px 8px;border-radius:10px;margin-left:4px;font-weight:600;font-size:11px; }
+            .mp-sleeve { background:var(--white);border:1px solid var(--line);border-radius:14px;padding:16px 18px;box-shadow:var(--shadow-hover); }
+            .mp-sleeve-head { padding-left:12px;margin-bottom:8px; }
+            .mp-sleeve-sub { font-size:var(--fs-xs);color:var(--text-muted);margin-top:3px;line-height:1.5; }
+            .mp-weight { font-size:11px;color:var(--text-muted);font-weight:600;margin-left:8px; }
+            .mp-rank { min-width:34px;padding:0 4px; }
         </style>
         <div style="background:linear-gradient(135deg,var(--brand-navy-deep),var(--brand-navy));border-radius:var(--radius);padding:18px 20px;color:#fff;margin-bottom:14px">
-            <div style="font-size:var(--fs-lg);font-weight:800">📁 Modellportföljer</div>
+            <div style="font-size:var(--fs-lg);font-weight:800">📁 DAKTIER-portföljen</div>
             <div style="font-size:var(--fs-sm);opacity:0.85;margin-top:4px">
-                Två regelstyrda topp 10-portföljer med <strong>dagligt utbyte</strong> — utanför toppen = ut ur portföljen.
+                10 bolag i två lager: <strong>Kärnan (65 %)</strong> ger trygghet — kvalitetsbolag som växer och genererar kassa.
+                <strong>Kryddan (35 %)</strong> ger uppsidan — tillväxt och momentum. Reglerna omprövas <strong>dagligen</strong>.
                 Facit mäts likaviktat mot marknadssnittet (${d.benchmark || 'median, 500 största'}). Inga backtester — bara live.
             </div>
             ${d.snapshot_date ? `<div style="font-size:var(--fs-xs);opacity:0.7;margin-top:8px">Senaste snapshot: ${d.snapshot_date} · ${d.n_dagar || 1} loggade dagar</div>` : ''}
         </div>
-        <div class="mp-grid">${card('koplista_10')}${card('kvant_10')}</div>
+        <div class="mp-grid">${sleeveBlock('karna')}${sleeveBlock('krydda')}</div>
+        ${utChips}
+        ${facitBlock}
         <div style="margin-top:14px;font-size:var(--fs-xs);color:var(--text-muted)">
-            Beslutsstöd, inte rådgivning. Dagligt utbyte = det reglerna säger — verklig handel medför courtage/skatt som inte simuleras.
+            Kvalitet får kosta — inget hårt värderingstak i Kärnan (det uteslöt Alphabet/Microsoft-klassen och släppte in cykliska toppvinster).
+            Investmentbolag tas in endast vid substansrabatt. Beslutsstöd, inte rådgivning — verklig handel medför courtage/skatt som inte simuleras.
         </div>`;
 
     if (window.Chart) {
-        for (const key of ['koplista_10', 'kvant_10']) {
-            const m = models[key];
-            const serie = ((m || {}).facit || {}).portfolj || [];
-            const bserie = ((m || {}).facit || {}).marknad || [];
-            const cv = document.getElementById('mpChart-' + key);
+        for (const key2 of Object.keys(models)) {
+            const mm = models[key2];
+            const serie = ((mm || {}).facit || {}).portfolj || [];
+            const bserie = ((mm || {}).facit || {}).marknad || [];
+            const cv = document.getElementById('mpChart-' + key2);
             if (!cv || serie.length < 2) continue;
             _mpCharts.push(new Chart(cv.getContext('2d'), {
                 type: 'line',

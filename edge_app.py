@@ -16348,6 +16348,12 @@ def api_analyst_estimates_sync():
 
 
 def _log_model_portfolios(db):
+    """DAKTIER-portföljen (kärna + krydda) — se compute_daktier_portfolios."""
+    from edge_db import compute_daktier_portfolios
+    return compute_daktier_portfolios(db)
+
+
+def _log_model_portfolios_gammal(db):
     """Dagens topp 10 per modellportfölj → model_portfolios (snapshot per dag).
     Två modeller (användarens beslut 2026-07-31 — de gamla simuleringarna
     kändes svaga mot index och togs bort):
@@ -16519,8 +16525,9 @@ def api_model_portfolios():
                 m.setdefault(gd["isin"], {})[str(gd["date"])[:10]] = gd["close"]
             return m
 
+        MODELS = sorted({r["model"] for r in rows})
         facit = {}
-        for model in ("koplista_10", "kvant_10"):
+        for model in MODELS:
             serie, cum, bcum, bserie = [], 1.0, 1.0, []
             for i in range(len(dates) - 1):
                 d1, d2 = dates[i], dates[i + 1]
@@ -16541,13 +16548,14 @@ def api_model_portfolios():
             facit[model] = {"portfolj": serie, "marknad": bserie}
 
         models = {}
-        for model in ("koplista_10", "kvant_10"):
+        for model in MODELS:
             cur = bydate.get(latest, {}).get(model) or []
             prevt = {m["ticker"] for m in (bydate.get(prev, {}).get(model) or [])} if prev else set()
             curt = {m["ticker"] for m in cur}
             models[model] = {
                 "holdings": [{"rank": m["rank"], "ticker": m["ticker"],
-                              "name": m["name"],
+                              "name": m["name"], "sleeve": m.get("sleeve"),
+                              "weight_pct": m.get("weight_pct"), "motiv": m.get("motiv"),
                               "ny": bool(prev) and m["ticker"] not in prevt}
                              for m in sorted(cur, key=lambda x: x["rank"])],
                 "ut": sorted(prevt - curt) if prev else [],
@@ -16557,12 +16565,19 @@ def api_model_portfolios():
                         "n_dagar": len(dates), "models": models,
                         "benchmark": "median dagsavkastning, 500 största bolagen (likaviktad)",
                         "regler": {
-                            "koplista_10": "Kvalitet × värdering × trend: ROCE ≥ 15 %, "
-                                           "EV/EBIT 4–25, pris > MA200, 6m-momentum > 0. "
-                                           "Rank: kombinerad Greenblatt-stil. Topp 10, byts dagligen.",
-                            "kvant_10": "5-faktor sektorpercentil (vinstmomentum 25, prismomentum 25, "
-                                        "lönsamhet 20, tillväxt 20, värdering 10), inga DQ. "
-                                        "Topp 10, byts dagligen."}})
+                            "daktier_10": {
+                                "karna": "6 bolag, ~65 %: växande omsättning OCH vinst, "
+                                         "ROCE ≥ 12 % eller ROE ≥ 15 %, OCF/vinst ≥ 0,7 "
+                                         "(vinstkvalitet), måttlig skuld, pris > MA200, "
+                                         "≥ 30 mdr SEK. Inget värderingstak — kvalitet får "
+                                         "kosta (värdering väger 10 % i ranken).",
+                                "krydda": "4 bolag, ~35 %: omsättningstillväxt ≥ 15 %, "
+                                          "12m-momentum > 0, hög bruttomarginal eller "
+                                          "positivt kassaflöde, positiva estimatrevisioner "
+                                          "(US), pris > MA200, ≥ 10 mdr SEK. Vinstkrav "
+                                          "slopat — här ryms återinvesterare.",
+                                "investmentbolag": "Endast vid substansrabatt (P/B < 1). "
+                                                   "Handlas de i premie åker de ut."}}})
     finally:
         db.close()
 

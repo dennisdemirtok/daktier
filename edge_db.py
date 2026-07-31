@@ -5228,6 +5228,240 @@ def sync_analyst_estimates(db, tickers=None, max_n=600, throttle=0.12):
             "universe": len(tickers)}
 
 
+# Växelkurser för storleksgolv (grovt — bara för att sålla bort småbolag)
+_FX_SEK = {"SEK": 1.0, "USD": 10.5, "EUR": 11.3, "NOK": 0.95, "DKK": 1.52,
+           "GBP": 13.3, "CAD": 7.6, "CHF": 12.0, "JPY": 0.07, "ISK": 0.075,
+           "PLN": 2.6, "AUD": 6.8}
+
+
+def compute_daktier_portfolios(db):
+    """DAKTIER-portföljen: KÄRNA (kvalitetscompounders) + KRYDDA (tillväxt/risk).
+
+    Ersätter den gamla koplista_10/kvant_10-modellen (2026-07-31): EV/EBIT-taket
+    4–25 uteslöt systematiskt Alphabet/Microsoft/Visa medan cykliska toppvinster
+    (guldgruvor) såg billiga ut — klassisk värdefälla, inte kvalitet.
+
+    KÄRNA (6 bolag, ~65 %): växande omsättning OCH vinst, ROCE/ROE-kvalitet,
+      stark kassagenerering (OCF/vinst ≥ 0,7), måttlig skuld, pris > MA200.
+      INGET hårt värderingstak — kvalitet får kosta, värdering väger lätt i rank.
+    KRYDDA (4 bolag, ~35 %): omsättningstillväxt ≥ 15 %, 12m-momentum, positiva
+      estimatrevisioner (US), pris > MA200. Vinstkrav slopat — hit hör
+      Cloudflare/Credo-klassen som återinvesterar allt.
+
+    Investmentbolag tas ENDAST in vid substansrabatt (P/B < 1 ⇔ pris < NAV;
+    Investor/Industrivärden handlas i premium just nu → utanför).
+    """
+    from datetime import date as _date
+    ph = _ph()
+    today = _date.today().isoformat()
+
+    uni = [dict(r) for r in _fetchall(db, f"""
+        SELECT s.isin, s.short_name, s.name, s.country, s.currency, s.market_cap,
+               s.last_price, s.return_on_equity, s.return_on_capital_employed,
+               s.debt_to_equity_ratio, s.net_debt_ebitda_ratio, s.price_book_ratio,
+               s.ev_ebit_ratio, s.pe_ratio, s.number_of_owners,
+               COALESCE(NULLIF(s.sector, ''), bs.name) AS sector
+        FROM stocks s
+        LEFT JOIN borsdata_instrument_map m ON m.isin = s.isin
+        LEFT JOIN borsdata_sectors bs ON bs.sector_id = m.sector_id
+        WHERE s.isin IS NOT NULL AND s.isin != '' AND s.isin NOT LIKE {ph}
+          AND s.last_price > 0 AND s.market_cap > 0
+    """, ("YAHOO_%",))]
+    if not uni:
+        return {"error": "tomt universum"}
+
+    # En rad per isin (valutadubbletter) — flest ägare = huvudlistningen
+    best_by_isin = {}
+    for u in uni:
+        cur = best_by_isin.get(u["isin"])
+        if not cur or (u.get("number_of_owners") or 0) > (cur.get("number_of_owners") or 0):
+            best_by_isin[u["isin"]] = u
+    uni = list(best_by_isin.values())
+    isins = [u["isin"] for u in uni]
+
+    # TTM ur rapportarkivet (4 senaste kvartal + föregående 4)
+    marks = ",".join([ph] * len(isins))
+    qrows = _fetchall(db, f"""
+        SELECT isin, report_end_date, revenues, gross_income, operating_income,
+               net_profit, operating_cash_flow, free_cash_flow
+        FROM borsdata_reports
+        WHERE report_type = 'quarter' AND isin IN ({marks})
+          AND report_end_date IS NOT NULL
+    """, tuple(isins))
+    byq = {}
+    for r in qrows:
+        d = dict(r)
+        byq.setdefault(d["isin"], []).append(d)
+
+    trend = {dict(r)["isin"]: dict(r) for r in _fetchall(db, f"""
+        SELECT isin, above_ma200, pct_vs_ma200, ret_6m, ret_12m
+        FROM trend_snapshot WHERE isin IN ({marks})""", tuple(isins))}
+
+    est = {}
+    try:
+        er = _fetchone(db, "SELECT MAX(snapshot_date) AS d FROM analyst_estimates")
+        ed = dict(er).get("d") if er else None
+        if ed:
+            t2i = {u["short_name"]: u["isin"] for u in uni if u.get("short_name")}
+            for r in _fetchall(db, f"SELECT * FROM analyst_estimates WHERE snapshot_date = {ph}", (ed,)):
+                d0 = dict(r)
+                if t2i.get(d0.get("ticker")):
+                    est[t2i[d0["ticker"]]] = d0
+    except Exception:
+        pass
+
+    def _sum4(rows_, key):
+        vs = [x.get(key) for x in rows_]
+        return sum(vs) if len(vs) == 4 and all(isinstance(v, (int, float)) for v in vs) else None
+
+    cands = []
+    for u in uni:
+        isin = u["isin"]
+        lst = sorted(byq.get(isin, []), key=lambda x: str(x["report_end_date"]), reverse=True)
+        if len(lst) < 8:
+            continue
+        cur, prev = lst[:4], lst[4:8]
+        rev, rev_p = _sum4(cur, "revenues"), _sum4(prev, "revenues")
+        np_, np_p = _sum4(cur, "net_profit"), _sum4(prev, "net_profit")
+        ocf = _sum4(cur, "operating_cash_flow")
+        gross = _sum4(cur, "gross_income")
+        if not rev or rev <= 0 or not rev_p or rev_p <= 0:
+            continue
+        mcap_sek = (u["market_cap"] or 0) * _FX_SEK.get((u.get("currency") or "SEK").upper(), 1.0)
+        t = trend.get(isin) or {}
+        e0 = est.get(isin) or {}
+        rev_g = (rev - rev_p) / abs(rev_p)
+        np_g = ((np_ - np_p) / abs(np_p)) if (np_ is not None and np_p not in (None, 0)) else None
+        roce = u.get("return_on_capital_employed")
+        roe = u.get("return_on_equity")
+        # Investmentbolag: premie (P/B > 1) = pris över substans → ut
+        pb = u.get("price_book_ratio")
+        sec = (u.get("sector") or "").lower()
+        is_inv = ("investment" in sec or "investmentbolag" in sec
+                  or any(k in (u.get("name") or "").lower()
+                         for k in ("investor a", "investor b", "industrivärden",
+                                   "latour", "kinnevik", "svolder", "creades",
+                                   "bure", "traction", "öresund", "vne", "lundbergs")))
+        rev_ups = sum(v for k, v in (("yr_up", e0.get("yr_up")), ("qtr_up", e0.get("qtr_up")))
+                      if isinstance(v, int))
+        rev_dns = sum(v for k, v in (("yr_down", e0.get("yr_down")), ("qtr_down", e0.get("qtr_down")))
+                      if isinstance(v, int))
+        rev_net = ((rev_ups - rev_dns) / (rev_ups + rev_dns)) if (rev_ups + rev_dns) else None
+        cands.append({
+            **u, "mcap_sek": mcap_sek, "rev_ttm": rev, "np_ttm": np_, "ocf_ttm": ocf,
+            "rev_g": rev_g, "np_g": np_g,
+            "ocf_margin": (ocf / rev) if ocf is not None else None,
+            "gross_margin": (gross / rev) if gross else None,
+            "ocf_quality": (ocf / np_) if (ocf is not None and np_ and np_ > 0) else None,
+            "roce": roce, "roe": roe, "pb": pb, "is_inv": is_inv,
+            "above_ma200": t.get("above_ma200"), "ret_12m": t.get("ret_12m"),
+            "ret_6m": t.get("ret_6m"), "rev_net": rev_net,
+            "senaste_kvartal": str(lst[0]["report_end_date"])[:10],
+        })
+
+    def _pctl(vals):
+        s_ = sorted(v for v in vals if v is not None)
+        def rank(v):
+            if v is None or not s_:
+                return 50.0
+            below = sum(1 for x in s_ if x < v)
+            return 100.0 * below / max(1, len(s_) - 1) if len(s_) > 1 else 50.0
+        return rank
+
+    # ── KÄRNA: kvalitetscompounders ──────────────────────────────────────
+    karna_pool = [c for c in cands if
+        c["mcap_sek"] >= 3e10                                  # ≥ 30 mdr SEK
+        and c["rev_g"] > 0                                     # växande omsättning
+        and c["np_ttm"] is not None and c["np_ttm"] > 0        # vinst
+        and (c["np_g"] is None or c["np_g"] > -0.05)           # vinst ej fallande
+        and ((c["roce"] or 0) >= 0.12 or (c["roe"] or 0) >= 0.15)
+        and c["ocf_ttm"] is not None and c["ocf_ttm"] > 0
+        and (c["ocf_quality"] is None or c["ocf_quality"] >= 0.7)
+        and ((c.get("net_debt_ebitda_ratio") is None or c["net_debt_ebitda_ratio"] < 3.5)
+             and (c.get("debt_to_equity_ratio") is None or c["debt_to_equity_ratio"] < 2.0))
+        and c["above_ma200"] == 1
+        and not (c["is_inv"] and (c["pb"] or 99) >= 1.0)       # investmentbolag: bara rabatt
+    ]
+    if karna_pool:
+        r_roce = _pctl([c["roce"] for c in karna_pool])
+        r_ocfm = _pctl([c["ocf_margin"] for c in karna_pool])
+        r_revg = _pctl([c["rev_g"] for c in karna_pool])
+        r_npg = _pctl([c["np_g"] for c in karna_pool])
+        r_val = _pctl([c["ev_ebit_ratio"] for c in karna_pool])
+        for c in karna_pool:
+            c["score"] = (0.30 * r_roce(c["roce"]) + 0.25 * r_ocfm(c["ocf_margin"])
+                          + 0.20 * r_revg(c["rev_g"]) + 0.15 * r_npg(c["np_g"])
+                          + 0.10 * (100 - r_val(c["ev_ebit_ratio"])))
+        karna_pool.sort(key=lambda c: -c["score"])
+
+    # ── KRYDDA: tillväxt + momentum (risklagret) ─────────────────────────
+    kr_pool = [c for c in cands if
+        c["mcap_sek"] >= 1e10                                  # ≥ 10 mdr SEK
+        and c["rev_g"] >= 0.15                                 # ≥ 15 % tillväxt
+        and c["above_ma200"] == 1
+        and (c["ret_12m"] or 0) > 0
+        and (c["ocf_ttm"] is None or c["ocf_ttm"] > 0 or (c["gross_margin"] or 0) > 0.5)
+        and not c["is_inv"]
+    ]
+    if kr_pool:
+        k_revg = _pctl([c["rev_g"] for c in kr_pool])
+        k_mom = _pctl([c["ret_12m"] for c in kr_pool])
+        k_gm = _pctl([c["gross_margin"] for c in kr_pool])
+        k_rev = _pctl([c["rev_net"] for c in kr_pool])
+        for c in kr_pool:
+            c["score"] = (0.35 * k_revg(c["rev_g"]) + 0.30 * k_mom(c["ret_12m"])
+                          + 0.20 * k_gm(c["gross_margin"])
+                          + 0.15 * (k_rev(c["rev_net"]) if c["rev_net"] is not None else 50.0))
+        kr_pool.sort(key=lambda c: -c["score"])
+
+    karna = karna_pool[:6]
+    kr_names = {c["isin"] for c in karna}
+    krydda = [c for c in kr_pool if c["isin"] not in kr_names][:4]
+
+    db.execute("""
+        CREATE TABLE IF NOT EXISTS model_portfolios (
+            snapshot_date TEXT NOT NULL, model TEXT NOT NULL, rank INTEGER NOT NULL,
+            ticker TEXT, name TEXT, isin TEXT, price DOUBLE PRECISION,
+            PRIMARY KEY (snapshot_date, model, rank))""")
+    db.commit()
+    for col, typ in (("sleeve", "TEXT"), ("weight_pct", "DOUBLE PRECISION"),
+                     ("motiv", "TEXT")):
+        try:
+            db.execute(f"ALTER TABLE model_portfolios ADD COLUMN {col} {typ}")
+            db.commit()
+        except Exception:
+            try: db.rollback()
+            except Exception: pass
+
+    ins = _upsert_sql("model_portfolios",
+                      ["snapshot_date", "model", "rank", "ticker", "name", "isin",
+                       "price", "sleeve", "weight_pct", "motiv"],
+                      ["snapshot_date", "model", "rank"])
+    n = 0
+    for sleeve, rows_, wtot in (("karna", karna, 65.0), ("krydda", krydda, 35.0)):
+        w = round(wtot / len(rows_), 1) if rows_ else 0
+        for i, c in enumerate(rows_):
+            bits = []
+            if c["rev_g"] is not None:
+                bits.append(f"oms {c['rev_g']*100:+.0f}%")
+            if c["np_g"] is not None:
+                bits.append(f"vinst {c['np_g']*100:+.0f}%")
+            if c["roce"]:
+                bits.append(f"ROCE {c['roce']*100:.0f}%")
+            if c["ocf_margin"] is not None:
+                bits.append(f"OCF-marg {c['ocf_margin']*100:.0f}%")
+            if c["ret_12m"] is not None:
+                bits.append(f"12m {c['ret_12m']:+.0f}%")
+            n += 1
+            db.execute(ins, (today, "daktier_10", n, c["short_name"], c["name"],
+                             c["isin"], c["last_price"], sleeve, w, " · ".join(bits)))
+    db.commit()
+    return {"snapshot_date": today, "karna": [c["short_name"] for c in karna],
+            "krydda": [c["short_name"] for c in krydda],
+            "kandidater": len(cands), "karna_pool": len(karna_pool),
+            "krydda_pool": len(kr_pool)}
+
+
 def compute_factor_scores(db, min_mcap=1e9):
     """Multifaktormodell — percentilrank per (land, sektor)-bucket:
       F1 25% Vinstmomentum   (PROXY för estimatrevisioner: rapporterad TTM-EPS-
