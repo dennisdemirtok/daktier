@@ -5805,7 +5805,8 @@ function openDrawer(s) {
         if (v == null) return '';
         const num = Number(v);
         const col = !isPct ? 'var(--ink)' : (num > 0 ? '#059669' : num < 0 ? '#DC2626' : 'var(--text-muted)');
-        const val = isPct ? (num > 0 ? '+' : '') + num.toFixed(1) + '%' : v;
+        // ändringsfälten är KVOTER i drawer-objektet (0.009 = 0.9%) — ×100 som fmtPct
+        const val = isPct ? (num > 0 ? '+' : '') + (num * 100).toFixed(1) + '%' : v;
         return `<div class="dov-chip"><div class="l">${label}</div><div class="v" style="color:${col}">${val}</div></div>`;
     };
     const mcapTxt = s.market_cap ? (s.market_cap >= 1e9
