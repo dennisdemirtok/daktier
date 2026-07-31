@@ -5169,12 +5169,24 @@ def flow_shadow_into_reports(db, days=14):
             db.execute(f"INSERT INTO borsdata_reports ({cols}) VALUES ({qmarks}) "
                        f"ON CONFLICT DO NOTHING", vals)
             # Fyll LUCKOR i befintliga rader (t.ex. nollställda frusna
-            # omsättningsfält) — skuggan skriver aldrig över befintliga värden
-            db.execute(
-                f"UPDATE borsdata_reports SET revenues = {ph} "
-                f"WHERE isin = {ph} AND report_type = {ph} AND period_year = {ph} "
-                f"AND period_q = {ph} AND revenues IS NULL AND {ph} IS NOT NULL",
-                (vals[7], isin, vals[2], vals[3], vals[4], vals[7]))
+            # omsättningsfält). Matchas på RAPPORTENS SLUTDATUM ±7 dagar, inte
+            # på år/kvartalsetiketter: bolag med brutet räkenskapsår (Credo
+            # slutar i april) numreras olika av EDGAR och Börsdata, så
+            # etikettmatchning missade luckorna helt.
+            if vals[7] is not None and vals[5]:
+                try:
+                    from datetime import datetime as _dtu, timedelta as _tdu
+                    _d0 = _dtu.fromisoformat(str(vals[5])[:10])
+                    _lo = (_d0 - _tdu(days=7)).isoformat()[:10]
+                    _hi = (_d0 + _tdu(days=7)).isoformat()[:10]
+                    db.execute(
+                        f"UPDATE borsdata_reports SET revenues = {ph} "
+                        f"WHERE isin = {ph} AND report_type = {ph} "
+                        f"AND report_end_date >= {ph} AND report_end_date <= {ph} "
+                        f"AND revenues IS NULL",
+                        (vals[7], isin, vals[2], _lo, _hi))
+                except Exception:
+                    pass
             inserted += 1
         except Exception:
             try: db.rollback()
