@@ -16429,22 +16429,81 @@ def _log_model_portfolios_gammal(db):
     return out
 
 
+_FIXDATA_STATE = {"running": False, "steg": None, "resultat": None}
+
+
+def _run_fix_data_thread():
+    """Datalagningen tar flera minuter (1 137 drabbade bolag) — Railways
+    proxy kapar synkrona anrop efter ~2 min, så jobbet körs i tråd med
+    status i meta-tabellen."""
+    import json as _jf
+    from edge_db import (clean_price_outliers, normalize_report_scales,
+                         compute_trend_snapshot, _upsert_sql as _ups)
+    _FIXDATA_STATE.update(running=True, steg="priser", resultat=None)
+    dbf = get_db()
+    res = {}
+    try:
+        res["priser"] = clean_price_outliers(dbf)
+        _FIXDATA_STATE["steg"] = "rapporter"
+        res["rapporter"] = normalize_report_scales(dbf)
+        _FIXDATA_STATE["steg"] = "trend_snapshot"
+        res["trend_snapshot"] = compute_trend_snapshot(dbf)
+        _FIXDATA_STATE["steg"] = "klar"
+    except Exception as e:
+        res["fel"] = str(e)[:300]
+        _FIXDATA_STATE["steg"] = "fel"
+    finally:
+        try:
+            dbf.execute(_ups("meta", ["key", "value"], ["key"]),
+                        ("fixdata:last", _jf.dumps(
+                            {"ts": datetime.now().isoformat(), **res},
+                            ensure_ascii=False, default=str)[:8000]))
+            dbf.commit()
+        except Exception:
+            try: dbf.rollback()
+            except Exception: pass
+        dbf.close()
+        _FIXDATA_STATE.update(running=False, resultat=res)
+        print(f"[FIXDATA] klar: {str(res)[:300]}", file=sys.stderr)
+
+
 @app.route("/api/maintenance/fix-data", methods=["POST"])
 def api_diag_fix_data():
     """LAGAR datan: prisutliggare (valutadubbletter) + skalblandade rapportrader,
-    och bygger om trend_snapshot. ?dry=1 visar vad som skulle ändras."""
+    och bygger om trend_snapshot. ?dry=1 = synkron förhandsvisning."""
     from edge_db import (clean_price_outliers, normalize_report_scales,
                          compute_trend_snapshot)
-    dry = request.args.get("dry") in ("1", "true", "yes")
+    if request.args.get("dry") in ("1", "true", "yes"):
+        db = get_db()
+        try:
+            return jsonify({"priser": clean_price_outliers(db, dry_run=True),
+                            "rapporter": normalize_report_scales(db, dry_run=True)})
+        finally:
+            db.close()
+    if _FIXDATA_STATE["running"]:
+        return jsonify({"status": "pågår", "steg": _FIXDATA_STATE["steg"]})
+    import threading
+    threading.Thread(target=_run_fix_data_thread, daemon=True).start()
+    return jsonify({"status": "startad",
+                    "följ": "GET /api/maintenance/fix-data-status"})
+
+
+@app.route("/api/maintenance/fix-data-status", methods=["GET"])
+def api_fix_data_status():
+    """Status för datalagningen (läser meta så den syns cross-worker)."""
+    import json as _jf
+    from edge_db import _fetchone, _ph
     db = get_db()
     try:
-        res = {"priser": clean_price_outliers(db, dry_run=dry),
-               "rapporter": normalize_report_scales(db, dry_run=dry)}
-        if not dry:
-            res["trend_snapshot"] = compute_trend_snapshot(db)
-        return jsonify(res)
+        row = _fetchone(db, f"SELECT value FROM meta WHERE key = {_ph()}",
+                        ("fixdata:last",))
+        senast = _jf.loads(dict(row)["value"]) if row else None
+    except Exception:
+        senast = None
     finally:
         db.close()
+    return jsonify({"running": _FIXDATA_STATE["running"],
+                    "steg": _FIXDATA_STATE["steg"], "senaste_körning": senast})
 
 
 @app.route("/api/maintenance/report-scale-audit", methods=["GET"])
