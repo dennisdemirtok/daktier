@@ -5645,12 +5645,15 @@ def compute_daktier_portfolios(db):
             v_pe = (100 - _band(c.get("pe_ratio"), 15, 60)) if (c.get("pe_ratio") or 0) > 0 else 45.0
             v_ev = (100 - _band(c.get("ev_ebit_ratio"), 8, 45)) if c.get("ev_ebit_ratio") else 45.0
             vardering = 0.6 * v_pe + 0.4 * v_ev
-            c["score"] = (0.24 * kvalitet + 0.22 * kassa + 0.18 * tillvaxt
-                          + 0.14 * uthallig + 0.08 * storlek + 0.14 * vardering)
-            c["delpoang"] = {"kvalitet": round(kvalitet), "kassa": round(kassa),
-                             "tillvaxt": round(tillvaxt), "stabilitet": round(uthallig),
-                             "storlek": round(storlek), "vardering": round(vardering)}
-        karna_pool.sort(key=lambda c: -c["score"])
+            # Separata nycklar per lager: samma dict-objekt kan ligga i BÅDA
+            # poolerna, och kryddans beräkning skrev annars över kärnans poäng
+            # (GOOGL visades med 49,5 i stället för sin verkliga ~87)
+            c["score_karna"] = (0.24 * kvalitet + 0.22 * kassa + 0.18 * tillvaxt
+                                + 0.14 * uthallig + 0.08 * storlek + 0.14 * vardering)
+            c["delpoang_karna"] = {"kvalitet": round(kvalitet), "kassa": round(kassa),
+                                   "tillvaxt": round(tillvaxt), "stabilitet": round(uthallig),
+                                   "storlek": round(storlek), "vardering": round(vardering)}
+        karna_pool.sort(key=lambda c: -c["score_karna"])
 
     # ── KRYDDA: tillväxt + momentum (risklagret) ─────────────────────────
     # KRYDDAN har två spår (användarfeedback: Cloudflare hör hemma här,
@@ -5675,8 +5678,20 @@ def compute_daktier_portfolios(db):
         (c["ocf_margin"] or -9) > 0.02
         and (c["np_g"] is None or c["np_g"] > -0.30)
         and c["kvartal_vinst"] >= 5]
+    # Mjukvaruspåret ska fånga Cloudflare-klassen — INTE biotech. Esperion,
+    # Adaptive och Arcutis har också hög bruttomarginal och krympande
+    # förluster, men deras uppsida hänger på kliniska studier, inte på
+    # skalbar produkt med inlåsning. Därför sektorkrav.
+    def _ar_teknik(c):
+        s = (c.get("sector") or "").lower()
+        if any(k in s for k in ("hälsov", "halsov", "health", "pharma", "läkemedel",
+                                "biotech", "sjukv")):
+            return False
+        return any(k in s for k in ("informationstek", "teknolog", "technology",
+                                    "telekom", "telecom", "kommunikation", "it "))
     kr_mjukvara = [c for c in kr_bas if
         c not in kr_lonsam
+        and _ar_teknik(c)                                      # teknik, ej biotech
         and 0.60 <= (c["gross_margin"] or 0) <= 1.0            # skalbar produkt
         and c["rev_g"] >= 0.18                                 # tydlig tillväxt
         and (c["ocf_margin"] or -9) > -0.12                    # ej kassaförbrännare
@@ -5693,12 +5708,12 @@ def compute_daktier_portfolios(db):
             jamn = 100.0 * c["jamnhet"] if c.get("jamnhet") is not None else 45.0
             revis = _band(c["rev_net"], -0.2, 0.6) if c.get("rev_net") is not None else 50.0
             c["spar"] = "mjukvara" if c in kr_mjukvara else "lönsam"
-            c["score"] = (0.26 * tillv + 0.20 * flerar + 0.20 * mom
-                          + 0.14 * marg + 0.10 * jamn + 0.10 * revis)
-            c["delpoang"] = {"tillvaxt": round(tillv), "flerar": round(flerar),
-                             "momentum": round(mom), "bruttomarginal": round(marg),
-                             "jamnhet": round(jamn), "revisioner": round(revis)}
-        kr_pool.sort(key=lambda c: -c["score"])
+            c["score_krydda"] = (0.26 * tillv + 0.20 * flerar + 0.20 * mom
+                                 + 0.14 * marg + 0.10 * jamn + 0.10 * revis)
+            c["delpoang_krydda"] = {"tillvaxt": round(tillv), "flerar": round(flerar),
+                                    "momentum": round(mom), "bruttomarginal": round(marg),
+                                    "jamnhet": round(jamn), "revisioner": round(revis)}
+        kr_pool.sort(key=lambda c: -c["score_krydda"])
 
     karna = karna_pool[:6]
     kr_names = {c["isin"] for c in karna}
@@ -5773,13 +5788,16 @@ def compute_daktier_portfolios(db):
             if c.get("np_g") is not None: motiv.append(f"vinst {c['np_g']*100:+.0f}%")
             if c.get("roce"): motiv.append(f"ROCE {c['roce']*100:.0f}%")
             if c.get("ocf_margin") is not None: motiv.append(f"OCF-marg {c['ocf_margin']*100:.0f}%")
-            if c.get("pe_ratio"): motiv.append(f"P/E {c['pe_ratio']:.0f}")
+            if (c.get("pe_ratio") or 0) > 0: motiv.append(f"P/E {c['pe_ratio']:.0f}")
+            sc = c.get(f"score_{sleeve}") or 0
+            dpg = c.get(f"delpoang_{sleeve}") or {}
             try:
                 db.execute(sins, (today, c["isin"], sleeve, c["short_name"], c["name"],
                                   c.get("country"), c.get("sector"),
-                                  round(c.get("score") or 0, 1), i + 1,
-                                  1 if c["isin"] in valda else 0, c.get("spar"),
-                                  _js.dumps(c.get("delpoang") or {}, ensure_ascii=False),
+                                  round(sc, 1), i + 1,
+                                  1 if c["isin"] in valda else 0,
+                                  c.get("spar") if sleeve == "krydda" else None,
+                                  _js.dumps(dpg, ensure_ascii=False),
                                   " · ".join(motiv)))
             except Exception:
                 try: db.rollback()
@@ -5815,7 +5833,9 @@ def compute_daktier_portfolios(db):
         if c["above_ma200"] != 1: skal.append("under MA200")
         if c["is_inv"] and (c["pb"] or 99) >= 1.0: skal.append("investmentbolag i premie")
         if not skal:
-            skal.append(f"klarade filtren men rankades utanför topp 6 (poäng {c.get('score', 0):.0f})")
+            kp = next((i + 1 for i, x in enumerate(karna_pool) if x["isin"] == c["isin"]), None)
+            skal.append(f"kvalificerad men plats {kp or '?'} i Kärnan "
+                        f"(poäng {c.get('score_karna', 0):.0f}, topp 6 tas in)")
         diag[t] = "; ".join(skal)
 
     return {"snapshot_date": today, "karna": [c["short_name"] for c in karna],
