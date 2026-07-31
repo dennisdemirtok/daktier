@@ -16429,7 +16429,7 @@ def _log_model_portfolios_gammal(db):
     return out
 
 
-@app.route("/api/diag/fix-data", methods=["POST"])
+@app.route("/api/maintenance/fix-data", methods=["POST"])
 def api_diag_fix_data():
     """LAGAR datan: prisutliggare (valutadubbletter) + skalblandade rapportrader,
     och bygger om trend_snapshot. ?dry=1 visar vad som skulle ändras."""
@@ -16447,7 +16447,7 @@ def api_diag_fix_data():
         db.close()
 
 
-@app.route("/api/diag/report-scale-audit", methods=["GET"])
+@app.route("/api/maintenance/report-scale-audit", methods=["GET"])
 def api_report_scale_audit():
     """Kartlägger skal-/valutablandning i rapportarkivet: bolag där kvartalens
     omsättning avviker >3x från seriens median. Visar mönstret (källa, valuta,
