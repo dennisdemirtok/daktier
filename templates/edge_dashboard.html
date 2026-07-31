@@ -611,6 +611,24 @@
         .drawer-body { padding:0 28px 32px;flex:1; }
         .drawer-section { margin-top:22px; }
         .drawer-section-title { font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;color:var(--text-muted);margin-bottom:11px;padding-bottom:7px;border-bottom:1px solid var(--line); }
+        /* Flikad aktievy (Montrose-inspirerad): toppmeny inne i lådan i stället
+           för en enda lång scroll — gäller desktop och mobil */
+        .dtab-bar { display:flex;gap:2px;position:sticky;top:0;z-index:5;background:var(--white);
+                    border-bottom:2px solid var(--line);margin:0 -4px 14px -4px;padding:2px 4px 0 4px;
+                    overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none; }
+        .dtab-bar::-webkit-scrollbar { display:none; }
+        .dtab { border:none;background:none;font-family:inherit;font-size:13.5px;font-weight:600;
+                color:var(--text-muted);padding:10px 14px;cursor:pointer;white-space:nowrap;
+                border-bottom:2.5px solid transparent;margin-bottom:-2px;transition:color 0.15s; }
+        .dtab:hover { color:var(--brand-navy); }
+        .dtab.active { color:var(--brand-navy);border-bottom-color:var(--brand-cyan);font-weight:700; }
+        .dtab-panel { display:none; }
+        .dtab-panel.active { display:block; }
+        .dtab-empty { padding:32px;text-align:center;color:var(--text-muted);font-size:13px; }
+        .dov-chips { display:grid;grid-template-columns:repeat(auto-fit,minmax(88px,1fr));gap:8px;margin-bottom:14px; }
+        .dov-chip { background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:9px 10px;text-align:center; }
+        .dov-chip .l { font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--text-muted); }
+        .dov-chip .v { font-size:14.5px;font-weight:800;margin-top:2px; }
         /* v3.8: ren, läsbar tabell-stil i drawern */
         .drawer-tbl { width:100%;border-collapse:collapse;font-size:12.5px; }
         .drawer-tbl th { text-align:left;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.4px;color:var(--text-muted);padding:6px 8px;border-bottom:1px solid var(--line); }
@@ -3871,20 +3889,42 @@ function renderQuarterlyTrendsSection(s) {
         </div>`;
     }
 
-    // Tabell med 8 senaste kvartalen
-    const tableRows = recent.slice(0, 8).map(r => {
+    // Tabell med 8 senaste kvartalen — klickbara rader: expandera för
+    // rapportens YoY-jämförelse (Montrose-stil: "hur var rapporten?")
+    const tableRows = recent.slice(0, 8).map((r, ri) => {
         const np = r.net_profit;
         const sales = r.sales;
         const margin = r.profit_margin;
         const roe = r.return_on_equity;
         const npCol = np == null ? '#888' : np > 0 ? '#00a870' : '#c0392b';
-        return `<tr>
-            <td style="padding:6px 10px;font-weight:600">${r.quarter} ${r.financial_year}</td>
+        const py = sortedDesc.find(p =>
+            p.quarter === r.quarter && p.financial_year === (r.financial_year || 0) - 1);
+        const dS = py ? deltaPct(sales, py.sales) : null;
+        const dN = py ? deltaPct(np, py.net_profit) : null;
+        const dM = (margin != null && py && py.profit_margin != null)
+            ? (margin - py.profit_margin) : null;
+        const detail = `<tr class="qrow-detail" id="qdet-${ri}" style="display:none">
+            <td colspan="5" style="padding:10px 14px;background:var(--bg);border-radius:8px">
+                <div style="font-size:11px;font-weight:700;text-transform:uppercase;
+                            letter-spacing:0.5px;color:var(--text-muted);margin-bottom:6px">
+                    ${r.quarter} ${r.financial_year} vs ${r.quarter} ${(r.financial_year || 0) - 1}</div>
+                <div style="display:flex;flex-wrap:wrap;gap:14px;font-size:12.5px">
+                    <div>Omsättning: ${deltaTag(dS, 'YoY')}</div>
+                    <div>Resultat: ${deltaTag(dN, 'YoY')}</div>
+                    <div>Marginal: ${dM == null ? '<span style="color:var(--text-muted)">–</span>'
+                        : `<span style="font-weight:700;color:${dM > 0 ? '#00a870' : '#c0392b'}">${dM > 0 ? '+' : ''}${(dM * 100).toFixed(1)} p.e.</span>`}</div>
+                    ${py ? `<div style="color:var(--text-muted)">Fjolår: ${fmtMoney(py.sales)} oms · ${fmtMoney(py.net_profit)} vinst</div>` : ''}
+                </div>
+            </td></tr>`;
+        return `<tr onclick="const d=document.getElementById('qdet-${ri}');if(d)d.style.display=d.style.display==='none'?'':'none'"
+                    style="cursor:pointer" title="Klicka för rapportens YoY-jämförelse">
+            <td style="padding:6px 10px;font-weight:600">${r.quarter} ${r.financial_year}
+                <span style="color:var(--brand-cyan);font-size:10px">▾</span></td>
             <td style="padding:6px 10px;text-align:right">${fmtMoney(sales)}</td>
             <td style="padding:6px 10px;text-align:right;color:${npCol};font-weight:600">${fmtMoney(np)}</td>
             <td style="padding:6px 10px;text-align:right">${fmtPct(margin)}</td>
             <td style="padding:6px 10px;text-align:right">${roe != null ? (roe < 1 ? (roe*100).toFixed(1) : roe.toFixed(1)) + '%' : '–'}</td>
-        </tr>`;
+        </tr>` + detail;
     }).join('');
 
     // v2.4 — ROE och YoY-tillväxt per kvartal (utbyggd kvartalshistorik)
@@ -5056,6 +5096,8 @@ function openDrawer(s) {
     }
 
     let html = '';
+    // Flik-hinkar: varje sektion hamnar i en flik i stället för en lång scroll
+    const B = { oversikt: '', rapporter: '', nyckeltal: '', analys: '', agare: '' };
 
     // ── 🎯 v2 SETUP (kompakt, modern design) ──
     // Renderas EFTER DAKTIER Score nedan — placeras hit i koden men HTML:en
@@ -5303,7 +5345,7 @@ function openDrawer(s) {
 
         const ssBg = ss >= 70 ? 'linear-gradient(135deg, #ecfdf5, #d1fae5)' : ss >= 55 ? 'linear-gradient(135deg, #f8fafc, #f1f5f9)' : ss >= 40 ? 'linear-gradient(135deg, #fffbeb, #fef3c7)' : 'linear-gradient(135deg, #fef2f2, #fee2e2)';
 
-        html += `<div class="drawer-section" style="background:${ssBg};border-radius:14px;padding:18px;margin-bottom:14px;border:1px solid rgba(0,0,0,0.05)">
+        B.analys += `<div class="drawer-section" style="background:${ssBg};border-radius:14px;padding:18px;margin-bottom:14px;border:1px solid rgba(0,0,0,0.05)">
             <div style="display:flex;align-items:center;justify-content:space-between;gap:14px;margin-bottom:14px">
                 <div>
                     <div style="font-size:10.5px;color:#475569;text-transform:uppercase;letter-spacing:0.1em;font-weight:800">⭐ DAKTIER Score</div>
@@ -5336,7 +5378,7 @@ function openDrawer(s) {
     }
 
     // V2 SETUP-CARD (renderad ovan, läggs in efter DAKTIER Score)
-    html += setupHtml;
+    B.analys += setupHtml;
 
     // ── 📚 BOK-MODELLER (13) — per-modell-breakdown ──
     // Visar varje av de 13 bokmodellerna med score + mini-bar.
@@ -5414,7 +5456,7 @@ function openDrawer(s) {
                          bookComp >= 45 ? '#64748b' :
                          bookComp >= 30 ? '#f59e0b' : '#dc2626';
 
-        html += `<details class="drawer-section" style="background:white;border-radius:14px;padding:14px 18px;margin-bottom:14px;border:1px solid rgba(0,0,0,0.06)">
+        B.analys += `<details class="drawer-section" style="background:white;border-radius:14px;padding:14px 18px;margin-bottom:14px;border:1px solid rgba(0,0,0,0.06)">
             <summary style="cursor:pointer;list-style:none;display:flex;align-items:center;justify-content:space-between;gap:10px">
                 <div>
                     <div style="font-size:10.5px;color:#64748b;text-transform:uppercase;letter-spacing:0.5px;font-weight:700">📚 Bok-modeller</div>
@@ -5484,7 +5526,7 @@ function openDrawer(s) {
             </div>`;
         }
         if (detailsBody) {
-            html += `<details class="drawer-section" style="background:#f8fafc;border-radius:10px;padding:10px 14px">
+            B.analys += `<details class="drawer-section" style="background:#f8fafc;border-radius:10px;padding:10px 14px">
                 <summary style="font-size:12px;font-weight:700;color:#334155;cursor:pointer;list-style:none">
                     📊 Score-detaljer (Edge + Meta)
                 </summary>
@@ -5493,7 +5535,7 @@ function openDrawer(s) {
         }
     } else if (hasEdge && !hasMeta) {
         // Edge utan smart_score: visa kompakt utan att duplicera
-        html += `<details class="drawer-section" style="background:#f8fafc;border-radius:10px;padding:10px 14px">
+        B.analys += `<details class="drawer-section" style="background:#f8fafc;border-radius:10px;padding:10px 14px">
             <summary style="font-size:12px;font-weight:700;color:#334155;cursor:pointer">📊 Edge-detaljer</summary>
             <div style="margin-top:8px;display:flex;flex-wrap:wrap;gap:6px">
                 <span style="background:white;border:1px solid #e5e7eb;border-radius:6px;padding:4px 9px;font-size:11.5px"><b>Score:</b> ${s.edge_score.toFixed(0)}</span>
@@ -5514,7 +5556,7 @@ function openDrawer(s) {
         const qt = s.quarters_total || 0;
         const vel = s.vel_13w ? (s.vel_13w * 100).toFixed(1) : '0';
         const strk = s.streak || 0;
-        html += `<div class="drawer-section" style="background:${discBg};border-radius:12px;padding:16px">
+        B.analys += `<div class="drawer-section" style="background:${discBg};border-radius:12px;padding:16px">
             <div class="drawer-section-title" style="color:${discColor}">${discEmoji} Discovery Signal</div>
             <div style="display:flex;align-items:center;gap:16px;margin-bottom:12px">
                 <div style="font-size:36px;font-weight:900;color:${discColor}">${disc}</div>
@@ -5543,7 +5585,7 @@ function openDrawer(s) {
         const ov = s.owner_velocity || 0;
         const msColor = ms >= 70 ? '#166534' : ms >= 50 ? '#854d0e' : '#6b7280';
         const bgColor = ms >= 70 ? 'linear-gradient(135deg, #f0fdf4, #ecfccb)' : ms >= 50 ? 'linear-gradient(135deg, #fefce8, #fef9c3)' : '#f9fafb';
-        html += `<div class="drawer-section" style="background:${bgColor};border-radius:12px;padding:16px">
+        B.agare += `<div class="drawer-section" style="background:${bgColor};border-radius:12px;padding:16px">
             <div class="drawer-section-title" style="color:${msColor}">Ägarmognad</div>
             <div style="display:flex;align-items:center;gap:16px;margin-bottom:12px">
                 <div style="font-size:36px;font-weight:900;color:${msColor}">${ms.toFixed(0)}</div>
@@ -5569,7 +5611,7 @@ function openDrawer(s) {
         ['1Y','one_year_change_pct'],['3Y','three_years_change_pct'],['5Y','five_years_change_pct'],
         ['10Y','ten_years_change_pct'],['Alltid','infinity_change_pct'],
     ];
-    html += `<div class="drawer-section"><div class="drawer-section-title">Prisutveckling</div><div class="drawer-grid-3">${
+    B.oversikt += `<div class="drawer-section"><div class="drawer-section-title">Prisutveckling</div><div class="drawer-grid-3">${
         priceFields.map(([l,k]) => {
             const v = s[k];
             return `<div class="drawer-item"><div class="drawer-item-label">${l}</div><div class="drawer-item-value ${pctClass(v)}">${fmtPct(v)}</div></div>`;
@@ -5582,7 +5624,7 @@ function openDrawer(s) {
         ['1M','owners_change_1m','owners_change_1m_abs'],['3M','owners_change_3m','owners_change_3m_abs'],
         ['YTD','owners_change_ytd','owners_change_ytd_abs'],['1Y','owners_change_1y','owners_change_1y_abs'],
     ];
-    html += `<div class="drawer-section"><div class="drawer-section-title">Ägarförändringar (${fmtNum(s.number_of_owners)} ägare)</div><div class="drawer-grid-3">${
+    B.agare += `<div class="drawer-section"><div class="drawer-section-title">Ägarförändringar (${fmtNum(s.number_of_owners)} ägare)</div><div class="drawer-grid-3">${
         ownerFields.map(([l,pk,ak]) => {
             const v = s[pk]; const abs = s[ak];
             return `<div class="drawer-item"><div class="drawer-item-label">${l}</div>
@@ -5656,7 +5698,7 @@ function openDrawer(s) {
     const sectorBadge = sm
         ? `<span style="font-size:10px;background:#dbeafe;color:#1e40af;padding:2px 8px;border-radius:10px;margin-left:8px">vs ${sm.sector} (${sm.n_stocks} bolag)</span>`
         : '';
-    html += `<div class="drawer-section"><div class="drawer-section-title">Fundamentala nyckeltal${sectorBadge}</div><div class="drawer-grid">${
+    B.nyckeltal += `<div class="drawer-section"><div class="drawer-section-title">Fundamentala nyckeltal${sectorBadge}</div><div class="drawer-grid">${
         fundItems.map(([l,v,fmt,medFn]) => `<div class="drawer-item"><div class="drawer-item-label">${l}</div><div class="drawer-item-value">${fmt(v)}</div>${medFn()}</div>`).join('')
     }</div></div>`;
 
@@ -5678,57 +5720,57 @@ function openDrawer(s) {
         ['MACD', s.macd_histogram, v => v!=null ? `<span class="${v>0?'num-pos':'num-neg'}">${v.toFixed(3)}</span>` : '-'],
         ['Boll. bredd', s.bollinger_distance_upper_to_lower, v => v!=null ? (v*100).toFixed(1)+'%' : '-'],
     ];
-    html += `<div class="drawer-section"><div class="drawer-section-title">Tekniska indikatorer</div><div class="drawer-grid">${
+    B.nyckeltal += `<div class="drawer-section"><div class="drawer-section-title">Tekniska indikatorer</div><div class="drawer-grid">${
         techItems.map(([l,v,fmt]) => `<div class="drawer-item"><div class="drawer-item-label">${l}</div><div class="drawer-item-value">${fmt(v)}</div></div>`).join('')
     }</div></div>`;
 
     // ── INSIDER (FI insynsregister) ──
-    html += renderInsiderSection(s);
+    B.agare += renderInsiderSection(s);
 
     // ── RUNWAY (för förlustbolag — kritisk siffra) ──
-    html += renderRunwaySection(s);
+    B.nyckeltal += renderRunwaySection(s);
 
     // ── UTSPÄDNING (shares-bevakning) ──
-    html += renderDilutionSection(s);
+    B.nyckeltal += renderDilutionSection(s);
 
     // ── MACRO-OVERLAY (10y-ränta + sektor-relevans) ──
-    html += renderMacroOverlay(s);
+    B.analys += renderMacroOverlay(s);
 
     // ── BACKTEST-VALIDERING (alfa per setup historiskt) ──
-    html += renderBacktestValidation(s);
+    B.analys += renderBacktestValidation(s);
 
     // ── KVANT-RANG (Quality/Value/Momentum percent-ranks) ──
-    html += renderQuantRank(s);
+    B.analys += renderQuantRank(s);
 
     // ── KVALITETS-PERSISTENS (5y ROIC/ROE-stabilitet) ──
-    html += renderQualityPersistence(s);
+    B.analys += renderQualityPersistence(s);
 
     // ── INVESTMENTBOLAG-PANEL (NAV/substansrabatt) — visas FÖRST om relevant ──
-    html += renderInvestmentCompanySection(s);
+    B.nyckeltal += renderInvestmentCompanySection(s);
 
     // ── BOKMODELLER (Graham, Buffett, Lynch, Greenblatt, Klarman, Taleb, Kelly m.fl.) ──
-    html += renderBookModelSection(s);
+    B.analys += renderBookModelSection(s);
 
     // ── KÖPZON (simulerat riktpris) ──
-    html += renderBuyZoneSection(s);
+    B.analys += renderBuyZoneSection(s);
 
     // ── PEER-JÄMFÖRELSE (lazy-loaded) ──
-    html += renderPeersPlaceholder(s);
+    B.analys += renderPeersPlaceholder(s);
 
     // ── VINST/TILLVÄXT PER KVARTAL (Avanza har ej FCF — vi visar nettoresultat) ──
     // Skippa för investmentbolag — kvartalsvinst speglar inte värdet (NAV är primärt)
     if (!s.is_investment_company) {
-        html += renderQuarterlyTrendsSection(s);
+        B.rapporter += renderQuarterlyTrendsSection(s);
     }
 
     // ── 10-års HISTORIK (Avanza /analysis) ──
-    html += renderHistoricalSection(s);
+    B.rapporter += renderHistoricalSection(s);
 
     // ── PIOTROSKI F-SCORE (Börsdata) ──
-    html += renderFScoreSection(s);
+    B.nyckeltal += renderFScoreSection(s);
 
     // ── AI ANALYS-KNAPP ──
-    html += `<div class="drawer-section">
+    B.analys += `<div class="drawer-section">
         <div class="drawer-section-title">🤖 AI-analys (Claude)</div>
         <button id="aiAnalyzeBtn" onclick="analyzeStock()" style="
             width:100%;padding:12px 16px;border:none;border-radius:10px;cursor:pointer;font-size:14px;font-weight:700;
@@ -5743,7 +5785,7 @@ function openDrawer(s) {
 
     // ── INSIDER ──
     if (s.insider_buys > 0 || s.insider_sells > 0) {
-        html += `<div class="drawer-section"><div class="drawer-section-title">Insiderhandel (90d)</div><div class="drawer-grid">
+        B.agare += `<div class="drawer-section"><div class="drawer-section-title">Insiderhandel (90d)</div><div class="drawer-grid">
             <div class="drawer-item"><div class="drawer-item-label">Köp</div><div class="drawer-item-value" style="color:var(--green)">${s.insider_buys}</div></div>
             <div class="drawer-item"><div class="drawer-item-label">Sälj</div><div class="drawer-item-value" style="color:var(--red)">${s.insider_sells}</div></div>
             ${s.insider_cluster_buy ? '<div class="drawer-item" style="grid-column:span 2;background:var(--green-light)"><div class="drawer-item-value" style="color:var(--green)">🔥 Klusterköp (3+ insiders)</div></div>' : ''}
@@ -5751,13 +5793,41 @@ function openDrawer(s) {
     }
 
     // v3.8: Nyheter + Insider-transaktioner (lazy-laddas efter render om data finns)
-    html += `<div class="drawer-section" id="drawerNewsSection" style="display:none">
+    B.oversikt += `<div class="drawer-section" id="drawerNewsSection" style="display:none">
         <div class="drawer-section-title">📰 Senaste nyheter</div>
         <div id="drawerNews"></div></div>`;
-    html += `<div class="drawer-section" id="drawerInsidersSection" style="display:none">
+    B.agare += `<div class="drawer-section" id="drawerInsidersSection" style="display:none">
         <div class="drawer-section-title">👥 Insider-transaktioner (senaste)</div>
         <div id="drawerInsiders"></div></div>`;
 
+    // ── Kompositlager: Montrose-stil flikar i stället för lång scroll ──
+    const pchip = (label, v, isPct) => {
+        if (v == null) return '';
+        const num = Number(v);
+        const col = !isPct ? 'var(--ink)' : (num > 0 ? '#059669' : num < 0 ? '#DC2626' : 'var(--text-muted)');
+        const val = isPct ? (num > 0 ? '+' : '') + num.toFixed(1) + '%' : v;
+        return `<div class="dov-chip"><div class="l">${label}</div><div class="v" style="color:${col}">${val}</div></div>`;
+    };
+    const mcapTxt = s.market_cap ? (s.market_cap >= 1e9
+        ? (s.market_cap / 1e9).toFixed(1) + ' mdr' : (s.market_cap / 1e6).toFixed(0) + ' M') : null;
+    B.oversikt = `<div class="dov-chips">`
+        + pchip('1 dag', s.one_day_change_pct, true)
+        + pchip('1 vecka', s.one_week_change_pct, true)
+        + pchip('1 mån', s.one_month_change_pct, true)
+        + pchip('3 mån', s.three_months_change_pct, true)
+        + pchip('I år', s.ytd_change_pct, true)
+        + pchip('P/E', s.pe_ratio != null ? Number(s.pe_ratio).toFixed(1) : null, false)
+        + pchip('Börsvärde', mcapTxt, false)
+        + `</div>` + B.oversikt;
+    const DTABS = [['oversikt', 'Översikt'], ['rapporter', 'Rapporter'],
+                   ['nyckeltal', 'Nyckeltal'], ['analys', 'Analys'], ['agare', 'Ägare']];
+    html = `<div class="dtab-bar">` + DTABS.map(([k, l], i) =>
+            `<button class="dtab${i === 0 ? ' active' : ''}" data-dtab="${k}" `
+            + `onclick="switchDrawerTab('${k}')">${l}</button>`).join('')
+        + `</div>`
+        + DTABS.map(([k]) => `<div class="dtab-panel${k === 'oversikt' ? ' active' : ''}" id="dtab-${k}">`
+            + (B[k] || '<div class="dtab-empty">Inget innehåll för denna aktie ännu</div>')
+            + `</div>`).join('');
     document.getElementById('drawerBody').innerHTML = html;
     document.getElementById('stockDrawer').classList.add('open');
     document.getElementById('drawerOverlay').classList.add('open');
@@ -8291,6 +8361,18 @@ function renderTrendingTable() {
     });
     html += '</tbody></table>';
     document.getElementById('trendingContent').innerHTML = html;
+}
+
+function switchDrawerTab(name) {
+    document.querySelectorAll('.dtab').forEach(b =>
+        b.classList.toggle('active', b.dataset.dtab === name));
+    document.querySelectorAll('.dtab-panel').forEach(p =>
+        p.classList.toggle('active', p.id === 'dtab-' + name));
+    const body = document.getElementById('drawerBody') ||
+                 document.querySelector('.drawer');
+    if (body) body.scrollTop = 0;
+    // Chart.js-canvas i nyss dolda paneler har nollbredd — trigga omritning
+    try { window.dispatchEvent(new Event('resize')); } catch (e) {}
 }
 
 function openStockDrawer(orderbookId) {
