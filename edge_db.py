@@ -5534,8 +5534,16 @@ def compute_daktier_portfolios(db):
         # nettokassa ska aldrig sorteras bort som skuldsatt.
         nd = next((x.get("net_debt") for x in lst[:4]
                    if isinstance(x.get("net_debt"), (int, float))), None)
+        # MARGINALFÖRBÄTTRING: rätt mått för skalande bolag som ännu går med
+        # förlust. Cloudflare går från -20 % till -10 % nettomarginal = tydlig
+        # förbättring, men absolut "vinstförändring" ger inget utslag eftersom
+        # båda talen är negativa. Mäts i procentenheter.
+        npm = (np_ / rev) if (np_ is not None and rev) else None
+        npm_prev = (np_p / rev_p) if (np_p is not None and rev_p) else None
+        marg_delta = (npm - npm_prev) if (npm is not None and npm_prev is not None) else None
         cands.append({
             "net_debt_rap": nd, "nettokassa": (nd is not None and nd < 0),
+            "np_margin": npm, "np_margin_prev": npm_prev, "marg_delta": marg_delta,
             "kvartal_vinst": kvartal_vinst,
             **u, "mcap_sek": mcap_sek, "rev_ttm": rev, "rev_sek": rev * 1e6 * fx,
             "np_ttm": np_, "ocf_ttm": ocf,
@@ -5706,8 +5714,11 @@ def compute_daktier_portfolios(db):
         and 0.60 <= (c["gross_margin"] or 0) <= 1.0            # skalbar produkt
         and c["rev_g"] >= 0.18                                 # tydlig tillväxt
         and (c["ocf_margin"] or -9) > -0.12                    # ej kassaförbrännare
-        # Förlusten ska KRYMPA (np_g > 0 betyder mindre negativt resultat)
-        and (c["np_g"] is not None and c["np_g"] > 0)]
+        # FÖRLUSTEN SKA KRYMPA — mätt som marginalförbättring i procentenheter
+        # (Cloudflare: -20 % → -10 % nettomarginal syns här men inte i absolut
+        # vinstförändring, eftersom båda talen är negativa)
+        and ((c.get("marg_delta") is not None and c["marg_delta"] > 0.015)
+             or (c["np_g"] is not None and c["np_g"] > 0))]
     kr_pool = kr_lonsam + kr_mjukvara
     if kr_pool:
         for c in kr_pool:
@@ -5719,10 +5730,20 @@ def compute_daktier_portfolios(db):
             jamn = 100.0 * c["jamnhet"] if c.get("jamnhet") is not None else 45.0
             revis = _band(c["rev_net"], -0.2, 0.6) if c.get("rev_net") is not None else 50.0
             c["spar"] = "mjukvara" if c in kr_mjukvara else "lönsam"
-            c["score_krydda"] = (0.26 * tillv + 0.20 * flerar + 0.20 * mom
-                                 + 0.14 * marg + 0.10 * jamn + 0.10 * revis)
+            # SKALBARHET: Kryddan ska vara tillväxtlagret, inte en generisk
+            # momentumlista. Teknik med hög bruttomarginal (mjukvarukännetecken)
+            # premieras — råvaru-/energibolag med cyklisk topp får inte samma vikt.
+            skalbar = (100.0 if (_ar_teknik(c) and (c.get("gross_margin") or 0) >= 0.6)
+                       else 70.0 if _ar_teknik(c)
+                       else 45.0 if (c.get("gross_margin") or 0) >= 0.5 else 20.0)
+            # Marginalförbättring: belönar bolag som skalar mot lönsamhet
+            forb = _band(c.get("marg_delta"), 0.0, 0.06) if c.get("marg_delta") is not None else 40.0
+            c["score_krydda"] = (0.22 * tillv + 0.16 * flerar + 0.16 * mom
+                                 + 0.10 * marg + 0.08 * jamn + 0.08 * revis
+                                 + 0.12 * skalbar + 0.08 * forb)
             c["delpoang_krydda"] = {"tillvaxt": round(tillv), "flerar": round(flerar),
                                     "momentum": round(mom), "bruttomarginal": round(marg),
+                                    "skalbarhet": round(skalbar), "förbättring": round(forb),
                                     "jamnhet": round(jamn), "revisioner": round(revis)}
         kr_pool.sort(key=lambda c: -c["score_krydda"])
 
@@ -5864,7 +5885,31 @@ def compute_daktier_portfolios(db):
             kp = next((i + 1 for i, x in enumerate(karna_pool) if x["isin"] == c["isin"]), None)
             skal.append(f"kvalificerad men plats {kp or '?'} i Kärnan "
                         f"(poäng {c.get('score_karna', 0):.0f}, topp 6 tas in)")
-        diag[t] = "; ".join(skal)
+        # Om bolaget inte kvalade till Kärnan — varför inte till Kryddan?
+        if c["isin"] not in in_kr and "MED" not in skal[0]:
+            kp2 = next((i + 1 for i, x in enumerate(kr_pool) if x["isin"] == c["isin"]), None)
+            if kp2:
+                skal.append(f"KRYDDAN: plats {kp2} (poäng {c.get('score_krydda', 0):.0f}, topp 4 tas in)")
+            else:
+                kskal = []
+                if c["mcap_sek"] < 3e10: kskal.append("för litet bolag")
+                if not (0.15 <= (c["rev_g"] or 0) <= 1.50):
+                    kskal.append(f"tillväxt {(c['rev_g'] or 0)*100:.0f}% utanför 15-150%")
+                if c["above_ma200"] != 1: kskal.append("under MA200")
+                if not (0 < (c["ret_12m"] or 0) <= 400): kskal.append("12m-momentum ej positivt")
+                if c.get("jamnhet") is not None and c["jamnhet"] < 0.5:
+                    kskal.append(f"ojämn utveckling ({c['jamnhet']*100:.0f}% ökande år)")
+                if not c.get("nettokassa") and (c.get("debt_to_equity_ratio") or 0) >= 1.5:
+                    kskal.append(f"D/E {c['debt_to_equity_ratio']:.1f}")
+                # Mjukvaruspårets krav
+                if not _ar_teknik(c): kskal.append("ej tekniksektor (mjukvaruspåret)")
+                elif not (0.60 <= (c.get("gross_margin") or 0) <= 1.0):
+                    kskal.append(f"bruttomarginal {(c.get('gross_margin') or 0)*100:.0f}% < 60%")
+                elif (c.get("marg_delta") is not None and c["marg_delta"] <= 0.015
+                      and not (c["np_g"] and c["np_g"] > 0)):
+                    kskal.append(f"marginal {c['marg_delta']*100:+.1f} p.e. — förlusten krymper ej nog")
+                skal.append("KRYDDAN: " + ("; ".join(kskal) if kskal else "föll på annat krav"))
+        diag[t] = " | ".join(skal)
 
     return {"snapshot_date": today, "karna": [c["short_name"] for c in karna],
             "krydda": [c["short_name"] for c in krydda],
