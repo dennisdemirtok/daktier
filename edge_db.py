@@ -5234,6 +5234,123 @@ _FX_SEK = {"SEK": 1.0, "USD": 10.5, "EUR": 11.3, "NOK": 0.95, "DKK": 1.52,
            "PLN": 2.6, "AUD": 6.8}
 
 
+def clean_price_outliers(db, threshold=2.5, dry_run=False):
+    """LAGAR prisarkivet: tar bort rader som avviker kraftigt från bolagets
+    egen rullande prisnivå.
+
+    Rotorsak: stocks har flera rader per ISIN i olika valutor (Microsoft:
+    USD 460,71 med 79 874 ägare OCH CAD 27,76 med 0 ägare). Båda skrevs till
+    borsdata_prices under samma ISIN → MA200 räknades på blandade valutor →
+    ALLA megacaps flaggades felaktigt 'under MA200'.
+
+    Metod: rullande median (±5 dagar) per ISIN. Avviker en dag mer än
+    threshold× från medianen är den en valuta-/skalartefakt, inte en kursrörelse
+    (en äkta krasch syns i grannarna också och flyttar medianen med sig)."""
+    import statistics as _stat
+    ph = _ph()
+    # Kandidater: ISIN där max/min-spannet är orimligt för en kursserie
+    cand = _fetchall(db, """
+        SELECT isin, MIN(close) AS lo, MAX(close) AS hi, COUNT(*) AS n
+        FROM borsdata_prices WHERE close > 0
+        GROUP BY isin HAVING MAX(close) > MIN(close) * 5 AND COUNT(*) >= 30
+    """)
+    cand = [dict(r)["isin"] for r in cand]
+    borttagna, drabbade = 0, []
+    for isin in cand:
+        rows = [dict(r) for r in _fetchall(db,
+            f"SELECT date, close FROM borsdata_prices WHERE isin = {ph} "
+            f"AND close > 0 ORDER BY date ASC", (isin,))]
+        if len(rows) < 15:
+            continue
+        closes = [r["close"] for r in rows]
+        bad_dates = []
+        for i, r in enumerate(rows):
+            lo, hi = max(0, i - 5), min(len(closes), i + 6)
+            grannar = closes[lo:i] + closes[i + 1:hi]
+            if len(grannar) < 4:
+                continue
+            med = _stat.median(grannar)
+            if med > 0 and (r["close"] > med * threshold or r["close"] < med / threshold):
+                bad_dates.append(str(r["date"])[:10])
+        if not bad_dates:
+            continue
+        drabbade.append({"isin": isin, "n_rader": len(bad_dates),
+                         "exempel": bad_dates[:3]})
+        if not dry_run:
+            for chunk in [bad_dates[i:i + 200] for i in range(0, len(bad_dates), 200)]:
+                marks = ",".join([ph] * len(chunk))
+                db.execute(f"DELETE FROM borsdata_prices WHERE isin = {ph} "
+                           f"AND date IN ({marks})", (isin,) + tuple(chunk))
+                borttagna += len(chunk)
+            db.commit()
+    return {"granskade_isin": len(cand), "drabbade_bolag": len(drabbade),
+            "borttagna_rader": borttagna, "dry_run": dry_run,
+            "exempel": drabbade[:15]}
+
+
+def normalize_report_scales(db, dry_run=False):
+    """LAGAR rapportarkivet: normaliserar rader som ligger i annan valuta/skala
+    än bolagets övriga serie (TSM hade 39 890 · 1 134 103 · 33 266 · 32 469 —
+    TWD-rader blandat med USD-skalade).
+
+    Rader SLÄNGS INTE — hela raden skalas proportionellt (omsättning, vinst,
+    kassaflöde, tillgångar) med samma faktor så att den hamnar i seriens
+    dominerande skala. Alla marginaler och tillväxttal bevaras exakt; bara
+    valutaskalan harmoniseras. Faktorn kommer ur datan själv (median/rad),
+    inget gissas."""
+    import statistics as _stat
+    ph = _ph()
+    _SKAL = ["revenues", "gross_income", "operating_income", "profit_before_tax",
+             "net_profit", "operating_cash_flow", "investing_cash_flow",
+             "financing_cash_flow", "free_cash_flow", "total_assets",
+             "current_assets", "total_equity", "total_liabilities",
+             "current_liabilities", "cash_and_equivalents", "net_debt"]
+    rows = [dict(r) for r in _fetchall(db, """
+        SELECT isin, report_type, report_end_date, revenues
+        FROM borsdata_reports
+        WHERE revenues IS NOT NULL AND revenues != 0
+          AND report_end_date IS NOT NULL""")]
+    byk = {}
+    for r in rows:
+        byk.setdefault((r["isin"], r["report_type"]), []).append(r)
+    fixade, bolag = 0, []
+    for (isin, rtype), lst in byk.items():
+        if len(lst) < 6:
+            continue
+        vals = [abs(r["revenues"]) for r in lst]
+        med = _stat.median(vals)
+        if med <= 0:
+            continue
+        outl = [r for r in lst if abs(r["revenues"]) > med * 3
+                or abs(r["revenues"]) < med / 3]
+        if not outl or len(outl) > len(lst) / 2:
+            continue          # majoriteten avvikande = medianen är opålitlig
+        ex = []
+        for r in outl:
+            faktor = med / abs(r["revenues"])
+            # Skala hela raden proportionellt — marginaler bevaras exakt
+            sets = ", ".join(f"{c} = {c} * {faktor:.10g}" for c in _SKAL)
+            ex.append({"datum": str(r["report_end_date"])[:10],
+                       "fore": round(r["revenues"], 1),
+                       "faktor": round(faktor, 4)})
+            if not dry_run:
+                try:
+                    db.execute(
+                        f"UPDATE borsdata_reports SET {sets} WHERE isin = {ph} "
+                        f"AND report_type = {ph} AND report_end_date = {ph}",
+                        (isin, rtype, r["report_end_date"]))
+                    fixade += 1
+                except Exception:
+                    try: db.rollback()
+                    except Exception: pass
+        if not dry_run:
+            db.commit()
+        bolag.append({"isin": isin, "typ": rtype, "median": round(med, 1),
+                      "rader": ex[:3], "n": len(outl)})
+    return {"normaliserade_rader": fixade, "drabbade_serier": len(bolag),
+            "dry_run": dry_run, "exempel": bolag[:15]}
+
+
 def compute_daktier_portfolios(db):
     """DAKTIER-portföljen: KÄRNA (kvalitetscompounders) + KRYDDA (tillväxt/risk).
 
@@ -5330,20 +5447,15 @@ def compute_daktier_portfolios(db):
         if len(lst) < 8:
             continue
         cur, prev = lst[:4], lst[4:8]
-        # SKALKONTROLL (REGEL 0): TSM hade 39 890 · 1 134 103 · 33 266 · 32 469 —
-        # ett kvartal 34× grannarna (TWD-rader blandat med USD-skalade). Sådana
-        # serier ger fantasitillväxt → bolaget utesluts hellre än gissas på.
+        # SKALKONTROLL: serien normaliseras numera av normalize_report_scales
+        # (hela rader skalas proportionellt — inga bolag slängs). Kvar som
+        # sista skyddsnät om något ändå slinker igenom.
         revs = [abs(x.get("revenues")) for x in lst[:8]
                 if isinstance(x.get("revenues"), (int, float)) and x.get("revenues")]
         if len(revs) < 6:
             continue
         med = _stat.median(revs)
-        if med <= 0 or any(v > med * 3 or v < med / 3 for v in revs):
-            skippade_skala += 1
-            continue
-        # Valutakonsistens genom hela serien
-        curs = {(x.get("currency") or "").upper() for x in lst[:8] if x.get("currency")}
-        if len(curs) > 1:
+        if med <= 0 or any(v > med * 3.5 or v < med / 3.5 for v in revs):
             skippade_skala += 1
             continue
         rev, rev_p = _sum4(cur, "revenues"), _sum4(prev, "revenues")

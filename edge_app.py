@@ -16429,6 +16429,24 @@ def _log_model_portfolios_gammal(db):
     return out
 
 
+@app.route("/api/diag/fix-data", methods=["POST"])
+def api_diag_fix_data():
+    """LAGAR datan: prisutliggare (valutadubbletter) + skalblandade rapportrader,
+    och bygger om trend_snapshot. ?dry=1 visar vad som skulle ändras."""
+    from edge_db import (clean_price_outliers, normalize_report_scales,
+                         compute_trend_snapshot)
+    dry = request.args.get("dry") in ("1", "true", "yes")
+    db = get_db()
+    try:
+        res = {"priser": clean_price_outliers(db, dry_run=dry),
+               "rapporter": normalize_report_scales(db, dry_run=dry)}
+        if not dry:
+            res["trend_snapshot"] = compute_trend_snapshot(db)
+        return jsonify(res)
+    finally:
+        db.close()
+
+
 @app.route("/api/diag/report-scale-audit", methods=["GET"])
 def api_report_scale_audit():
     """Kartlägger skal-/valutablandning i rapportarkivet: bolag där kvartalens
