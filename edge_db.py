@@ -5714,10 +5714,13 @@ def compute_daktier_portfolios(db):
         and 0.60 <= (c["gross_margin"] or 0) <= 1.0            # skalbar produkt
         and c["rev_g"] >= 0.18                                 # tydlig tillväxt
         and (c["ocf_margin"] or -9) > -0.12                    # ej kassaförbrännare
-        # FÖRLUSTEN SKA KRYMPA — mätt som marginalförbättring i procentenheter
-        # (Cloudflare: -20 % → -10 % nettomarginal syns här men inte i absolut
-        # vinstförändring, eftersom båda talen är negativa)
-        and ((c.get("marg_delta") is not None and c["marg_delta"] > 0.015)
+        # FÖRLUSTEN SKA KRYMPA — mätt som marginalförbättring i procentenheter.
+        # Kravet SKALAS efter hur långt bolaget har kvar: Cloudflare ligger på
+        # ~-2 % marginal och förbättrar 0,9 p.e./år = break-even inom ~2 år,
+        # medan ett bolag på -30 % med samma takt är hopplöst. Därför räcker
+        # 0,4 p.e. nära break-even men krävs 1,5 p.e. längre ner.
+        and ((c.get("marg_delta") is not None
+              and c["marg_delta"] > (0.004 if (c.get("np_margin") or -1) > -0.10 else 0.015))
              or (c["np_g"] is not None and c["np_g"] > 0))]
     kr_pool = kr_lonsam + kr_mjukvara
     if kr_pool:
