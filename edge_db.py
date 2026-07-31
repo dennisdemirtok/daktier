@@ -5040,12 +5040,33 @@ def compute_trend_snapshot(db):
     ins = _upsert_sql("trend_snapshot",
         ["isin", "snap_date", "last_date", "last_close", "ma200", "pct_vs_ma200",
          "ret_6m", "ret_12m", "dist_52w_high", "above_ma200", "n_days"], ["isin"])
+    # DAGSAKTUELLT PRIS: prisarkivet kan släpa (MSFT hade 402,29 från 20 juli
+    # medan kursen var 460,71 — det gjorde att alla megacaps felaktigt
+    # flaggades 'under MA200'). Avanza-priset i stocks är alltid färskt.
+    live = {}
+    try:
+        for r0 in _fetchall(db, f"""
+            SELECT isin, last_price, number_of_owners FROM stocks
+            WHERE isin IS NOT NULL AND isin != '' AND isin NOT LIKE {ph}
+              AND last_price > 0""", ("YAHOO_%",)):
+            d0 = dict(r0)
+            cur = live.get(d0["isin"])
+            # Flest ägare = huvudlistningen (skyddar mot valutadubbletter)
+            if not cur or (d0.get("number_of_owners") or 0) > cur[1]:
+                live[d0["isin"]] = (d0["last_price"], d0.get("number_of_owners") or 0)
+    except Exception:
+        pass
+
     n = 0
     for r in rows:
         d = dict(r)
         lc, ma = d.get("last_close"), d.get("ma200")
         if not lc or not ma or ma <= 0:
             continue
+        lp = (live.get(d["isin"]) or (None, 0))[0]
+        # Använd dagspriset om det ligger i samma skala (skydd mot valutafel)
+        if lp and 0.4 < lp / lc < 2.5:
+            lc = lp
         c6, c12, hi = d.get("close_6m"), d.get("close_12m"), d.get("high_52w")
         try:
             db.execute(ins, (d["isin"], snap, str(d.get("last_date") or "")[:10],
