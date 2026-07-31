@@ -5006,26 +5006,36 @@ def compute_trend_snapshot(db):
     # Ett svep över senaste ~430 kalenderdagar räcker för MA200 + 12m-retur.
     # rn = handelsdagar bakåt per bolag; 6m ≈ rn 126, 12m ≈ rn 252.
     cutoff = (_dt.utcnow() - _td(days=430)).strftime("%Y-%m-%d")
-    rows = _fetchall(db, f"""
-        WITH ranked AS (
-            SELECT isin, date, close,
-                   ROW_NUMBER() OVER (PARTITION BY isin ORDER BY date DESC) AS rn
-            FROM borsdata_prices
-            WHERE close > 0 AND date >= {ph}
-        )
-        SELECT isin,
-               MAX(CASE WHEN rn = 1 THEN close END)                 AS last_close,
-               MAX(CASE WHEN rn = 1 THEN date END)                  AS last_date,
-               AVG(CASE WHEN rn <= 200 THEN close END)              AS ma200,
-               AVG(CASE WHEN rn BETWEEN 123 AND 129 THEN close END) AS close_6m,
-               AVG(CASE WHEN rn BETWEEN 248 AND 256 THEN close END) AS close_12m,
-               MAX(CASE WHEN rn <= 252 THEN close END)              AS high_52w,
-               COUNT(*)                                             AS n_days
-        FROM ranked
-        WHERE rn <= 260
-        GROUP BY isin
-        HAVING COUNT(*) >= 150
-    """, (cutoff,))
+    # CHUNKAT: hela svepet över ~2,7 GB prisdata slog i statement_timeout
+    # (särskilt efter RAM-taket). Kör 800 ISIN i taget — samma resultat,
+    # men varje query är liten nog att alltid gå igenom.
+    all_isins = [dict(r)["isin"] for r in _fetchall(db,
+        f"SELECT DISTINCT isin FROM borsdata_prices WHERE date >= {ph}", (cutoff,))]
+    rows = []
+    CH = 800
+    for i in range(0, len(all_isins), CH):
+        chunk = all_isins[i:i + CH]
+        marks = ",".join([ph] * len(chunk))
+        rows.extend(_fetchall(db, f"""
+            WITH ranked AS (
+                SELECT isin, date, close,
+                       ROW_NUMBER() OVER (PARTITION BY isin ORDER BY date DESC) AS rn
+                FROM borsdata_prices
+                WHERE close > 0 AND date >= {ph} AND isin IN ({marks})
+            )
+            SELECT isin,
+                   MAX(CASE WHEN rn = 1 THEN close END)                 AS last_close,
+                   MAX(CASE WHEN rn = 1 THEN date END)                  AS last_date,
+                   AVG(CASE WHEN rn <= 200 THEN close END)              AS ma200,
+                   AVG(CASE WHEN rn BETWEEN 123 AND 129 THEN close END) AS close_6m,
+                   AVG(CASE WHEN rn BETWEEN 248 AND 256 THEN close END) AS close_12m,
+                   MAX(CASE WHEN rn <= 252 THEN close END)              AS high_52w,
+                   COUNT(*)                                             AS n_days
+            FROM ranked
+            WHERE rn <= 260
+            GROUP BY isin
+            HAVING COUNT(*) >= 150
+        """, (cutoff,) + tuple(chunk)))
     snap = _dt.utcnow().strftime("%Y-%m-%d")
     ins = _upsert_sql("trend_snapshot",
         ["isin", "snap_date", "last_date", "last_close", "ma200", "pct_vs_ma200",
