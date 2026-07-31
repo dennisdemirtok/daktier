@@ -5334,53 +5334,66 @@ def clean_price_outliers(db, threshold=2.5, dry_run=False):
             "exempel": drabbade[:15]}
 
 
-def find_frozen_revenue_isins(db, min_q=4):
-    """Hittar bolag med FRUSET omsättningsfält — exakt samma värde i alla
-    kvartal (Credo: 52,2135 i fem kvartal i rad medan nettovinsten växte
-    11→20). 1 298 bolag drabbade. Orsak: felaktig fältmappning i importen.
-    Returnerar [(isin, ticker, country, varde, n_kvartal)]."""
-    ph = _ph()
-    rows = _fetchall(db, f"""
-        SELECT r.isin, MIN(s.short_name) AS ticker, MIN(s.country) AS country,
-               MIN(r.revenues) AS varde, COUNT(*) AS n
+def find_frozen_revenue_isins(db, min_q=3):
+    """Hittar bolag med FRUSET omsättningsfält — samma värde upprepat i de
+    SENASTE kvartalen (Credo: 52,2135 i fem kvartal medan nettovinsten växte
+    11→20, men ÄLDRE kvartal hade korrekta siffror — därför räcker det inte
+    att kräva att hela serien är identisk). Orsak: fältmappningsfel i importen.
+    Returnerar [{isin, ticker, country, varde, n_frusna, fran_datum}]."""
+    rows = [dict(r) for r in _fetchall(db, """
+        SELECT r.isin, r.report_end_date, r.revenues, s.short_name AS ticker,
+               s.country
         FROM borsdata_reports r
         LEFT JOIN stocks s ON s.isin = r.isin
         WHERE r.report_type = 'quarter' AND r.revenues IS NOT NULL
-        GROUP BY r.isin
-        HAVING COUNT(*) >= {ph}
-           AND COUNT(DISTINCT ROUND(r.revenues::numeric, 2)) = 1
-    """, (min_q,)) if _use_postgres() else _fetchall(db, f"""
-        SELECT r.isin, MIN(s.short_name) AS ticker, MIN(s.country) AS country,
-               MIN(r.revenues) AS varde, COUNT(*) AS n
-        FROM borsdata_reports r
-        LEFT JOIN stocks s ON s.isin = r.isin
-        WHERE r.report_type = 'quarter' AND r.revenues IS NOT NULL
-        GROUP BY r.isin
-        HAVING COUNT(*) >= {ph}
-           AND COUNT(DISTINCT ROUND(r.revenues, 2)) = 1
-    """, (min_q,))
-    return [dict(r) for r in rows]
+          AND r.report_end_date IS NOT NULL""")]
+    byi = {}
+    for r in rows:
+        byi.setdefault(r["isin"], []).append(r)
+    out = []
+    for isin, lst in byi.items():
+        lst.sort(key=lambda x: str(x["report_end_date"]), reverse=True)
+        if len(lst) < min_q:
+            continue
+        # Hur många av de senaste kvartalen delar exakt samma (avrundade) värde?
+        forsta = round(float(lst[0]["revenues"]), 2)
+        n_frusna = 1
+        for x in lst[1:]:
+            if round(float(x["revenues"]), 2) == forsta:
+                n_frusna += 1
+            else:
+                break
+        if n_frusna >= min_q:
+            out.append({"isin": isin, "ticker": lst[0].get("ticker"),
+                        "country": lst[0].get("country"), "varde": forsta,
+                        "n_frusna": n_frusna, "n_total": len(lst),
+                        "fran_datum": str(lst[n_frusna - 1]["report_end_date"])[:10]})
+    out.sort(key=lambda x: -x["n_frusna"])
+    return out
 
 
-def clear_frozen_revenues(db, isins=None, limit=2000):
-    """Nollställer det frusna omsättningsfältet (sätter NULL) så att korrekt
-    data kan flöda in från SEC EDGAR/pressreleaser. Raderna behålls — bara
-    det korrupta fältet töms, övriga poster (vinst, kassaflöde) är korrekta."""
+def clear_frozen_revenues(db, frozen=None, limit=3000):
+    """Nollställer det frusna omsättningsfältet (NULL) så korrekt data kan
+    flöda in från SEC EDGAR. Nollställer ENDAST de frusna kvartalen (från och
+    med fran_datum) — äldre korrekta värden behålls. Raderna finns kvar; bara
+    det korrupta fältet töms, vinst/kassaflöde är intakta."""
     ph = _ph()
-    if isins is None:
-        isins = [d["isin"] for d in find_frozen_revenue_isins(db)][:limit]
+    if frozen is None:
+        frozen = find_frozen_revenue_isins(db)[:limit]
     n = 0
-    for chunk in [isins[i:i + 200] for i in range(0, len(isins), 200)]:
-        marks = ",".join([ph] * len(chunk))
+    for f in frozen:
         try:
             db.execute(f"UPDATE borsdata_reports SET revenues = NULL "
-                       f"WHERE report_type = 'quarter' AND isin IN ({marks})",
-                       tuple(chunk))
-            n += len(chunk)
-            db.commit()
+                       f"WHERE report_type = 'quarter' AND isin = {ph} "
+                       f"AND report_end_date >= {ph}",
+                       (f["isin"], f["fran_datum"]))
+            n += 1
+            if n % 100 == 0:
+                db.commit()
         except Exception:
             try: db.rollback()
             except Exception: pass
+    db.commit()
     return {"nollstallda_bolag": n}
 
 

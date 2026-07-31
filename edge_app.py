@@ -16525,7 +16525,7 @@ def _run_fix_frozen_thread(max_us):
               and f.get("ticker")]
         res["us_bolag"] = len(us)
         _FROZEN_STATE["steg"] = f"nollställer {len(frozen)} bolag"
-        res["nollstallt"] = clear_frozen_revenues(dbf, [f["isin"] for f in frozen])
+        res["nollstallt"] = clear_frozen_revenues(dbf, frozen)
         # US-bolagen kan hämtas om från SEC EDGAR — gratis och validerat
         tick = [f["ticker"] for f in us][:max_us]
         _FROZEN_STATE["steg"] = f"hämtar {len(tick)} US-bolag från EDGAR"
