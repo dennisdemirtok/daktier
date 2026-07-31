@@ -5409,6 +5409,54 @@ def clear_frozen_revenues(db, frozen=None, limit=3000):
     return {"nollstallda_bolag": n}
 
 
+def derive_missing_q4(db, limit=4000):
+    """Härleder saknade Q4-omsättningar: Q4 = helår − (Q1+Q2+Q3).
+
+    SEC EDGAR rapporterar ofta bara ÅRSsiffran för det kvartal som avslutar
+    räkenskapsåret (Credo slutar i april → 2026-04-30 och 2025-04-30 blev
+    tomma trots att övriga kvartal fylldes korrekt). Ren aritmetik ur bolagets
+    egna tal — inget gissas."""
+    ph = _ph()
+    qs = [dict(r) for r in _fetchall(db, """
+        SELECT isin, report_type, period_year, report_end_date, revenues
+        FROM borsdata_reports
+        WHERE report_end_date IS NOT NULL""")]
+    ar, kv = {}, {}
+    for r in qs:
+        if r["report_type"] == "year" and isinstance(r.get("revenues"), (int, float)):
+            ar[(r["isin"], r["period_year"])] = r["revenues"]
+        elif r["report_type"] == "quarter":
+            kv.setdefault((r["isin"], r["period_year"]), []).append(r)
+    n = 0
+    for (isin, year), rader in kv.items():
+        if n >= limit:
+            break
+        arsv = ar.get((isin, year))
+        if not arsv or len(rader) != 4:
+            continue
+        saknas = [x for x in rader if x.get("revenues") is None]
+        har = [x for x in rader if isinstance(x.get("revenues"), (int, float))]
+        if len(saknas) != 1 or len(har) != 3:
+            continue
+        rest = arsv - sum(x["revenues"] for x in har)
+        # Rimlighetskontroll: ett kvartal ska ligga i häradet 5–60 % av året
+        if not (0.05 * abs(arsv) <= abs(rest) <= 0.60 * abs(arsv)):
+            continue
+        try:
+            db.execute(f"UPDATE borsdata_reports SET revenues = {ph} "
+                       f"WHERE isin = {ph} AND report_type = 'quarter' "
+                       f"AND report_end_date = {ph} AND revenues IS NULL",
+                       (round(rest, 4), isin, saknas[0]["report_end_date"]))
+            n += 1
+            if n % 100 == 0:
+                db.commit()
+        except Exception:
+            try: db.rollback()
+            except Exception: pass
+    db.commit()
+    return {"harledda_q4": n}
+
+
 def normalize_report_scales(db, dry_run=False):
     """LAGAR rapportarkivet: normaliserar rader som ligger i annan valuta/skala
     än bolagets övriga serie (TSM hade 39 890 · 1 134 103 · 33 266 · 32 469 —

@@ -16541,6 +16541,9 @@ def _run_fix_frozen_thread(max_us):
         res["edgar_hamtade"] = got
         _FROZEN_STATE["steg"] = "flödar in"
         res["infloede"] = flow_shadow_into_reports(dbf, days=3650)
+        _FROZEN_STATE["steg"] = "härleder Q4"
+        from edge_db import derive_missing_q4
+        res["q4"] = derive_missing_q4(dbf)
         _FROZEN_STATE["steg"] = "klar"
     except Exception as e:
         res["fel"] = str(e)[:300]
