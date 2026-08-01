@@ -5985,8 +5985,18 @@ def compute_daktier_portfolios(db):
                 and c["ocf_ttm"] > c["np_ttm"] * 2.5):
             f.append(("info", "💡 kassaflöde ≫ vinst — tunga avskrivningar, ofta förvärv"))
         # ── RISKFLAGGOR: sänker poäng och höjer riskklass ──
-        if not c.get("nettokassa") and (c.get("debt_to_equity_ratio") or 0) >= 1.5:
-            f.append(("risk", f"⚠️ hög skuldsättning D/E {c['debt_to_equity_ratio']:.1f}"))
+        # D/E blir högt av AKTIEÅTERKÖP (eget kapital krymper) utan att risken
+        # ökar — Mastercard 9,3 och Adobe 1,6 har nettokassa. Kolla därför
+        # nettoskuld/EBITDA också: negativ = mer kassa än skuld = ingen risk.
+        _har_nettokassa = (c.get("nettokassa")
+                           or (c.get("net_debt_ebitda_ratio") is not None
+                               and c["net_debt_ebitda_ratio"] < 0))
+        if not _har_nettokassa and (c.get("debt_to_equity_ratio") or 0) >= 1.5:
+            # Skuld är bara en risk om den är stor i förhållande till intjäningen
+            _nde = c.get("net_debt_ebitda_ratio")
+            if _nde is None or _nde >= 2.0:
+                f.append(("risk", f"⚠️ hög skuldsättning D/E {c['debt_to_equity_ratio']:.1f}"
+                                  + (f", nettoskuld/EBITDA {_nde:.1f}" if _nde is not None else "")))
         if c.get("ocf_margin") is not None and c["ocf_margin"] < 0:
             f.append(("risk", f"⚠️ negativt kassaflöde ({c['ocf_margin']*100:.0f}% av oms)"))
         if c.get("jamnhet") is not None and c["jamnhet"] < 0.5:
