@@ -5453,8 +5453,10 @@ def edgar_as_truth(db, tickers, radera_motsagda=True):
             continue
         if radera_motsagda:
             try:
-                db.execute(f"DELETE FROM borsdata_reports WHERE isin = {ph} "
-                           f"AND ins_id != 0", (isin,))
+                # ALLA rader raderas (även tidigare skuggrader): samma slutdatum
+                # kunde ligga under två olika (år, kvartal)-nycklar från gammal
+                # och ny nyckling, vilket gav dubbletter i serien
+                db.execute(f"DELETE FROM borsdata_reports WHERE isin = {ph}", (isin,))
                 db.commit()
             except Exception:
                 try: db.rollback()
@@ -5709,8 +5711,21 @@ def compute_daktier_portfolios(db):
                 if isinstance(x.get("revenues"), (int, float)) and x.get("revenues")]
         if len(revs) < 6:
             continue
-        med = _stat.median(revs)
-        if med <= 0 or any(v > med * 3.5 or v < med / 3.5 for v in revs):
+        # SKALKONTROLL mot GRANNARNA, inte mot hela seriens median: en äkta
+        # tillväxtresa (Credo 35 → 407 MUSD på tre år, 11x) fälldes tidigare
+        # som "datafel" av medianjämförelsen. Ett verkligt skalfel är en
+        # ISOLERAD avvikare — grannkvartalen ligger alltid i samma härad.
+        skal_fel = False
+        for _i in range(len(revs)):
+            _lo, _hi = max(0, _i - 2), min(len(revs), _i + 3)
+            _gran = [revs[_j] for _j in range(_lo, _hi) if _j != _i]
+            if len(_gran) < 2:
+                continue
+            _gm = _stat.median(_gran)
+            if _gm > 0 and (revs[_i] > _gm * 4 or revs[_i] < _gm / 4):
+                skal_fel = True
+                break
+        if skal_fel:
             skippade_skala += 1
             continue
         rev, rev_p = _sum4(cur, "revenues"), _sum4(prev, "revenues")
