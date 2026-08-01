@@ -6235,13 +6235,16 @@ def compute_daktier_portfolios(db):
         if c["kvartal_vinst"] < 7: skal.append(f"vinst {c['kvartal_vinst']}/8 kvartal")
         if not ((0.12 <= (c["roce"] or 0) <= 1.0) or (0.15 <= (c["roe"] or 0) <= 1.0)):
             skal.append(f"ROCE {(c['roce'] or 0)*100:.0f}% / ROE {(c['roe'] or 0)*100:.0f}%")
-        if not (c["ocf_ttm"] and c["ocf_ttm"] > 0): skal.append("OCF ej positivt")
+        if c["ocf_ttm"] is None:
+            skal.append("kassaflöde saknas i källdata (flaggas, fäller ej)")
+        elif c["ocf_ttm"] <= 0:
+            skal.append("negativt kassaflöde")
         if c["ocf_quality"] is not None and c["ocf_quality"] < 0.7:
             skal.append(f"OCF/vinst {c['ocf_quality']:.2f} < 0,7")
         if c["above_ma200"] != 1: skal.append("under MA200")
         if c["is_inv"] and (c["pb"] or 99) >= 1.0: skal.append("investmentbolag i premie")
-        if not (0 < (c["ocf_margin"] or 0) <= 1.0):
-            skal.append(f"OCF-marginal {(c['ocf_margin'] or 0)*100:.0f}% utanför 0-100%")
+        if c["ocf_margin"] is not None and not (0 < c["ocf_margin"] <= 1.0):
+            skal.append(f"OCF-marginal {c['ocf_margin']*100:.0f}% utanför 0-100%")
         if c["np_g"] is not None and c["np_g"] > 3.0:
             skal.append(f"vinstförändring {c['np_g']*100:.0f}% (misstänkt data)")
         if not c.get("nettokassa"):
@@ -6261,8 +6264,8 @@ def compute_daktier_portfolios(db):
             else:
                 kskal = []
                 if c["mcap_sek"] < 3e10: kskal.append("för litet bolag")
-                if not (0.15 <= (c["rev_g"] or 0) <= 1.50):
-                    kskal.append(f"tillväxt {(c['rev_g'] or 0)*100:.0f}% utanför 15-150%")
+                if (c["rev_g"] or 0) < 0.15:
+                    kskal.append(f"tillväxt {(c['rev_g'] or 0)*100:.0f}% < 15%")
                 if c["above_ma200"] != 1: kskal.append("under MA200")
                 if not (0 < (c["ret_12m"] or 0) <= 400): kskal.append("12m-momentum ej positivt")
                 if c.get("jamnhet") is not None and c["jamnhet"] < 0.5:
