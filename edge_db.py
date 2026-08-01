@@ -5511,45 +5511,69 @@ def derive_missing_q4(db, limit=4000):
         SELECT isin, report_type, period_year, report_end_date, revenues
         FROM borsdata_reports
         WHERE report_end_date IS NOT NULL""")]
-    ar, kv = {}, {}
+    # DATUMBASERAT, inte etikettbaserat: efter omnycklingen till kalenderår
+    # tillhör "år 2025" och "kvartal 2025" olika perioder för bolag med brutet
+    # räkenskapsår (Credo: årsrad maj–maj mot kalenderkvartal feb/aug/nov gav
+    # Q4 = −189 MUSD). Vi matchar därför årsradens SLUTDATUM mot det kvartal
+    # som slutar samma dag, och tar de tre kvartal som ligger närmast före.
+    from datetime import date as _dq
+    ar_rader, kv_isin = {}, {}
     for r in qs:
-        if r["report_type"] == "year" and isinstance(r.get("revenues"), (int, float)):
-            ar[(r["isin"], r["period_year"])] = r["revenues"]
-        elif r["report_type"] == "quarter":
-            kv.setdefault((r["isin"], r["period_year"]), []).append(r)
-    n = 0
-    for (isin, year), rader in kv.items():
-        if n >= limit:
-            break
-        arsv = ar.get((isin, year))
-        if not arsv or len(rader) != 4:
-            continue
-        saknas = [x for x in rader if x.get("revenues") is None]
-        har = [x for x in rader if isinstance(x.get("revenues"), (int, float))]
-        if len(saknas) != 1 or len(har) != 3:
-            continue
-        rest = arsv - sum(x["revenues"] for x in har)
-        # Rimlighetskontroll 1: ett kvartal ska ligga i häradet 5–60 % av året
-        if not (0.05 * abs(arsv) <= abs(rest) <= 0.60 * abs(arsv)):
-            continue
-        # Rimlighetskontroll 2: det härledda kvartalet måste ligga i samma
-        # storleksordning som grannkvartalen. Om ÅRSSIFFRAN också är korrupt
-        # (Credo) ger subtraktionen ett orimligt Q4 som förvärrar felet.
-        import statistics as _st2
-        gran = _st2.median([abs(x["revenues"]) for x in har])
-        if gran <= 0 or not (gran / 2.5 <= abs(rest) <= gran * 2.5):
+        if not r.get("report_end_date"):
             continue
         try:
-            db.execute(f"UPDATE borsdata_reports SET revenues = {ph} "
-                       f"WHERE isin = {ph} AND report_type = 'quarter' "
-                       f"AND report_end_date = {ph} AND revenues IS NULL",
-                       (round(rest, 4), isin, saknas[0]["report_end_date"]))
-            n += 1
-            if n % 100 == 0:
-                db.commit()
+            d0 = _dq.fromisoformat(str(r["report_end_date"])[:10])
         except Exception:
-            try: db.rollback()
-            except Exception: pass
+            continue
+        if r["report_type"] == "year" and isinstance(r.get("revenues"), (int, float)):
+            ar_rader.setdefault(r["isin"], []).append((d0, r["revenues"]))
+        elif r["report_type"] == "quarter":
+            kv_isin.setdefault(r["isin"], []).append((d0, r))
+    n = 0
+    for isin, arlist in ar_rader.items():
+        if n >= limit:
+            break
+        kvl = sorted(kv_isin.get(isin, []), key=lambda x: x[0])
+        if len(kvl) < 4:
+            continue
+        for (adatum, arsv) in arlist:
+            if not arsv or n >= limit:
+                continue
+            # Kvartalet som avslutar räkenskapsåret (±10 dagar från årsslutet)
+            idx = next((i for i, (d1, _) in enumerate(kvl)
+                        if abs((d1 - adatum).days) <= 10), None)
+            if idx is None or idx < 3:
+                continue
+            rader = [kvl[i][1] for i in range(idx - 3, idx + 1)]
+            saknas = [x for x in rader if x.get("revenues") is None]
+            har = [x for x in rader if isinstance(x.get("revenues"), (int, float))]
+            if len(saknas) != 1 or len(har) != 3:
+                continue
+            rest = arsv - sum(x["revenues"] for x in har)
+            # Negativ omsättning är ALLTID fel — spärr före allt annat
+            if rest <= 0:
+                continue
+            # Rimlighetskontroll 1: ett kvartal ska ligga i häradet 5–60 % av året
+            if not (0.05 * abs(arsv) <= rest <= 0.60 * abs(arsv)):
+                continue
+            # Rimlighetskontroll 2: det härledda kvartalet måste ligga i samma
+            # storleksordning som grannkvartalen. Om ÅRSSIFFRAN också är korrupt
+            # ger subtraktionen ett orimligt värde som förvärrar felet.
+            import statistics as _st2
+            gran = _st2.median([abs(x["revenues"]) for x in har])
+            if gran <= 0 or not (gran / 2.5 <= rest <= gran * 2.5):
+                continue
+            try:
+                db.execute(f"UPDATE borsdata_reports SET revenues = {ph} "
+                           f"WHERE isin = {ph} AND report_type = 'quarter' "
+                           f"AND report_end_date = {ph} AND revenues IS NULL",
+                           (round(rest, 4), isin, saknas[0]["report_end_date"]))
+                n += 1
+                if n % 100 == 0:
+                    db.commit()
+            except Exception:
+                try: db.rollback()
+                except Exception: pass
     db.commit()
     return {"harledda_q4": n}
 
