@@ -5445,15 +5445,44 @@ def repair_edgar_gutted_reports(db, limit=None):
     if not BORSDATA_KEY:
         return {"error": "BORSDATA_API_KEY saknas"}
     ph = _ph()
+    # LEFT JOIN mot instrumentregistret: bolag som saknar mappning ska ändå
+    # med, de slås upp mot Börsdatas instrumentlista på ticker nedan. Marvell
+    # ligger t.ex. på ett kanadensiskt ISIN (CA57384M1077) och Credo på ett
+    # Cayman-ISIN — ingen av dem matchar registret, och en INNER JOIN hade
+    # tyst hoppat över exakt de bolag som är mest trasiga.
     skadade = [dict(r) for r in _fetchall(db, f"""
         SELECT r.isin, m.ins_id, m.is_global,
                COALESCE(s.short_name, r.isin) AS tick
         FROM (SELECT DISTINCT isin FROM borsdata_reports WHERE ins_id = 0) r
-        JOIN borsdata_instrument_map m ON m.isin = r.isin
+        LEFT JOIN borsdata_instrument_map m ON m.isin = r.isin
         LEFT JOIN (SELECT isin, short_name,
                           ROW_NUMBER() OVER (PARTITION BY isin
                               ORDER BY COALESCE(number_of_owners,0) DESC) rn
                    FROM stocks) s ON s.isin = r.isin AND s.rn = 1""")]
+    # Uppslagning på ticker för de omappade — hämtas en gång, inte per bolag
+    _bd_ticker = None
+    def _slag_upp(tick):
+        nonlocal _bd_ticker
+        if _bd_ticker is None:
+            _bd_ticker = {}
+            try:
+                from borsdata_fetcher import (fetch_all_instruments,
+                                              fetch_global_instruments)
+                for inst in (fetch_global_instruments() or []):
+                    inst["_g"] = True
+                    for k in (inst.get("yahoo"), inst.get("ticker")):
+                        # Bara instrument med riktig ISIN: sekundärlistningar
+                        # (polsk/italiensk MSFT) saknar KPI-data i Börsdata
+                        if k and inst.get("isin") and k not in _bd_ticker:
+                            _bd_ticker[k] = inst
+                for inst in (fetch_all_instruments() or []):
+                    inst["_g"] = False
+                    k = inst.get("ticker")
+                    if k and k not in _bd_ticker:
+                        _bd_ticker[k] = inst
+            except Exception as e:
+                print(f"[REPAIR] instrumentlista misslyckades: {e}")
+        return _bd_ticker.get(tick)
     if limit:
         skadade = skadade[:limit]
     cols = ["isin", "ins_id", "report_type", "period_year", "period_q",
@@ -5475,10 +5504,17 @@ def repair_edgar_gutted_reports(db, limit=None):
     res = {}
     for row in skadade:
         isin, ins_id, tick = row["isin"], row["ins_id"], row["tick"]
+        globalt = bool(row.get("is_global"))
+        if not ins_id:
+            inst = _slag_upp(tick)
+            if not inst:
+                res[tick] = "ingen Börsdata-motsvarighet"
+                continue
+            ins_id, globalt = inst.get("insId"), bool(inst.get("_g"))
         try:
             n = 0
             for rtype in ("year", "quarter"):
-                fn = fetch_global_reports if row.get("is_global") else fetch_reports
+                fn = fetch_global_reports if globalt else fetch_reports
                 for r in (fn(ins_id, rtype) or []):
                     g = extract_v21_metrics(r).get
                     pq = r.get("period") if rtype == "quarter" else 0

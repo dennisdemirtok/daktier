@@ -16684,13 +16684,27 @@ def api_restore_from_borsdata():
 
     Hittar dem själv via ins_id = 0 och hämtar tillbaka originalraderna.
     Måste köras medan Börsdata-accessen lever (upphör 5 augusti 2026)."""
-    from edge_db import repair_edgar_gutted_reports
-    db = get_db()
-    try:
-        res = repair_edgar_gutted_reports(db, limit=request.args.get("limit", type=int))
-        return jsonify({"aterstallt": res, "antal": len(res)})
-    finally:
-        db.close()
+    # Railway-proxyn dödar synkrona anrop efter ~2 min och reparationen tar
+    # längre — kör i bakgrunden och läs resultatet ur loggen.
+    import threading
+    lim = request.args.get("limit", type=int)
+
+    def _kor():
+        from edge_db import repair_edgar_gutted_reports
+        dbb = get_db()
+        try:
+            res = repair_edgar_gutted_reports(dbb, limit=lim)
+            print(f"[REPAIR] Återställda serier: {res}")
+            _log_model_portfolios(dbb)
+            print("[REPAIR] Ranking omräknad")
+        except Exception as e:
+            print(f"[REPAIR] fel: {e}")
+        finally:
+            dbb.close()
+
+    threading.Thread(target=_kor, daemon=True).start()
+    return jsonify({"status": "reparation startad i bakgrunden",
+                    "se": "Railway-loggen, prefix [REPAIR]"})
 
 
 @app.route("/api/maintenance/edgar-as-truth", methods=["POST"])
@@ -22564,7 +22578,7 @@ def _startup():
         # originalraderna från Börsdata och räknar om rankingen. Måste ske
         # medan Börsdata-accessen lever — den upphör 5 augusti 2026.
         def _repair_gutted_once():
-            if not _sched_claim("repair_gutted_reports", "v1"):
+            if not _sched_claim("repair_gutted_reports", "v2"):
                 return
             try:
                 from edge_db import repair_edgar_gutted_reports
