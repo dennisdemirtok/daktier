@@ -5941,7 +5941,15 @@ def compute_daktier_portfolios(db):
         gross = _sum4(cur, "gross_income")
         if not rev or rev <= 0 or not rev_p or rev_p <= 0:
             continue
-        mcap_sek = (u["market_cap"] or 0) * _FX_SEK.get((u.get("currency") or "SEK").upper(), 1.0)
+        # stocks.market_cap är REDAN i SEK för alla bolag (verifierat:
+        # Microsoft 32,8 biljoner och Apple 43,7 biljoner mot Ericsson 0,32
+        # och Volvo 0,74 — samma enhet). Att multiplicera med växelkursen
+        # igen gav varje utländskt bolag en tiopotens för mycket i storlek:
+        # log10 steg med ~1,02, halva bandet 10,7–12,7, alltså upp till 51
+        # storlekspoäng gratis. Svenska bolag fick inget — modellen gynnade
+        # systematiskt utländska bolag. Rapportraderna är däremot i lokal
+        # valuta och konverteras med fx nedan, vilket är korrekt.
+        mcap_sek = u["market_cap"] or 0
         t = trend.get(isin) or {}
         e0 = est.get(isin) or {}
         rev_g = (rev - rev_p) / abs(rev_p)
