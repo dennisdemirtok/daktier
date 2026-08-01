@@ -15668,8 +15668,12 @@ def _extract_edgar_periods(facts):
     # egna tal. Utan detta blev kassaflödet tomt för hela bolagsklassen.
     for metric in ("operating_cash_flow", "revenues", "net_profit",
                    "operating_income"):
-        if any(k[0] == "quarter" and metric in v for k, v in out.items()):
-            continue                    # kvartalsdata finns redan
+        # Kör härledningen när serien är GLES (< 4 kvartal), inte bara när den
+        # är helt tom: Credo hade ett enda OCF-kvartal av åtta, vilket räckte
+        # för att hoppa över härledningen och lämna serien oanvändbar.
+        n_kv = sum(1 for k, v in out.items() if k[0] == "quarter" and metric in v)
+        if n_kv >= 4:
+            continue
         ytd = []
         for tag in _EDGAR_TAGS.get(metric, []):
             for unit_items in ((gaap.get(tag) or {}).get("units") or {}).values():
