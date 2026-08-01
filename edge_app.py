@@ -16625,11 +16625,16 @@ def api_edgar_as_truth():
         return jsonify({"error": "ange ?tickers=CRDO,MRVL"}), 400
     db = get_db()
     try:
+        from edge_db import derive_missing_q4
         hamt = sync_shadow_reports(db, tickers=tick)
         res = edgar_as_truth(db, tick)
+        # EDGAR särredovisar sällan det kvartal som avslutar räkenskapsåret →
+        # härled det direkt, annars blir serien ofullständig (Credo saknade
+        # 2025-05-03 och nådde därför inte 8 kompletta kvartal)
+        q4 = derive_missing_q4(db)
         return jsonify({"edgar_hamtning": {k: hamt.get(k) for k in
                                            ("companies", "rows", "errors")},
-                        "facit": res})
+                        "facit": res, "q4_harledda": q4})
     finally:
         db.close()
 

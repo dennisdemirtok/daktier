@@ -5442,15 +5442,25 @@ def edgar_as_truth(db, tickers, radera_motsagda=True):
             resultat[t] = "saknas i stocks"
             continue
         isin = dict(srow)["isin"]
-        sh = [dict(r) for r in _fetchall(db, f"""
+        sh_raw = [dict(r) for r in _fetchall(db, f"""
             SELECT report_type, period_year, period_q, report_end_date, currency,
                    revenues, operating_income, net_profit, eps,
-                   operating_cash_flow, total_assets, total_equity
+                   operating_cash_flow, total_assets, total_equity, fetched_at
             FROM shadow_reports WHERE ticker = {ph} AND source = 'sec_edgar'
-              AND report_end_date IS NOT NULL""", (t,))]
-        if not sh:
+              AND report_end_date IS NOT NULL
+            ORDER BY fetched_at DESC""", (t,))]
+        if not sh_raw:
             resultat[t] = "ingen EDGAR-data i skuggan"
             continue
+        # Dedup på (typ, slutdatum): skuggan kan ha samma period under två
+        # (år, kvartal)-nycklar efter omnycklingen — senast hämtad vinner
+        _seen, sh = set(), []
+        for r in sh_raw:
+            k = (r["report_type"], str(r["report_end_date"])[:10])
+            if k in _seen:
+                continue
+            _seen.add(k)
+            sh.append(r)
         if radera_motsagda:
             try:
                 # ALLA rader raderas (även tidigare skuggrader): samma slutdatum
