@@ -5421,6 +5421,98 @@ def clear_frozen_revenues(db, frozen=None, limit=3000):
     return {"nollstallda_bolag": n}
 
 
+def repair_edgar_gutted_reports(db, limit=None):
+    """Återställer rapportserier som edgar_as_truth tömde på balansräkning.
+
+    Den gamla edgar_as_truth raderade alla borsdata_reports-rader för ett
+    bolag och skrev tillbaka bara de 14 fält EDGAR har. Nettoskuld, kassa,
+    aktieantal och fritt kassaflöde försvann → kassapoäng och värderings-
+    poäng blev 0. Marvell föll till plats 3342, Credo till 3447, och Visa,
+    Nvidia, Meta, ASML, Micron, Cloudflare, Arista och TSM föll ur
+    rankingen helt när serierna blev för glesa.
+
+    De skadade raderna är exakt identifierbara: edgar_as_truth satte
+    ins_id = 0, vilket Börsdata-synken aldrig gör. Här hämtas
+    originalraderna tillbaka från Börsdata. MÅSTE köras medan
+    Börsdata-accessen lever (upphör 5 augusti 2026).
+
+    Returnerar {bolag: status}."""
+    try:
+        from borsdata_fetcher import (fetch_reports, fetch_global_reports,
+                                      extract_v21_metrics, BORSDATA_KEY)
+    except ImportError:
+        return {"error": "borsdata_fetcher saknas"}
+    if not BORSDATA_KEY:
+        return {"error": "BORSDATA_API_KEY saknas"}
+    ph = _ph()
+    skadade = [dict(r) for r in _fetchall(db, f"""
+        SELECT r.isin, m.ins_id, m.is_global,
+               COALESCE(s.short_name, r.isin) AS tick
+        FROM (SELECT DISTINCT isin FROM borsdata_reports WHERE ins_id = 0) r
+        JOIN borsdata_instrument_map m ON m.isin = r.isin
+        LEFT JOIN (SELECT isin, short_name,
+                          ROW_NUMBER() OVER (PARTITION BY isin
+                              ORDER BY COALESCE(number_of_owners,0) DESC) rn
+                   FROM stocks) s ON s.isin = r.isin AND s.rn = 1""")]
+    if limit:
+        skadade = skadade[:limit]
+    cols = ["isin", "ins_id", "report_type", "period_year", "period_q",
+            "report_end_date", "currency",
+            "revenues", "gross_income", "operating_income", "profit_before_tax",
+            "net_profit", "eps",
+            "operating_cash_flow", "investing_cash_flow", "financing_cash_flow",
+            "free_cash_flow", "cash_flow_year",
+            "total_assets", "current_assets", "non_current_assets",
+            "tangible_assets", "intangible_assets", "financial_assets",
+            "total_equity", "total_liabilities", "current_liabilities",
+            "non_current_liabilities", "cash_and_equivalents", "net_debt",
+            "shares_outstanding", "dividend", "stock_price_avg",
+            "stock_price_high", "stock_price_low", "broken_fiscal_year",
+            "fetched_at"]
+    sql = _upsert_sql("borsdata_reports", cols,
+                      ["isin", "report_type", "period_year", "period_q"])
+    now_iso = datetime.now().isoformat()
+    res = {}
+    for row in skadade:
+        isin, ins_id, tick = row["isin"], row["ins_id"], row["tick"]
+        try:
+            n = 0
+            for rtype in ("year", "quarter"):
+                fn = fetch_global_reports if row.get("is_global") else fetch_reports
+                for r in (fn(ins_id, rtype) or []):
+                    g = extract_v21_metrics(r).get
+                    pq = r.get("period") if rtype == "quarter" else 0
+                    if rtype == "quarter" and pq in (None, 0, 5):
+                        continue
+                    db.execute(sql, (
+                        isin, ins_id, rtype, r.get("year"), pq,
+                        g("report_end_date"), g("currency"),
+                        g("revenues"), g("gross_income"), g("operating_income"),
+                        g("profit_before_tax"), g("net_profit"),
+                        g("earnings_per_share"),
+                        g("operating_cash_flow"), g("investing_cash_flow"),
+                        g("financing_cash_flow"), g("free_cash_flow"),
+                        g("cash_flow_year"),
+                        g("total_assets"), g("current_assets"),
+                        g("non_current_assets"), g("tangible_assets"),
+                        g("intangible_assets"), g("financial_assets"),
+                        g("total_equity"), g("total_liabilities"),
+                        g("current_liabilities"), g("non_current_liabilities"),
+                        g("cash_and_equivalents"), g("net_debt"),
+                        g("shares_outstanding"), g("dividend"),
+                        g("stock_price_avg"), g("stock_price_high"),
+                        g("stock_price_low"),
+                        1 if g("broken_fiscal_year") else 0, now_iso))
+                    n += 1
+            db.commit()
+            res[tick] = f"{n} rader"
+        except Exception as e:
+            try: db.rollback()
+            except Exception: pass
+            res[tick] = f"fel: {str(e)[:100]}"
+    return res
+
+
 def edgar_as_truth(db, tickers, radera_motsagda=True):
     """Gör SEC EDGAR till PRIMÄRKÄLLA för angivna US-bolag.
 
