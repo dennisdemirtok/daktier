@@ -15706,8 +15706,15 @@ def _extract_edgar_periods(facts):
                 dagar = (d2 - forra_slut).days
                 kvartal_val = serie[d2] - forra_val
                 if 80 <= dagar <= 100:
-                    _put(("quarter", d2.year, (d2.month - 1) // 3 + 1),
-                         metric, kvartal_val, d2.isoformat(), None)
+                    # Skriv direkt i stället för via _put: _put jämför filade
+                    # datum och en härledd post (utan filing-datum) rankas
+                    # alltid lägst → den skrevs aldrig. Härledda värden fyller
+                    # bara LUCKOR, de skriver aldrig över rapporterade tal.
+                    _k = ("quarter", d2.year, (d2.month - 1) // 3 + 1)
+                    _rad = out.setdefault(_k, {})
+                    if _rad.get(metric) is None:
+                        _rad[metric] = kvartal_val
+                        _rad.setdefault("report_end_date", d2.isoformat())
                 forra_slut, forra_val = d2, serie[d2]
     return out
 
