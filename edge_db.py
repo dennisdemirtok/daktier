@@ -5507,8 +5507,13 @@ def derive_missing_q4(db, limit=4000):
     tomma trots att övriga kvartal fylldes korrekt). Ren aritmetik ur bolagets
     egna tal — inget gissas."""
     ph = _ph()
+    # Härleder ALLA flödesmått, inte bara omsättning: annars saknar de
+    # härledda kvartalen vinst och kassaflöde, och bolaget faller på
+    # "ingen TTM-vinst" trots komplett omsättningsserie (Credo).
+    _FALT = ["revenues", "net_profit", "operating_income", "operating_cash_flow"]
     qs = [dict(r) for r in _fetchall(db, """
-        SELECT isin, report_type, period_year, report_end_date, revenues
+        SELECT isin, report_type, period_year, report_end_date, revenues,
+               net_profit, operating_income, operating_cash_flow
         FROM borsdata_reports
         WHERE report_end_date IS NOT NULL""")]
     # DATUMBASERAT, inte etikettbaserat: efter omnycklingen till kalenderår
@@ -5525,8 +5530,8 @@ def derive_missing_q4(db, limit=4000):
             d0 = _dq.fromisoformat(str(r["report_end_date"])[:10])
         except Exception:
             continue
-        if r["report_type"] == "year" and isinstance(r.get("revenues"), (int, float)):
-            ar_rader.setdefault(r["isin"], []).append((d0, r["revenues"]))
+        if r["report_type"] == "year":
+            ar_rader.setdefault(r["isin"], []).append((d0, r))
         elif r["report_type"] == "quarter":
             kv_isin.setdefault(r["isin"], []).append((d0, r))
     n = 0
@@ -5536,8 +5541,8 @@ def derive_missing_q4(db, limit=4000):
         kvl = sorted(kv_isin.get(isin, []), key=lambda x: x[0])
         if len(kvl) < 4:
             continue
-        for (adatum, arsv) in arlist:
-            if not arsv or n >= limit:
+        for (adatum, arad) in arlist:
+            if n >= limit:
                 continue
             # Kvartalet som avslutar räkenskapsåret (±10 dagar från årsslutet)
             idx = next((i for i, (d1, _) in enumerate(kvl)
@@ -5545,35 +5550,40 @@ def derive_missing_q4(db, limit=4000):
             if idx is None or idx < 3:
                 continue
             rader = [kvl[i][1] for i in range(idx - 3, idx + 1)]
-            saknas = [x for x in rader if x.get("revenues") is None]
-            har = [x for x in rader if isinstance(x.get("revenues"), (int, float))]
-            if len(saknas) != 1 or len(har) != 3:
-                continue
-            rest = arsv - sum(x["revenues"] for x in har)
-            # Negativ omsättning är ALLTID fel — spärr före allt annat
-            if rest <= 0:
-                continue
-            # Rimlighetskontroll 1: ett kvartal ska ligga i häradet 5–60 % av året
-            if not (0.05 * abs(arsv) <= rest <= 0.60 * abs(arsv)):
-                continue
-            # Rimlighetskontroll 2: det härledda kvartalet måste ligga i samma
-            # storleksordning som grannkvartalen. Om ÅRSSIFFRAN också är korrupt
-            # ger subtraktionen ett orimligt värde som förvärrar felet.
+            satta = {}
             import statistics as _st2
-            gran = _st2.median([abs(x["revenues"]) for x in har])
-            if gran <= 0 or not (gran / 2.5 <= rest <= gran * 2.5):
+            for falt in _FALT:
+                arsv = arad.get(falt)
+                if not isinstance(arsv, (int, float)) or arsv == 0:
+                    continue
+                saknas = [x for x in rader if x.get(falt) is None]
+                har = [x for x in rader if isinstance(x.get(falt), (int, float))]
+                if len(saknas) != 1 or len(har) != 3:
+                    continue
+                rest = arsv - sum(x[falt] for x in har)
+                # Omsättning kan aldrig vara negativ; vinst/kassaflöde kan det
+                if falt == "revenues" and rest <= 0:
+                    continue
+                if not (0.02 * abs(arsv) <= abs(rest) <= 0.75 * abs(arsv)):
+                    continue
+                gran = _st2.median([abs(x[falt]) for x in har])
+                if gran <= 0 or not (gran / 3.0 <= abs(rest) <= gran * 3.0):
+                    continue
+                satta[falt] = (round(rest, 4), saknas[0]["report_end_date"])
+            if not satta:
                 continue
-            try:
-                db.execute(f"UPDATE borsdata_reports SET revenues = {ph} "
-                           f"WHERE isin = {ph} AND report_type = 'quarter' "
-                           f"AND report_end_date = {ph} AND revenues IS NULL",
-                           (round(rest, 4), isin, saknas[0]["report_end_date"]))
-                n += 1
-                if n % 100 == 0:
-                    db.commit()
-            except Exception:
-                try: db.rollback()
-                except Exception: pass
+            for falt, (varde, slutdatum) in satta.items():
+                try:
+                    db.execute(f"UPDATE borsdata_reports SET {falt} = {ph} "
+                               f"WHERE isin = {ph} AND report_type = 'quarter' "
+                               f"AND report_end_date = {ph} AND {falt} IS NULL",
+                               (varde, isin, slutdatum))
+                except Exception:
+                    try: db.rollback()
+                    except Exception: pass
+            n += 1
+            if n % 100 == 0:
+                db.commit()
     db.commit()
     return {"harledda_q4": n}
 
