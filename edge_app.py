@@ -16603,6 +16603,44 @@ def api_fix_frozen_status():
                     "steg": _FROZEN_STATE["steg"], "senaste": senast})
 
 
+@app.route("/api/maintenance/report-dump", methods=["GET"])
+def api_report_dump():
+    """Visar ALLA rapportrader för en ticker (kvartal + år + skugga) så
+    datafel kan felsökas exakt. ?ticker=CRDO"""
+    from edge_db import _fetchall, _fetchone, _ph
+    ph = _ph()
+    t = (request.args.get("ticker") or "").strip().upper()
+    if not t:
+        return jsonify({"error": "ange ?ticker=CRDO"}), 400
+    db = get_db()
+    try:
+        srow = _fetchone(db, f"SELECT isin, name, country, currency, market_cap "
+                             f"FROM stocks WHERE UPPER(short_name) = {ph} "
+                             f"ORDER BY COALESCE(number_of_owners,0) DESC", (t,))
+        if not srow:
+            return jsonify({"error": f"{t} finns ej i stocks"}), 404
+        sd = dict(srow)
+        isin = sd["isin"]
+        rows = [dict(r) for r in _fetchall(db, f"""
+            SELECT report_type, period_year, period_q, report_end_date, currency,
+                   ins_id, revenues, gross_income, operating_income, net_profit,
+                   eps, operating_cash_flow, free_cash_flow, net_debt
+            FROM borsdata_reports WHERE isin = {ph}
+            ORDER BY report_type, report_end_date DESC""", (isin,))]
+        sh = [dict(r) for r in _fetchall(db, f"""
+            SELECT report_type, period_year, period_q, report_end_date, currency,
+                   revenues, net_profit, eps, operating_cash_flow, source, fetched_at
+            FROM shadow_reports WHERE ticker = {ph}
+            ORDER BY report_end_date DESC LIMIT 20""", (t,))]
+        return jsonify({"stock": sd,
+                        "kvartal": [r for r in rows if r["report_type"] == "quarter"][:14],
+                        "ar": [r for r in rows if r["report_type"] == "year"][:8],
+                        "skugga": sh,
+                        "n_totalt": len(rows)})
+    finally:
+        db.close()
+
+
 @app.route("/api/maintenance/report-scale-audit", methods=["GET"])
 def api_report_scale_audit():
     """Kartlägger skal-/valutablandning i rapportarkivet: bolag där kvartalens
