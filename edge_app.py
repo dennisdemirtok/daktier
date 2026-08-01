@@ -15659,6 +15659,52 @@ def _extract_edgar_periods(facts):
                         got_any = True
             if got_any:
                 break  # första taggen som gav data vinner (undvik dubbelräkning)
+
+    # ── KUMULATIVA (YTD) FLÖDEN → KVARTALSVÄRDEN ─────────────────────────
+    # Många bolag rapporterar kassaflödet ackumulerat från räkenskapsårets
+    # början i stället för per kvartal (Credo: 6 mån 115,8 → 9 mån 282,1 →
+    # helår 464,3 MUSD, inga 90-dagarsposter alls). Kvartalet är differensen
+    # mellan två på varandra följande YTD-poster — ren aritmetik ur bolagets
+    # egna tal. Utan detta blev kassaflödet tomt för hela bolagsklassen.
+    for metric in ("operating_cash_flow", "revenues", "net_profit",
+                   "operating_income"):
+        if any(k[0] == "quarter" and metric in v for k, v in out.items()):
+            continue                    # kvartalsdata finns redan
+        ytd = []
+        for tag in _EDGAR_TAGS.get(metric, []):
+            for unit_items in ((gaap.get(tag) or {}).get("units") or {}).values():
+                for it in unit_items:
+                    s0, e0, val = it.get("start"), it.get("end"), it.get("val")
+                    if not s0 or not e0 or val is None:
+                        continue
+                    try:
+                        d1, d2 = _date.fromisoformat(s0), _date.fromisoformat(e0)
+                    except Exception:
+                        continue
+                    if 80 <= (d2 - d1).days <= 380:
+                        ytd.append((s0, d2, val))
+            if ytd:
+                break
+        if not ytd:
+            continue
+        # Gruppera per räkenskapsårets startdatum, sortera på slutdatum
+        per_start = {}
+        for s0, d2, val in ytd:
+            per_start.setdefault(s0, {})[d2] = val
+        for s0, serie in per_start.items():
+            try:
+                d_start = _date.fromisoformat(s0)
+            except Exception:
+                continue
+            slut = sorted(serie.keys())
+            forra_slut, forra_val = d_start, 0.0
+            for d2 in slut:
+                dagar = (d2 - forra_slut).days
+                kvartal_val = serie[d2] - forra_val
+                if 80 <= dagar <= 100:
+                    _put(("quarter", d2.year, (d2.month - 1) // 3 + 1),
+                         metric, kvartal_val, d2.isoformat(), None)
+                forra_slut, forra_val = d2, serie[d2]
     return out
 
 

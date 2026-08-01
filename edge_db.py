@@ -5799,10 +5799,16 @@ def compute_daktier_portfolios(db):
                       if isinstance(v, int))
         rev_net = ((rev_ups - rev_dns) / (rev_ups + rev_dns)) if (rev_ups + rev_dns) else None
         fx = _FX_SEK.get((lst[0].get("currency") or u.get("currency") or "SEK").upper(), 1.0)
-        # Uthållighet: hur många av de 8 senaste kvartalen gick med vinst?
+        # Uthållighet: kvartal med vinst ELLER positivt kassaflöde.
+        # Bolag med stora FÖRVÄRVSAVSKRIVNINGAR (Marvell: 225-246 MUSD/kvartal
+        # från Inphi-köpet mot rörelseresultat 271-358) visar svag GAAP-vinst
+        # trots stark underliggande verksamhet — kassaflödet 639 MUSD avslöjar
+        # skillnaden. Att bara räkna nettovinst straffar den bolagsklassen.
         kvartal_vinst = sum(1 for x in lst[:8]
-                            if isinstance(x.get("net_profit"), (int, float))
-                            and x["net_profit"] > 0)
+                            if (isinstance(x.get("net_profit"), (int, float))
+                                and x["net_profit"] > 0)
+                            or (isinstance(x.get("operating_cash_flow"), (int, float))
+                                and x["operating_cash_flow"] > 0))
         # NETTOKASSA: Apple (D/E 2,6) och Cloudflare (3,0) har hög skuldkvot
         # av återköp/konvertibler men MER KASSA ÄN SKULD. Ett bolag med
         # nettokassa ska aldrig sorteras bort som skuldsatt.
@@ -5966,6 +5972,11 @@ def compute_daktier_portfolios(db):
             f.append("📊 kassaflöde saknas i källdata — ej bedömt")
         if (c.get("np_g") or 0) > 3.0:
             f.append(f"⚡ vinsthopp {c['np_g']*100:.0f}% — ofta jämförelse mot svagt år")
+        # Kassaflödet mycket större än vinsten = tunga avskrivningar (ofta
+        # förvärv). Underliggande intjäning är starkare än GAAP-vinsten.
+        if (c.get("ocf_ttm") and c.get("np_ttm") and c["np_ttm"] > 0
+                and c["ocf_ttm"] > c["np_ttm"] * 2.5):
+            f.append("💡 kassaflöde ≫ vinst — tunga avskrivningar, ofta förvärv")
         c["flaggor"] = f
 
     kr_bas = [c for c in cands if
