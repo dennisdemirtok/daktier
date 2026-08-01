@@ -5430,8 +5430,12 @@ def edgar_as_truth(db, tickers, radera_motsagda=True):
     rader låg på ett KANADENSISKT isin i CAD med nollor i alla årsrader.
 
     EDGAR-skuggan är validerad mot Börsdata (94 % träff på nettoresultat över
-    647 perioder) och är entydig för US-bolag. Här raderas Börsdata-raderna
-    och ersätts med skuggans, matchade på rapportens slutdatum."""
+    647 perioder) och är entydig för US-bolag. Skuggan KOMPLETTERAR raden,
+    matchad på rapportens slutdatum — den ersätter den inte. EDGAR saknar
+    balansräkning, nettoskuld och aktieantal, så en raderad rad tar dessa
+    fält med sig och lämnar bolaget utan kassa- och värderingspoäng.
+
+    radera_motsagda: kvar för bakåtkompatibilitet, har ingen effekt."""
     ph = _ph()
     resultat = {}
     for t in tickers:
@@ -5461,41 +5465,61 @@ def edgar_as_truth(db, tickers, radera_motsagda=True):
                 continue
             _seen.add(k)
             sh.append(r)
-        if radera_motsagda:
-            try:
-                # ALLA rader raderas (även tidigare skuggrader): samma slutdatum
-                # kunde ligga under två olika (år, kvartal)-nycklar från gammal
-                # och ny nyckling, vilket gav dubbletter i serien
-                db.execute(f"DELETE FROM borsdata_reports WHERE isin = {ph}", (isin,))
-                db.commit()
-            except Exception:
-                try: db.rollback()
-                except Exception: pass
+        # Befintliga Börsdata-rader indexerade på (typ, slutdatum). EDGAR har
+        # BARA resultat- och kassaflödesfält — inte balansräkning, nettoskuld
+        # eller aktieantal. Raderar vi raden förlorar vi de fälten permanent
+        # (det gjorde vi 2026-08-01: kassa och värdering blev 0 för Marvell,
+        # Credo, Apple, Snowflake, och Visa/Nvidia/Meta föll ur rankingen helt).
+        # Därför: UPPDATERA de fält EDGAR äger, behåll resten.
+        bef = {}
+        for r in _fetchall(db, f"""
+                SELECT report_type, period_year, period_q, report_end_date
+                FROM borsdata_reports WHERE isin = {ph}
+                  AND report_end_date IS NOT NULL""", (isin,)):
+            d = dict(r)
+            bef[(d["report_type"], str(d["report_end_date"])[:10])] = d
         cols = ["isin", "ins_id", "report_type", "period_year", "period_q",
                 "report_end_date", "currency", "revenues", "operating_income",
                 "net_profit", "eps", "operating_cash_flow", "total_assets",
                 "total_equity"]
         ins = _upsert_sql("borsdata_reports", cols,
                           ["isin", "report_type", "period_year", "period_q"])
-        n = 0
+        upd = f"""UPDATE borsdata_reports SET
+                    revenues = COALESCE({ph}, revenues),
+                    operating_income = COALESCE({ph}, operating_income),
+                    net_profit = COALESCE({ph}, net_profit),
+                    eps = COALESCE({ph}, eps),
+                    operating_cash_flow = COALESCE({ph}, operating_cash_flow),
+                    total_assets = COALESCE({ph}, total_assets),
+                    total_equity = COALESCE({ph}, total_equity)
+                  WHERE isin = {ph} AND report_type = {ph}
+                    AND period_year = {ph} AND period_q = {ph}"""
+        n_upd = n_ins = 0
         for r in sh:
             # EDGAR lagrar absoluta belopp → miljoner (eps skalas ej)
             sc = lambda v: (v / 1e6) if isinstance(v, (int, float)) else None
+            vals = (sc(r.get("revenues")), sc(r.get("operating_income")),
+                    sc(r.get("net_profit")),
+                    r.get("eps") if isinstance(r.get("eps"), (int, float)) else None,
+                    sc(r.get("operating_cash_flow")),
+                    sc(r.get("total_assets")), sc(r.get("total_equity")))
+            b = bef.get((r["report_type"], str(r["report_end_date"])[:10]))
             try:
-                db.execute(ins, (isin, 0, r["report_type"], r["period_year"],
-                                 r["period_q"], str(r["report_end_date"])[:10],
-                                 r.get("currency") or "USD",
-                                 sc(r.get("revenues")), sc(r.get("operating_income")),
-                                 sc(r.get("net_profit")),
-                                 r.get("eps") if isinstance(r.get("eps"), (int, float)) else None,
-                                 sc(r.get("operating_cash_flow")),
-                                 sc(r.get("total_assets")), sc(r.get("total_equity"))))
-                n += 1
+                if b:
+                    # Perioden finns redan — korrigera bara siffrorna EDGAR äger
+                    db.execute(upd, vals + (isin, b["report_type"],
+                                            b["period_year"], b["period_q"]))
+                    n_upd += 1
+                else:
+                    db.execute(ins, (isin, 0, r["report_type"], r["period_year"],
+                                     r["period_q"], str(r["report_end_date"])[:10],
+                                     r.get("currency") or "USD") + vals)
+                    n_ins += 1
             except Exception:
                 try: db.rollback()
                 except Exception: pass
         db.commit()
-        resultat[t] = f"{n} EDGAR-rader satta som facit"
+        resultat[t] = f"{n_upd} korrigerade, {n_ins} nya"
     return resultat
 
 

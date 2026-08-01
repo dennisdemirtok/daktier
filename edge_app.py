@@ -16678,6 +16678,95 @@ def api_fix_frozen_status():
                     "steg": _FROZEN_STATE["steg"], "senaste": senast})
 
 
+@app.route("/api/maintenance/restore-from-borsdata", methods=["POST"])
+def api_restore_from_borsdata():
+    """ÅTERSTÄLLER rapportdata från Börsdata för angivna tickers.
+
+    edgar_as_truth raderade Börsdata-raderna och ersatte med EDGAR-data som
+    saknar kassaflöde för många bolag — Visa/Nvidia/Meta försvann helt ur
+    rankingen och Marvell rasade till plats 3342. Detta hämtar tillbaka
+    originaldatan. Måste köras MEDAN Börsdata-accessen lever."""
+    from edge_db import _fetchall, _fetchone, _ph, _upsert_sql
+    tick = [t.strip().upper() for t in (request.args.get("tickers") or "").split(",")
+            if t.strip()]
+    if not tick:
+        return jsonify({"error": "ange ?tickers=V,NVDA,..."}), 400
+    db = get_db()
+    try:
+        from borsdata_fetcher import (fetch_reports, fetch_global_reports,
+                                      extract_v21_metrics, BORSDATA_KEY)
+        if not BORSDATA_KEY:
+            return jsonify({"error": "BORSDATA_API_KEY saknas"}), 400
+        ph = _ph()
+        res = {}
+        for t in tick:
+            srow = _fetchone(db, f"SELECT isin FROM stocks WHERE UPPER(short_name) = {ph} "
+                                 f"ORDER BY COALESCE(number_of_owners,0) DESC", (t,))
+            if not srow:
+                res[t] = "saknas i stocks"
+                continue
+            isin = dict(srow)["isin"]
+            m = _fetchone(db, f"SELECT ins_id, is_global FROM borsdata_instrument_map "
+                              f"WHERE isin = {ph}", (isin,))
+            if not m:
+                res[t] = "saknas i instrument-map"
+                continue
+            md = dict(m)
+            ins_id, is_global = md["ins_id"], md.get("is_global")
+            cols = ["isin", "ins_id", "report_type", "period_year", "period_q",
+                    "report_end_date", "currency",
+                    "revenues", "gross_income", "operating_income",
+                    "profit_before_tax", "net_profit", "eps",
+                    "operating_cash_flow", "investing_cash_flow",
+                    "financing_cash_flow", "free_cash_flow", "cash_flow_year",
+                    "total_assets", "current_assets", "non_current_assets",
+                    "tangible_assets", "intangible_assets", "financial_assets",
+                    "total_equity", "total_liabilities", "current_liabilities",
+                    "non_current_liabilities", "cash_and_equivalents",
+                    "net_debt", "shares_outstanding", "dividend",
+                    "stock_price_avg", "stock_price_high", "stock_price_low",
+                    "broken_fiscal_year", "fetched_at"]
+            sql = _upsert_sql("borsdata_reports", cols,
+                              ["isin", "report_type", "period_year", "period_q"])
+            now_iso = datetime.now().isoformat()
+            try:
+                n = 0
+                for rtype in ("year", "quarter"):
+                    fn = fetch_global_reports if is_global else fetch_reports
+                    for r in (fn(ins_id, rtype) or []):
+                        g = extract_v21_metrics(r).get
+                        pq = r.get("period") if rtype == "quarter" else 0
+                        if rtype == "quarter" and pq in (None, 0, 5):
+                            continue
+                        db.execute(sql, (
+                            isin, ins_id, rtype, r.get("year"), pq,
+                            g("report_end_date"), g("currency"),
+                            g("revenues"), g("gross_income"), g("operating_income"),
+                            g("profit_before_tax"), g("net_profit"),
+                            g("earnings_per_share"),
+                            g("operating_cash_flow"), g("investing_cash_flow"),
+                            g("financing_cash_flow"), g("free_cash_flow"),
+                            g("cash_flow_year"),
+                            g("total_assets"), g("current_assets"),
+                            g("non_current_assets"), g("tangible_assets"),
+                            g("intangible_assets"), g("financial_assets"),
+                            g("total_equity"), g("total_liabilities"),
+                            g("current_liabilities"), g("non_current_liabilities"),
+                            g("cash_and_equivalents"), g("net_debt"),
+                            g("shares_outstanding"), g("dividend"),
+                            g("stock_price_avg"), g("stock_price_high"),
+                            g("stock_price_low"),
+                            1 if g("broken_fiscal_year") else 0, now_iso))
+                        n += 1
+                db.commit()
+                res[t] = f"{n} rader återställda"
+            except Exception as e:
+                res[t] = f"fel: {str(e)[:120]}"
+        return jsonify({"aterstallt": res})
+    finally:
+        db.close()
+
+
 @app.route("/api/maintenance/edgar-as-truth", methods=["POST"])
 def api_edgar_as_truth():
     """Gör EDGAR till primärkälla för angivna US-bolag (Credo, Marvell m.fl.
