@@ -16961,6 +16961,54 @@ def api_model_portfolios():
         db.close()
 
 
+@app.route("/api/daktier-rank", methods=["GET"])
+def api_daktier_rank():
+    """SITENS PRIMÄRA POÄNGSÄTTNING — DAKTIER-poäng för hela universumet.
+    Ersätter Edge Score/Meta Score som toppliste-sortering.
+    ?limit=50 &country=SE,US &q=sök &min_score=70 &bara_trend=1"""
+    from edge_db import _fetchall, _fetchone, _ph
+    ph = _ph()
+    limit = min(int(request.args.get("limit") or 50), 300)
+    country = (request.args.get("country") or "").upper()
+    q = (request.args.get("q") or "").strip().upper()
+    min_score = request.args.get("min_score")
+    bara_trend = request.args.get("bara_trend") in ("1", "true", "yes")
+    db = get_db()
+    try:
+        r = _fetchone(db, "SELECT MAX(snapshot_date) AS d FROM daktier_rank")
+        d = dict(r).get("d") if r else None
+        if not d:
+            return jsonify({"rows": [], "note": "ingen ranking ännu — "
+                            "kör POST /api/model-portfolios/log"})
+        w, a = [f"snapshot_date = {ph}"], [d]
+        if country:
+            cl = [c.strip() for c in country.split(",") if c.strip()]
+            w.append(f"country IN ({','.join([ph] * len(cl))})")
+            a += cl
+        if q:
+            w.append(f"(UPPER(name) LIKE {ph} OR UPPER(ticker) LIKE {ph})")
+            a += [f"%{q}%", f"%{q}%"]
+        if min_score:
+            w.append(f"score >= {ph}")
+            a.append(float(min_score))
+        if bara_trend:
+            w.append("over_ma200 = 1")
+        rows = [dict(x) for x in _fetchall(db,
+            f"SELECT * FROM daktier_rank WHERE {' AND '.join(w)} "
+            f"ORDER BY score DESC LIMIT {ph}", tuple(a + [limit]))]
+        tot = _fetchone(db, f"SELECT COUNT(*) AS n FROM daktier_rank "
+                            f"WHERE snapshot_date = {ph}", (d,))
+        return jsonify({
+            "snapshot_date": str(d), "rows": rows,
+            "total_rankade": (dict(tot)["n"] if tot else 0),
+            "modell": "DAKTIER-poäng 0–100: kvalitet (ROCE/ROE) 24 % · "
+                      "kassaflöde 22 % · tillväxt 18 % (55 % flerårig) · "
+                      "stabilitet 14 % · värdering 14 % · storlek 8 %. "
+                      "Samma poäng styr Köplistan, portföljerna och topplistorna."})
+    finally:
+        db.close()
+
+
 @app.route("/api/daktier-scores", methods=["GET"])
 def api_daktier_scores():
     """Hela DAKTIER-rankingen med delpoäng — inte bara topp 10.

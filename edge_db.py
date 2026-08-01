@@ -2851,6 +2851,9 @@ def search_stocks(db, query="", country="", sort="owners", order="desc",
         "price_1d": "one_day_change_pct",
         "price_1w": "one_week_change_pct",
         "price_1m": "one_month_change_pct",
+        # SITENS PRIMÄRA SORTERING (2026-08-01): en poängsättning styr allt
+        "daktier": "dr.score",
+        "score": "dr.score",
     }
     sort_col = sort_map.get(sort, "number_of_owners")
     order_dir = "ASC" if order == "asc" else "DESC"
@@ -2865,7 +2868,7 @@ def search_stocks(db, query="", country="", sort="owners", order="desc",
     null_sensitive = {
         "operating_cash_flow", "return_on_equity", "return_on_capital_employed",
         "pe_ratio", "direct_yield", "rsi14", "ytd_change_pct", "market_cap",
-        "short_selling_ratio", "t.pct_vs_ma200",
+        "short_selling_ratio", "t.pct_vs_ma200", "dr.score",
     }
 
     total_row = _fetchone(db, f"SELECT COUNT(*) as cnt FROM stocks s {where_clause}", params if params else None)
@@ -2883,11 +2886,20 @@ def search_stocks(db, query="", country="", sort="owners", order="desc",
 
     # Trend-kolumn (pris vs MA200 + 6m-momentum) ur trend_snapshot.
     # JOIN på s.isin = PK-säkert (aldrig raddubbletter); saknad trend → NULL.
+    # DAKTIER-poängen följer med på varje rad — den är sitens PRIMÄRA
+    # poängsättning (ersätter Edge/Meta Score som toppliste-mått)
     sql = f"""
         SELECT s.*, t.pct_vs_ma200 AS pct_vs_ma200, t.ret_6m AS trend_ret_6m,
-               t.above_ma200 AS above_ma200
+               t.above_ma200 AS above_ma200,
+               dr.score AS daktier_score, dr.rank AS daktier_rank,
+               dr.kvalitet AS dp_kvalitet, dr.kassa AS dp_kassa,
+               dr.tillvaxt AS dp_tillvaxt, dr.stabilitet AS dp_stabilitet,
+               dr.vardering AS dp_vardering, dr.i_portfolj AS i_portfolj,
+               dr.sleeve AS portfolj_sleeve
         FROM stocks s
         LEFT JOIN trend_snapshot t ON t.isin = s.isin
+        LEFT JOIN daktier_rank dr ON dr.isin = s.isin
+             AND dr.snapshot_date = (SELECT MAX(snapshot_date) FROM daktier_rank)
         {where_clause}{extra_where}
         ORDER BY {sort_col} {order_dir} {nulls_clause}
         LIMIT {ph} OFFSET {ph}
@@ -5937,6 +5949,78 @@ def compute_daktier_portfolios(db):
     except Exception:
         try: db.rollback()
         except Exception: pass
+    # ── DAKTIER-POÄNG FÖR HELA UNIVERSUMET ───────────────────────────────
+    # EN poängsättning ska styra siten (användarbeslut 2026-08-01): Edge
+    # Score/Meta Score byggde på momentum+ägardata och gav bolag man inte
+    # vill äga. Här poängsätts ALLA bolag med tillräcklig data enligt samma
+    # kvalitetslogik som Kärnan — även de som inte klarar portföljfiltren.
+    for c in cands:
+        kval = 0.5 * _band(c.get("roce"), 0.10, 0.25) + 0.5 * _band(c.get("roe"), 0.12, 0.30)
+        kassa = (0.6 * _band(c.get("ocf_margin"), 0.08, 0.28)
+                 + 0.4 * _band(c.get("ocf_quality"), 0.7, 1.2))
+        g0 = c.get("rev_g") or 0
+        t_ttm = _band(g0, 0.02, 0.15) if g0 <= 0.25 else max(20.0, 100 - (g0 - 0.25) * 220)
+        cg0 = c.get("cagr_3y")
+        t_fler = _band(cg0, 0.02, 0.15) if cg0 is not None else 35.0
+        tillv = 0.45 * t_ttm + 0.55 * t_fler
+        stab = (0.55 * 100.0 * (c.get("kvartal_vinst", 0) / 8.0)
+                + 0.45 * (100.0 * c["jamnhet"] if c.get("jamnhet") is not None else 45.0))
+        storl = _band(_math.log10(max(c.get("mcap_sek") or 1, 1)), 10.7, 12.7)
+        v_pe0 = (100 - _band(c.get("pe_ratio"), 15, 60)) if (c.get("pe_ratio") or 0) > 0 else 45.0
+        v_ev0 = (100 - _band(c.get("ev_ebit_ratio"), 8, 45)) if c.get("ev_ebit_ratio") else 45.0
+        vard = 0.6 * v_pe0 + 0.4 * v_ev0
+        # Trendbonus: pris över MA200 är timing-kvalitet, inte bolagskvalitet
+        trend_ok = 1 if c.get("above_ma200") == 1 else 0
+        c["score_alla"] = round(0.24 * kval + 0.22 * kassa + 0.18 * tillv
+                                + 0.14 * stab + 0.08 * storl + 0.14 * vard, 1)
+        c["delpoang_alla"] = {"kvalitet": round(kval), "kassa": round(kassa),
+                              "tillvaxt": round(tillv), "stabilitet": round(stab),
+                              "storlek": round(storl), "vardering": round(vard),
+                              "over_ma200": trend_ok}
+
+    db.execute("""
+        CREATE TABLE IF NOT EXISTS daktier_rank (
+            snapshot_date TEXT NOT NULL, isin TEXT NOT NULL,
+            ticker TEXT, name TEXT, country TEXT, sector TEXT,
+            score DOUBLE PRECISION, rank INTEGER,
+            kvalitet INTEGER, kassa INTEGER, tillvaxt INTEGER,
+            stabilitet INTEGER, storlek INTEGER, vardering INTEGER,
+            over_ma200 INTEGER, i_portfolj INTEGER DEFAULT 0, sleeve TEXT,
+            PRIMARY KEY (snapshot_date, isin))""")
+    db.commit()
+    try:
+        db.execute(f"DELETE FROM daktier_rank WHERE snapshot_date = {ph}", (today,))
+        db.commit()
+    except Exception:
+        try: db.rollback()
+        except Exception: pass
+    rins = _upsert_sql("daktier_rank",
+                       ["snapshot_date", "isin", "ticker", "name", "country", "sector",
+                        "score", "rank", "kvalitet", "kassa", "tillvaxt", "stabilitet",
+                        "storlek", "vardering", "over_ma200", "i_portfolj", "sleeve"],
+                       ["snapshot_date", "isin"])
+    alla = sorted([c for c in cands if c.get("score_alla") is not None],
+                  key=lambda c: -c["score_alla"])
+    valda_isin = {c["isin"]: "karna" for c in karna}
+    valda_isin.update({c["isin"]: "krydda" for c in krydda})
+    n_rank = 0
+    for i, c in enumerate(alla):
+        dp = c["delpoang_alla"]
+        try:
+            db.execute(rins, (today, c["isin"], c.get("short_name"), c.get("name"),
+                              c.get("country"), c.get("sector"), c["score_alla"], i + 1,
+                              dp["kvalitet"], dp["kassa"], dp["tillvaxt"], dp["stabilitet"],
+                              dp["storlek"], dp["vardering"], dp["over_ma200"],
+                              1 if c["isin"] in valda_isin else 0,
+                              valda_isin.get(c["isin"])))
+            n_rank += 1
+            if n_rank % 500 == 0:
+                db.commit()
+        except Exception:
+            try: db.rollback()
+            except Exception: pass
+    db.commit()
+
     # HELA RANKINGEN sparas så listan kan granskas i appen
     db.execute("""
         CREATE TABLE IF NOT EXISTS daktier_scores (
@@ -6055,7 +6139,7 @@ def compute_daktier_portfolios(db):
             "krydda": [c["short_name"] for c in krydda],
             "kandidater": len(cands), "karna_pool": len(karna_pool),
             "krydda_pool": len(kr_pool), "skippade_skalfel": skippade_skala,
-            "diagnostik_vantade": diag}
+            "rankade_bolag": n_rank, "diagnostik_vantade": diag}
 
 
 def compute_factor_scores(db, min_mcap=1e9):

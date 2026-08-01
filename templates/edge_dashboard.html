@@ -1596,7 +1596,7 @@ function switchTab(tab, el) {
     searchQuery = '';
 
     if (tab === 'signals') { sortCol = 'smart'; sortOrder = 'desc'; }
-    else if (tab === 'stocks') { sortCol = 'owners'; sortOrder = 'desc'; }
+    else if (tab === 'stocks') { sortCol = 'daktier'; sortOrder = 'desc'; }
     else if (tab === 'hotmovers') {
         // Short periods sorterar på hot_diff_pct, long periods på change-kolumn
         sortCol = (['1d','3d','1w'].includes(momPeriod)) ? 'hot_diff_pct' : 'change_1m';
@@ -2530,7 +2530,13 @@ function renderStocksTable() {
         const shortPct = s.short_selling_ratio || 0;
         return `<tr>
             <td>${i+1}</td>
-            <td>${flag} <span class="stock-name" onclick="openDrawer(allLoadedRows[${i}])">${s.name}</span><br><span class="stock-ticker">${s.short_name || ''}</span></td>
+            <td>${flag} <span class="stock-name" onclick="openDrawer(allLoadedRows[${i}])">${s.name}</span>
+                ${s.i_portfolj ? `<span style="background:var(--brand-cyan);color:#fff;font-size:9px;font-weight:800;padding:1px 6px;border-radius:8px;margin-left:5px" title="I DAKTIER-portföljen (${s.portfolj_sleeve || ''})">PORTFÖLJ</span>` : ''}
+                <br><span class="stock-ticker">${s.short_name || ''}</span></td>
+            <td style="text-align:right">${s.daktier_score != null
+                ? `<span style="font-weight:800;color:${s.daktier_score >= 80 ? '#059669' : s.daktier_score >= 65 ? '#0891b2' : s.daktier_score >= 50 ? 'var(--ink)' : 'var(--text-muted)'}"
+                     title="Kvalitet ${s.dp_kvalitet ?? '–'} · Kassa ${s.dp_kassa ?? '–'} · Tillväxt ${s.dp_tillvaxt ?? '–'} · Stabilitet ${s.dp_stabilitet ?? '–'} · Värdering ${s.dp_vardering ?? '–'}">${s.daktier_score.toFixed(0)}</span>`
+                : '<span style="color:var(--text-muted)">–</span>'}</td>
             <td>${s.country || ''}</td>
             <td style="text-align:right;font-weight:600">${fmtNum(s.number_of_owners)}</td>
             <td style="text-align:right" class="${pctClass(ch1m)}">${fmtPct(ch1m)}</td>
@@ -2548,6 +2554,8 @@ function renderStocksTable() {
             <table><thead><tr>
                 <th style="width:40px">#</th>
                 <th onclick="doSort('name')" class="${thClass('name')}">Aktie${sortArrow('name')}</th>
+                <th onclick="doSort('daktier')" class="${thClass('daktier')}" style="text-align:right"
+                    title="DAKTIER-poäng 0–100: kvalitet 24% · kassaflöde 22% · tillväxt 18% · stabilitet 14% · värdering 14% · storlek 8%. Sitens primära poängsättning.">DAKTIER${sortArrow('daktier')}</th>
                 <th>Land</th>
                 <th onclick="doSort('owners')" class="${thClass('owners')}" style="text-align:right">Ägare${sortArrow('owners')}</th>
                 <th onclick="doSort('change_1m')" class="${thClass('change_1m')}" style="text-align:right">1M${sortArrow('change_1m')}</th>
