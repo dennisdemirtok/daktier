@@ -2215,7 +2215,10 @@ function renderDaktierTopplista(d) {
             <td style="color:var(--text-muted)">${x.rank}</td>
             <td>${FLAGS[x.country] || ''} <span class="stock-name">${(x.name || x.ticker || '').slice(0, 30)}</span>
                 ${x.i_portfolj ? `<span style="background:var(--brand-cyan);color:#fff;font-size:9px;font-weight:800;padding:1px 6px;border-radius:8px;margin-left:5px">PORTFÖLJ</span>` : ''}
-                <br><span class="stock-ticker">${x.ticker || ''} · ${(x.sector || '').slice(0, 22)}</span></td>
+                ${x.riskklass === 'HÖG' ? `<span style="background:#fef2f2;color:#991b1b;font-size:9px;font-weight:800;padding:1px 6px;border-radius:8px;margin-left:5px" title="${(x.flaggor || '').replace(/"/g, '')}">HÖG RISK</span>`
+                  : x.riskklass === 'MEDEL' ? `<span style="background:#fff7ed;color:#9a3412;font-size:9px;font-weight:700;padding:1px 6px;border-radius:8px;margin-left:5px" title="${(x.flaggor || '').replace(/"/g, '')}">BEVAKA</span>` : ''}
+                <br><span class="stock-ticker">${x.ticker || ''} · ${(x.sector || '').slice(0, 22)}</span>
+                ${x.flaggor ? `<br><span style="font-size:10.5px;color:var(--text-muted)">${x.flaggor.slice(0, 90)}</span>` : ''}</td>
             <td style="text-align:right;font-weight:800;font-size:15px;color:${col(x.score)}">${x.score}</td>
             <td style="text-align:center;font-weight:700;color:${col(x.kvalitet)}">${x.kvalitet ?? '–'}</td>
             <td style="text-align:center;font-weight:700;color:${col(x.kassa)}">${x.kassa ?? '–'}</td>

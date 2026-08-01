@@ -5964,20 +5964,48 @@ def compute_daktier_portfolios(db):
     # INGET TILLVÄXTTAK (användarbeslut 2026-08-01) — extrem tillväxt FLAGGAS
     # i stället för att sållas bort. Credo växte 223 % på AI-efterfrågan,
     # vilket är genuint; taket på 150 % nollade den felaktigt.
+    # FLAGGSYSTEM i tre nivåer (användarens design 2026-08-01):
+    #   risk    → sänker poängen OCH höjer riskklassen (verklig osäkerhet)
+    #   bevaka  → informerar: "behöver fler kvartal för att bekräftas"
+    #   info    → upplysning som varken sänker eller varnar
     for c in cands:
         f = []
-        if (c.get("rev_g") or 0) > 1.5:
-            f.append(f"⚡ extrem tillväxt {c['rev_g']*100:.0f}% — kontrollera om engångseffekt")
+        g0, npg = c.get("rev_g") or 0, c.get("np_g") or 0
+        if g0 > 1.5:
+            f.append(("bevaka", f"⚡ extrem tillväxt {g0*100:.0f}% — bevaka om den "
+                                f"håller i sig flera kvartal i rad"))
+        if npg > 3.0:
+            f.append(("bevaka", f"⚡ vinsthopp {npg*100:.0f}% — ofta jämförelse mot "
+                                f"svagt år, bekräfta nästa kvartal"))
         if c.get("ocf_ttm") is None:
-            f.append("📊 kassaflöde saknas i källdata — ej bedömt")
-        if (c.get("np_g") or 0) > 3.0:
-            f.append(f"⚡ vinsthopp {c['np_g']*100:.0f}% — ofta jämförelse mot svagt år")
+            f.append(("info", "📊 kassaflöde saknas i källdata — ej bedömt"))
         # Kassaflödet mycket större än vinsten = tunga avskrivningar (ofta
         # förvärv). Underliggande intjäning är starkare än GAAP-vinsten.
         if (c.get("ocf_ttm") and c.get("np_ttm") and c["np_ttm"] > 0
                 and c["ocf_ttm"] > c["np_ttm"] * 2.5):
-            f.append("💡 kassaflöde ≫ vinst — tunga avskrivningar, ofta förvärv")
-        c["flaggor"] = f
+            f.append(("info", "💡 kassaflöde ≫ vinst — tunga avskrivningar, ofta förvärv"))
+        # ── RISKFLAGGOR: sänker poäng och höjer riskklass ──
+        if not c.get("nettokassa") and (c.get("debt_to_equity_ratio") or 0) >= 1.5:
+            f.append(("risk", f"⚠️ hög skuldsättning D/E {c['debt_to_equity_ratio']:.1f}"))
+        if c.get("ocf_margin") is not None and c["ocf_margin"] < 0:
+            f.append(("risk", f"⚠️ negativt kassaflöde ({c['ocf_margin']*100:.0f}% av oms)"))
+        if c.get("jamnhet") is not None and c["jamnhet"] < 0.5:
+            f.append(("risk", f"⚠️ ojämn utveckling — omsättningen ökade bara "
+                              f"{c['jamnhet']*100:.0f}% av åren"))
+        if c.get("kvartal_vinst", 8) <= 4:
+            f.append(("risk", f"⚠️ lönsam i {c.get('kvartal_vinst', 0)}/8 kvartal"))
+        if (c.get("pe_ratio") or 0) > 60:
+            f.append(("risk", f"⚠️ P/E {c['pe_ratio']:.0f} — mycket framtid inprisad"))
+        n_risk = sum(1 for typ, _ in f if typ == "risk")
+        n_bevaka = sum(1 for typ, _ in f if typ == "bevaka")
+        c["flaggor"] = [txt for _, txt in f]
+        c["flaggor_typade"] = f
+        c["n_risk"] = n_risk
+        # Riskklass styr hur köpet ska hanteras, inte om bolaget får vara med
+        c["riskklass"] = ("HÖG" if n_risk >= 2 else
+                          "MEDEL" if (n_risk == 1 or n_bevaka >= 2) else "LÅG")
+        # Poängavdrag: 4 p per riskflagga, tak 12 — märkbart men inte dödande
+        c["risk_avdrag"] = min(12.0, 4.0 * n_risk)
 
     kr_bas = [c for c in cands if
         c["mcap_sek"] >= 3e10 and c["rev_sek"] >= 2e9
@@ -6124,8 +6152,11 @@ def compute_daktier_portfolios(db):
         vard = 0.6 * v_pe0 + 0.4 * v_ev0
         # Trendbonus: pris över MA200 är timing-kvalitet, inte bolagskvalitet
         trend_ok = 1 if c.get("above_ma200") == 1 else 0
-        c["score_alla"] = round(0.24 * kval + 0.22 * kassa + 0.18 * tillv
-                                + 0.14 * stab + 0.08 * storl + 0.14 * vard, 1)
+        # Riskflaggor sänker poängen (4 p styck, tak 12) — bevaka-flaggor gör
+        # det inte, de är påminnelser om att följa upp kommande kvartal
+        c["score_alla"] = round(max(0.0, 0.24 * kval + 0.22 * kassa + 0.18 * tillv
+                                    + 0.14 * stab + 0.08 * storl + 0.14 * vard
+                                    - (c.get("risk_avdrag") or 0)), 1)
         c["delpoang_alla"] = {"kvalitet": round(kval), "kassa": round(kassa),
                               "tillvaxt": round(tillv), "stabilitet": round(stab),
                               "storlek": round(storl), "vardering": round(vard),
@@ -6139,7 +6170,16 @@ def compute_daktier_portfolios(db):
             kvalitet INTEGER, kassa INTEGER, tillvaxt INTEGER,
             stabilitet INTEGER, storlek INTEGER, vardering INTEGER,
             over_ma200 INTEGER, i_portfolj INTEGER DEFAULT 0, sleeve TEXT,
+            riskklass TEXT, flaggor TEXT, risk_avdrag DOUBLE PRECISION,
             PRIMARY KEY (snapshot_date, isin))""")
+    for _c, _t in (("riskklass", "TEXT"), ("flaggor", "TEXT"),
+                   ("risk_avdrag", "DOUBLE PRECISION")):
+        try:
+            db.execute(f"ALTER TABLE daktier_rank ADD COLUMN {_c} {_t}")
+            db.commit()
+        except Exception:
+            try: db.rollback()
+            except Exception: pass
     db.commit()
     try:
         db.execute(f"DELETE FROM daktier_rank WHERE snapshot_date = {ph}", (today,))
@@ -6150,7 +6190,8 @@ def compute_daktier_portfolios(db):
     rins = _upsert_sql("daktier_rank",
                        ["snapshot_date", "isin", "ticker", "name", "country", "sector",
                         "score", "rank", "kvalitet", "kassa", "tillvaxt", "stabilitet",
-                        "storlek", "vardering", "over_ma200", "i_portfolj", "sleeve"],
+                        "storlek", "vardering", "over_ma200", "i_portfolj", "sleeve",
+                        "riskklass", "flaggor", "risk_avdrag"],
                        ["snapshot_date", "isin"])
     alla = sorted([c for c in cands if c.get("score_alla") is not None],
                   key=lambda c: -c["score_alla"])
@@ -6165,7 +6206,10 @@ def compute_daktier_portfolios(db):
                               dp["kvalitet"], dp["kassa"], dp["tillvaxt"], dp["stabilitet"],
                               dp["storlek"], dp["vardering"], dp["over_ma200"],
                               1 if c["isin"] in valda_isin else 0,
-                              valda_isin.get(c["isin"])))
+                              valda_isin.get(c["isin"]),
+                              c.get("riskklass"),
+                              " | ".join(c.get("flaggor") or []) or None,
+                              c.get("risk_avdrag")))
             n_rank += 1
             if n_rank % 500 == 0:
                 db.commit()
