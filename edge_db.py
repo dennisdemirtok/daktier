@@ -5885,7 +5885,7 @@ def compute_daktier_portfolios(db):
         return sum(vs) if len(vs) == 4 and all(isinstance(v, (int, float)) for v in vs) else None
 
     import statistics as _stat
-    cands, skippade_skala = [], 0
+    cands, skippade_skala, skippade_valuta = [], 0, 0
     for u in uni:
         isin = u["isin"]
         raw = byq.get(isin, [])
@@ -5898,6 +5898,17 @@ def compute_daktier_portfolios(db):
                 per_q[k] = r0
         lst = sorted(per_q.values(), key=lambda x: str(x["report_end_date"]), reverse=True)
         if len(lst) < 8:
+            continue
+        # VALUTAKONTROLL: en serie ska ha EN valuta. Fler betyder att posten
+        # innehåller mer än ett bolag — Marvell låg på ett kanadensiskt ISIN
+        # (CA57384M1077) och fick ett kanadensiskt skalbolags nollrader i CAD
+        # blandat med riktiga Marvells USD-siffror från EDGAR. Att poängsätta
+        # en sådan post vore att analysera fel bolag, vilket är värre än att
+        # inte analysera alls. Ut ur rankingen tills ISIN:et är rättat.
+        _val = {(x.get("currency") or "").upper() for x in lst[:12]
+                if x.get("currency")}
+        if len(_val) > 1:
+            skippade_valuta += 1
             continue
         cur, prev = lst[:4], lst[4:8]
         # SKALKONTROLL: serien normaliseras numera av normalize_report_scales
@@ -6503,6 +6514,7 @@ def compute_daktier_portfolios(db):
             "krydda": [c["short_name"] for c in krydda],
             "kandidater": len(cands), "karna_pool": len(karna_pool),
             "krydda_pool": len(kr_pool), "skippade_skalfel": skippade_skala,
+            "skippade_valutafel": skippade_valuta,
             "rankade_bolag": n_rank, "diagnostik_vantade": diag}
 
 
