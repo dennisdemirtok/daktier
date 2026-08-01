@@ -5850,9 +5850,11 @@ def compute_daktier_portfolios(db):
         and c["kvartal_vinst"] >= 7                            # uthålligt lönsam
         and (c["np_g"] is None or -0.05 < c["np_g"] <= 3.0)
         and ((0.12 <= (c["roce"] or 0) <= 1.0) or (0.15 <= (c["roe"] or 0) <= 1.0))
-        and c["ocf_ttm"] is not None and c["ocf_ttm"] > 0
+        # Kärnan kräver bevisad kassagenerering — men saknad data flaggas i
+        # stället för att fälla (kassapoängen blir då lägre, vilket räcker)
+        and (c["ocf_ttm"] is None or c["ocf_ttm"] > 0)
         and (c["ocf_quality"] is None or c["ocf_quality"] >= 0.7)
-        and 0 < (c["ocf_margin"] or 0) <= 1.0
+        and (c["ocf_margin"] is None or 0 < c["ocf_margin"] <= 1.0)
         # Skuldkrav — men NETTOKASSA går alltid fri (Apple/Cloudflare)
         and (c.get("nettokassa")
              or ((c.get("net_debt_ebitda_ratio") is None or c["net_debt_ebitda_ratio"] < 3.5)
@@ -5953,9 +5955,22 @@ def compute_daktier_portfolios(db):
     #  B) MJUKVARA I VÄNDNING — förlust TILLÅTS om den KRYMPER och kassa-
     #     flödet förbättras: hög bruttomarginal (≥60 %) = skalbar produkt.
     #     Cloudflare: ökande omsättning, krympande förlust, stigande FCF.
+    # INGET TILLVÄXTTAK (användarbeslut 2026-08-01) — extrem tillväxt FLAGGAS
+    # i stället för att sållas bort. Credo växte 223 % på AI-efterfrågan,
+    # vilket är genuint; taket på 150 % nollade den felaktigt.
+    for c in cands:
+        f = []
+        if (c.get("rev_g") or 0) > 1.5:
+            f.append(f"⚡ extrem tillväxt {c['rev_g']*100:.0f}% — kontrollera om engångseffekt")
+        if c.get("ocf_ttm") is None:
+            f.append("📊 kassaflöde saknas i källdata — ej bedömt")
+        if (c.get("np_g") or 0) > 3.0:
+            f.append(f"⚡ vinsthopp {c['np_g']*100:.0f}% — ofta jämförelse mot svagt år")
+        c["flaggor"] = f
+
     kr_bas = [c for c in cands if
         c["mcap_sek"] >= 3e10 and c["rev_sek"] >= 2e9
-        and 0.15 <= c["rev_g"] <= 1.50
+        and c["rev_g"] >= 0.15
         and c["above_ma200"] == 1
         and 0 < (c["ret_12m"] or 0) <= 400
         # Skuldkrav skärpt: Atlanticus (holding, hög skuldgrad) ska inte in.
@@ -5967,8 +5982,10 @@ def compute_daktier_portfolios(db):
         # Jämn utveckling — inte ryckiga engångsår (Ligand)
         and (c.get("jamnhet") is None or c["jamnhet"] >= 0.5)
     ]
+    # Saknad kassaflödesdata fäller inte — den flaggas (bolaget ska inte
+    # straffas för att VÅR källa saknar taggen). Negativt OCF fäller dock.
     kr_lonsam = [c for c in kr_bas if
-        (c["ocf_margin"] or -9) > 0.02
+        (c["ocf_ttm"] is None or (c["ocf_margin"] or -9) > 0.02)
         and (c["np_g"] is None or c["np_g"] > -0.30)
         and c["kvartal_vinst"] >= 5]
     # Mjukvaruspåret ska fånga Cloudflare-klassen — INTE biotech. Esperion,
@@ -6178,6 +6195,8 @@ def compute_daktier_portfolios(db):
             if c.get("roce"): motiv.append(f"ROCE {c['roce']*100:.0f}%")
             if c.get("ocf_margin") is not None: motiv.append(f"OCF-marg {c['ocf_margin']*100:.0f}%")
             if (c.get("pe_ratio") or 0) > 0: motiv.append(f"P/E {c['pe_ratio']:.0f}")
+            if c.get("flaggor"):
+                motiv.append(" | ".join(c["flaggor"]))
             sc = c.get(f"score_{sleeve}") or 0
             dpg = c.get(f"delpoang_{sleeve}") or {}
             try:

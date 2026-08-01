@@ -15539,7 +15539,15 @@ _EDGAR_TAGS = {
     "total_equity": ["StockholdersEquity",
                      "StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest"],
     "cash_and_equivalents": ["CashAndCashEquivalentsAtCarryingValue"],
-    "operating_cash_flow": ["NetCashProvidedByUsedInOperatingActivities"],
+    # Bolag taggar kassaflödet olika — 'ContinuingOperations'-varianten är
+    # mycket vanlig (Credo m.fl.) och saknades, vilket gav tomma OCF-serier
+    "operating_cash_flow": [
+        "NetCashProvidedByUsedInOperatingActivities",
+        "NetCashProvidedByUsedInOperatingActivitiesContinuingOperations",
+    ],
+    "free_cash_flow": [],   # härleds: OCF − investeringar i anläggningar
+    "capex": ["PaymentsToAcquirePropertyPlantAndEquipment",
+              "PaymentsToAcquireProductiveAssets"],
 }
 
 
