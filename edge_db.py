@@ -5421,6 +5421,72 @@ def clear_frozen_revenues(db, frozen=None, limit=3000):
     return {"nollstallda_bolag": n}
 
 
+def edgar_as_truth(db, tickers, radera_motsagda=True):
+    """Gör SEC EDGAR till PRIMÄRKÄLLA för angivna US-bolag.
+
+    Bakgrund (2026-08-01): Börsdatas rapportdata för US-bolag med brutet
+    räkenskapsår är opålitlig. Credo hade årsrad 2026 = 184,194 — exakt samma
+    siffra som 2023 (kopierad), vilket gav Q4 = −82,5 i härledningen. Marvells
+    rader låg på ett KANADENSISKT isin i CAD med nollor i alla årsrader.
+
+    EDGAR-skuggan är validerad mot Börsdata (94 % träff på nettoresultat över
+    647 perioder) och är entydig för US-bolag. Här raderas Börsdata-raderna
+    och ersätts med skuggans, matchade på rapportens slutdatum."""
+    ph = _ph()
+    resultat = {}
+    for t in tickers:
+        t = str(t).strip().upper()
+        srow = _fetchone(db, f"SELECT isin FROM stocks WHERE UPPER(short_name) = {ph} "
+                             f"ORDER BY COALESCE(number_of_owners,0) DESC", (t,))
+        if not srow:
+            resultat[t] = "saknas i stocks"
+            continue
+        isin = dict(srow)["isin"]
+        sh = [dict(r) for r in _fetchall(db, f"""
+            SELECT report_type, period_year, period_q, report_end_date, currency,
+                   revenues, operating_income, net_profit, eps,
+                   operating_cash_flow, total_assets, total_equity
+            FROM shadow_reports WHERE ticker = {ph} AND source = 'sec_edgar'
+              AND report_end_date IS NOT NULL""", (t,))]
+        if not sh:
+            resultat[t] = "ingen EDGAR-data i skuggan"
+            continue
+        if radera_motsagda:
+            try:
+                db.execute(f"DELETE FROM borsdata_reports WHERE isin = {ph} "
+                           f"AND ins_id != 0", (isin,))
+                db.commit()
+            except Exception:
+                try: db.rollback()
+                except Exception: pass
+        cols = ["isin", "ins_id", "report_type", "period_year", "period_q",
+                "report_end_date", "currency", "revenues", "operating_income",
+                "net_profit", "eps", "operating_cash_flow", "total_assets",
+                "total_equity"]
+        ins = _upsert_sql("borsdata_reports", cols,
+                          ["isin", "report_type", "period_year", "period_q"])
+        n = 0
+        for r in sh:
+            # EDGAR lagrar absoluta belopp → miljoner (eps skalas ej)
+            sc = lambda v: (v / 1e6) if isinstance(v, (int, float)) else None
+            try:
+                db.execute(ins, (isin, 0, r["report_type"], r["period_year"],
+                                 r["period_q"], str(r["report_end_date"])[:10],
+                                 r.get("currency") or "USD",
+                                 sc(r.get("revenues")), sc(r.get("operating_income")),
+                                 sc(r.get("net_profit")),
+                                 r.get("eps") if isinstance(r.get("eps"), (int, float)) else None,
+                                 sc(r.get("operating_cash_flow")),
+                                 sc(r.get("total_assets")), sc(r.get("total_equity"))))
+                n += 1
+            except Exception:
+                try: db.rollback()
+                except Exception: pass
+        db.commit()
+        resultat[t] = f"{n} EDGAR-rader satta som facit"
+    return resultat
+
+
 def derive_missing_q4(db, limit=4000):
     """Härleder saknade Q4-omsättningar: Q4 = helår − (Q1+Q2+Q3).
 

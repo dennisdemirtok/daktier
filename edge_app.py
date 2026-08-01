@@ -16603,6 +16603,27 @@ def api_fix_frozen_status():
                     "steg": _FROZEN_STATE["steg"], "senaste": senast})
 
 
+@app.route("/api/maintenance/edgar-as-truth", methods=["POST"])
+def api_edgar_as_truth():
+    """Gör EDGAR till primärkälla för angivna US-bolag (Credo, Marvell m.fl.
+    där Börsdatas data för brutna räkenskapsår är korrupt).
+    ?tickers=CRDO,MRVL — hämtar först färsk EDGAR-data, sätter den som facit."""
+    from edge_db import edgar_as_truth
+    tick = [t.strip().upper() for t in (request.args.get("tickers") or "").split(",")
+            if t.strip()]
+    if not tick:
+        return jsonify({"error": "ange ?tickers=CRDO,MRVL"}), 400
+    db = get_db()
+    try:
+        hamt = sync_shadow_reports(db, tickers=tick)
+        res = edgar_as_truth(db, tick)
+        return jsonify({"edgar_hamtning": {k: hamt.get(k) for k in
+                                           ("companies", "rows", "errors")},
+                        "facit": res})
+    finally:
+        db.close()
+
+
 @app.route("/api/maintenance/report-dump", methods=["GET"])
 def api_report_dump():
     """Visar ALLA rapportrader för en ticker (kvartal + år + skugga) så
