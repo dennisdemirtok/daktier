@@ -15619,12 +15619,22 @@ def _extract_edgar_periods(facts):
                     val, filed = it.get("val"), it.get("filed")
                     if not end or val is None or not fy:
                         continue
+                    # NYCKLA PÅ SLUTDATUM, INTE fy/fp: EDGAR:s fy anger vilken
+                    # FILING posten kom från — en 10-Q från FY2026 innehåller
+                    # jämförelsetal från FY2025 som då får etiketten 2026, och
+                    # "senast filade vinner" lät gamla siffror skriva över nya
+                    # (Credo fick 135 MUSD där verkligt värde var 407).
+                    try:
+                        _e = _date.fromisoformat(end)
+                        _ky, _kq = _e.year, (_e.month - 1) // 3 + 1
+                    except Exception:
+                        continue
                     if instant:
                         if fp.startswith("Q"):
-                            _put(("quarter", int(fy), int(fp[1])), metric, val, end, filed)
+                            _put(("quarter", _ky, _kq), metric, val, end, filed)
                             got_any = True
                         elif fp == "FY":
-                            _put(("year", int(fy), 0), metric, val, end, filed)
+                            _put(("year", _ky, 0), metric, val, end, filed)
                             got_any = True
                         continue
                     if not start:
@@ -15633,11 +15643,11 @@ def _extract_edgar_periods(facts):
                         days = (_date.fromisoformat(end) - _date.fromisoformat(start)).days
                     except Exception:
                         continue
-                    if 80 <= days <= 100 and fp.startswith("Q"):
-                        _put(("quarter", int(fy), int(fp[1])), metric, val, end, filed)
+                    if 80 <= days <= 100:
+                        _put(("quarter", _ky, _kq), metric, val, end, filed)
                         got_any = True
-                    elif 350 <= days <= 380 and fp == "FY":
-                        _put(("year", int(fy), 0), metric, val, end, filed)
+                    elif 350 <= days <= 380:
+                        _put(("year", _ky, 0), metric, val, end, filed)
                         got_any = True
             if got_any:
                 break  # första taggen som gav data vinner (undvik dubbelräkning)
