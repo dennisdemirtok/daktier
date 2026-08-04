@@ -6451,6 +6451,36 @@ def compute_daktier_portfolios(db):
                        ["snapshot_date", "isin"])
     alla = sorted([c for c in cands if c.get("score_alla") is not None],
                   key=lambda c: -c["score_alla"])
+
+    # DUBBLETTAKTIESLAG: GOOG och GOOGL låg båda i topp 20 som två separata
+    # innehav — samma bolag, två av tjugo platser. Alpha Picks tillåter bara
+    # ett noterat stamaktieslag per bolag. För US/CA identifieras emittenten
+    # av CUSIP-delen i ISIN (US02079K1079 och US02079K3059 delar "02079K");
+    # i Norden av namnet utan aktieslagsbokstav ("Investor A"/"Investor B").
+    # Det aktieslag med flest ägare vinner — mest likvitt är det man äger.
+    def _emittent(c):
+        isin = (c.get("isin") or "").upper()
+        if len(isin) >= 8 and isin[:2] in ("US", "CA"):
+            return isin[2:8]
+        namn = (c.get("name") or c.get("short_name") or "").strip().lower()
+        bitar = namn.split()
+        if len(bitar) > 1 and len(bitar[-1]) == 1:      # "investor b" → "investor"
+            bitar = bitar[:-1]
+        return " ".join(bitar) or isin
+
+    _bast, _bortvalda = {}, 0
+    for c in alla:
+        k = _emittent(c)
+        f = _bast.get(k)
+        if f is None or (c.get("number_of_owners") or 0) > (f.get("number_of_owners") or 0):
+            if f is not None:
+                _bortvalda += 1
+            _bast[k] = c
+        else:
+            _bortvalda += 1
+    if _bortvalda:
+        print(f"[DAKTIER] {_bortvalda} dubblettaktieslag bortvalda ur rankingen")
+    alla = sorted(_bast.values(), key=lambda c: -c["score_alla"])
     valda_isin = {c["isin"]: "karna" for c in karna}
     valda_isin.update({c["isin"]: "krydda" for c in krydda})
     n_rank = 0
