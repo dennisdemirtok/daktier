@@ -5992,7 +5992,37 @@ def compute_daktier_portfolios(db):
         npm = (np_ / rev) if (np_ is not None and rev) else None
         npm_prev = (np_p / rev_p) if (np_p is not None and rev_p) else None
         marg_delta = (npm - npm_prev) if (npm is not None and npm_prev is not None) else None
+        # KASSAKVOT robust mot engångsposter. Kvoten kassaflöde/vinst räknades
+        # på TTM-SUMMAN, vilket lät ETT enda kvartal sänka hela betyget:
+        # Alphabet bokförde 112 193 MUSD i vinst på 119 796 i omsättning ett
+        # kvartal — 94 % nettomarginal, en orealiserad värdeuppgång på
+        # aktieinnehav som aldrig passerar kassaflödet — och föll från full
+        # kassapoäng till 65. Medianen över åtta kvartal låter de sju normala
+        # kvartalen rösta ner avvikaren. Skyddar åt båda håll: Marvells
+        # förvärvsavskrivningar trycker ner enskilda kvartals vinst utan att
+        # röra kassaflödet, och gav förr ett missvisande HÖGT kvalitetsbetyg.
+        _kvot = []
+        for x in lst[:8]:
+            _o, _n = x.get("operating_cash_flow"), x.get("net_profit")
+            if (isinstance(_o, (int, float)) and isinstance(_n, (int, float))
+                    and _n > 0):
+                _kvot.append(_o / _n)
+        ocf_kval = (_stat.median(_kvot) if len(_kvot) >= 4
+                    else ((ocf / np_) if (ocf is not None and np_ and np_ > 0)
+                          else None))
+        # ENGÅNGSPOST: ett kvartal vars vinst avviker kraftigt från seriens
+        # median är nästan alltid en icke-kassaflödespost — värdeuppgång,
+        # skattejustering eller nedskrivning. Den ska BEVAKAS, inte tysta
+        # bort bolaget, och inte heller passera obemärkt som "tillväxt".
+        _npq = [x.get("net_profit") for x in lst[:8]
+                if isinstance(x.get("net_profit"), (int, float)) and x.get("net_profit")]
+        engangspost = False
+        if len(_npq) >= 6:
+            _m = _stat.median([abs(v) for v in _npq])
+            if _m > 0 and any(abs(v) > _m * 2.5 for v in _npq):
+                engangspost = True
         cands.append({
+            "ocf_kval": ocf_kval, "engangspost": engangspost,
             "net_debt_rap": nd, "nettokassa": (nd is not None and nd < 0),
             "np_margin": npm, "np_margin_prev": npm_prev, "marg_delta": marg_delta,
             "kvartal_vinst": kvartal_vinst,
@@ -6001,7 +6031,7 @@ def compute_daktier_portfolios(db):
             "rev_g": rev_g, "np_g": np_g,
             "ocf_margin": (ocf / rev) if ocf is not None else None,
             "gross_margin": (gross / rev) if gross else None,
-            "ocf_quality": (ocf / np_) if (ocf is not None and np_ and np_ > 0) else None,
+            "ocf_quality": ocf_kval,
             "roce": roce, "roe": roe, "pb": pb, "is_inv": is_inv,
             "above_ma200": t.get("above_ma200"), "ret_12m": t.get("ret_12m"),
             "ret_6m": t.get("ret_6m"), "rev_net": rev_net,
@@ -6016,6 +6046,32 @@ def compute_daktier_portfolios(db):
             below = sum(1 for x in s_ if x < v)
             return 100.0 * below / max(1, len(s_) - 1) if len(s_) > 1 else 50.0
         return rank
+
+    # UTHÅLLIGHETSKRAV (Alpha Picks): en aktie köps först när betyget hållit
+    # i sig 75 handelsdagar i rad. En rankning som byts ut dag för dag fångar
+    # mest brus — persistensen är hela poängen med regeln. Räknas ur
+    # daktier_rank-historiken. Har vi ännu inte 75 dagars historik gäller
+    # kravet inte; det slår in av sig självt när arkivet vuxit.
+    _hist, _dagar_i_arkiv = {}, set()
+    try:
+        for r in _fetchall(db, """SELECT isin, snapshot_date, score
+                                  FROM daktier_rank ORDER BY snapshot_date DESC"""):
+            d = dict(r)
+            _hist.setdefault(d["isin"], []).append(d.get("score") or 0)
+            _dagar_i_arkiv.add(d["snapshot_date"])
+    except Exception:
+        _hist = {}
+
+    def _dagar_stark(isin, trosk=80.0):
+        n = 0
+        for sc in (_hist.get(isin) or []):   # sorterad, senaste först
+            if sc >= trosk:
+                n += 1
+            else:
+                break
+        return n
+
+    _persistens_gäller = len(_dagar_i_arkiv) >= 75
 
     # ── KÄRNA: kvalitetscompounders ──────────────────────────────────────
     # Sanity-tak överallt: ROCE 882 % och tillväxt +1051 % är datafel, inte
@@ -6038,6 +6094,8 @@ def compute_daktier_portfolios(db):
                  and (c.get("debt_to_equity_ratio") is None or c["debt_to_equity_ratio"] < 2.0)))
         and c["above_ma200"] == 1
         and not (c["is_inv"] and (c["pb"] or 99) >= 1.0)       # investmentbolag: bara rabatt
+        # Alpha Picks-persistens: betyget ska ha hållit 75 handelsdagar
+        and (not _persistens_gäller or _dagar_stark(c["isin"]) >= 75)
     ]
     # ── Flerårig tillväxt + stabilitet (användarfeedback 2026-07-31) ─────
     # Texas Instruments klarade TTM-tillväxt men har platt omsättning sedan
@@ -6316,7 +6374,24 @@ def compute_daktier_portfolios(db):
     # Score/Meta Score byggde på momentum+ägardata och gav bolag man inte
     # vill äga. Här poängsätts ALLA bolag med tillräcklig data enligt samma
     # kvalitetslogik som Kärnan — även de som inte klarar portföljfiltren.
+    # HYGIENGRINDAR (Alpha Picks-modellen, användarbeslut 2026-08-04):
+    # börsvärde över 500 MUSD, kurs över 10 USD, inga REIT:s. Utan dem kan
+    # ett bolag med storlekspoäng 0 nå topp 20 om övriga fem dimensioner är
+    # starka — BKTI, HACK, FREETR och KARO gjorde just det. Storlek var en
+    # delpoäng man kunde kompensera bort; nu är den också en tröskel.
+    _MIN_MCAP_SEK = 500e6 * 10.5      # 500 MUSD
+    _MIN_KURS_SEK = 10 * 10.5         # 10 USD
     for c in cands:
+        _fx = _FX_SEK.get((c.get("currency") or "SEK").upper(), 1.0)
+        _kurs_sek = (c.get("last_price") or 0) * _fx
+        _namn = f"{c.get('name') or ''} {c.get('sector') or ''}".lower()
+        _reit = ("reit" in _namn or "real estate investment" in _namn)
+        if (c.get("mcap_sek") or 0) < _MIN_MCAP_SEK or _kurs_sek < _MIN_KURS_SEK or _reit:
+            c["score_alla"] = None
+            c["utesluten"] = ("REIT" if _reit else
+                              "kurs < 10 USD" if _kurs_sek < _MIN_KURS_SEK
+                              else "börsvärde < 500 MUSD")
+            continue
         kval = 0.5 * _band(c.get("roce"), 0.10, 0.25) + 0.5 * _band(c.get("roe"), 0.12, 0.30)
         kassa = (0.6 * _band(c.get("ocf_margin"), 0.08, 0.28)
                  + 0.4 * _band(c.get("ocf_quality"), 0.7, 1.2))
