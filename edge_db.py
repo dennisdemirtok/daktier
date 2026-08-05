@@ -6090,9 +6090,26 @@ def compute_cycle_top_monitor(db):
                       ORDER BY COALESCE(number_of_owners,0) DESC LIMIT 1) s
                   ON s.isin = br.isin
                 WHERE br.report_type = 'quarter' AND br.revenues IS NOT NULL
-                ORDER BY br.report_end_date DESC LIMIT 8""", (tick,))]
+                ORDER BY br.report_end_date DESC LIMIT 12""", (tick,))]
         except Exception:
             return None
+        # Månadshink-dedup: samma kvartal kan ligga under två slutdatum från
+        # två källor (Marvell: 2026-05-02 och 2026-04-30, identiska värden)
+        # — utan dedup räknas det kvartalet dubbelt i YoY-jämförelsen
+        _sedd, _uniq = set(), []
+        for r in rows:
+            k = str(r["report_end_date"])[:10]
+            try:
+                _dd = datetime.fromisoformat(k)
+                if _dd.day <= 3:
+                    _dd = _dd.replace(day=1) - timedelta(days=1)
+                k = f"{_dd.year}-{_dd.month:02d}"
+            except Exception:
+                k = k[:7]
+            if k not in _sedd:
+                _sedd.add(k)
+                _uniq.append(r)
+        rows = _uniq[:8]
         if len(rows) < 8:
             return None
         nu4 = sum(r["revenues"] or 0 for r in rows[:4])
@@ -6286,10 +6303,22 @@ def compute_daktier_portfolios(db):
         isin = u["isin"]
         raw = byq.get(isin, [])
         # EN rad per kvartal: arkivet har både Börsdata-rader och vårt eget
-        # skugginflöde (ins_id=0) — dubbletter dubblade TTM-summorna
+        # skugginflöde (ins_id=0) — dubbletter dubblade TTM-summorna.
+        # Nyckeln är MÅNADSHINK, inte exakt datum: samma kvartal kan ligga
+        # under två slutdatum från två källor (Marvell: 2026-05-02 från EDGAR
+        # och 2026-04-30 approximerat — identiska värden, två dagar isär,
+        # dubbelräknat i TTM). Brutna räkenskapsår slutar månadsskiften ±3
+        # dagar, så dag ≤3 räknas till föregående månad.
         per_q = {}
         for r0 in raw:
             k = str(r0["report_end_date"])[:10]
+            try:
+                _dd = datetime.fromisoformat(k)
+                if _dd.day <= 3:
+                    _dd = _dd.replace(day=1) - timedelta(days=1)
+                k = f"{_dd.year}-{_dd.month:02d}"
+            except Exception:
+                k = k[:7]
             if k not in per_q or (r0.get("ins_id") or 0) != 0:
                 per_q[k] = r0
         lst = sorted(per_q.values(), key=lambda x: str(x["report_end_date"]), reverse=True)
