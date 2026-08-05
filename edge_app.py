@@ -16700,6 +16700,63 @@ def api_sync_analyst_actions():
     return jsonify({"status": "startad", "se": "Railway-loggen, prefix [REK]"})
 
 
+@app.route("/api/maintenance/sync-analyst-consensus", methods=["POST"])
+def api_sync_analyst_consensus():
+    """Hämtar konsensusbetyg + riktkurser (Montrose-mönstret, öppna källor)."""
+    import threading
+    n = request.args.get("max_n", 400, type=int)
+    tick = [x.strip().upper() for x in (request.args.get("tickers") or "").split(",")
+            if x.strip()] or None
+
+    def _kor():
+        from edge_db import sync_analyst_consensus
+        dbb = get_db()
+        try:
+            print(f"[KONSENSUS] {sync_analyst_consensus(dbb, max_n=n, tickers=tick)}")
+        except Exception as e:
+            print(f"[KONSENSUS] fel: {e}")
+        finally:
+            dbb.close()
+
+    threading.Thread(target=_kor, daemon=True).start()
+    return jsonify({"status": "startad", "se": "Railway-loggen, prefix [KONSENSUS]"})
+
+
+@app.route("/api/analyst-consensus")
+def api_analyst_consensus():
+    """Konsensushistorik per bolag: snittbetyg 1-5 per månad + riktkurser
+    per dag, med drift-signal (snitt nu mot 3 mån sedan). ?ticker=MRVL"""
+    from edge_db import _fetchall, _ph
+    ph = _ph()
+    t = (request.args.get("ticker") or "").strip().upper()
+    if not t:
+        return jsonify({"error": "ange ?ticker=MRVL"}), 400
+    db = get_db()
+    try:
+        kons = [dict(r) for r in _fetchall(db, f"""
+            SELECT manad, strong_buy, buy, hold, sell, strong_sell, n, snitt
+            FROM analyst_consensus WHERE ticker = {ph}
+            ORDER BY manad DESC LIMIT 36""", (t,))]
+        rikt = [dict(r) for r in _fetchall(db, f"""
+            SELECT snapshot_date, mean_target, high_target, low_target
+            FROM analyst_targets WHERE ticker = {ph}
+            ORDER BY snapshot_date DESC LIMIT 180""", (t,))]
+        drift = None
+        if len(kons) >= 2:
+            nu_s, da_s = kons[0].get("snitt"), kons[-1].get("snitt")
+            if isinstance(nu_s, (int, float)) and isinstance(da_s, (int, float)):
+                drift = {"snitt_nu": nu_s, "snitt_da": da_s,
+                         "fran_manad": kons[-1]["manad"],
+                         "riktning": ("försämras" if nu_s < da_s - 0.05 else
+                                      "förbättras" if nu_s > da_s + 0.05 else "stabil")}
+        return jsonify({"ticker": t, "konsensus_manader": kons,
+                        "riktkurser": rikt, "drift": drift,
+                        "obs": None if kons else
+                              "ingen konsensusdata — kör sync-analyst-consensus"})
+    finally:
+        db.close()
+
+
 @app.route("/api/action-toplist")
 def api_action_toplist():
     """Topplista: flest nettohöjda rekommendationer. ?manader=12"""
@@ -17393,7 +17450,7 @@ def api_daktier_rank():
     ?limit=50 &country=SE,US &q=sök &min_score=70 &bara_trend=1"""
     from edge_db import _fetchall, _fetchone, _ph
     ph = _ph()
-    limit = min(int(request.args.get("limit") or 50), 300)
+    limit = min(int(request.args.get("limit") or 50), 6000)
     country = (request.args.get("country") or "").upper()
     q = (request.args.get("q") or "").strip().upper()
     min_score = request.args.get("min_score")
@@ -22883,6 +22940,26 @@ def _startup():
         scheduler.add_job(scheduled_cycle_monitor, 'cron',
                           month='2,5,8,11', day=21, hour=7, minute=0,
                           id='cycle_monitor_quarterly')
+
+        # 📊 Konsensusbetyg + riktkurser (04:50, efter estimaten 04:45):
+        # bygger egen Montrose-liknande historik — snittbetyg per månad,
+        # riktkurs per dag. Driften (snittet glider nedåt) är säljsignalen.
+        def scheduled_analyst_consensus():
+            if not _sched_claim("analyst_consensus", datetime.now().strftime("%Y-%m-%d")):
+                return
+            try:
+                from edge_db import sync_analyst_consensus
+                dbk = get_db()
+                try:
+                    print(f"[AUTO] Konsensus: {sync_analyst_consensus(dbk, max_n=400)}")
+                finally:
+                    dbk.close()
+            except Exception as e:
+                print(f"[AUTO] Konsensus fel: {e}")
+
+        scheduler.add_job(scheduled_analyst_consensus, 'cron',
+                          day_of_week='mon-fri', hour=4, minute=50,
+                          id='analyst_consensus_daily')
 
         scheduler.start()
         print("  ✓ Auto-refresh scheduler aktiv (var 15:e min under marknadstid)")

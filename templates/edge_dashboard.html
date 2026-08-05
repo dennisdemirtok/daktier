@@ -2058,14 +2058,14 @@ function renderSignalsTable() {
     const infoBanner = `<div class="info-banner">
         <div class="info-banner-icon">⭐</div>
         <div class="info-banner-text">
-            <strong>⭐ DAKTIER Score 0–100</strong> — vår primära score. Backtest-validerad sammanvägning av momentum + fundamenta.<br>
+            <strong>⭐ Modellscore 0–100</strong> — flikens eget mått (Bok+Meta), inte DAKTIER-poängen. Backtest-validerad sammanvägning av momentum + fundamenta.<br>
             <span style="opacity:0.85">≥80 STARK KÖP · ≥70 KÖP · ≥55 OK · ≥40 VÄNTA · &lt;40 UNDVIK · ▲/▼ = förändring sedan igår</span><br>
             <details style="margin-top:6px">
-                <summary style="cursor:pointer;font-weight:600">Vad ingår i DAKTIER Score?</summary>
+                <summary style="cursor:pointer;font-weight:600">Vad ingår i Modellscore?</summary>
                 <div style="margin-top:6px;font-size:12px;line-height:1.5">
                     <strong>50% Bok-composite</strong> — viktat snitt av 13 bokmodeller (Graham, Buffett, Lynch, Greenblatt, Klarman, Bogle, Stinsen, Taleb, Kelly, Spiltan, <strong>Pabrai, Marks, Spier</strong>).<br>
                     <strong>50% Meta-score</strong> — Trav (30%, ägar-momentum) + DSM (25%, kontrarian) + ACE (25%, multi-faktor) + Magic Formula (20%, EV/EBIT + ROCE).<br>
-                    Övriga score-kolumner i tabellen (Meta, Edge, Bok) är delkomponenter — DAKTIER Score är den siffran att sortera på.<br>
+                    Övriga score-kolumner i tabellen (Meta, Edge, Bok) är delkomponenter — Modellscore är den siffran att sortera på i den här fliken.<br>
                     <strong>DD-skydd:</strong> Blockerar entry vid hög DD-risk (≥60) eller extrem pris-spike (6M &gt;150%, YTD &gt;200%).
                 </div>
             </details>
@@ -2176,7 +2176,7 @@ function renderSignalsTable() {
         <div class="table-container">
             <table class="signals-table"><thead><tr>
                 <th style="width:40px">#</th>
-                <th onclick="doSort('smart')" class="${thClass('smart')}" style="min-width:120px" title="DAKTIER Score = vår primära score 0-100. Sammanvägning av Meta (50% — momentum) och Bok-composite (50% — fundamenta). ▲/▼ visar förändring senaste dygnet. Övriga score-kolumner är delkomponenter.">⭐ DAKTIER Score${sortArrow('smart')}</th>
+                <th onclick="doSort('smart')" class="${thClass('smart')}" style="min-width:120px" title="Modellscore 0-100 = Meta (50% momentum) + Bok-composite (50% fundamenta). Sitens huvudpoäng är DAKTIER-poängen i Aktier/Topplistan. ▲/▼ visar förändring senaste dygnet. Övriga score-kolumner är delkomponenter.">⭐ Modellscore${sortArrow('smart')}</th>
                 <th onclick="doSort('v2_quality')" class="${thClass('v2_quality')}" style="min-width:90px" title="v2 Setup-typ + Value/Quality/Momentum-axlar (klassificerings-baserad analys, asset_light/compounder/etc).">🎯 v2 Setup${sortArrow('v2_quality')}</th>
                 <th onclick="doSort('meta')" class="${thClass('meta')}" style="min-width:140px">Meta Score${sortArrow('meta')}</th>
                 <th onclick="doSort('score')" class="${thClass('score')}" style="min-width:80px">Edge${sortArrow('score')}</th>
@@ -5690,7 +5690,7 @@ function openDrawer(s) {
         B.analys += `<div class="drawer-section" style="background:${ssBg};border-radius:14px;padding:18px;margin-bottom:14px;border:1px solid rgba(0,0,0,0.05)">
             <div style="display:flex;align-items:center;justify-content:space-between;gap:14px;margin-bottom:14px">
                 <div>
-                    <div style="font-size:10.5px;color:#475569;text-transform:uppercase;letter-spacing:0.1em;font-weight:800">⭐ DAKTIER Score</div>
+                    <div style="font-size:10.5px;color:#475569;text-transform:uppercase;letter-spacing:0.1em;font-weight:800">Historisk modellscore (Bok + Meta)</div>
                     <div style="display:flex;align-items:baseline;gap:10px;margin-top:4px">
                         <div style="font-size:46px;font-weight:900;color:${ssColor};line-height:1">${ss.toFixed(0)}</div>
                         <div style="font-size:13px;color:${ssColor};font-weight:800;letter-spacing:0.5px">${ssLabel}</div>
@@ -5703,7 +5703,7 @@ function openDrawer(s) {
                 ${deltaBadge(d30, '30 dagar')}
             </div>
             <details style="margin-top:12px">
-                <summary style="font-size:11px;color:#64748b;cursor:pointer;font-weight:600">Hur räknas DAKTIER Score?</summary>
+                <summary style="font-size:11px;color:#64748b;cursor:pointer;font-weight:600">Hur räknas modellscoren?</summary>
                 <div style="margin-top:8px;font-size:11.5px;color:#475569;line-height:1.5">
                     <div style="margin-bottom:6px">Sammanvägning av två backtestade ramverk:</div>
                     <div style="display:flex;flex-wrap:wrap;gap:6px">
@@ -6174,7 +6174,53 @@ function openDrawer(s) {
         + `<div class="drawer-section-title">Kurs 12 mån · <span style="color:var(--brand-cyan)">Ⓡ</span> = rapportdag</div>`
         + `<div style="height:190px"><canvas id="dovPriceChart"></canvas></div></div>`
         + B.oversikt;
-    B.analys = `<div id="dovFactorCard"></div>` + B.analys;
+    // ── ⭐ DAKTIER-POÄNG — sitens ENDA poängsättning (samma som Topplistan) ──
+    // Allt annat i fliken (kvantmodell, bok-modeller, setup, gamla scoren)
+    // är fördjupning och ligger hopfällt så det inte konkurrerar om
+    // auktoritet — användarbeslut 2026-08-05: "olika betyg överallt är jobbigt".
+    const dpBar = (label, val) => {
+        if (val == null) return '';
+        const c = val >= 80 ? '#059669' : val >= 55 ? '#0891b2' : val >= 35 ? '#d97706' : '#dc2626';
+        return `<div style="display:flex;align-items:center;gap:8px;margin-top:6px">
+            <span style="font-size:11px;color:#475569;font-weight:600;width:64px">${label}</span>
+            <div style="flex:1;height:6px;background:#e2e8f0;border-radius:3px;overflow:hidden"><div style="width:${Math.max(2,Math.min(100,val))}%;height:100%;background:${c}"></div></div>
+            <span style="font-size:12px;font-weight:800;color:${c};width:26px;text-align:right">${Math.round(val)}</span>
+        </div>`;
+    };
+    let daktierCard;
+    if (s.daktier_score != null) {
+        const ds = s.daktier_score;
+        const dc = ds >= 80 ? '#006c46' : ds >= 65 ? '#0891b2' : ds >= 50 ? '#475569' : '#b45309';
+        const rk = (s.riskklass || '').toUpperCase();
+        const rkBg = rk === 'HÖG' ? '#fee2e2' : rk === 'MEDEL' ? '#fef3c7' : '#d1fae5';
+        const rkFg = rk === 'HÖG' ? '#b91c1c' : rk === 'MEDEL' ? '#b45309' : '#047857';
+        const dflag = (s.flaggor || '').split(' | ').filter(Boolean);
+        daktierCard = `<div class="drawer-section" style="background:linear-gradient(135deg,#f0f9ff,#e0f2fe);border:1px solid rgba(22,54,92,0.14);border-radius:14px;padding:18px;margin-bottom:14px">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
+                <div style="font-size:10.5px;color:#16365C;text-transform:uppercase;letter-spacing:0.1em;font-weight:800">⭐ DAKTIER-poäng</div>
+                ${rk ? `<span style="font-size:10px;font-weight:800;padding:3px 8px;border-radius:999px;background:${rkBg};color:${rkFg}">RISK ${rk}</span>` : ''}
+            </div>
+            <div style="display:flex;align-items:baseline;gap:10px;margin-top:6px;flex-wrap:wrap">
+                <div style="font-size:46px;font-weight:900;color:${dc};line-height:1">${ds.toFixed(0)}</div>
+                ${s.daktier_rank ? `<div style="font-size:13px;color:#475569;font-weight:700">plats ${s.daktier_rank} i dagens ranking</div>` : ''}
+                ${s.i_portfolj ? `<span style="font-size:10px;font-weight:800;padding:3px 8px;border-radius:999px;background:#cffafe;color:#0e7490">PORTFÖLJ${s.portfolj_sleeve ? ' · ' + String(s.portfolj_sleeve).toUpperCase() : ''}</span>` : ''}
+            </div>
+            <div style="margin-top:10px">
+                ${dpBar('Kvalitet', s.dp_kvalitet)}${dpBar('Kassa', s.dp_kassa)}${dpBar('Tillväxt', s.dp_tillvaxt)}${dpBar('Stabilitet', s.dp_stabilitet)}${dpBar('Värdering', s.dp_vardering)}${dpBar('Storlek', s.dp_storlek)}
+            </div>
+            ${dflag.length ? `<div style="margin-top:10px;font-size:11.5px;color:#92400e;line-height:1.5">${dflag.map(f => `<div>${f}</div>`).join('')}</div>` : ''}
+            <div style="margin-top:10px;font-size:10.5px;color:#64748b">Sitens enda poängsättning — samma siffra som i Aktier, Topplistan och portföljerna. Vikter: kvalitet 24 % · kassaflöde 22 % · tillväxt 18 % · stabilitet 14 % · värdering 14 % · storlek 8 %.</div>
+        </div>`;
+    } else {
+        daktierCard = `<div class="drawer-section" style="background:#f8fafc;border:1px solid var(--line);border-radius:14px;padding:16px;margin-bottom:14px">
+            <div style="font-size:10.5px;color:#16365C;text-transform:uppercase;letter-spacing:0.1em;font-weight:800">⭐ DAKTIER-poäng</div>
+            <div style="margin-top:6px;font-size:13px;color:#475569;line-height:1.5">Ingen poäng i dagens ranking — bolaget saknar tillräcklig rapportserie (minst 8 kvartal), faller på hygienkraven (börsvärde ≥ 500 MUSD · kurs ≥ 10 USD · ej REIT) eller är en sekundärnotering av ett bolag som redan rankas.</div>
+        </div>`;
+    }
+    B.analys = daktierCard +
+        `<details class="drawer-section" style="background:var(--bg);border:1px solid var(--line);border-radius:14px;padding:12px 16px;margin-bottom:14px">
+            <summary style="cursor:pointer;font-weight:700;font-size:12.5px;color:#64748b">🔬 Fördjupning — övriga modeller (styr inte DAKTIER-poängen)</summary>
+            <div style="margin-top:12px"><div id="dovFactorCard"></div>` + B.analys + `</div></details>`;
     const DTABS = [['oversikt', 'Översikt'], ['rapporter', 'Rapporter'],
                    ['nyckeltal', 'Nyckeltal'], ['analys', 'Analys'], ['agare', 'Ägare']];
     html = `<div class="dtab-bar">` + DTABS.map(([k, l], i) =>

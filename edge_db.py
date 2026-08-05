@@ -2797,11 +2797,21 @@ def _parse_number(s):
 
 # ── Query Functions ──────────────────────────────────────────
 
+_STOCKS_DEDUP = ("(SELECT s0.*, ROW_NUMBER() OVER (PARTITION BY s0.isin "
+                 "ORDER BY COALESCE(s0.number_of_owners,0) DESC) AS huvudnotering "
+                 "FROM stocks s0)")
+
+
 def search_stocks(db, query="", country="", sort="owners", order="desc",
                   limit=50, offset=0, min_owners=0):
     """Search stocks with pagination, filtering and sorting."""
     ph = _ph()
-    where_parts = []
+    # HUVUDNOTERING: stocks har valutadubbletter per ISIN (Microsoft fanns
+    # som US-rad med 79 330 ägare OCH CAD-rad med 0 ägare — båda visades i
+    # Alla aktier med samma DAKTIER-poäng). En rad per ISIN, flest ägare
+    # vinner. Sökning träffar fortfarande allt eftersom dedup:en är per
+    # ISIN, inte per namn — Investor A och B är olika ISIN och visas båda.
+    where_parts = ["s.huvudnotering = 1"]
     params = []
 
     if query:
@@ -2871,7 +2881,7 @@ def search_stocks(db, query="", country="", sort="owners", order="desc",
         "short_selling_ratio", "t.pct_vs_ma200", "dr.score",
     }
 
-    total_row = _fetchone(db, f"SELECT COUNT(*) as cnt FROM stocks s {where_clause}", params if params else None)
+    total_row = _fetchone(db, f"SELECT COUNT(*) as cnt FROM {_STOCKS_DEDUP} s {where_clause}", params if params else None)
     total = total_row["cnt"] if _use_postgres() else total_row[0]
 
     # When ranking a null-sensitive column descending, exclude NULL rows from
@@ -2894,9 +2904,11 @@ def search_stocks(db, query="", country="", sort="owners", order="desc",
                dr.score AS daktier_score, dr.rank AS daktier_rank,
                dr.kvalitet AS dp_kvalitet, dr.kassa AS dp_kassa,
                dr.tillvaxt AS dp_tillvaxt, dr.stabilitet AS dp_stabilitet,
-               dr.vardering AS dp_vardering, dr.i_portfolj AS i_portfolj,
+               dr.vardering AS dp_vardering, dr.storlek AS dp_storlek,
+               dr.riskklass AS riskklass, dr.flaggor AS flaggor,
+               dr.i_portfolj AS i_portfolj,
                dr.sleeve AS portfolj_sleeve
-        FROM stocks s
+        FROM {_STOCKS_DEDUP} s
         LEFT JOIN trend_snapshot t ON t.isin = s.isin
         LEFT JOIN daktier_rank dr ON dr.isin = s.isin
              AND dr.snapshot_date = (SELECT MAX(snapshot_date) FROM daktier_rank)
@@ -5869,6 +5881,96 @@ def sync_analyst_actions(db, max_n=600, tickers=None):
             "av_tickers": len(tickers)}
 
 
+def sync_analyst_consensus(db, max_n=400, tickers=None):
+    """Daglig konsensus-snapshot: snittbetyg (1-5) + snittriktkurs, à la
+    Montrose/FactSet. Montrose har inget publikt API — deras tabell är
+    FactSet-data bakom inloggning. Samma mönster byggs här av öppna källor:
+
+      - yfinance recommendations: antal per betygsklass (Strong Buy/Buy/
+        Hold/Sell/Strong Sell), innevarande + tre månader bakåt
+      - yfinance analyst_price_targets: aktuell snittriktkurs
+
+    Betygshistoriken UPPSERTAS per (ticker, månad); riktkursen snapshotas
+    per dag. Historiken växer alltså framåt från idag — FactSets fleråriga
+    riktkurshistorik finns inte gratis och hittas inte på, den byggs.
+    Snittet räknas som FactSet: 5=Köp ... 1=Sälj."""
+    try:
+        import yfinance as yf
+    except ImportError:
+        return {"error": "yfinance saknas"}
+    ph = _ph()
+    db.execute("""
+        CREATE TABLE IF NOT EXISTS analyst_consensus (
+            ticker TEXT NOT NULL, manad TEXT NOT NULL,
+            strong_buy INTEGER, buy INTEGER, hold INTEGER,
+            sell INTEGER, strong_sell INTEGER,
+            n INTEGER, snitt DOUBLE PRECISION, uppdaterad TEXT,
+            PRIMARY KEY (ticker, manad))""")
+    db.execute("""
+        CREATE TABLE IF NOT EXISTS analyst_targets (
+            snapshot_date TEXT NOT NULL, ticker TEXT NOT NULL,
+            mean_target DOUBLE PRECISION, high_target DOUBLE PRECISION,
+            low_target DOUBLE PRECISION,
+            PRIMARY KEY (snapshot_date, ticker))""")
+    db.commit()
+    if not tickers:
+        rows = _fetchall(db, f"""
+            SELECT short_name FROM stocks
+            WHERE country IN ('US','CA') AND last_price > 0 AND market_cap > 0
+              AND short_name IS NOT NULL AND short_name != ''
+            ORDER BY market_cap DESC LIMIT {int(max_n)}""")
+        tickers = [dict(r)["short_name"] for r in rows if dict(r).get("short_name")]
+    cins = _upsert_sql("analyst_consensus",
+                       ["ticker", "manad", "strong_buy", "buy", "hold",
+                        "sell", "strong_sell", "n", "snitt", "uppdaterad"],
+                       ["ticker", "manad"])
+    tins = _upsert_sql("analyst_targets",
+                       ["snapshot_date", "ticker", "mean_target",
+                        "high_target", "low_target"],
+                       ["snapshot_date", "ticker"])
+    nu = datetime.now()
+    idag = nu.strftime("%Y-%m-%d")
+    n_kons = n_rikt = n_fel = 0
+    for t in tickers:
+        try:
+            yt = yf.Ticker(t)
+            rec = yt.recommendations
+            if rec is not None and len(rec):
+                for _, r in rec.iterrows():
+                    per = str(r.get("period") or "0m")
+                    try:
+                        skift = int(per.replace("m", ""))
+                    except Exception:
+                        continue
+                    m = nu.month + skift          # skift är 0 eller negativt
+                    ar = nu.year + (m - 1) // 12
+                    manad = f"{ar}-{((m - 1) % 12) + 1:02d}"
+                    sb, b = int(r.get("strongBuy") or 0), int(r.get("buy") or 0)
+                    h = int(r.get("hold") or 0)
+                    sl, ss = int(r.get("sell") or 0), int(r.get("strongSell") or 0)
+                    ant = sb + b + h + sl + ss
+                    if not ant:
+                        continue
+                    snitt = round((5*sb + 4*b + 3*h + 2*sl + 1*ss) / ant, 2)
+                    db.execute(cins, (t, manad, sb, b, h, sl, ss, ant, snitt, idag))
+                    n_kons += 1
+            try:
+                pt = yt.analyst_price_targets or {}
+            except Exception:
+                pt = {}
+            if isinstance(pt.get("mean"), (int, float)):
+                db.execute(tins, (idag, t, pt.get("mean"),
+                                  pt.get("high"), pt.get("low")))
+                n_rikt += 1
+            db.commit()
+        except Exception:
+            try: db.rollback()
+            except Exception: pass
+            n_fel += 1
+    return {"konsensusrader": n_kons, "riktkurser": n_rikt,
+            "fel": n_fel, "av_tickers": len(tickers)}
+
+
 def compute_action_toplist(db, manader=12, limit=100):
     """Topplista över flest NETTOHÖJDA rekommendationer senaste N månader.
 
@@ -6864,6 +6966,9 @@ def compute_daktier_portfolios(db):
     db.commit()
     try:
         db.execute(f"DELETE FROM daktier_rank WHERE snapshot_date = {ph}", (today,))
+        # 90 dagars historik räcker för 7/30-dagarsdeltan och håller volymen nere
+        db.execute(f"DELETE FROM daktier_rank WHERE snapshot_date < {ph}",
+                   ((datetime.now() - timedelta(days=90)).strftime("%Y-%m-%d"),))
         db.commit()
     except Exception:
         try: db.rollback()
