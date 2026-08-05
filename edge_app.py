@@ -16424,8 +16424,29 @@ def api_analyst_estimates_sync():
 
 def _log_model_portfolios(db):
     """DAKTIER-portföljen (kärna + krydda) — se compute_daktier_portfolios."""
-    from edge_db import compute_daktier_portfolios
-    return compute_daktier_portfolios(db)
+    from edge_db import compute_daktier_portfolios, _upsert_sql
+    res = compute_daktier_portfolios(db)
+    # S&P 500-stängningar till jämförelsekurvan — målet är att slå indexet,
+    # då måste indexet ligga i samma graf (användarbeslut 2026-08-05)
+    try:
+        import yfinance as yf
+        db.execute("""CREATE TABLE IF NOT EXISTS benchmark_prices (
+            symbol TEXT NOT NULL, date TEXT NOT NULL,
+            close DOUBLE PRECISION, PRIMARY KEY (symbol, date))""")
+        h = yf.Ticker("^GSPC").history(period="6mo")
+        ins = _upsert_sql("benchmark_prices", ["symbol", "date", "close"],
+                          ["symbol", "date"])
+        n_sp = 0
+        for idx, row in h.iterrows():
+            c = float(row.get("Close") or 0)
+            if c > 0:
+                db.execute(ins, ("^GSPC", str(idx)[:10], c))
+                n_sp += 1
+        db.commit()
+        print(f"[PORTFÖLJ] S&P 500: {n_sp} stängningar uppdaterade")
+    except Exception as e:
+        print(f"[PORTFÖLJ] S&P-hämtning misslyckades: {e}")
+    return res
 
 
 def _log_model_portfolios_gammal(db):
@@ -17408,15 +17429,41 @@ def api_model_portfolios():
                 bserie.append({"date": d2, "cum_pct": round((bcum - 1) * 100, 2)})
             facit[model] = {"portfolj": serie, "marknad": bserie}
 
+        # S&P 500 över samma datumaxel — saknas ett datum (US-helgdag) står
+        # kurvan still den dagen i stället för att hitta på en avkastning
+        spx = {}
+        try:
+            for r0 in _fetchall(db, f"SELECT date, close FROM benchmark_prices "
+                                    f"WHERE symbol = {ph}", ("^GSPC",)):
+                dd = dict(r0)
+                spx[str(dd["date"])[:10]] = dd["close"]
+        except Exception:
+            pass
+        sp_serie, scum = [], 1.0
+        for i in range(len(dates) - 1):
+            d1, d2 = dates[i], dates[i + 1]
+            if spx.get(d1) and spx.get(d2):
+                scum *= spx[d2] / spx[d1]
+            sp_serie.append({"date": d2, "cum_pct": round((scum - 1) * 100, 2)})
+        for model in MODELS:
+            facit[model]["sp500"] = sp_serie
+
+        START_KAPITAL = 100000.0
         models = {}
         for model in MODELS:
             cur = bydate.get(latest, {}).get(model) or []
             prevt = {m["ticker"] for m in (bydate.get(prev, {}).get(model) or [])} if prev else set()
             curt = {m["ticker"] for m in cur}
+            _pser = (facit.get(model) or {}).get("portfolj") or []
+            _cum = _pser[-1]["cum_pct"] if _pser else 0.0
+            nav_nu = round(START_KAPITAL * (1 + _cum / 100.0))
             models[model] = {
+                "nav": {"start": START_KAPITAL, "nu": nav_nu,
+                        "avkastning_pct": _cum, "max_vikt_pct": 10.0},
                 "holdings": [{"rank": m["rank"], "ticker": m["ticker"],
                               "name": m["name"], "sleeve": m.get("sleeve"),
                               "weight_pct": m.get("weight_pct"), "motiv": m.get("motiv"),
+                              "varde": round(nav_nu * (m.get("weight_pct") or 0) / 100.0),
                               "ny": bool(prev) and m["ticker"] not in prevt}
                              for m in sorted(cur, key=lambda x: x["rank"])],
                 "ut": sorted(prevt - curt) if prev else [],

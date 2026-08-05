@@ -6953,8 +6953,12 @@ def compute_daktier_portfolios(db):
                        "price", "sleeve", "weight_pct", "motiv"],
                       ["snapshot_date", "model", "rank"])
     n = 0
-    for sleeve, rows_, wtot in (("karna", karna, 65.0), ("krydda", krydda, 35.0)):
-        w = round(wtot / len(rows_), 1) if rows_ else 0
+    # VIKTTAK 10 % (användarregel 2026-08-05): max 10 % av portföljen per
+    # aktie. Med tio innehav blir det likaviktat 10 % rakt av — Kärnan är
+    # fortfarande 6 av 10 platser och Kryddan 4, men inget bolag väger över
+    # taket. Gamla 65/35-vikterna gav kärnbolagen 10,8 % > taket.
+    for sleeve, rows_ in (("karna", karna), ("krydda", krydda)):
+        w = 10.0
         for i, c in enumerate(rows_):
             bits = []
             if c["rev_g"] is not None:
