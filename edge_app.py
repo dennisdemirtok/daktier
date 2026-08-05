@@ -16955,6 +16955,22 @@ def api_fix_ticker_isin():
         db.close()
 
 
+@app.route("/api/factset-rating")
+def api_factset_rating():
+    """FactSet-liknande konsensus (Köp=5-skalan) rekonstruerad ur per-hus-
+    händelser — snitt, fördelning och flerårig historik. ?ticker=MRVL"""
+    from edge_db import compute_factset_style_rating
+    t = (request.args.get("ticker") or "").strip().upper()
+    if not t:
+        return jsonify({"error": "ange ?ticker=MRVL"}), 400
+    db = get_db()
+    try:
+        return jsonify(compute_factset_style_rating(
+            db, t, max_alder_man=request.args.get("max_alder", 15, type=int)))
+    finally:
+        db.close()
+
+
 @app.route("/api/analyst-actions/dump")
 def api_analyst_actions_dump():
     """ALLA lagrade rekändringar för en ticker — för granskning av vad

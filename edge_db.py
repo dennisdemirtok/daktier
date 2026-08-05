@@ -5971,6 +5971,96 @@ def sync_analyst_consensus(db, max_n=400, tickers=None):
             "fel": n_fel, "av_tickers": len(tickers)}
 
 
+_FACTSET_BETYG = {
+    # 5 = Köp
+    "buy": 5, "strong buy": 5, "outperform": 5, "market outperform": 5,
+    "sector outperform": 5, "positive": 5, "conviction buy": 5,
+    # 4 = Övervikt
+    "overweight": 4, "accumulate": 4, "add": 4, "moderate buy": 4,
+    # 3 = Behåll
+    "hold": 3, "neutral": 3, "equal-weight": 3, "equal weight": 3,
+    "market perform": 3, "sector perform": 3, "in-line": 3, "in line": 3,
+    "perform": 3, "sector weight": 3, "peer perform": 3, "mixed": 3,
+    "fair value": 3,
+    # 2 = Undervikt
+    "underweight": 2, "reduce": 2, "moderate sell": 2,
+    # 1 = Sälj
+    "sell": 1, "strong sell": 1, "underperform": 1, "negative": 1,
+    "market underperform": 1, "sector underperform": 1,
+}
+
+
+def compute_factset_style_rating(db, ticker, max_alder_man=15):
+    """FactSet-liknande konsensus REKONSTRUERAD ur per-hus-händelser.
+
+    FactSet säljer inte API-access privat och Montroses app får inte
+    skrapas — men analyst_actions innehåller varje hus SENASTE betyg
+    med datum, flera år bakåt. Spelas händelserna upp kronologiskt och
+    hålls senaste betyget per hus fås samma sak FactSet visar: snitt på
+    skalan Köp=5 … Sälj=1, fördelning per hink, och en HISTORIK byggd
+    ur riktiga registrerade händelser — inget påhittat.
+
+    Skillnader mot FactSet som ska förstås, inte döljas: (1) poolen är
+    de hus Yahoo registrerar, inte FactSets 36 — antalet skiljer;
+    (2) hus som tystnat faller ur efter max_alder_man månader (FactSets
+    'aktiv täckning' motsvaras av åldersgränsen); (3) betyg utanför
+    kartan räknas inte och redovisas som okända — de gissas aldrig."""
+    ph = _ph()
+    ev = [dict(r) for r in _fetchall(db, f"""
+        SELECT datum, firma, till_betyg FROM analyst_actions
+        WHERE ticker = {ph} AND firma IS NOT NULL
+        ORDER BY datum""", (ticker,))]
+    if not ev:
+        return {"ticker": ticker, "historik": [], "nu": None,
+                "obs": "inga händelser — kör sync-analyst-actions"}
+    from datetime import date as _d
+    granse_dagar = int(max_alder_man * 30.4)
+    tillstand, okanda = {}, set()
+    serie = []
+    for e in ev:
+        btxt = (e.get("till_betyg") or "").strip().lower()
+        num = _FACTSET_BETYG.get(btxt)
+        if num is None:
+            if btxt:
+                okanda.add(e["till_betyg"])
+            continue
+        d0 = str(e["datum"])[:10]
+        tillstand[e["firma"]] = (num, d0)
+        try:
+            dd = _d.fromisoformat(d0)
+        except Exception:
+            continue
+        aktiva = [v for (v, vd) in tillstand.values()
+                  if (dd - _d.fromisoformat(vd)).days <= granse_dagar]
+        if len(aktiva) >= 3:
+            serie.append({"datum": d0,
+                          "snitt": round(sum(aktiva) / len(aktiva), 2),
+                          "n_hus": len(aktiva)})
+    # Nuläget: åldra mot idag
+    idag = _d.today()
+    hink = {5: 0, 4: 0, 3: 0, 2: 0, 1: 0}
+    for (v, vd) in tillstand.values():
+        try:
+            if (idag - _d.fromisoformat(vd)).days <= granse_dagar:
+                hink[v] += 1
+        except Exception:
+            continue
+    n_nu = sum(hink.values())
+    nu = None
+    if n_nu >= 3:
+        nu = {"snitt": round(sum(k * v for k, v in hink.items()) / n_nu, 2),
+              "n_hus": n_nu,
+              "fordelning": {"kop": hink[5], "overvikt": hink[4],
+                             "behall": hink[3], "undervikt": hink[2],
+                             "salj": hink[1]}}
+    return {"ticker": ticker, "skala": "FactSet-stil: Köp=5 … Sälj=1",
+            "nu": nu, "historik": serie[-260:],
+            "max_alder_manader": max_alder_man,
+            "okanda_betyg": sorted(okanda) or None,
+            "kalla": "rekonstruerad ur per-hus-händelser (analyst_actions) — "
+                     "poolen är Yahoos hus, inte FactSets"}
+
+
 def compute_action_toplist(db, manader=12, limit=100):
     """Topplista över flest NETTOHÖJDA rekommendationer senaste N månader.
 
