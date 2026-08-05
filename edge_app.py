@@ -16955,6 +16955,31 @@ def api_fix_ticker_isin():
         db.close()
 
 
+@app.route("/api/analyst-actions/dump")
+def api_analyst_actions_dump():
+    """ALLA lagrade rekändringar för en ticker — för granskning av vad
+    siffrorna faktiskt bygger på. ?ticker=MRVL&atgard=down"""
+    from edge_db import _fetchall, _ph
+    ph = _ph()
+    t = (request.args.get("ticker") or "").strip().upper()
+    if not t:
+        return jsonify({"error": "ange ?ticker=MRVL"}), 400
+    a = (request.args.get("atgard") or "").strip().lower()
+    db = get_db()
+    try:
+        w, p = [f"ticker = {ph}"], [t]
+        if a:
+            w.append(f"LOWER(atgard) = {ph}")
+            p.append(a)
+        rows = [dict(r) for r in _fetchall(db, f"""
+            SELECT datum, firma, fran_betyg, till_betyg, atgard, hamtad
+            FROM analyst_actions WHERE {' AND '.join(w)}
+            ORDER BY datum DESC LIMIT 400""", tuple(p))]
+        return jsonify({"ticker": t, "antal": len(rows), "rader": rows})
+    finally:
+        db.close()
+
+
 @app.route("/api/analyst-actions")
 def api_analyst_actions():
     """Rekändringar per bolag med analyshus. ?tickers=MU,CRDO,MRVL&manader=12
