@@ -16812,10 +16812,16 @@ def api_fix_ticker_isin():
         n_flytt = 0
         if lp and lp > 0:
             # Bara kurser inom 1/3x–3x av dagens pris är riktiga Marvell —
-            # resten är pennyaktiens CAD-rader och raderas med gamla ISIN:et
-            cur = db.execute(f"UPDATE borsdata_prices SET isin = {ph} "
-                             f"WHERE isin = {ph} AND close BETWEEN {ph} AND {ph}",
-                             (kandidat, gammalt, lp / 3.0, lp * 3.0))
+            # resten är pennyaktiens CAD-rader och raderas med gamla ISIN:et.
+            # NOT EXISTS: rätt ISIN kan redan ha rader för samma datum (visade
+            # sig i skarp körning: 2026-07-22 fanns) — de behåller företräde.
+            cur = db.execute(
+                f"UPDATE borsdata_prices SET isin = {ph} "
+                f"WHERE isin = {ph} AND close BETWEEN {ph} AND {ph} "
+                f"AND NOT EXISTS (SELECT 1 FROM borsdata_prices p2 "
+                f"                WHERE p2.isin = {ph} "
+                f"                  AND p2.date = borsdata_prices.date)",
+                (kandidat, gammalt, lp / 3.0, lp * 3.0, kandidat))
             n_flytt = getattr(cur, "rowcount", 0) or 0
         db.execute(f"DELETE FROM borsdata_prices WHERE isin = {ph}", (gammalt,))
         db.commit()
