@@ -6368,7 +6368,7 @@ def compute_daktier_portfolios(db):
     qrows = _fetchall(db, f"""
         SELECT isin, report_end_date, currency, ins_id, revenues, gross_income,
                operating_income, net_profit, operating_cash_flow, free_cash_flow,
-               net_debt
+               net_debt, total_equity
         FROM borsdata_reports
         WHERE report_type = 'quarter' AND isin IN ({marks})
           AND report_end_date IS NOT NULL
@@ -6548,7 +6548,17 @@ def compute_daktier_portfolios(db):
             _m = _stat.median([abs(v) for v in _npq])
             if _m > 0 and any(abs(v) > _m * 2.5 for v in _npq):
                 engangspost = True
+        # Underlag för kassabenet: senaste bokförda egna kapitalet och hur
+        # många av de åtta kvartalen som faktiskt genererat kassa
+        equity_sen = next((x.get("total_equity") for x in lst
+                           if isinstance(x.get("total_equity"), (int, float))
+                           and x.get("total_equity") > 0), None)
+        ocf_pos = sum(1 for x in lst[:8]
+                      if isinstance(x.get("operating_cash_flow"), (int, float))
+                      and x.get("operating_cash_flow") > 0)
         cands.append({
+            "equity_senaste": equity_sen, "ocf_pos_kvartal": ocf_pos,
+            "fx_rap": fx,
             "ocf_kval": ocf_kval, "engangspost": engangspost,
             "net_debt_rap": nd, "nettokassa": (nd is not None and nd < 0),
             "np_margin": npm, "np_margin_prev": npm_prev, "marg_delta": marg_delta,
@@ -6677,6 +6687,54 @@ def compute_daktier_portfolios(db):
             return 0.0
         return 100.0 * (v - lo) / (hi - lo)
 
+    def _kassaben(c, gk, gv):
+        """Kassaflödesbaserat ben för kvalitet + värdering (användarbeslut
+        2026-08-05). Räddar bolag vars BOKFÖRDA vinst trycks ner av
+        förvärvsavskrivningar — Marvell kostnadsför 225-246 MUSD/kvartal
+        från Inphi-köpet mot rörelseresultat 271-358; pengarna finns kvar,
+        posten är bokföring. GAAP-ROCE 5,8 %% gav kvalitet 5 trots 26 %%
+        kassaflödesmarginal.
+
+        SPÄRRAR — benet gäller bara när kassan är bevisad och vinsten POSITIV:
+          1) np_ttm > 0: förlustbolag släpps inte in. OCF räknar TILLBAKA
+             aktierelaterade ersättningar, så SBC-tunga förlustbolag
+             (Snowflake) skulle annars se starka ut på exakt det här måttet.
+          2) ocf_ttm > 1,5x np_ttm: signaturen för nedtryckt vinst — benet
+             är ett undantag för förvrängda resultaträkningar, inte en
+             generell höjning av hela universumet.
+          3) minst 6 av 8 kvartal med positivt kassaflöde: ett bra kvartal
+             är inte bevisad kassagenerering.
+        Kapitalbasen behåller förvärvsgoodwill (eget kapital + nettoskuld)
+        med avsikt: priset för förvärven ska bäras — det är resultat-
+        räkningens avskrivningspost som är förvrängningen, inte balansen.
+        Bästa benet vinner per mått; GAAP-benet kan aldrig sänkas av detta."""
+        ocf, np_ = c.get("ocf_ttm"), c.get("np_ttm")
+        if not (isinstance(ocf, (int, float)) and ocf > 0
+                and isinstance(np_, (int, float)) and np_ > 0
+                and ocf > 1.5 * np_
+                and (c.get("ocf_pos_kvartal") or 0) >= 6):
+            return gk, gv, False
+        nk, nv = gk, gv
+        eq = c.get("equity_senaste")
+        if isinstance(eq, (int, float)) and eq > 0:
+            cap = eq + max(c.get("net_debt_rap") or 0, 0)
+            kk = (0.5 * _band(ocf / cap, 0.10, 0.25)
+                  + 0.5 * _band(ocf / eq, 0.12, 0.30))
+            nk = max(gk, kk)
+        fxr = c.get("fx_rap") or 1.0
+        if c.get("mcap_sek"):
+            p_ocf = c["mcap_sek"] / (ocf * 1e6 * fxr)
+            if p_ocf > 0:
+                nv = max(gv, 100 - _band(p_ocf, 12, 40))
+        return nk, nv, (nk > gk + 0.5 or nv > gv + 0.5)
+
+    def _kassaben_flagga(c):
+        fl = c.get("flaggor") or []
+        if not any("mätt på kassaflöde" in f for f in fl):
+            fl.append("💡 kvalitet/värdering mätt på kassaflöde i st.f. "
+                      "bokförd vinst (förvärvsavskrivningar)")
+        c["flaggor"] = fl
+
     if karna_pool:
         for c in karna_pool:
             kvalitet = 0.5 * _band(c["roce"], 0.10, 0.25) + 0.5 * _band(c["roe"], 0.12, 0.30)
@@ -6700,6 +6758,9 @@ def compute_daktier_portfolios(db):
             v_pe = (100 - _band(c.get("pe_ratio"), 15, 60)) if (c.get("pe_ratio") or 0) > 0 else 45.0
             v_ev = (100 - _band(c.get("ev_ebit_ratio"), 8, 45)) if c.get("ev_ebit_ratio") else 45.0
             vardering = 0.6 * v_pe + 0.4 * v_ev
+            kvalitet, vardering, _kb = _kassaben(c, kvalitet, vardering)
+            if _kb:
+                _kassaben_flagga(c)
             # Separata nycklar per lager: samma dict-objekt kan ligga i BÅDA
             # poolerna, och kryddans beräkning skrev annars över kärnans poäng
             # (GOOGL visades med 49,5 i stället för sin verkliga ~87)
@@ -6933,6 +6994,9 @@ def compute_daktier_portfolios(db):
         v_pe0 = (100 - _band(c.get("pe_ratio"), 15, 60)) if (c.get("pe_ratio") or 0) > 0 else 45.0
         v_ev0 = (100 - _band(c.get("ev_ebit_ratio"), 8, 45)) if c.get("ev_ebit_ratio") else 45.0
         vard = 0.6 * v_pe0 + 0.4 * v_ev0
+        kval, vard, _kb0 = _kassaben(c, kval, vard)
+        if _kb0:
+            _kassaben_flagga(c)
         # Trendbonus: pris över MA200 är timing-kvalitet, inte bolagskvalitet
         trend_ok = 1 if c.get("above_ma200") == 1 else 0
         # Riskflaggor sänker poängen (4 p styck, tak 12) — bevaka-flaggor gör
