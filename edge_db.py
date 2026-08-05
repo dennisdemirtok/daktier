@@ -5981,9 +5981,17 @@ def compute_cycle_top_monitor(db):
         fg4 = sum(r["revenues"] or 0 for r in rows[4:8])
         tillv = ((nu4 - fg4) / abs(fg4)) if fg4 else None
         def _bm(sub):
-            r_ = sum(x["revenues"] or 0 for x in sub)
-            g_ = sum(x["gross_income"] or 0 for x in sub if x.get("gross_income") is not None)
-            return (g_ / r_) if (r_ and g_) else None
+            # Bara kvartal där BÅDA finns. Att summera omsättning för alla
+            # kvartal men bruttoresultat bara för några gav Micron 72,6 %
+            # bruttomarginal — nämnaren saknade kvartal som täljaren hade.
+            par = [(x["revenues"], x["gross_income"]) for x in sub
+                   if isinstance(x.get("revenues"), (int, float))
+                   and isinstance(x.get("gross_income"), (int, float))]
+            if len(par) < 3:          # färre än tre kvartal säger inget om trend
+                return None
+            r_ = sum(p[0] for p in par)
+            g_ = sum(p[1] for p in par)
+            return (g_ / r_) if r_ else None
         bm_nu, bm_fg = _bm(rows[:4]), _bm(rows[4:8])
         return {"tillvaxt_yoy": round(tillv * 100, 1) if tillv is not None else None,
                 "brutto_nu": round(bm_nu * 100, 1) if bm_nu else None,
