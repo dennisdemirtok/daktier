@@ -6368,7 +6368,7 @@ def compute_daktier_portfolios(db):
     qrows = _fetchall(db, f"""
         SELECT isin, report_end_date, currency, ins_id, revenues, gross_income,
                operating_income, net_profit, operating_cash_flow, free_cash_flow,
-               net_debt, total_equity
+               net_debt, total_equity, intangible_assets, total_assets
         FROM borsdata_reports
         WHERE report_type = 'quarter' AND isin IN ({marks})
           AND report_end_date IS NOT NULL
@@ -6553,12 +6553,19 @@ def compute_daktier_portfolios(db):
         equity_sen = next((x.get("total_equity") for x in lst
                            if isinstance(x.get("total_equity"), (int, float))
                            and x.get("total_equity") > 0), None)
+        # Förvärvssignaturen: stor andel immateriella tillgångar på balansen
+        intang_andel = next(
+            ((x["intangible_assets"] / x["total_assets"]) for x in lst
+             if isinstance(x.get("intangible_assets"), (int, float))
+             and isinstance(x.get("total_assets"), (int, float))
+             and x.get("total_assets") and x["total_assets"] > 0
+             and x["intangible_assets"] >= 0), None)
         ocf_pos = sum(1 for x in lst[:8]
                       if isinstance(x.get("operating_cash_flow"), (int, float))
                       and x.get("operating_cash_flow") > 0)
         cands.append({
             "equity_senaste": equity_sen, "ocf_pos_kvartal": ocf_pos,
-            "fx_rap": fx,
+            "intang_andel": intang_andel, "fx_rap": fx,
             "ocf_kval": ocf_kval, "engangspost": engangspost,
             "net_debt_rap": nd, "nettokassa": (nd is not None and nd < 0),
             "np_margin": npm, "np_margin_prev": npm_prev, "marg_delta": marg_delta,
@@ -6714,18 +6721,33 @@ def compute_daktier_portfolios(db):
                 and ocf > 1.5 * np_
                 and (c.get("ocf_pos_kvartal") or 0) >= 6):
             return gk, gv, False
+        # SPÄRR 4 — FÖRVÄRVSSIGNATUREN (lärdom av första utfallet): kravet
+        # "OCF ≫ vinst" ensamt släppte igenom lönsamma SBC-tunga bolag —
+        # Workday, Trade Desk och Pinterest fick kvalitet 100/värdering 100
+        # eftersom aktieersättningar också läggs tillbaka i OCF. Skillnaden
+        # syns i BALANSEN: förvärvarens vinst trycks ner av avskrivningar på
+        # köpta immateriella tillgångar, och då är andelen immateriellt stor
+        # (Broadcom/VMware, Salesforce/Slack, Intuit/Mailchimp ≥ 25 %).
+        # SBC-bolagen saknar den signaturen. Saknas balansdata → inget ben:
+        # hellre ingen justering än fel justering.
+        ia = c.get("intang_andel")
+        if not (isinstance(ia, (int, float)) and ia >= 0.25):
+            return gk, gv, False
         nk, nv = gk, gv
         eq = c.get("equity_senaste")
         if isinstance(eq, (int, float)) and eq > 0:
             cap = eq + max(c.get("net_debt_rap") or 0, 0)
             kk = (0.5 * _band(ocf / cap, 0.10, 0.25)
                   + 0.5 * _band(ocf / eq, 0.12, 0.30))
-            nk = max(gk, kk)
+            # BLANDNING, inte rent max: kassabenet halveras mot GAAP-benet
+            # så ett enda mått aldrig ensamt lyfter ett bolag till toppen
+            nk = max(gk, (gk + kk) / 2.0)
         fxr = c.get("fx_rap") or 1.0
         if c.get("mcap_sek"):
             p_ocf = c["mcap_sek"] / (ocf * 1e6 * fxr)
             if p_ocf > 0:
-                nv = max(gv, 100 - _band(p_ocf, 12, 40))
+                kv2 = 100 - _band(p_ocf, 10, 32)
+                nv = max(gv, (gv + kv2) / 2.0)
         return nk, nv, (nk > gk + 0.5 or nv > gv + 0.5)
 
     def _kassaben_flagga(c):
