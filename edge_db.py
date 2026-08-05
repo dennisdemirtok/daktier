@@ -6087,7 +6087,7 @@ def compute_factset_rating_toplist(db, limit=50, min_hus=5):
         per_t.setdefault(r["ticker"], []).append(r)
     namn = {}
     try:
-        for r in _fetchall(db, "SELECT short_name, name FROM stocks"):
+        for r in _fetchall(db, "SELECT short_name, name FROM stocks ORDER BY COALESCE(number_of_owners,0) DESC"):
             d = dict(r)
             if d.get("short_name") and d["short_name"] not in namn:
                 namn[d["short_name"]] = d.get("name")
@@ -6165,7 +6165,7 @@ def compute_factset_level_toplist(db, limit=30, min_hus=5, min_punkter=6):
         per_t.setdefault(r["ticker"], []).append(r)
     namn = {}
     try:
-        for r in _fetchall(db, "SELECT short_name, name, sector FROM stocks"):
+        for r in _fetchall(db, "SELECT short_name, name, sector FROM stocks ORDER BY COALESCE(number_of_owners,0) DESC"):
             d = dict(r)
             if d.get("short_name") and d["short_name"] not in namn:
                 namn[d["short_name"]] = d
@@ -6243,7 +6243,7 @@ def compute_action_toplist(db, manader=12, limit=100):
             d["ovrigt"] += r["n"]
     namn = {}
     try:
-        for r in _fetchall(db, "SELECT short_name, name, sector FROM stocks"):
+        for r in _fetchall(db, "SELECT short_name, name, sector FROM stocks ORDER BY COALESCE(number_of_owners,0) DESC"):
             d = dict(r)
             if d.get("short_name") and d["short_name"] not in namn:
                 namn[d["short_name"]] = d
@@ -6346,7 +6346,7 @@ def compute_revision_toplist(db, manader=24, min_manader=6, limit=200):
     if ut:
         namn = {}
         try:
-            for r in _fetchall(db, "SELECT short_name, name, sector, country FROM stocks"):
+            for r in _fetchall(db, "SELECT short_name, name, sector, country FROM stocks ORDER BY COALESCE(number_of_owners,0) DESC"):
                 d = dict(r)
                 if d.get("short_name") and d["short_name"] not in namn:
                     namn[d["short_name"]] = d
