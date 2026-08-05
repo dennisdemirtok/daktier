@@ -16955,6 +16955,19 @@ def api_fix_ticker_isin():
         db.close()
 
 
+@app.route("/api/factset-rating/basta")
+def api_factset_rating_basta():
+    """Topplista på nivån: bästa snittbetyg som 12-månadersmedel."""
+    from edge_db import compute_factset_level_toplist
+    db = get_db()
+    try:
+        return jsonify(compute_factset_level_toplist(
+            db, limit=request.args.get("limit", 30, type=int),
+            min_hus=request.args.get("min_hus", 5, type=int)))
+    finally:
+        db.close()
+
+
 @app.route("/api/factset-rating/toplist")
 def api_factset_rating_toplist():
     """Topplista: förändring i konsensus-snittet 3/6/12 mån, upp och ned."""

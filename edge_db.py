@@ -6142,6 +6142,75 @@ def compute_factset_rating_toplist(db, limit=50, min_hus=5):
                              key=_nyckel("3m"))[:limit]}
 
 
+def compute_factset_level_toplist(db, limit=30, min_hus=5, min_punkter=6):
+    """Topplista på NIVÅN: bästa konsensus-snittbetyg (FactSet-skalan)
+    som GENOMSNITT över senaste 12 månaderna, med dagens snitt bredvid.
+
+    Genomsnittet tas över tolv månatliga mätpunkter (samma per-hus-
+    uppspelning och 15-månaders åldersgräns som övriga vyer). Minst
+    min_punkter av tolv måste ha min_hus aktiva hus — annars utesluts
+    bolaget i stället för att ett tunt underlag ser ut som ett helår."""
+    ph = _ph()
+    from datetime import date as _d
+    rows = [dict(r) for r in _fetchall(db, """
+        SELECT ticker, datum, firma, till_betyg FROM analyst_actions
+        WHERE firma IS NOT NULL ORDER BY ticker, datum""")]
+    if not rows:
+        return {"error": "analyst_actions är tom"}
+    idag = _d.today()
+    punkter = [idag - timedelta(days=int(k * 30.4)) for k in range(12)]
+    GRANS = timedelta(days=int(15 * 30.4))
+    per_t = {}
+    for r in rows:
+        per_t.setdefault(r["ticker"], []).append(r)
+    namn = {}
+    try:
+        for r in _fetchall(db, "SELECT short_name, name, sector FROM stocks"):
+            d = dict(r)
+            if d.get("short_name") and d["short_name"] not in namn:
+                namn[d["short_name"]] = d
+    except Exception:
+        pass
+
+    def _snitt_vid(ev, cutoff):
+        st = {}
+        for e in ev:
+            try:
+                dd = _d.fromisoformat(str(e["datum"])[:10])
+            except Exception:
+                continue
+            if dd > cutoff:
+                break
+            num = _FACTSET_BETYG.get((e.get("till_betyg") or "").strip().lower())
+            if num is not None:
+                st[e["firma"]] = (num, dd)
+        akt = [v for (v, vd) in st.values() if cutoff - vd <= GRANS]
+        return (round(sum(akt) / len(akt), 2), len(akt)) if len(akt) >= min_hus \
+            else (None, len(akt))
+
+    ut = []
+    for t, ev in per_t.items():
+        varden = []
+        for c in punkter:
+            s, _n = _snitt_vid(ev, c)
+            if s is not None:
+                varden.append(s)
+        if len(varden) < min_punkter:
+            continue
+        snu, n_nu = _snitt_vid(ev, idag)
+        if snu is None:
+            continue
+        m = namn.get(t) or {}
+        ut.append({"ticker": t, "name": m.get("name"), "sector": m.get("sector"),
+                   "snitt_12m_medel": round(sum(varden) / len(varden), 2),
+                   "snitt_nu": snu, "n_hus": n_nu,
+                   "matpunkter": len(varden)})
+    ut.sort(key=lambda x: (-x["snitt_12m_medel"], -x["snitt_nu"], -x["n_hus"]))
+    return {"skala": "Köp=5 … Sälj=1 · medel över 12 månatliga mätpunkter",
+            "min_hus": min_hus, "bolag": len(ut),
+            "basta": ut[:limit], "samsta": ut[-limit:][::-1]}
+
+
 def compute_action_toplist(db, manader=12, limit=100):
     """Topplista över flest NETTOHÖJDA rekommendationer senaste N månader.
 
