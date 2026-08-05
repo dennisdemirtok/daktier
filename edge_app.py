@@ -16961,7 +16961,7 @@ def api_analyst_actions():
 
     Svaret visar varje enskild händelse (datum, hus, från → till) plus
     12-månaderssummering. Större hus markeras med hus_klass='stor'."""
-    from edge_db import _fetchall, _ph
+    from edge_db import _fetchall, _fetchone, _ph
     ph = _ph()
     raw = request.args.get("tickers") or request.args.get("ticker") or ""
     tick = [x.strip().upper() for x in raw.split(",") if x.strip()]
@@ -16981,9 +16981,20 @@ def api_analyst_actions():
                 SELECT datum, firma, fran_betyg, till_betyg, atgard
                 FROM analyst_actions WHERE ticker = {ph}
                 ORDER BY datum DESC LIMIT 60""", (t,))]
-            i_fonster = [r for r in rows if str(r["datum"]) >= grans]
-            hojda = sum(1 for r in i_fonster if (r.get("atgard") or "").lower() in ("up", "upgrade"))
-            sankta = sum(1 for r in i_fonster if (r.get("atgard") or "").lower() in ("down", "downgrade"))
+            # Summeringen görs i SQL över HELA fönstret — att räkna på de 60
+            # senaste raderna underräknade bolag med fler händelser per år
+            # (Marvell rapporterades +5/0 när tabellen innehöll fler sänkningar
+            # äldre än de 60 senaste raderna men inom 12-månadersfönstret)
+            cr = _fetchone(db, f"""
+                SELECT SUM(CASE WHEN LOWER(atgard) IN ('up','upgrade')
+                           THEN 1 ELSE 0 END) AS u,
+                       SUM(CASE WHEN LOWER(atgard) IN ('down','downgrade')
+                           THEN 1 ELSE 0 END) AS d
+                FROM analyst_actions WHERE ticker = {ph} AND datum >= {ph}""",
+                (t, grans))
+            crd = dict(cr) if cr else {}
+            hojda = int(crd.get("u") or 0)
+            sankta = int(crd.get("d") or 0)
             for r in rows:
                 f = (r.get("firma") or "").lower()
                 r["hus_klass"] = "stor" if any(s in f for s in STORA) else "övrig"
