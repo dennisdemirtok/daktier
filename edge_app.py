@@ -16678,6 +16678,61 @@ def api_fix_frozen_status():
                     "steg": _FROZEN_STATE["steg"], "senaste": senast})
 
 
+@app.route("/api/revision-toplist")
+def api_revision_toplist():
+    """Topplista över bolag vars estimat reviderats upp. ?manader=24"""
+    from edge_db import compute_revision_toplist
+    db = get_db()
+    try:
+        return jsonify(compute_revision_toplist(
+            db, manader=request.args.get("manader", 24, type=int),
+            limit=request.args.get("limit", 200, type=int)))
+    finally:
+        db.close()
+
+
+@app.route("/api/cycle-monitor")
+def api_cycle_monitor():
+    """Cykeltopp-monitor: fem signaler → 0-5 poäng → grönt/gult/rött."""
+    from edge_db import compute_cycle_top_monitor
+    db = get_db()
+    try:
+        return jsonify(compute_cycle_top_monitor(db))
+    finally:
+        db.close()
+
+
+@app.route("/api/cycle-monitor/flag", methods=["POST"])
+def api_cycle_monitor_flag():
+    """Sätter en manuell kvartalsbedömning (capex eller finansiering).
+
+    Body: {signal: "capex"|"finansiering", flaggad: bool, kommentar: str,
+           kvartal: "2026Q3" (valfritt, default innevarande)}"""
+    from edge_db import _ph, _upsert_sql
+    b = request.json if request.is_json else {}
+    sig = (b.get("signal") or "").strip().lower()
+    if sig not in ("capex", "finansiering"):
+        return jsonify({"error": "signal måste vara capex eller finansiering"}), 400
+    kv = b.get("kvartal") or f"{datetime.now().year}Q{(datetime.now().month-1)//3+1}"
+    db = get_db()
+    try:
+        db.execute("""CREATE TABLE IF NOT EXISTS cycle_manual_flags (
+                        kvartal TEXT NOT NULL, signal TEXT NOT NULL,
+                        flaggad INTEGER NOT NULL DEFAULT 0,
+                        kommentar TEXT, satt_av TEXT, satt_datum TEXT,
+                        PRIMARY KEY (kvartal, signal))""")
+        db.execute(_upsert_sql("cycle_manual_flags",
+                               ["kvartal", "signal", "flaggad", "kommentar",
+                                "satt_av", "satt_datum"], ["kvartal", "signal"]),
+                   (kv, sig, 1 if b.get("flaggad") else 0, b.get("kommentar"),
+                    session.get("email"), datetime.now().isoformat()))
+        db.commit()
+        return jsonify({"sparat": {"kvartal": kv, "signal": sig,
+                                   "flaggad": bool(b.get("flaggad"))}})
+    finally:
+        db.close()
+
+
 @app.route("/api/maintenance/restore-from-borsdata", methods=["POST"])
 def api_restore_from_borsdata():
     """Återställer rapportserier som edgar_as_truth tömde på balansräkning.
@@ -22597,6 +22652,35 @@ def _startup():
         scheduler.add_job(_repair_gutted_once, 'date',
                           run_date=datetime.now() + timedelta(seconds=90),
                           id='repair_gutted_once')
+
+        # 🔔 Cykeltopp-monitor: MED VILJE LÅNGSAM. Kvartalsvis, ~3 veckor in
+        # i varje rapportsäsong när hyperscalers och halvledarkedjan hunnit
+        # rapportera. En daglig variant hade larmat på brus — cykeltoppar
+        # syns i kvartalsdata, inte i kursrörelser.
+        def scheduled_cycle_monitor():
+            kv = f"{datetime.now().year}Q{(datetime.now().month-1)//3+1}"
+            if not _sched_claim("cycle_monitor", kv):
+                return
+            try:
+                from edge_db import compute_cycle_top_monitor
+                dbc = get_db()
+                try:
+                    res = compute_cycle_top_monitor(dbc)
+                    print(f"[CYKEL] {res['larm']} {res['poang']}/5 — {res['atgard']}")
+                    for s in res["signaler"]:
+                        if s.get("flaggad"):
+                            print(f"[CYKEL]   ⚠ {s['namn']}: {s.get('detalj')}")
+                    if res.get("varning"):
+                        print(f"[CYKEL] {res['varning']}")
+                finally:
+                    dbc.close()
+            except Exception as e:
+                print(f"[CYKEL] fel: {e}")
+                _sched_release("cycle_monitor")
+
+        scheduler.add_job(scheduled_cycle_monitor, 'cron',
+                          month='2,5,8,11', day=21, hour=7, minute=0,
+                          id='cycle_monitor_quarterly')
 
         scheduler.start()
         print("  ✓ Auto-refresh scheduler aktiv (var 15:e min under marknadstid)")

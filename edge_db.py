@@ -5803,6 +5803,276 @@ def normalize_report_scales(db, dry_run=False):
             "dry_run": dry_run, "exempel": bolag[:15]}
 
 
+def compute_revision_toplist(db, manader=24, min_manader=6, limit=200):
+    """Topplista över bolag vars estimat reviderats UPP över tid.
+
+    VIKTIGT om mätmetoden: analyst_estimates.yr_up räknar antalet analytiker
+    som reviderat upp de senaste veckorna, och snapshoten tas dagligen. Att
+    summera yr_up över 24 månader hade dubbelräknat varje revidering ~20
+    gånger. Här mäts i stället två saker som INTE dubbelräknar:
+
+      1. estimatets faktiska förflyttning — yr_mean nu mot yr_mean då
+      2. antal MÅNADER med nettohöjning (yr_up > yr_down), en per månad
+
+    Returnerar {rader, tackning} där tackning säger hur djup historiken
+    faktiskt är — utan den kan man inte veta om "24 månader" är sant."""
+    from datetime import date as _date
+    try:
+        rows = [dict(r) for r in _fetchall(db, """
+            SELECT snapshot_date, ticker, yr_mean, yr_up, yr_down
+            FROM analyst_estimates
+            WHERE yr_mean IS NOT NULL
+            ORDER BY ticker, snapshot_date""")]
+    except Exception as e:
+        return {"error": f"analyst_estimates saknas: {e}"}
+    if not rows:
+        return {"rader": [], "tackning": {"snapshots": 0}}
+
+    per_t = {}
+    alla_dagar = set()
+    for r in rows:
+        d = str(r["snapshot_date"])[:10]
+        alla_dagar.add(d)
+        per_t.setdefault(r["ticker"], []).append((d, r))
+
+    _dagar = sorted(alla_dagar)
+    _spann = 0
+    if len(_dagar) >= 2:
+        try:
+            _a, _b = _date.fromisoformat(_dagar[0]), _date.fromisoformat(_dagar[-1])
+            _spann = round((_b - _a).days / 30.4)
+        except Exception:
+            _spann = 0
+    # Fönstret kan aldrig bli djupare än historiken — be om 24 månader när
+    # arkivet har 3 och du får en tyst lögn. Kapas och redovisas.
+    fonster = min(manader, _spann) if _spann else 0
+
+    ut = []
+    for tick, lst in per_t.items():
+        lst.sort(key=lambda x: x[0])
+        senaste_d, senaste = lst[-1]
+        # Månadsprover: ett per kalendermånad (sista i månaden)
+        per_man = {}
+        for d, r in lst:
+            per_man[d[:7]] = (d, r)
+        man_sort = sorted(per_man.keys())
+        if len(man_sort) < min_manader:
+            continue
+        valda = man_sort[-(fonster + 1):] if fonster else man_sort
+        if len(valda) < 2:
+            continue
+        _, forsta_r = per_man[valda[0]]
+        bas = forsta_r.get("yr_mean")
+        nu = senaste.get("yr_mean")
+        rev_pct = (((nu - bas) / abs(bas)) * 100.0
+                   if (isinstance(nu, (int, float)) and isinstance(bas, (int, float))
+                       and bas) else None)
+        hojda = sum(1 for m in valda
+                    if (per_man[m][1].get("yr_up") or 0) > (per_man[m][1].get("yr_down") or 0))
+        sankta = sum(1 for m in valda
+                     if (per_man[m][1].get("yr_down") or 0) > (per_man[m][1].get("yr_up") or 0))
+        ut.append({
+            "ticker": tick, "estimat_nu": nu, "estimat_da": bas,
+            "revision_pct": round(rev_pct, 1) if rev_pct is not None else None,
+            "manader_hojda": hojda, "manader_sankta": sankta,
+            "manader_matta": len(valda), "senaste_datum": senaste_d,
+            "analytiker_upp": senaste.get("yr_up"), "analytiker_ned": senaste.get("yr_down"),
+        })
+    # Sortering: förflyttningen först, andelen höjda månader som andrahandskriterium
+    ut = [x for x in ut if x["revision_pct"] is not None]
+    ut.sort(key=lambda x: (-(x["revision_pct"] or 0),
+                           -(x["manader_hojda"] / max(x["manader_matta"], 1))))
+    # Berika med namn och sektor
+    if ut:
+        namn = {}
+        try:
+            for r in _fetchall(db, "SELECT short_name, name, sector, country FROM stocks"):
+                d = dict(r)
+                if d.get("short_name") and d["short_name"] not in namn:
+                    namn[d["short_name"]] = d
+        except Exception:
+            pass
+        for x in ut:
+            m = namn.get(x["ticker"]) or {}
+            x["name"] = m.get("name")
+            x["sector"] = m.get("sector")
+            x["country"] = m.get("country")
+    return {"rader": ut[:limit],
+            "tackning": {"snapshots": len(alla_dagar),
+                         "historik_manader": _spann,
+                         "fonster_anvant": fonster,
+                         "begart": manader,
+                         "bolag": len(ut)}}
+
+
+_CYKEL_KEDJA = ["MRVL", "AVGO", "NVDA"]     # AI-infrastrukturkedjan
+_CYKEL_KANARIE = "MU"                        # leder kedjan med 1-2 kvartal
+_CYKEL_HYPER = ["AMZN", "MSFT", "GOOGL", "META"]
+
+
+def compute_cycle_top_monitor(db):
+    """Cykeltopp-monitor: fem signaler → 0-5 poäng → grönt/gult/rött.
+
+    MED VILJE LÅNGSAM. Kvartalsvis, inte daglig. Cykeltoppar syns i
+    kvartalsdata, inte i kursrörelser — en daglig variant hade larmat på
+    brus som juli-nedgången, där sektorn tappade enormt och studsade på
+    två veckor.
+
+    Tre signaler räknas ur data vi redan har. Två har ingen automatiserbar
+    källa (capex-guidning och finansieringsstrukturer) och läses från
+    cycle_manual_flags, där bedömningen sätts en gång per kvartal. En
+    manuell signal som saknas räknas som ICKE-flaggad, aldrig som gissad —
+    monitorn ska hellre missa ett larm än hitta på ett.
+
+    Returnerar {poang, larm, signaler, satta_manuellt}."""
+    ph = _ph()
+    db.execute("""
+        CREATE TABLE IF NOT EXISTS cycle_manual_flags (
+            kvartal TEXT NOT NULL, signal TEXT NOT NULL,
+            flaggad INTEGER NOT NULL DEFAULT 0,
+            kommentar TEXT, satt_av TEXT, satt_datum TEXT,
+            PRIMARY KEY (kvartal, signal))""")
+    db.commit()
+
+    def _est_serie(tick):
+        try:
+            return [dict(r) for r in _fetchall(db, f"""
+                SELECT snapshot_date, yr_mean, yr_up, yr_down
+                FROM analyst_estimates WHERE ticker = {ph} AND yr_mean IS NOT NULL
+                ORDER BY snapshot_date""", (tick,))]
+        except Exception:
+            return []
+
+    def _andraderivata(tick):
+        """Rullande 90-dagars förändring i snittestimatet, och om DEN
+        förändringen i sin tur mattats. Det är vändningen som är signalen,
+        inte nivån — ett estimat kan vara högt och ändå ha slutat stiga."""
+        s = _est_serie(tick)
+        if len(s) < 30:
+            return None
+        def _vid(idx):
+            v = s[idx].get("yr_mean")
+            return v if isinstance(v, (int, float)) else None
+        nu, mitt, then = _vid(-1), _vid(max(0, len(s) - 61)), _vid(max(0, len(s) - 121))
+        if None in (nu, mitt, then) or not mitt or not then:
+            return None
+        senaste = (nu - mitt) / abs(mitt)
+        tidigare = (mitt - then) / abs(then)
+        return {"senaste_90d": round(senaste * 100, 2),
+                "foregaende_90d": round(tidigare * 100, 2),
+                "vanding": senaste < 0 or (tidigare > 0.01 and senaste < tidigare / 2)}
+
+    def _fundament(tick):
+        """Omsättningstillväxt YoY och bruttomarginaltrend ur rapporterna."""
+        try:
+            rows = [dict(r) for r in _fetchall(db, f"""
+                SELECT br.report_end_date, br.revenues, br.gross_income
+                FROM borsdata_reports br
+                JOIN (SELECT isin FROM stocks WHERE UPPER(short_name) = {ph}
+                      ORDER BY COALESCE(number_of_owners,0) DESC LIMIT 1) s
+                  ON s.isin = br.isin
+                WHERE br.report_type = 'quarter' AND br.revenues IS NOT NULL
+                ORDER BY br.report_end_date DESC LIMIT 8""", (tick,))]
+        except Exception:
+            return None
+        if len(rows) < 8:
+            return None
+        nu4 = sum(r["revenues"] or 0 for r in rows[:4])
+        fg4 = sum(r["revenues"] or 0 for r in rows[4:8])
+        tillv = ((nu4 - fg4) / abs(fg4)) if fg4 else None
+        def _bm(sub):
+            r_ = sum(x["revenues"] or 0 for x in sub)
+            g_ = sum(x["gross_income"] or 0 for x in sub if x.get("gross_income") is not None)
+            return (g_ / r_) if (r_ and g_) else None
+        bm_nu, bm_fg = _bm(rows[:4]), _bm(rows[4:8])
+        return {"tillvaxt_yoy": round(tillv * 100, 1) if tillv is not None else None,
+                "brutto_nu": round(bm_nu * 100, 1) if bm_nu else None,
+                "brutto_fg": round(bm_fg * 100, 1) if bm_fg else None,
+                "brutto_faller": (bm_nu is not None and bm_fg is not None
+                                  and bm_nu < bm_fg - 0.01)}
+
+    signaler, poang = [], 0
+
+    # 1 + 5: manuella kvartalsbedömningar
+    kvartal = f"{datetime.now().year}Q{(datetime.now().month - 1)//3 + 1}"
+    manuella = {}
+    try:
+        for r in _fetchall(db, f"SELECT signal, flaggad, kommentar FROM "
+                               f"cycle_manual_flags WHERE kvartal = {ph}", (kvartal,)):
+            d = dict(r)
+            manuella[d["signal"]] = d
+    except Exception:
+        pass
+    for nyckel, rubrik in (("capex", "Capex-guidning hos hyperscalers"),
+                           ("finansiering", "Finansieringsstrukturer")):
+        m = manuella.get(nyckel)
+        f = bool(m and m.get("flaggad"))
+        if f:
+            poang += 1
+        signaler.append({"nr": 1 if nyckel == "capex" else 5, "namn": rubrik,
+                         "flaggad": f, "kalla": "manuell",
+                         "satt": bool(m),
+                         "detalj": (m or {}).get("kommentar")
+                                   or ("ej bedömd detta kvartal — räknas som ej flaggad"
+                                       if not m else None)})
+
+    # 2: revisionsmomentum i kedjan
+    vand = {}
+    for t in _CYKEL_KEDJA:
+        vand[t] = _andraderivata(t)
+    _n_vand = sum(1 for v in vand.values() if v and v.get("vanding"))
+    _har_data = sum(1 for v in vand.values() if v)
+    f2 = _har_data >= 2 and _n_vand >= 2
+    if f2:
+        poang += 1
+    signaler.append({"nr": 2, "namn": "Revisionsmomentum (MRVL/AVGO/NVDA)",
+                     "flaggad": f2, "kalla": "analyst_estimates",
+                     "satt": _har_data > 0,
+                     "detalj": (f"{_n_vand} av {_har_data} med vändande estimat"
+                                if _har_data else "för kort estimathistorik"),
+                     "per_bolag": vand})
+
+    # 3: bolagsspecifik tillväxtcheck
+    fm = _fundament("MRVL")
+    f3 = bool(fm and ((fm.get("tillvaxt_yoy") is not None and fm["tillvaxt_yoy"] < 40)
+                      or fm.get("brutto_faller")))
+    if f3:
+        poang += 1
+    signaler.append({"nr": 3, "namn": "Marvell: tillväxt mot guidning + bruttomarginal",
+                     "flaggad": f3, "kalla": "borsdata_reports", "satt": bool(fm),
+                     "detalj": (f"tillväxt {fm['tillvaxt_yoy']}% mot guidad 40%, "
+                                f"bruttomarginal {fm['brutto_fg']}% → {fm['brutto_nu']}%"
+                                if fm else "rapportserien räcker inte")})
+
+    # 4: kanariefågeln Micron
+    mv, mfd = _andraderivata(_CYKEL_KANARIE), _fundament(_CYKEL_KANARIE)
+    f4 = bool((mv and mv.get("vanding")) or (mfd and mfd.get("brutto_faller")))
+    if f4:
+        poang += 1
+    signaler.append({"nr": 4, "namn": "Kanariefågeln Micron",
+                     "flaggad": f4, "kalla": "analyst_estimates + rapporter",
+                     "satt": bool(mv or mfd),
+                     "detalj": ((f"estimat 90d {mv['senaste_90d']}% mot "
+                                 f"{mv['foregaende_90d']}% föregående" if mv else "")
+                                + (f" · bruttomarginal {mfd['brutto_fg']}% → "
+                                   f"{mfd['brutto_nu']}%" if mfd else "")).strip(" ·")
+                               or "för lite data",
+                     "obs": "lagerdagar går inte att räkna — borsdata_reports "
+                            "har ingen lagerpost"})
+
+    larm = "RÖTT" if poang >= 3 else ("GULT" if poang == 2 else "GRÖNT")
+    atgard = {"GRÖNT": "ingen åtgärd, fortsatt bevakning",
+              "GULT": "trimma exponering, skärp bevakningen",
+              "RÖTT": "aktiv exitplan"}[larm]
+    ej_satta = [s["namn"] for s in signaler if not s.get("satt")]
+    return {"kvartal": kvartal, "poang": poang, "av": 5, "larm": larm,
+            "atgard": atgard, "signaler": signaler,
+            "ej_bedomda": ej_satta,
+            "varning": (f"{len(ej_satta)} signal(er) saknar underlag och räknas "
+                        f"som ej flaggade — poängen är därmed en UNDRE gräns"
+                        if ej_satta else None)}
+
+
 def compute_daktier_portfolios(db):
     """DAKTIER-portföljen: KÄRNA (kvalitetscompounders) + KRYDDA (tillväxt/risk).
 
