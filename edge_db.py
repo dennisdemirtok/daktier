@@ -6318,6 +6318,220 @@ def compute_cycle_top_monitor(db):
                         if ej_satta else None)}
 
 
+# Claude-10: diskretionär alternativportfölj (användarbeslut 2026-08-05).
+# Valen är mina, ur sessionens verifierade data — DAKTIER-poäng, rekbild,
+# kassaflödesben — med två uttalade högriskval användaren tror på (MRVL/CRDO).
+# Byts VECKOVIS/MÅNADSVIS av användaren via /api/claude-portfolio/set, inte
+# dagligen av modellen. Ambitionen "slå index 4-5x" är just ambition — kurvan
+# mäts live mot S&P 500 i samma facit som DAKTIER-10, inga backtester.
+CLAUDE_10_SEED = [
+    ("karna",  "MSFT",   "DAKTIER 94,5 · kvalitet+kassa 100 · AI-monetisering i drift"),
+    ("karna",  "NOVO B", "92,1 · kvalitet 100 + värdering 98 — sällsynt kombination"),
+    ("karna",  "INTU",   "91,9 · förvärvare med kassaflödesbenet aktivt · P/OCF ~10"),
+    ("karna",  "ABNB",   "89,6 · kassa 100 · asset-light nätverkseffekt"),
+    ("karna",  "GOOGL",  "86,7 · billigaste megacap-AI · stabilitet 100"),
+    ("karna",  "V",      "84,2 · riskklass LÅG · betalnätverks-compounder"),
+    ("krydda", "MU",     "84,2 · HBM/AI-minnescykeln · egen kanariefågelbevakning"),
+    ("krydda", "NVDA",   "80,6 · AI-infrastrukturens nav · stark kassa"),
+    ("krydda", "MRVL",   "rek +5/0 på 12 mån · AI-bokningar · HÖG RISK: P/OCF ~90"),
+    ("krydda", "CRDO",   "omsättning 11x på 3 år · AI-connectivity · HÖG RISK: ung serie"),
+]
+
+
+def log_claude_portfolio(db, nya_innehav=None):
+    """Loggar Claude-10 för idag. Utan nya_innehav bärs gårdagens innehav
+    vidare (första körningen sår CLAUDE_10_SEED) — facit-kurvan kräver en
+    rad per dag men innehaven byts bara när användaren aktivt byter."""
+    ph = _ph()
+    from datetime import date as _d
+    today = _d.today().isoformat()
+    if nya_innehav is None:
+        prev = [dict(r) for r in _fetchall(db, """
+            SELECT ticker, sleeve, motiv FROM model_portfolios
+            WHERE model = 'claude_10' AND snapshot_date =
+              (SELECT MAX(snapshot_date) FROM model_portfolios
+               WHERE model = 'claude_10')
+            ORDER BY rank""")]
+        val = prev or [{"ticker": t, "sleeve": sl, "motiv": m}
+                       for sl, t, m in CLAUDE_10_SEED]
+    else:
+        val = nya_innehav
+    ins = _upsert_sql("model_portfolios",
+                      ["snapshot_date", "model", "rank", "ticker", "name", "isin",
+                       "price", "sleeve", "weight_pct", "motiv"],
+                      ["snapshot_date", "model", "rank"])
+    n, saknade = 0, []
+    for h in val[:10]:
+        t = str(h.get("ticker") or "").strip().upper()
+        srow = _fetchone(db, f"SELECT isin, name, last_price FROM stocks "
+                             f"WHERE UPPER(short_name) = {ph} "
+                             f"ORDER BY COALESCE(number_of_owners,0) DESC", (t,))
+        if not srow:
+            saknade.append(t)
+            continue
+        sd = dict(srow)
+        n += 1
+        db.execute(ins, (today, "claude_10", n, t, sd["name"], sd["isin"],
+                         sd["last_price"], h.get("sleeve") or "karna", 10.0,
+                         h.get("motiv")))
+    db.commit()
+    return {"claude_10": n, "saknade": saknade}
+
+
+def compute_analyst_behavior(db, tickers=None, limit=150):
+    """Analytikerbeteende — arketypklassificering enligt användarens spec
+    (2026-08-05): sex mätvärden, sex arketyper i prioritetsordning, tre listor.
+
+    ÄRLIGHETSRAM: specen förutsätter 12+ månaders DAGLIG riktkurshistorik
+    (FactSet-klass). Vår riktkurshistorik (analyst_targets) börjar
+    2026-08-05 och växer en dag i taget — den går inte att köpa loss gratis
+    bakåt och hittas ALDRIG på (REGEL 0). Varje mätvärde beräknas därför
+    bara när dess underlag finns och redovisar annars null + orsak.
+    Aktiveringsordning i takt med att historiken växer: rating_level/trend
+    direkt (månadskonsensus) → staleness efter ~3 veckor → platå efter 28 d
+    → drift efter ~4 mån → rapporthopp/arketyp 1/4/6 fullt efter första
+    rapportsäsongen med historik. Interimkriterier på rekÄNDRINGAR
+    (analyst_actions, flera års historik) märks alltid interim=true.
+
+    HÅRDA REGLER (specens): gap kurs/riktkurs ingår ALDRIG i score — bara
+    dekomponerad kontext; dispersion topp/botten > 3x halverar signalvikt;
+    full omklassificering per rapportsäsong."""
+    ph = _ph()
+    from datetime import date as _d
+    if not tickers:
+        rows = _fetchall(db, f"""
+            SELECT DISTINCT ticker FROM analyst_consensus LIMIT {int(limit)}""")
+        tickers = [dict(r)["ticker"] for r in rows]
+    idag = _d.today()
+    ut, varningar, ignorera, kandidater = {}, [], [], []
+    for t in tickers:
+        tg = [dict(r) for r in _fetchall(db, f"""
+            SELECT snapshot_date, mean_target, high_target, low_target
+            FROM analyst_targets WHERE ticker = {ph}
+            ORDER BY snapshot_date""", (t,))]
+        kons = [dict(r) for r in _fetchall(db, f"""
+            SELECT manad, snitt, n FROM analyst_consensus WHERE ticker = {ph}
+            ORDER BY manad""", (t,))]
+        akt = [dict(r) for r in _fetchall(db, f"""
+            SELECT datum, atgard FROM analyst_actions WHERE ticker = {ph}
+            AND datum >= {ph} ORDER BY datum""",
+            (t, (idag - timedelta(days=365)).isoformat()))]
+        pr = [dict(r) for r in _fetchall(db, f"""
+            SELECT p.date, p.close FROM borsdata_prices p
+            JOIN (SELECT isin FROM stocks WHERE UPPER(short_name) = {ph}
+                  ORDER BY COALESCE(number_of_owners,0) DESC LIMIT 1) s
+              ON s.isin = p.isin
+            WHERE p.date >= {ph} AND p.close > 0 ORDER BY p.date""",
+            (t, (idag - timedelta(days=380)).isoformat()))]
+        hist = len(tg)
+        m = {"historik_dagar_riktkurs": hist,
+             "historik_manader_rating": len(kons)}
+        # Rating: nivå + 90-dagarstrend + dispersion (aktiva från dag 1)
+        m["rating_snitt"] = kons[-1]["snitt"] if kons else None
+        m["rating_trend_90d"] = (round(kons[-1]["snitt"] - kons[max(0, len(kons)-4)]["snitt"], 2)
+                                 if len(kons) >= 2 else None)
+        disp = None
+        if tg and tg[-1].get("high_target") and tg[-1].get("low_target"):
+            lo = tg[-1]["low_target"]
+            disp = round(tg[-1]["high_target"] / lo, 2) if lo else None
+        m["dispersion"] = disp
+        m["halverad_signalvikt"] = bool(disp and disp > 3)
+        m["riktkurs_snitt"] = tg[-1]["mean_target"] if tg else None
+        # Staleness: dagar sedan snittet rörde sig >1 % — kräver ~3 veckor
+        if hist >= 15:
+            sen = None
+            for i in range(len(tg) - 1, 0, -1):
+                a, b = tg[i-1]["mean_target"], tg[i]["mean_target"]
+                if a and b and abs(b/a - 1) > 0.01:
+                    sen = tg[i]["snapshot_date"]
+                    break
+            m["staleness_dagar"] = ((idag - _d.fromisoformat(str(sen)[:10])).days
+                                    if sen else hist)
+        else:
+            m["staleness_dagar"] = None
+            m["staleness_orsak"] = f"kräver ~15 dagars riktkurshistorik (har {hist})"
+        # Platå: längsta oförändrade period ±0,3 % — kräver 28 dagar
+        if hist >= 28:
+            langsta = run = 0
+            for i in range(1, len(tg)):
+                a, b = tg[i-1]["mean_target"], tg[i]["mean_target"]
+                run = run + 1 if (a and b and abs(b/a - 1) <= 0.003) else 0
+                langsta = max(langsta, run)
+            m["plateau_dagar"] = langsta
+        else:
+            m["plateau_dagar"] = None
+        # Rapporthopp/accel/drift: kräver riktkurser kring rapportdatum
+        m["report_jump"] = None
+        m["report_jump_orsak"] = ("riktkurshistoriken täcker ännu ingen "
+                                  "rapportsäsong — aktiveras automatiskt")
+        m["jump_accel"] = None
+        m["drift_ratio"] = None
+        # Kursens drawdown 12 mån (aktiv nu)
+        dd = dd_start = None
+        if len(pr) >= 40:
+            topp, topp_d = 0.0, None
+            for r0 in pr:
+                if r0["close"] > topp:
+                    topp, topp_d = r0["close"], str(r0["date"])[:10]
+            sista = pr[-1]["close"]
+            dd = round((sista / topp - 1) * 100, 1)
+            dd_start = topp_d
+        m["kurs_drawdown_pct"] = dd
+        # Gap kurs/riktkurs — ENDAST kontext, aldrig i score (specens regel)
+        if m["riktkurs_snitt"] and len(pr) >= 1 and pr[-1]["close"]:
+            m["gap_kontext"] = {
+                "gap_pct": round((m["riktkurs_snitt"] / pr[-1]["close"] - 1) * 100, 1),
+                "obs": "visas som kontext — ingår aldrig i score"}
+        ups90 = sum(1 for a in akt if (a.get("atgard") or "").lower() == "up"
+                    and str(a["datum"]) >= (idag - timedelta(days=90)).isoformat())
+        dns90 = sum(1 for a in akt if (a.get("atgard") or "").lower() == "down"
+                    and str(a["datum"]) >= (idag - timedelta(days=90)).isoformat())
+        dns60 = sum(1 for a in akt if (a.get("atgard") or "").lower() == "down"
+                    and str(a["datum"]) >= (idag - timedelta(days=60)).isoformat())
+        dns365 = sum(1 for a in akt if (a.get("atgard") or "").lower() == "down")
+        # Arketyp i specens ordning — första träff gäller; interimkriterier
+        # (rekändringar i stället för riktkurshopp) märks
+        arketyp, grund, interim = None, None, False
+        rt = m["rating_trend_90d"]
+        if dns90 >= 2 and (rt is not None and rt <= -0.2):
+            arketyp, interim = "DE-RATING", True
+            grund = f"{dns90} sänkningar 90 d + rating {rt:+.2f}"
+        elif dd is not None and dd <= -20 and dns365 == 0 and (rt is None or abs(rt) < 0.1):
+            arketyp, interim = "CYKLIKER-VARNING", True
+            grund = (f"kurs {dd:+.1f}% från topp medan inga reksänkningar "
+                     f"gjorts — staleness-fällan (MU-läget)")
+        elif (len(kons) >= 6 and all((k.get("snitt") or 5) < 4.5 for k in kons[-6:])
+              and dd is not None and dd > -15):
+            arketyp = "VÄRDERINGSSTREJKARE"
+            grund = "rating <4,5 i 6+ mån med kurs nära topp — konsensus ignoreras"
+        elif dns365 >= 2 and dns60 == 0 and ups90 >= 1:
+            arketyp, interim = "VÄNDNINGSKANDIDAT", True
+            grund = f"{dns365} sänkningar 12 mån, inga på 60 d, {ups90} höjning(ar) 90 d"
+        else:
+            arketyp = "OKLASSAD"
+            grund = ("kvalitetskompression/fundamenta-driven kräver "
+                     "riktkurshistorik över minst en rapportsäsong")
+        rad = {"ticker": t, "arketyp": arketyp, "grund": grund,
+               "interim_underlag": interim, "matvarden": m}
+        ut[t] = rad
+        if arketyp in ("DE-RATING", "CYKLIKER-VARNING"):
+            varningar.append({"ticker": t, "arketyp": arketyp, "grund": grund,
+                              "interim": interim,
+                              "halverad_vikt": m["halverad_signalvikt"]})
+        if arketyp == "VÄRDERINGSSTREJKARE":
+            ignorera.append({"ticker": t, "grund": grund})
+    return {"bolag": ut,
+            "listor": {"kopkandidater": kandidater,
+                       "kopkandidater_obs": ("score-formeln (0,5×hopp + 0,3×accel "
+                                             "+ platåbonus − driftstraff) kräver "
+                                             "rapporthopp-data — aktiveras efter "
+                                             "första rapportsäsongen med historik"),
+                       "varningar": varningar,
+                       "ignorera_konsensus": ignorera},
+            "datalage": {"riktkurshistorik_fran": "2026-08-05",
+                         "bolag_analyserade": len(ut)}}
+
+
 def compute_daktier_portfolios(db):
     """DAKTIER-portföljen: KÄRNA (kvalitetscompounders) + KRYDDA (tillväxt/risk).
 

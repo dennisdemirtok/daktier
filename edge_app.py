@@ -16446,6 +16446,11 @@ def _log_model_portfolios(db):
         print(f"[PORTFÖLJ] S&P 500: {n_sp} stängningar uppdaterade")
     except Exception as e:
         print(f"[PORTFÖLJ] S&P-hämtning misslyckades: {e}")
+    try:
+        from edge_db import log_claude_portfolio
+        print(f"[PORTFÖLJ] Claude-10: {log_claude_portfolio(db)}")
+    except Exception as e:
+        print(f"[PORTFÖLJ] Claude-10 fel: {e}")
     return res
 
 
@@ -16719,6 +16724,40 @@ def api_sync_analyst_actions():
 
     threading.Thread(target=_kor, daemon=True).start()
     return jsonify({"status": "startad", "se": "Railway-loggen, prefix [REK]"})
+
+
+@app.route("/api/claude-portfolio/set", methods=["POST"])
+def api_claude_portfolio_set():
+    """Byter Claude-10:s innehav (veckovis/månadsvis, användarens beslut).
+
+    Body: {"holdings": [{"ticker": "MSFT", "sleeve": "karna",
+                          "motiv": "..."}, ...]}  (max 10)"""
+    from edge_db import log_claude_portfolio
+    b = request.json if request.is_json else {}
+    h = b.get("holdings") or []
+    if not h or not isinstance(h, list):
+        return jsonify({"error": 'body: {"holdings": [{"ticker": ...}]}'}), 400
+    db = get_db()
+    try:
+        res = log_claude_portfolio(db, nya_innehav=h)
+        return jsonify({"bytt": res})
+    finally:
+        db.close()
+
+
+@app.route("/api/analyst-behavior")
+def api_analyst_behavior():
+    """Analytikerbeteende: arketypklassificering per bolag + tre listor.
+    ?tickers=MU,MRVL begränsar; annars alla med konsensusdata."""
+    from edge_db import compute_analyst_behavior
+    tick = [x.strip().upper() for x in (request.args.get("tickers") or "").split(",")
+            if x.strip()] or None
+    db = get_db()
+    try:
+        return jsonify(compute_analyst_behavior(
+            db, tickers=tick, limit=request.args.get("limit", 150, type=int)))
+    finally:
+        db.close()
 
 
 @app.route("/api/maintenance/sync-analyst-consensus", methods=["POST"])
@@ -23007,6 +23046,36 @@ def _startup():
         scheduler.add_job(scheduled_analyst_consensus, 'cron',
                           day_of_week='mon-fri', hour=4, minute=50,
                           id='analyst_consensus_daily')
+
+        # 🧭 Analytikerbeteende: veckoklassificering (måndag 05:05). Full
+        # omklassificering per rapportsäsong sker implicit — mätvärdena
+        # läser alltid färsk historik vid varje körning.
+        def scheduled_analyst_behavior():
+            if not _sched_claim("analyst_behavior",
+                                datetime.now().strftime("%G-V%V")):
+                return
+            try:
+                from edge_db import compute_analyst_behavior, _upsert_sql
+                import json as _jb
+                dba = get_db()
+                try:
+                    res = compute_analyst_behavior(dba)
+                    kort = {"datum": datetime.now().strftime("%Y-%m-%d"),
+                            "listor": res.get("listor"),
+                            "datalage": res.get("datalage")}
+                    dba.execute(_upsert_sql("meta", ["key", "value"], ["key"]),
+                                ("analyst_behavior:last", _jb.dumps(kort)))
+                    dba.commit()
+                    print(f"[BETEENDE] {kort['datalage']} · "
+                          f"varningar: {len(kort['listor']['varningar'])}")
+                finally:
+                    dba.close()
+            except Exception as e:
+                print(f"[BETEENDE] fel: {e}")
+
+        scheduler.add_job(scheduled_analyst_behavior, 'cron',
+                          day_of_week='mon', hour=5, minute=5,
+                          id='analyst_behavior_weekly')
 
         scheduler.start()
         print("  ✓ Auto-refresh scheduler aktiv (var 15:e min under marknadstid)")

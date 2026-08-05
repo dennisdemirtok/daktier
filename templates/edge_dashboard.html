@@ -2360,6 +2360,33 @@ function renderModelPortfolios(d) {
         <div style="font-size:13px;font-weight:800;color:${(nav.avkastning_pct||0) >= 0 ? '#86efac' : '#fca5a5'}">${(nav.avkastning_pct||0) >= 0 ? '+' : ''}${(nav.avkastning_pct||0).toFixed(2)} %</div>
         ${spCum != null ? `<div style="font-size:11.5px;opacity:0.85">S&P 500 samma period: ${spCum >= 0 ? '+' : ''}${spCum.toFixed(2)} %</div>` : ''}
     </div>` : '';
+    // Claude-10: alternativportföljen — samma facit-maskineri, egna val,
+    // byts veckovis/månadsvis (inte dagligen)
+    const c10 = models.claude_10 || null;
+    let claudeBlock = '';
+    if (c10) {
+        const cnav = c10.nav || {};
+        const cser = ((c10.facit || {}).portfolj) || [];
+        const csp = ((c10.facit || {}).sp500) || [];
+        const ccum = cnav.avkastning_pct || 0;
+        const cspc = csp.length ? csp[csp.length - 1].cum_pct : null;
+        claudeBlock = `<div class="mp-card" style="margin-top:16px;border-left:4px solid var(--brand-cyan)">
+            <div class="mp-head">🤖 Claude-10 — alternativportföljen</div>
+            <div class="mp-sub">Diskretionära val, byts veckovis/månadsvis — inte dagligen. Samma mätning: 10 % per innehav (tak 10 %), live mot S&P 500 och marknadssnittet. Ambitionen är att slå index — kurvan är beviset, inga backtester.</div>
+            <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:baseline;margin-bottom:8px">
+                <span style="font-size:20px;font-weight:900;color:var(--brand-navy)">${Math.round(cnav.nu || 100000).toLocaleString('sv-SE')} kr</span>
+                <span style="font-size:12px;font-weight:800;color:${ccum >= 0 ? '#059669' : '#dc2626'}">${ccum >= 0 ? '+' : ''}${ccum.toFixed(2)} %</span>
+                ${cspc != null ? `<span style="font-size:11px;color:var(--text-muted)">S&P 500 samma period: ${cspc >= 0 ? '+' : ''}${cspc.toFixed(2)} %</span>` : ''}
+            </div>
+            ${(c10.holdings || []).map(h => `<div class="mp-row" onclick="openStockByTicker('${(h.ticker || '').replace(/'/g, "\\'")}')">
+                <span class="mp-rank" style="background:var(--brand-cyan)">${(h.weight_pct || 10).toFixed(0)}%</span>
+                <span class="mp-name">${h.name || h.ticker}${h.ny ? '<span class="mp-ny">NY</span>' : ''}<br>
+                <span class="mp-tick">${h.ticker || ''}${h.varde ? ' · ' + Math.round(h.varde).toLocaleString('sv-SE') + ' kr' : ''}${h.motiv ? ' · ' + h.motiv : ''}</span></span>
+            </div>`).join('')}
+            ${cser.length >= 2 ? `<div style="height:200px;margin-top:10px"><canvas id="mpChart-claude_10"></canvas></div>`
+                               : `<div style="margin-top:8px;font-size:11.5px;color:var(--text-muted)">Facit-kurvan byggs från i dag — en punkt per handelsdag.</div>`}
+        </div>`;
+    }
     const facitBlock = serie.length >= 2
         ? `<div class="mp-card" style="margin-top:16px"><div class="mp-head">📊 Live-facit</div>
              <div class="mp-sub">Likaviktad daglig avkastning mot marknadssnittet — mätt framåt, inga backtester.</div>
@@ -2410,6 +2437,7 @@ function renderModelPortfolios(d) {
             <div id="scoreList"><div style="padding:16px;color:var(--text-muted);font-size:13px">Laddar…</div></div>
         </div>
         ${facitBlock}
+        ${claudeBlock}
         <div style="margin-top:14px;font-size:var(--fs-xs);color:var(--text-muted)">
             Kvalitet får kosta — inget hårt värderingstak i Kärnan (det uteslöt Alphabet/Microsoft-klassen och släppte in cykliska toppvinster).
             Investmentbolag tas in endast vid substansrabatt. Beslutsstöd, inte rådgivning — verklig handel medför courtage/skatt som inte simuleras.
