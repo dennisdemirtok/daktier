@@ -16683,12 +16683,14 @@ def api_sync_analyst_actions():
     """Hämtar historiska rekändringar via yfinance (flera år bakåt)."""
     import threading
     n = request.args.get("max_n", 600, type=int)
+    tick = [x.strip().upper() for x in (request.args.get("tickers") or "").split(",")
+            if x.strip()] or None
 
     def _kor():
         from edge_db import sync_analyst_actions
         dbb = get_db()
         try:
-            print(f"[REK] {sync_analyst_actions(dbb, max_n=n)}")
+            print(f"[REK] {sync_analyst_actions(dbb, max_n=n, tickers=tick)}")
         except Exception as e:
             print(f"[REK] fel: {e}")
         finally:
@@ -16713,56 +16715,161 @@ def api_action_toplist():
 
 @app.route("/api/maintenance/fix-ticker-isin", methods=["POST"])
 def api_fix_ticker_isin():
-    """Rättar ett felmappat ISIN med yfinance som facit. ?ticker=MRVL
+    """Rättar ett felmappat ISIN, verifierat mot OpenFIGI. ?ticker=MRVL&isin=US...
 
-    Marvell ligger på CA57384M1077 — ett kanadensiskt skalbolags ISIN — och
-    har därför fått fel bolags rapporter. Felmappningen följer med från
-    Börsdata, så den källan kan inte användas för att verifiera. Skriver
-    INTE över något förrän det nya ISIN:et är hämtat och ser rimligt ut."""
-    from edge_db import _fetchone, _fetchall, _ph
+    Marvell låg på CA57384M1077 = MARVEL BIOSCIENCES CORP — ett kanadensiskt
+    bioteknikbolag med SAMMA ticker MRVL på kanadensiska börsen. Börsdata
+    matchade på ticker och tog fel bolag; felmappningen följer med därifrån,
+    så Börsdata kan inte användas för verifiering och yfinance gav '-'.
+
+    Verifieringen kräver att kandidat-ISIN:et och tickern på US-börsen ger
+    SAMMA shareClassFIGI hos OpenFIGI (Bloombergs öppna instrumentregister).
+    Namnlikhet räcker inte — det var namnlikhet som orsakade felet.
+
+    Torrkörning som default. skarp=1 byter ISIN, raderar fel bolags
+    rapportrader, migrerar bara prisrader i rimligt spann (arkivet blandar
+    riktiga Marvells USD-kurser från Avanza med pennyaktiens CAD-kurser),
+    och fyller rapportserien från EDGAR-skuggan direkt."""
+    from edge_db import _fetchone, _fetchall, _ph, edgar_as_truth
     t = (request.args.get("ticker") or "").strip().upper()
     if not t:
         return jsonify({"error": "ange ?ticker=MRVL"}), 400
     torr = request.args.get("skarp") != "1"
-    try:
-        import yfinance as yf
-    except ImportError:
-        return jsonify({"error": "yfinance saknas"}), 500
-    try:
-        nytt = (yf.Ticker(t).isin or "").strip().upper()
-    except Exception as e:
-        return jsonify({"error": f"yfinance-fel: {e}"}), 502
-    if not nytt or len(nytt) != 12 or nytt.startswith("-"):
-        return jsonify({"error": f"yfinance gav inget användbart ISIN: {nytt!r}"}), 502
+    kandidat = (request.args.get("isin") or "").strip().upper()
+    kalla = "param"
+    if not kandidat:
+        try:
+            import yfinance as yf
+            kandidat = (yf.Ticker(t).isin or "").strip().upper()
+            kalla = "yfinance"
+        except Exception:
+            kandidat = ""
+    if not kandidat or len(kandidat) != 12 or kandidat.startswith("-"):
+        return jsonify({"error": "inget kandidat-ISIN — ange ?isin=US... "
+                                 "(yfinance hittade inget)"}), 400
+    # OpenFIGI: kandidat-ISIN + ticker ska ge samma shareClassFIGI
     db = get_db()
     try:
         ph = _ph()
-        rad = _fetchone(db, f"SELECT isin, name, country FROM stocks "
+        rad = _fetchone(db, f"SELECT isin, name FROM stocks "
                             f"WHERE UPPER(short_name) = {ph} "
                             f"ORDER BY COALESCE(number_of_owners,0) DESC", (t,))
         if not rad:
             return jsonify({"error": f"{t} saknas i stocks"}), 404
         d = dict(rad)
         gammalt = d["isin"]
-        if gammalt == nytt:
-            return jsonify({"status": "redan korrekt", "isin": nytt})
+        try:
+            fig = requests.post(
+                "https://api.openfigi.com/v3/mapping",
+                json=[{"idType": "ID_ISIN", "idValue": kandidat},
+                      {"idType": "TICKER", "idValue": t, "exchCode": "US"},
+                      {"idType": "ID_ISIN", "idValue": gammalt}],
+                timeout=20).json()
+        except Exception as e:
+            return jsonify({"error": f"OpenFIGI-fel: {e}"}), 502
+        def _forsta(i):
+            try:
+                return (fig[i].get("data") or [{}])[0]
+            except Exception:
+                return {}
+        f_isin, f_tick, f_gammal = _forsta(0), _forsta(1), _forsta(2)
+        scf_i, scf_t = f_isin.get("shareClassFIGI"), f_tick.get("shareClassFIGI")
+        verifierad = bool(scf_i and scf_t and scf_i == scf_t)
+        svar = {"ticker": t, "namn_hos_oss": d.get("name"),
+                "kandidat_isin": kandidat, "kandidat_kalla": kalla,
+                "openfigi": {
+                    "kandidat_ar": f_isin.get("name"),
+                    "ticker_ar": f_tick.get("name"),
+                    "shareclass_match": verifierad,
+                    "gamla_isinet_ar": f_gammal.get("name") or "okänt"},
+                "gammalt_isin": gammalt, "torrkorning": torr}
+        if gammalt == kandidat:
+            svar["status"] = "redan korrekt"
+            return jsonify(svar)
+        if not verifierad:
+            svar["error"] = ("OpenFIGI bekräftar INTE att kandidaten och "
+                             "tickern är samma aktie — inget ändras")
+            return jsonify(svar), 409
         n_rap = len(_fetchall(db, f"SELECT 1 FROM borsdata_reports WHERE isin = {ph}",
                               (gammalt,)))
-        svar = {"ticker": t, "namn": d.get("name"), "gammalt_isin": gammalt,
-                "nytt_isin": nytt, "rapportrader_pa_gammalt": n_rap,
-                "torrkorning": torr}
+        n_pris = len(_fetchall(db, f"SELECT 1 FROM borsdata_prices WHERE isin = {ph}",
+                               (gammalt,)))
+        svar["rapportrader_fel_bolag"] = n_rap
+        svar["prisrader_pa_gammalt"] = n_pris
         if torr:
-            svar["obs"] = ("Inget ändrat. Lägg till &skarp=1 för att byta ISIN "
-                           "och radera de rapportrader som tillhör fel bolag.")
+            svar["obs"] = "Verifierad och redo. Lägg till &skarp=1 för att byta."
             return jsonify(svar)
-        # Skarpt läge: byt ISIN och släng fel bolags rapporter
-        db.execute(f"UPDATE stocks SET isin = {ph} WHERE isin = {ph}", (nytt, gammalt))
+        # Skarpt: byt i stocks, städa rapporter/mappning, migrera rimliga priser
+        kurs = _fetchone(db, f"SELECT last_price FROM stocks WHERE isin = {ph} "
+                             f"ORDER BY COALESCE(number_of_owners,0) DESC", (gammalt,))
+        lp = (dict(kurs) or {}).get("last_price") if kurs else None
+        db.execute(f"UPDATE stocks SET isin = {ph} WHERE isin = {ph}", (kandidat, gammalt))
         db.execute(f"DELETE FROM borsdata_reports WHERE isin = {ph}", (gammalt,))
+        try:
+            db.execute(f"DELETE FROM borsdata_instrument_map WHERE isin = {ph}", (gammalt,))
+        except Exception:
+            pass
+        n_flytt = 0
+        if lp and lp > 0:
+            # Bara kurser inom 1/3x–3x av dagens pris är riktiga Marvell —
+            # resten är pennyaktiens CAD-rader och raderas med gamla ISIN:et
+            cur = db.execute(f"UPDATE borsdata_prices SET isin = {ph} "
+                             f"WHERE isin = {ph} AND close BETWEEN {ph} AND {ph}",
+                             (kandidat, gammalt, lp / 3.0, lp * 3.0))
+            n_flytt = getattr(cur, "rowcount", 0) or 0
+        db.execute(f"DELETE FROM borsdata_prices WHERE isin = {ph}", (gammalt,))
         db.commit()
-        svar["gjort"] = f"ISIN bytt, {n_rap} rapportrader för fel bolag raderade"
-        svar["nasta"] = ("kör /api/maintenance/edgar-as-truth?tickers=" + t +
-                         " för att fylla serien från SEC")
+        # Fyll rapportserien från EDGAR-skuggan direkt (nu på rätt ISIN)
+        edgar = edgar_as_truth(db, [t])
+        svar["gjort"] = {"isin_bytt": f"{gammalt} → {kandidat}",
+                         "rapportrader_raderade": n_rap,
+                         "prisrader_migrerade": n_flytt,
+                         "prisrader_raderade": n_pris - n_flytt,
+                         "edgar_pafyllning": edgar.get(t)}
+        svar["nasta"] = "kör POST /api/model-portfolios/log för omräkning"
         return jsonify(svar)
+    finally:
+        db.close()
+
+
+@app.route("/api/analyst-actions")
+def api_analyst_actions():
+    """Rekändringar per bolag med analyshus. ?tickers=MU,CRDO,MRVL&manader=12
+
+    Svaret visar varje enskild händelse (datum, hus, från → till) plus
+    12-månaderssummering. Större hus markeras med hus_klass='stor'."""
+    from edge_db import _fetchall, _ph
+    ph = _ph()
+    raw = request.args.get("tickers") or request.args.get("ticker") or ""
+    tick = [x.strip().upper() for x in raw.split(",") if x.strip()]
+    if not tick:
+        return jsonify({"error": "ange ?tickers=MU,CRDO,MRVL"}), 400
+    manader = request.args.get("manader", 12, type=int)
+    per_t = request.args.get("limit", 12, type=int)
+    grans = (datetime.now() - timedelta(days=int(manader * 30.4))).date().isoformat()
+    STORA = ("goldman", "morgan stanley", "jp morgan", "jpmorgan", "bofa",
+             "bank of america", "ubs", "barclays", "citi", "wells fargo",
+             "evercore", "bernstein", "deutsche bank", "jefferies")
+    db = get_db()
+    try:
+        ut = {}
+        for t in tick:
+            rows = [dict(r) for r in _fetchall(db, f"""
+                SELECT datum, firma, fran_betyg, till_betyg, atgard
+                FROM analyst_actions WHERE ticker = {ph}
+                ORDER BY datum DESC LIMIT 60""", (t,))]
+            i_fonster = [r for r in rows if str(r["datum"]) >= grans]
+            hojda = sum(1 for r in i_fonster if (r.get("atgard") or "").lower() in ("up", "upgrade"))
+            sankta = sum(1 for r in i_fonster if (r.get("atgard") or "").lower() in ("down", "downgrade"))
+            for r in rows:
+                f = (r.get("firma") or "").lower()
+                r["hus_klass"] = "stor" if any(s in f for s in STORA) else "övrig"
+            ut[t] = {"hojda_12m": hojda, "sankta_12m": sankta,
+                     "netto_12m": hojda - sankta,
+                     "handelser": rows[:per_t],
+                     "obs": None if rows else "inga rekändringar hämtade — "
+                            "kör sync-analyst-actions med denna ticker"}
+        return jsonify({"fonster_manader": manader, "bolag": ut})
     finally:
         db.close()
 
