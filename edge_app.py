@@ -16678,6 +16678,95 @@ def api_fix_frozen_status():
                     "steg": _FROZEN_STATE["steg"], "senaste": senast})
 
 
+@app.route("/api/maintenance/sync-analyst-actions", methods=["POST"])
+def api_sync_analyst_actions():
+    """Hämtar historiska rekändringar via yfinance (flera år bakåt)."""
+    import threading
+    n = request.args.get("max_n", 600, type=int)
+
+    def _kor():
+        from edge_db import sync_analyst_actions
+        dbb = get_db()
+        try:
+            print(f"[REK] {sync_analyst_actions(dbb, max_n=n)}")
+        except Exception as e:
+            print(f"[REK] fel: {e}")
+        finally:
+            dbb.close()
+
+    threading.Thread(target=_kor, daemon=True).start()
+    return jsonify({"status": "startad", "se": "Railway-loggen, prefix [REK]"})
+
+
+@app.route("/api/action-toplist")
+def api_action_toplist():
+    """Topplista: flest nettohöjda rekommendationer. ?manader=12"""
+    from edge_db import compute_action_toplist
+    db = get_db()
+    try:
+        return jsonify(compute_action_toplist(
+            db, manader=request.args.get("manader", 12, type=int),
+            limit=request.args.get("limit", 100, type=int)))
+    finally:
+        db.close()
+
+
+@app.route("/api/maintenance/fix-ticker-isin", methods=["POST"])
+def api_fix_ticker_isin():
+    """Rättar ett felmappat ISIN med yfinance som facit. ?ticker=MRVL
+
+    Marvell ligger på CA57384M1077 — ett kanadensiskt skalbolags ISIN — och
+    har därför fått fel bolags rapporter. Felmappningen följer med från
+    Börsdata, så den källan kan inte användas för att verifiera. Skriver
+    INTE över något förrän det nya ISIN:et är hämtat och ser rimligt ut."""
+    from edge_db import _fetchone, _fetchall, _ph
+    t = (request.args.get("ticker") or "").strip().upper()
+    if not t:
+        return jsonify({"error": "ange ?ticker=MRVL"}), 400
+    torr = request.args.get("skarp") != "1"
+    try:
+        import yfinance as yf
+    except ImportError:
+        return jsonify({"error": "yfinance saknas"}), 500
+    try:
+        nytt = (yf.Ticker(t).isin or "").strip().upper()
+    except Exception as e:
+        return jsonify({"error": f"yfinance-fel: {e}"}), 502
+    if not nytt or len(nytt) != 12 or nytt.startswith("-"):
+        return jsonify({"error": f"yfinance gav inget användbart ISIN: {nytt!r}"}), 502
+    db = get_db()
+    try:
+        ph = _ph()
+        rad = _fetchone(db, f"SELECT isin, name, country FROM stocks "
+                            f"WHERE UPPER(short_name) = {ph} "
+                            f"ORDER BY COALESCE(number_of_owners,0) DESC", (t,))
+        if not rad:
+            return jsonify({"error": f"{t} saknas i stocks"}), 404
+        d = dict(rad)
+        gammalt = d["isin"]
+        if gammalt == nytt:
+            return jsonify({"status": "redan korrekt", "isin": nytt})
+        n_rap = len(_fetchall(db, f"SELECT 1 FROM borsdata_reports WHERE isin = {ph}",
+                              (gammalt,)))
+        svar = {"ticker": t, "namn": d.get("name"), "gammalt_isin": gammalt,
+                "nytt_isin": nytt, "rapportrader_pa_gammalt": n_rap,
+                "torrkorning": torr}
+        if torr:
+            svar["obs"] = ("Inget ändrat. Lägg till &skarp=1 för att byta ISIN "
+                           "och radera de rapportrader som tillhör fel bolag.")
+            return jsonify(svar)
+        # Skarpt läge: byt ISIN och släng fel bolags rapporter
+        db.execute(f"UPDATE stocks SET isin = {ph} WHERE isin = {ph}", (nytt, gammalt))
+        db.execute(f"DELETE FROM borsdata_reports WHERE isin = {ph}", (gammalt,))
+        db.commit()
+        svar["gjort"] = f"ISIN bytt, {n_rap} rapportrader för fel bolag raderade"
+        svar["nasta"] = ("kör /api/maintenance/edgar-as-truth?tickers=" + t +
+                         " för att fylla serien från SEC")
+        return jsonify(svar)
+    finally:
+        db.close()
+
+
 @app.route("/api/revision-toplist")
 def api_revision_toplist():
     """Topplista över bolag vars estimat reviderats upp. ?manader=24"""

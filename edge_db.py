@@ -5803,6 +5803,124 @@ def normalize_report_scales(db, dry_run=False):
             "dry_run": dry_run, "exempel": bolag[:15]}
 
 
+def sync_analyst_actions(db, max_n=600, tickers=None):
+    """Hämtar HISTORISKA rekändringar (upp-/nedgraderingar) via yfinance.
+
+    Löser problemet att analyst_estimates bara har nuläget: Nasdaq-API:t
+    ger antal analytiker som reviderat de senaste veckorna, så en topplista
+    över 12-24 månader gick inte att bygga ur den. yfinance
+    upgrades_downgrades levererar däremot varje enskild rekändring med
+    datum, firma och från/till-betyg flera år bakåt — historiken finns
+    alltså redan, den behövde bara hämtas från rätt källa.
+
+    Varje rad är EN händelse med eget datum, så det finns ingen risk för
+    den dubbelräkning som gjorde daglig yr_up-summering oanvändbar."""
+    try:
+        import yfinance as yf
+    except ImportError:
+        return {"error": "yfinance saknas"}
+    ph = _ph()
+    db.execute("""
+        CREATE TABLE IF NOT EXISTS analyst_actions (
+            ticker TEXT NOT NULL, datum TEXT NOT NULL, firma TEXT NOT NULL,
+            fran_betyg TEXT, till_betyg TEXT, atgard TEXT,
+            hamtad TEXT,
+            PRIMARY KEY (ticker, datum, firma))""")
+    db.commit()
+    if not tickers:
+        rows = _fetchall(db, f"""
+            SELECT short_name FROM stocks
+            WHERE country IN ('US','CA') AND last_price > 0 AND market_cap > 0
+              AND short_name IS NOT NULL AND short_name != ''
+            ORDER BY market_cap DESC LIMIT {int(max_n)}""")
+        tickers = [dict(r)["short_name"] for r in rows if dict(r).get("short_name")]
+    ins = _upsert_sql("analyst_actions",
+                      ["ticker", "datum", "firma", "fran_betyg", "till_betyg",
+                       "atgard", "hamtad"],
+                      ["ticker", "datum", "firma"])
+    nu = datetime.now().isoformat()
+    n_rader = n_bolag = n_fel = 0
+    for t in tickers:
+        try:
+            ud = yf.Ticker(t).upgrades_downgrades
+        except Exception:
+            n_fel += 1
+            continue
+        if ud is None or not len(ud):
+            continue
+        try:
+            for idx, r in ud.iterrows():
+                d = str(idx)[:10]
+                firma = str(r.get("Firm") or "").strip()
+                if not firma or not d:
+                    continue
+                db.execute(ins, (t, d, firma,
+                                 str(r.get("FromGrade") or "") or None,
+                                 str(r.get("ToGrade") or "") or None,
+                                 str(r.get("Action") or "") or None, nu))
+                n_rader += 1
+            n_bolag += 1
+            db.commit()
+        except Exception:
+            try: db.rollback()
+            except Exception: pass
+            n_fel += 1
+    return {"rader": n_rader, "bolag": n_bolag, "fel": n_fel,
+            "av_tickers": len(tickers)}
+
+
+def compute_action_toplist(db, manader=12, limit=100):
+    """Topplista över flest NETTOHÖJDA rekommendationer senaste N månader.
+
+    Bygger på analyst_actions, där varje rad är en enskild rekändring med
+    eget datum — ingen dubbelräkning. yfinance märker åtgärden som 'up',
+    'down', 'init', 'main' eller 'reit'; bara up och down räknas, eftersom
+    en upprepad rek inte är en revidering."""
+    from datetime import date as _date
+    ph = _ph()
+    try:
+        grans = (_date.today() - timedelta(days=int(manader * 30.4))).isoformat()
+        rows = [dict(r) for r in _fetchall(db, f"""
+            SELECT ticker, atgard, COUNT(*) AS n
+            FROM analyst_actions WHERE datum >= {ph}
+            GROUP BY ticker, atgard""", (grans,))]
+    except Exception as e:
+        return {"error": f"analyst_actions saknas — kör synken först ({e})"}
+    if not rows:
+        return {"rader": [], "obs": "inga rekändringar i fönstret — kör "
+                                    "/api/maintenance/sync-analyst-actions"}
+    per = {}
+    for r in rows:
+        a = (r.get("atgard") or "").lower()
+        d = per.setdefault(r["ticker"], {"upp": 0, "ned": 0, "ovrigt": 0})
+        if a in ("up", "upgrade"):
+            d["upp"] += r["n"]
+        elif a in ("down", "downgrade"):
+            d["ned"] += r["n"]
+        else:
+            d["ovrigt"] += r["n"]
+    namn = {}
+    try:
+        for r in _fetchall(db, "SELECT short_name, name, sector FROM stocks"):
+            d = dict(r)
+            if d.get("short_name") and d["short_name"] not in namn:
+                namn[d["short_name"]] = d
+    except Exception:
+        pass
+    ut = []
+    for t, d in per.items():
+        if d["upp"] + d["ned"] == 0:
+            continue
+        m = namn.get(t) or {}
+        ut.append({"ticker": t, "name": m.get("name"), "sector": m.get("sector"),
+                   "hojda": d["upp"], "sankta": d["ned"],
+                   "netto": d["upp"] - d["ned"],
+                   "ovriga_andringar": d["ovrigt"]})
+    ut.sort(key=lambda x: (-x["netto"], -x["hojda"]))
+    return {"rader": ut[:limit], "fonster_manader": manader,
+            "bolag_med_andringar": len(ut)}
+
+
 def compute_revision_toplist(db, manader=24, min_manader=6, limit=200):
     """Topplista över bolag vars estimat reviderats UPP över tid.
 
@@ -6736,26 +6854,42 @@ def compute_daktier_portfolios(db):
     # av CUSIP-delen i ISIN (US02079K1079 och US02079K3059 delar "02079K");
     # i Norden av namnet utan aktieslagsbokstav ("Investor A"/"Investor B").
     # Det aktieslag med flest ägare vinner — mest likvitt är det man äger.
+    _JURSUFFIX = {"ab", "abp", "asa", "a/s", "as", "inc", "inc.", "corp", "corp.",
+                  "corporation", "co", "co.", "company", "plc", "se", "nv", "n.v.",
+                  "sa", "s.a.", "ag", "oyj", "ltd", "ltd.", "limited", "holding",
+                  "holdings", "group", "the", "cl", "class", "adr", "spa", "s.p.a."}
+
     def _emittent(c):
-        isin = (c.get("isin") or "").upper()
-        if len(isin) >= 8 and isin[:2] in ("US", "CA"):
-            return isin[2:8]
+        """Nyckeln är BOLAGSNAMNET, inte ISIN. Ett bolag noterat i både USA
+        och Kanada har olika ISIN och slank därför förbi CUSIP-jämförelsen —
+        men användaren ser två rader med samma namn, och det är det som är
+        dubbletten. Suffix och aktieslagsbokstav skalas bort så att
+        'Investor AB ser. B' och 'Investor AB ser. A' möts."""
         namn = (c.get("name") or c.get("short_name") or "").strip().lower()
-        bitar = namn.split()
-        if len(bitar) > 1 and len(bitar[-1]) == 1:      # "investor b" → "investor"
-            bitar = bitar[:-1]
-        return " ".join(bitar) or isin
+        namn = namn.replace(".", " ").replace(",", " ").replace("-", " ")
+        bitar = [b for b in namn.split() if b and b not in _JURSUFFIX]
+        # Aktieslag på slutet: enstaka bokstav eller 'ser'/'serie'
+        while bitar and (len(bitar[-1]) == 1 or bitar[-1] in ("ser", "serie", "ser:")):
+            bitar.pop()
+        return " ".join(bitar) or (c.get("isin") or "")
+
+    def _storst(c):
+        """Störst vinner. Börsvärdet först — det är 'den största noteringen'.
+        Vid lika börsvärde (samma bolag, två aktieslag) avgör antalet ägare,
+        alltså vilket aktieslag som faktiskt handlas."""
+        return ((c.get("mcap_sek") or 0), (c.get("number_of_owners") or 0),
+                (c.get("score_alla") or 0))
 
     _bast, _bortvalda = {}, 0
     for c in alla:
         k = _emittent(c)
         f = _bast.get(k)
-        if f is None or (c.get("number_of_owners") or 0) > (f.get("number_of_owners") or 0):
-            if f is not None:
-                _bortvalda += 1
+        if f is None:
             _bast[k] = c
-        else:
-            _bortvalda += 1
+            continue
+        _bortvalda += 1
+        if _storst(c) > _storst(f):
+            _bast[k] = c
     if _bortvalda:
         print(f"[DAKTIER] {_bortvalda} dubblettaktieslag bortvalda ur rankingen")
     alla = sorted(_bast.values(), key=lambda c: -c["score_alla"])
