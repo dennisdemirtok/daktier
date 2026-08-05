@@ -7261,6 +7261,23 @@ def compute_daktier_portfolios(db):
     #   risk    → sänker poängen OCH höjer riskklassen (verklig osäkerhet)
     #   bevaka  → informerar: "behöver fler kvartal för att bekräftas"
     #   info    → upplysning som varken sänker eller varnar
+    # ── KONSENSUSDRIFT in i poängen (användarbeslut 2026-08-05) — som
+    # RÖRELSE via flaggorna, aldrig som nivå. Nivån är popularitet och
+    # redan inprisad: Credo är tredje mest älskade bolaget av 229 och har
+    # därmed störst fallhöjd — pluspoäng för kärlek vore att importera
+    # flocken. Men när gatan LÄMNAR är det verklig information: Intuit
+    # tappade ~0,5 på 90 dagar i alla fönster medan trailing-siffrorna
+    # såg perfekta ut. Asymmetrin är avsiktlig: flykt kostar, kärlek
+    # betalar inte. Täckning: US/CA-bolag med rekhistorik (≥5 hus).
+    konsdrift = {}
+    try:
+        _tp = compute_factset_rating_toplist(db, limit=100000, min_hus=5)
+        for _lista in ("upp_3m", "ned_3m"):
+            for _r in (_tp.get(_lista) or []):
+                if _r.get("d3m") is not None:
+                    konsdrift[_r["ticker"]] = _r["d3m"]
+    except Exception as _e:
+        print(f"[DAKTIER] konsensusdrift otillgänglig: {_e}")
     for c in cands:
         f = []
         g0, npg = c.get("rev_g") or 0, c.get("np_g") or 0
@@ -7299,6 +7316,14 @@ def compute_daktier_portfolios(db):
             f.append(("risk", f"⚠️ lönsam i {c.get('kvartal_vinst', 0)}/8 kvartal"))
         if (c.get("pe_ratio") or 0) > 60:
             f.append(("risk", f"⚠️ P/E {c['pe_ratio']:.0f} — mycket framtid inprisad"))
+        _kd = konsdrift.get(c.get("short_name"))
+        if _kd is not None:
+            if _kd <= -0.4:
+                f.append(("risk", f"🏦 gatan lämnar — konsensus {_kd:+.2f} på 3 mån"))
+            elif _kd <= -0.2:
+                f.append(("bevaka", f"🏦 konsensus glider {_kd:+.2f} på 3 mån"))
+            elif _kd >= 0.3:
+                f.append(("info", f"🏦 gatan återvänder — konsensus {_kd:+.2f} på 3 mån"))
         n_risk = sum(1 for typ, _ in f if typ == "risk")
         n_bevaka = sum(1 for typ, _ in f if typ == "bevaka")
         c["flaggor"] = [txt for _, txt in f]
