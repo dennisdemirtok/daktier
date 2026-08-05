@@ -6061,6 +6061,87 @@ def compute_factset_style_rating(db, ticker, max_alder_man=15):
                      "poolen är Yahoos hus, inte FactSets"}
 
 
+def compute_factset_rating_toplist(db, limit=50, min_hus=5):
+    """Topplista över FÖRÄNDRINGEN i konsensus-snittet (FactSet-skalan
+    Köp=5 … Sälj=1) senaste 3, 6 och 12 månaderna — uppåt och nedåt.
+
+    Snittet vid varje mätpunkt rekonstrueras som i
+    compute_factset_style_rating: senaste betyget per hus vid tidpunkten,
+    hus äldre än 15 månader räknas inte. Ett delta redovisas bara när BÅDA
+    mätpunkterna har minst min_hus aktiva hus — annars null, aldrig en
+    gissning. Nedåtlistan är cykeltopp-radarn: konsensus som glider från
+    högre till lägre poäng är precis mönstret användaren vill fånga."""
+    ph = _ph()
+    from datetime import date as _d
+    rows = [dict(r) for r in _fetchall(db, """
+        SELECT ticker, datum, firma, till_betyg FROM analyst_actions
+        WHERE firma IS NOT NULL ORDER BY ticker, datum""")]
+    if not rows:
+        return {"error": "analyst_actions är tom — kör sync-analyst-actions"}
+    idag = _d.today()
+    cutoffs = {"nu": idag, "3m": idag - timedelta(days=91),
+               "6m": idag - timedelta(days=182), "12m": idag - timedelta(days=365)}
+    GRANS = timedelta(days=int(15 * 30.4))
+    per_t = {}
+    for r in rows:
+        per_t.setdefault(r["ticker"], []).append(r)
+    namn = {}
+    try:
+        for r in _fetchall(db, "SELECT short_name, name FROM stocks"):
+            d = dict(r)
+            if d.get("short_name") and d["short_name"] not in namn:
+                namn[d["short_name"]] = d.get("name")
+    except Exception:
+        pass
+
+    def _snitt_vid(ev, cutoff):
+        st = {}
+        for e in ev:
+            try:
+                dd = _d.fromisoformat(str(e["datum"])[:10])
+            except Exception:
+                continue
+            if dd > cutoff:
+                break
+            num = _FACTSET_BETYG.get((e.get("till_betyg") or "").strip().lower())
+            if num is not None:
+                st[e["firma"]] = (num, dd)
+        akt = [v for (v, vd) in st.values() if cutoff - vd <= GRANS]
+        if len(akt) < min_hus:
+            return None, len(akt)
+        return round(sum(akt) / len(akt), 2), len(akt)
+
+    ut = []
+    for t, ev in per_t.items():
+        p = {k: _snitt_vid(ev, c) for k, c in cutoffs.items()}
+        snu, n_nu = p["nu"]
+        if snu is None:
+            continue
+        rad = {"ticker": t, "name": namn.get(t), "snitt_nu": snu, "n_hus": n_nu}
+        for k in ("3m", "6m", "12m"):
+            sd, _n = p[k]
+            rad[f"d{k}"] = round(snu - sd, 2) if sd is not None else None
+        if all(rad[f"d{k}"] is None for k in ("3m", "6m", "12m")):
+            continue
+        ut.append(rad)
+    def _nyckel(fonster):
+        return lambda x: x.get(f"d{fonster}") if x.get(f"d{fonster}") is not None else 0
+    return {"skala": "Köp=5 … Sälj=1 · delta = snitt nu minus snitt då",
+            "min_hus": min_hus, "bolag": len(ut),
+            "upp_12m": sorted([x for x in ut if (x.get("d12m") or 0) > 0],
+                              key=_nyckel("12m"), reverse=True)[:limit],
+            "ned_12m": sorted([x for x in ut if (x.get("d12m") or 0) < 0],
+                              key=_nyckel("12m"))[:limit],
+            "upp_6m": sorted([x for x in ut if (x.get("d6m") or 0) > 0],
+                             key=_nyckel("6m"), reverse=True)[:limit],
+            "ned_6m": sorted([x for x in ut if (x.get("d6m") or 0) < 0],
+                             key=_nyckel("6m"))[:limit],
+            "upp_3m": sorted([x for x in ut if (x.get("d3m") or 0) > 0],
+                             key=_nyckel("3m"), reverse=True)[:limit],
+            "ned_3m": sorted([x for x in ut if (x.get("d3m") or 0) < 0],
+                             key=_nyckel("3m"))[:limit]}
+
+
 def compute_action_toplist(db, manader=12, limit=100):
     """Topplista över flest NETTOHÖJDA rekommendationer senaste N månader.
 
