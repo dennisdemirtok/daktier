@@ -5815,6 +5815,27 @@ def normalize_report_scales(db, dry_run=False):
             "dry_run": dry_run, "exempel": bolag[:15]}
 
 
+def _yahoo_symbol(db, short_name):
+    """Yahoo-symbol för en ticker. US/CA fungerar rakt av ("MSFT"), men
+    nordiska bolag behöver börs-suffix ("NOVO-B.CO", "ERIC-B.ST") — det
+    ligger redan i borsdata_instrument_map.yahoo_ticker. Utan detta fick
+    Novo (tvåa i rankingen, i båda portföljerna) inget analytikerkort."""
+    ph = _ph()
+    try:
+        r = _fetchone(db, f"""
+            SELECT m.yahoo_ticker FROM borsdata_instrument_map m
+            JOIN stocks s ON s.isin = m.isin
+            WHERE UPPER(s.short_name) = {ph} AND m.yahoo_ticker IS NOT NULL
+              AND m.yahoo_ticker != ''
+            ORDER BY COALESCE(s.number_of_owners, 0) DESC LIMIT 1""",
+            (str(short_name).upper(),))
+        if r:
+            return dict(r)["yahoo_ticker"]
+    except Exception:
+        pass
+    return short_name
+
+
 def sync_analyst_actions(db, max_n=600, tickers=None):
     """Hämtar HISTORISKA rekändringar (upp-/nedgraderingar) via yfinance.
 
@@ -5846,6 +5867,15 @@ def sync_analyst_actions(db, max_n=600, tickers=None):
               AND short_name IS NOT NULL AND short_name != ''
             ORDER BY market_cap DESC LIMIT {int(max_n)}""")
         tickers = [dict(r)["short_name"] for r in rows if dict(r).get("short_name")]
+        # Norden med: Yahoo täcker storbolagen (NOVO-B.CO, ERIC-B.ST) om än
+        # tunnare — min_hus-spärrarna i vyerna hanterar glesa pooler
+        nrows = _fetchall(db, """
+            SELECT short_name FROM stocks
+            WHERE country IN ('SE','DK','NO','FI') AND last_price > 0
+              AND market_cap > 0 AND short_name IS NOT NULL AND short_name != ''
+            ORDER BY market_cap DESC LIMIT 120""")
+        tickers += [dict(r)["short_name"] for r in nrows
+                    if dict(r).get("short_name") and dict(r)["short_name"] not in tickers]
     ins = _upsert_sql("analyst_actions",
                       ["ticker", "datum", "firma", "fran_betyg", "till_betyg",
                        "atgard", "hamtad"],
@@ -5854,7 +5884,7 @@ def sync_analyst_actions(db, max_n=600, tickers=None):
     n_rader = n_bolag = n_fel = 0
     for t in tickers:
         try:
-            ud = yf.Ticker(t).upgrades_downgrades
+            ud = yf.Ticker(_yahoo_symbol(db, t)).upgrades_downgrades
         except Exception:
             n_fel += 1
             continue
@@ -5920,6 +5950,13 @@ def sync_analyst_consensus(db, max_n=400, tickers=None):
               AND short_name IS NOT NULL AND short_name != ''
             ORDER BY market_cap DESC LIMIT {int(max_n)}""")
         tickers = [dict(r)["short_name"] for r in rows if dict(r).get("short_name")]
+        nrows = _fetchall(db, """
+            SELECT short_name FROM stocks
+            WHERE country IN ('SE','DK','NO','FI') AND last_price > 0
+              AND market_cap > 0 AND short_name IS NOT NULL AND short_name != ''
+            ORDER BY market_cap DESC LIMIT 120""")
+        tickers += [dict(r)["short_name"] for r in nrows
+                    if dict(r).get("short_name") and dict(r)["short_name"] not in tickers]
     cins = _upsert_sql("analyst_consensus",
                        ["ticker", "manad", "strong_buy", "buy", "hold",
                         "sell", "strong_sell", "n", "snitt", "uppdaterad"],
@@ -5933,7 +5970,7 @@ def sync_analyst_consensus(db, max_n=400, tickers=None):
     n_kons = n_rikt = n_fel = 0
     for t in tickers:
         try:
-            yt = yf.Ticker(t)
+            yt = yf.Ticker(_yahoo_symbol(db, t))
             rec = yt.recommendations
             if rec is not None and len(rec):
                 for _, r in rec.iterrows():

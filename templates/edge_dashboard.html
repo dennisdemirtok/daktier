@@ -1582,6 +1582,7 @@ function renderFilterBar() {
 
 const TAB_META = {
     dashboard:   { title: 'Dashboard',       sub: 'Marknadsöversikt & makro-indikatorer' },
+    analytiker:  { title: 'Analytiker',      sub: 'Konsensusbetyg på FactSet-skalan — nivån är popularitet, rörelsen är informationen' },
     signals:     { title: 'Topplistan',      sub: 'DAKTIER-poäng — hela universumet rankat efter kvalitet, kassaflöde, tillväxt, stabilitet och värdering' },
     stocks:      { title: 'Alla aktier',     sub: 'Komplett databas över nordiska & US-aktier' },
     hotmovers:   { title: 'Ägarmomentum',    sub: 'Ägarförändringar — från intraday till 1 år' },
@@ -2681,12 +2682,6 @@ function renderKoplista(d, fs) {
         }
     }
 }
-function openStockByTicker(ticker) {
-    if (!ticker) return;
-    const inp = document.getElementById('navStockSearch');
-    if (inp) { inp.value = ticker; inp.dispatchEvent(new Event('input')); inp.focus(); }
-}
-
 function renderStocksTable() {
     const rows = allLoadedRows.map((s, i) => {
         const flag = FLAGS[s.country] || '🏳️';
