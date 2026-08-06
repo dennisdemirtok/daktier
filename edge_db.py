@@ -5888,6 +5888,16 @@ def _yahoo_symbol(db, short_name):
     ligger redan i borsdata_instrument_map.yahoo_ticker. Utan detta fick
     Novo (tvåa i rankingen, i båda portföljerna) inget analytikerkort."""
     ph = _ph()
+    land = ""
+    try:
+        r0 = _fetchone(db, f"""SELECT country FROM stocks
+            WHERE UPPER(short_name) = {ph}
+            ORDER BY COALESCE(number_of_owners, 0) DESC LIMIT 1""",
+            (str(short_name).upper(),))
+        land = (dict(r0)["country"] if r0 else "").upper()
+    except Exception:
+        pass
+    nordisk = land in ("SE", "DK", "NO", "FI")
     try:
         r = _fetchone(db, f"""
             SELECT m.yahoo_ticker FROM borsdata_instrument_map m
@@ -5897,24 +5907,23 @@ def _yahoo_symbol(db, short_name):
             ORDER BY COALESCE(s.number_of_owners, 0) DESC LIMIT 1""",
             (str(short_name).upper(),))
         if r:
-            return dict(r)["yahoo_ticker"]
+            y = dict(r)["yahoo_ticker"]
+            # Nordiska Yahoo-symboler MÅSTE ha börssuffix (.ST/.CO/.OL/.HE).
+            # Mappningen innehåller suffixlösa värden för vissa bolag (Novo,
+            # Ericsson, Volvo) som returnerades före reserven och gav tyst
+            # noll — Atlas Copco/Equinor fungerade bara för att deras map-
+            # värden råkade saknas helt.
+            if y and (("." in y) or not nordisk):
+                return y
     except Exception:
         pass
     # Reserv: Börsdatas nordiska instrument saknar ofta yahoo-fältet.
     # Yahoo-konventionen är deterministisk: mellanslag → bindestreck +
     # börssuffix per land ("NOVO B"/DK → "NOVO-B.CO", "ERIC B"/SE →
     # "ERIC-B.ST"). Utan denna gav nordensynken tyst noll rader.
-    try:
-        r = _fetchone(db, f"""SELECT country FROM stocks
-            WHERE UPPER(short_name) = {ph}
-            ORDER BY COALESCE(number_of_owners, 0) DESC LIMIT 1""",
-            (str(short_name).upper(),))
-        land = (dict(r)["country"] if r else "").upper()
-        suffix = {"SE": ".ST", "DK": ".CO", "NO": ".OL", "FI": ".HE"}.get(land)
-        if suffix:
-            return str(short_name).strip().replace(" ", "-") + suffix
-    except Exception:
-        pass
+    suffix = {"SE": ".ST", "DK": ".CO", "NO": ".OL", "FI": ".HE"}.get(land)
+    if suffix:
+        return str(short_name).strip().replace(" ", "-") + suffix
     return short_name
 
 

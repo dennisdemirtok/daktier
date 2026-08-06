@@ -6406,7 +6406,26 @@ function openDrawer(s) {
                                   y: { ticks: { maxTicksLimit: 5 }, grid: { color: 'rgba(0,0,0,0.05)' } } } }
                 });
                 // Analytikerkonsensus-kortet (FactSet-skala, rekonstruerad)
-                fetch('/api/factset-rating?ticker=' + encodeURIComponent(s.short_name || '')).then(r=>r.json()).then(ko => {
+                fetch('/api/factset-rating?ticker=' + encodeURIComponent(s.short_name || '')).then(async r => {
+                    let ko = await r.json();
+                    // Norden-reserv: Yahoo saknar actions-händelser för
+                    // europeiska listningar — bygg fördelningen ur månads-
+                    // konsensusen i stället (samma skala, annan källa)
+                    if (!ko || !ko.nu) {
+                        try {
+                            const k2 = await (await fetch('/api/analyst-consensus?ticker=' + encodeURIComponent(s.short_name || ''))).json();
+                            const m0 = (k2.konsensus_manader || [])[0];
+                            if (m0 && m0.n >= 3) {
+                                ko = { nu: { snitt: m0.snitt, n_hus: m0.n,
+                                    fordelning: { kop: m0.strong_buy, overvikt: m0.buy,
+                                                  behall: m0.hold, undervikt: m0.sell,
+                                                  salj: m0.strong_sell } },
+                                       historik: [] };
+                            }
+                        } catch (e2) {}
+                    }
+                    return ko;
+                }).then(ko => {
                     const kc = document.getElementById('dovKonsensusCard');
                     if (!kc || !ko || !ko.nu) return;
                     const fd = ko.nu.fordelning || {};
