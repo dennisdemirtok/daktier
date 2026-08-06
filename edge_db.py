@@ -5586,9 +5586,15 @@ def edgar_as_truth(db, tickers, radera_motsagda=True):
             resultat[t] = "saknas i stocks"
             continue
         isin = dict(srow)["isin"]
+        try:
+            db.execute("ALTER TABLE shadow_reports ADD COLUMN gross_income DOUBLE PRECISION")
+            db.commit()
+        except Exception:
+            try: db.rollback()
+            except Exception: pass
         sh_raw = [dict(r) for r in _fetchall(db, f"""
             SELECT report_type, period_year, period_q, report_end_date, currency,
-                   revenues, operating_income, net_profit, eps,
+                   revenues, gross_income, operating_income, net_profit, eps,
                    operating_cash_flow, total_assets, total_equity, fetched_at
             FROM shadow_reports WHERE ticker = {ph} AND source = 'sec_edgar'
               AND report_end_date IS NOT NULL
@@ -5611,21 +5617,43 @@ def edgar_as_truth(db, tickers, radera_motsagda=True):
         # (det gjorde vi 2026-08-01: kassa och värdering blev 0 för Marvell,
         # Credo, Apple, Snowflake, och Visa/Nvidia/Meta föll ur rankingen helt).
         # Därför: UPPDATERA de fält EDGAR äger, behåll resten.
+        # ±7 DAGARS MATCHNING (2026-08-06): Börsdata daterar månadsslut
+        # (2026-05-31) medan EDGAR har bolagets äkta slutdag (2026-05-28,
+        # Microns torsdagsbrutna kvartal). Exakt matchning missade → mergen
+        # läkte aldrig Börsdata-daterade rader utan skapade dubbletter.
+        from datetime import date as _dnv
         bef = {}
         for r in _fetchall(db, f"""
                 SELECT report_type, period_year, period_q, report_end_date
                 FROM borsdata_reports WHERE isin = {ph}
                   AND report_end_date IS NOT NULL""", (isin,)):
             d = dict(r)
-            bef[(d["report_type"], str(d["report_end_date"])[:10])] = d
+            bef.setdefault(d["report_type"], []).append(
+                (str(d["report_end_date"])[:10], d))
+
+        def _narmast(rtype, endstr):
+            try:
+                e0 = _dnv.fromisoformat(endstr)
+            except Exception:
+                return None
+            bast, bdiff = None, 8
+            for ds, row in bef.get(rtype, []):
+                try:
+                    diff = abs((_dnv.fromisoformat(ds) - e0).days)
+                except Exception:
+                    continue
+                if diff < bdiff:
+                    bast, bdiff = row, diff
+            return bast
         cols = ["isin", "ins_id", "report_type", "period_year", "period_q",
-                "report_end_date", "currency", "revenues", "operating_income",
-                "net_profit", "eps", "operating_cash_flow", "total_assets",
-                "total_equity"]
+                "report_end_date", "currency", "revenues", "gross_income",
+                "operating_income", "net_profit", "eps", "operating_cash_flow",
+                "total_assets", "total_equity"]
         ins = _upsert_sql("borsdata_reports", cols,
                           ["isin", "report_type", "period_year", "period_q"])
         upd = f"""UPDATE borsdata_reports SET
                     revenues = COALESCE({ph}, revenues),
+                    gross_income = COALESCE({ph}, gross_income),
                     operating_income = COALESCE({ph}, operating_income),
                     net_profit = COALESCE({ph}, net_profit),
                     eps = COALESCE({ph}, eps),
@@ -5638,12 +5666,12 @@ def edgar_as_truth(db, tickers, radera_motsagda=True):
         for r in sh:
             # EDGAR lagrar absoluta belopp → miljoner (eps skalas ej)
             sc = lambda v: (v / 1e6) if isinstance(v, (int, float)) else None
-            vals = (sc(r.get("revenues")), sc(r.get("operating_income")),
-                    sc(r.get("net_profit")),
+            vals = (sc(r.get("revenues")), sc(r.get("gross_income")),
+                    sc(r.get("operating_income")), sc(r.get("net_profit")),
                     r.get("eps") if isinstance(r.get("eps"), (int, float)) else None,
                     sc(r.get("operating_cash_flow")),
                     sc(r.get("total_assets")), sc(r.get("total_equity")))
-            b = bef.get((r["report_type"], str(r["report_end_date"])[:10]))
+            b = _narmast(r["report_type"], str(r["report_end_date"])[:10])
             try:
                 if b:
                     # Perioden finns redan — korrigera bara siffrorna EDGAR äger
@@ -5785,8 +5813,28 @@ def normalize_report_scales(db, dry_run=False):
         med = _stat.median(vals)
         if med <= 0:
             continue
-        outl = [r for r in lst if abs(r["revenues"]) > med * 3
-                or abs(r["revenues"]) < med / 3]
+        # GRANNGARDERING (2026-08-06): Microns äkta HBM-explosion Q1 13,6 →
+        # Q2 23,9 → Q3 41,5 mdr USD skalades ner till 8,7 för att den avvek
+        # från seriens MEDIAN — verktyget tillverkade ett falskt tal av ett
+        # äkta (REGEL 0-brott av reparationen själv). Ett verkligt SKALFEL
+        # (TWD-rad bland USD-skalade) är en ISOLERAD avvikare: grannkvartalen
+        # ligger kvar i andra skalan. Äkta hypertillväxt rör sig TILLSAMMANS
+        # med grannarna. Skala därför bara rader som avviker >3x från BÅDA
+        # sina tidsgrannar — samma princip som skalKONTROLLEN fick efter
+        # Credo-läxan (35→407 MUSD fälldes som datafel).
+        lst_sort = sorted(lst, key=lambda r: str(r["report_end_date"]))
+        revs_s = [abs(r["revenues"]) for r in lst_sort]
+        outl = []
+        for _i, r in enumerate(lst_sort):
+            v = abs(r["revenues"])
+            if not (v > med * 3 or v < med / 3):
+                continue
+            grannar = [revs_s[_j] for _j in (_i - 1, _i + 1)
+                       if 0 <= _j < len(revs_s) and revs_s[_j] > 0]
+            if not grannar:
+                continue
+            if all(v > g * 3 or v < g / 3 for g in grannar):
+                outl.append(r)
         if not outl or len(outl) > len(lst) / 2:
             continue          # majoriteten avvikande = medianen är opålitlig
         ex = []

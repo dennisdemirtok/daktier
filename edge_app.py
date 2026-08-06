@@ -15622,6 +15622,7 @@ _EDGAR_TAGS = {
                  "RevenuesNetOfInterestExpense",
                  "InterestAndDividendIncomeOperating"],
     "operating_income": ["OperatingIncomeLoss"],
+    "gross_income": ["GrossProfit"],
     "net_profit": ["NetIncomeLoss"],
     "eps": ["EarningsPerShareDiluted", "EarningsPerShareBasic"],
     "total_assets": ["Assets"],
@@ -15658,11 +15659,19 @@ def _ensure_shadow_table(db):
             total_equity DOUBLE PRECISION,
             cash_and_equivalents DOUBLE PRECISION,
             operating_cash_flow DOUBLE PRECISION,
+            gross_income DOUBLE PRECISION,
             source TEXT DEFAULT 'sec_edgar',
             fetched_at TEXT,
             PRIMARY KEY (ticker, report_type, period_year, period_q)
         )
     """)
+    # gross_income tillagd 2026-08-06 — ALTER för befintliga tabeller
+    try:
+        db.execute("ALTER TABLE shadow_reports ADD COLUMN gross_income DOUBLE PRECISION")
+        db.commit()
+    except Exception:
+        try: db.rollback()
+        except Exception: pass
     db.commit()
 
 
@@ -15833,7 +15842,8 @@ def sync_shadow_reports(db, tickers=None, days_back=7, max_companies=40):
     cols = ["ticker", "cik", "report_type", "period_year", "period_q",
             "report_end_date", "currency", "revenues", "operating_income",
             "net_profit", "eps", "total_assets", "total_equity",
-            "cash_and_equivalents", "operating_cash_flow", "source", "fetched_at"]
+            "cash_and_equivalents", "operating_cash_flow", "gross_income",
+            "source", "fetched_at"]
     ins = _upsert_sql("shadow_reports", cols,
                       ["ticker", "report_type", "period_year", "period_q"])
     done = errors = saved = 0
@@ -15856,6 +15866,7 @@ def sync_shadow_reports(db, tickers=None, days_back=7, max_companies=40):
                                  p.get("total_assets"), p.get("total_equity"),
                                  p.get("cash_and_equivalents"),
                                  p.get("operating_cash_flow"),
+                                 p.get("gross_income"),
                                  "sec_edgar", datetime.utcnow().isoformat()))
                 saved += 1
             db.commit()
