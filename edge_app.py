@@ -13816,9 +13816,17 @@ def _agent_search_stocks(db, query, limit=15):
     from edge_db import _ph
     ph = _ph()
     q = f"%{query}%"
+    # DAKTIER-poängen med i agentens sökverktyg (2026-08-06): verktyget hade
+    # egen SQL utan rank-join, så agenten fick null och sa "saknas" om bolag
+    # som visst är rankade (Marvell 39,1 plats 1604 — livetestets fynd)
     rows = db.execute(
-        f"SELECT * FROM stocks WHERE name LIKE {ph} OR short_name LIKE {ph} OR ticker LIKE {ph} "
-        f"ORDER BY number_of_owners DESC LIMIT {ph}",
+        f"SELECT s.*, dr.score AS daktier_score, dr.rank AS daktier_rank, "
+        f"       dr.riskklass AS riskklass "
+        f"FROM stocks s "
+        f"LEFT JOIN daktier_rank dr ON dr.isin = s.isin "
+        f"     AND dr.snapshot_date = (SELECT MAX(snapshot_date) FROM daktier_rank) "
+        f"WHERE s.name LIKE {ph} OR s.short_name LIKE {ph} OR s.ticker LIKE {ph} "
+        f"ORDER BY s.number_of_owners DESC LIMIT {ph}",
         (q, q, q, limit),
     ).fetchall()
     out = []
