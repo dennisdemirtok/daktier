@@ -5927,6 +5927,33 @@ def _yahoo_symbol(db, short_name):
     return short_name
 
 
+def _yahoo_kandidater(db, short_name):
+    """Alla rimliga Yahoo-symboler i prioritetsordning. Map-värdet kan vara
+    fel även MED punkt (Börsdata suffixar annorlunda än Yahoo för vissa
+    bolag — Novo/Ericsson/Volvo gav tyst noll medan Sandvik fungerade).
+    Synkarna provar kandidaterna tills data faktiskt kommer."""
+    kand, first = [], _yahoo_symbol(db, short_name)
+    if first:
+        kand.append(first)
+    ph = _ph()
+    try:
+        r0 = _fetchone(db, f"""SELECT country FROM stocks
+            WHERE UPPER(short_name) = {ph}
+            ORDER BY COALESCE(number_of_owners, 0) DESC LIMIT 1""",
+            (str(short_name).upper(),))
+        land = (dict(r0)["country"] if r0 else "").upper()
+        suffix = {"SE": ".ST", "DK": ".CO", "NO": ".OL", "FI": ".HE"}.get(land)
+        if suffix:
+            konv = str(short_name).strip().replace(" ", "-") + suffix
+            if konv not in kand:
+                kand.append(konv)
+    except Exception:
+        pass
+    if short_name not in kand:
+        kand.append(short_name)
+    return kand
+
+
 def sync_analyst_actions(db, max_n=600, tickers=None):
     """Hämtar HISTORISKA rekändringar (upp-/nedgraderingar) via yfinance.
 
@@ -5974,11 +6001,15 @@ def sync_analyst_actions(db, max_n=600, tickers=None):
     nu = datetime.now().isoformat()
     n_rader = n_bolag = n_fel = 0
     for t in tickers:
-        try:
-            ud = yf.Ticker(_yahoo_symbol(db, t)).upgrades_downgrades
-        except Exception:
-            n_fel += 1
-            continue
+        ud = None
+        for _sym in _yahoo_kandidater(db, t):
+            try:
+                _u = yf.Ticker(_sym).upgrades_downgrades
+            except Exception:
+                continue
+            if _u is not None and len(_u):
+                ud = _u
+                break
         if ud is None or not len(ud):
             continue
         try:
@@ -6061,8 +6092,18 @@ def sync_analyst_consensus(db, max_n=400, tickers=None):
     n_kons = n_rikt = n_fel = 0
     for t in tickers:
         try:
-            yt = yf.Ticker(_yahoo_symbol(db, t))
-            rec = yt.recommendations
+            yt, rec = None, None
+            for _sym in _yahoo_kandidater(db, t):
+                _yt = yf.Ticker(_sym)
+                try:
+                    _rc = _yt.recommendations
+                except Exception:
+                    continue
+                if _rc is not None and len(_rc):
+                    yt, rec = _yt, _rc
+                    break
+            if yt is None:
+                yt = yf.Ticker(_yahoo_symbol(db, t))
             if rec is not None and len(rec):
                 for _, r in rec.iterrows():
                     per = str(r.get("period") or "0m")
