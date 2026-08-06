@@ -2495,21 +2495,32 @@ function renderModelPortfolios(d) {
 }
 
 function renderAnalytiker(b, t) {
-    const rad = (x, i, delta) => `<div class="mp-row" onclick="openStockByTicker('${(x.ticker||'').replace(/'/g,"\\'")}')">
-        <span class="mp-rank" style="background:var(--brand-navy);min-width:30px">${i+1}</span>
-        <span class="mp-name">${x.name || x.ticker}
-            <br><span class="mp-tick">${x.ticker} · ${x.n_hus} hus</span></span>
+    const rad = (x, i, delta) => `<div class="an-row" onclick="openStockByTicker('${(x.ticker||'').replace(/'/g,"\\'")}')">
+        <span class="an-rank">${i+1}</span>
+        <span class="an-name">${x.name || x.ticker}
+            <br><span class="an-tick">${x.ticker} · ${x.n_hus} hus</span></span>
         <span style="margin-left:auto;text-align:right">
             <span style="font-weight:800;color:var(--brand-navy)">${x.snitt_12m_medel != null ? x.snitt_12m_medel : x.snitt_nu}</span>
             ${delta != null ? `<br><span style="font-size:11px;font-weight:700;color:${delta >= 0 ? '#059669' : '#dc2626'}">${delta >= 0 ? '+' : ''}${delta}</span>` : (x.snitt_nu != null && x.snitt_12m_medel != null ? `<br><span style="font-size:11px;color:var(--text-muted)">nu ${x.snitt_nu}</span>` : '')}
         </span></div>`;
     const lista = (titel, sub, rows, deltaKey) => `
-        <div class="mp-card" style="margin-bottom:16px">
-            <div class="mp-head">${titel}</div>
-            <div class="mp-sub">${sub}</div>
+        <div class="an-card">
+            <div class="an-head">${titel}</div>
+            <div class="an-sub">${sub}</div>
             ${(rows||[]).map((x,i)=>rad(x, i, deltaKey ? x[deltaKey] : null)).join('') || '<div style="padding:10px;color:var(--text-muted);font-size:12px">Ingen data ännu.</div>'}
         </div>`;
     document.getElementById('content').innerHTML = `
+        <style>
+            .an-grid { display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:16px; }
+            .an-card { background:var(--white);border:1px solid var(--line);border-radius:14px;padding:18px;box-shadow:var(--shadow-hover);margin-bottom:16px; }
+            .an-head { font-size:var(--fs-md);font-weight:800;color:var(--brand-navy); }
+            .an-sub { font-size:var(--fs-xs);color:var(--text-muted);margin:4px 0 10px 0;line-height:1.5; }
+            .an-row { display:flex;align-items:center;gap:10px;padding:7px 6px;border-top:1px solid var(--line);cursor:pointer; }
+            .an-row:hover { background:var(--bg); }
+            .an-rank { min-width:30px;height:24px;border-radius:12px;background:var(--brand-navy);color:#fff;font-size:11px;font-weight:800;display:flex;align-items:center;justify-content:center;padding:0 6px;flex-shrink:0; }
+            .an-name { font-size:13px;font-weight:600;color:var(--ink);line-height:1.3; }
+            .an-tick { font-size:11px;color:var(--text-muted);font-weight:400; }
+        </style>
         <div style="background:linear-gradient(135deg,var(--brand-navy-deep),var(--brand-navy));border-radius:var(--radius);padding:18px 20px;color:#fff;margin-bottom:14px">
             <div style="font-size:var(--fs-lg);font-weight:800">🏛 Analytikernas konsensus</div>
             <div style="font-size:var(--fs-sm);opacity:0.85;margin-top:4px">
@@ -2518,7 +2529,7 @@ function renderAnalytiker(b, t) {
                 — rörelsen är informationen:</strong> snitt som glider nedåt ger riskflagga i DAKTIER-poängen.
             </div>
         </div>
-        <div class="mp-grid">
+        <div class="an-grid">
             ${lista('⭐ Bästa snittbetyg — 12-månadersmedel', 'Genomsnitt över tolv månadspunkter. Kärlek är redan inprisad — läs som förväntansnivå, inte köplista.', (b && b.basta) || [])}
             <div>
                 ${lista('📈 Gatan återvänder — 3 mån', 'Störst höjning av snittet senaste kvartalet.', (t && t.upp_3m) || [], 'd3m')}
