@@ -715,6 +715,21 @@ def dashboard():
     return render_template("edge_dashboard.html")
 
 
+# SPA-djuplänkar: frontend skriver dessa vägar med history.pushState, men
+# Flask har bara haft "/" — en omladdning eller direktlänk på t.ex.
+# /analytiker gav Internal Server Error. Alla serverar samma mall;
+# frontenden läser vägen och aktiverar rätt flik.
+@app.route("/agent")
+@app.route("/dashboard")
+@app.route("/analytiker")
+@app.route("/koplistan")
+@app.route("/agarmomentum")
+@app.route("/aktier")
+@app.route("/portfolj")
+def spa_djuplankar():
+    return render_template("edge_dashboard.html")
+
+
 @app.route("/backtest-report")
 def backtest_report():
     """Publik backtest-rapport — visar alla validerade screens transparent.
