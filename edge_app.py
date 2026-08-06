@@ -1552,6 +1552,23 @@ def api_stock_detail(orderbook_id):
         if not row:
             return jsonify({"error": "not found"}), 404
         d = dict(row)
+        # DAKTIER-poängen med i detaljsvaret: drawern hämtar om bolaget härifrån
+        # och ERSÄTTER sökresultatets objekt — utan fälten här visade lådan
+        # "ingen poäng" för bolag som visst är rankade (Marvell 1606).
+        try:
+            from edge_db import _fetchone as _f1
+            _dr = _f1(db, f"""SELECT score AS daktier_score, rank AS daktier_rank,
+                       kvalitet AS dp_kvalitet, kassa AS dp_kassa,
+                       tillvaxt AS dp_tillvaxt, stabilitet AS dp_stabilitet,
+                       vardering AS dp_vardering, storlek AS dp_storlek,
+                       riskklass, flaggor, i_portfolj, sleeve AS portfolj_sleeve
+                FROM daktier_rank WHERE isin = {_ph()} AND snapshot_date =
+                  (SELECT MAX(snapshot_date) FROM daktier_rank)""",
+                (d.get("isin"),))
+            if _dr:
+                d.update(dict(_dr))
+        except Exception:
+            pass
         # NOTE: market_cap är i SEK för utländska bolag — currency-konvertering
         # till native sker EFTER scoring (se nedan, precis innan jsonify).
         # Att konvertera tidigare gav double-conversion-bug i _score_book_models.
