@@ -17271,7 +17271,19 @@ def api_edgar_as_truth():
         return jsonify({"error": "ange ?tickers=CRDO,MRVL"}), 400
     db = get_db()
     try:
-        from edge_db import derive_missing_q4
+        from edge_db import derive_missing_q4, _fetchone as _f1, _ph as _phw
+        # ?wipe=1: radera bolagets rapportrader först — ren EDGAR-ombyggnad
+        # för serier som blivit hybrider av nyckelkrockar (Micron 2026-08-06).
+        # Börsdata är avstängd så inget synkar tillbaka skräpet.
+        if request.args.get("wipe") == "1":
+            phw = _phw()
+            for t0 in tick:
+                sr = _f1(db, f"SELECT isin FROM stocks WHERE UPPER(short_name) = {phw} "
+                             f"ORDER BY COALESCE(number_of_owners,0) DESC", (t0,))
+                if sr:
+                    db.execute(f"DELETE FROM borsdata_reports WHERE isin = {phw}",
+                               (dict(sr)["isin"],))
+            db.commit()
         hamt = sync_shadow_reports(db, tickers=tick)
         res = edgar_as_truth(db, tick)
         # EDGAR särredovisar sällan det kvartal som avslutar räkenskapsåret →

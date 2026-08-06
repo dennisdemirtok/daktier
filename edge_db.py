@@ -5679,6 +5679,25 @@ def edgar_as_truth(db, tickers, radera_motsagda=True):
                                             b["period_year"], b["period_q"]))
                     n_upd += 1
                 else:
+                    # INSERT-VAKT (2026-08-06): upsert-nyckeln (isin, typ, år,
+                    # kvartal) kan KOLLIDERA mellan kalender- och räkenskaps-
+                    # numrering — Microns fiskala Q1 slutar i november och låg
+                    # som (2026,1); EDGAR:s februari-rad med samma nyckel
+                    # KLUBBADE den till en hybrid. Finns nyckeln redan med ett
+                    # slutdatum >7 dagar bort är det EN ANNAN PERIOD — hoppa
+                    # hellre än förstör.
+                    _kroll = _fetchone(db, f"""SELECT report_end_date FROM
+                        borsdata_reports WHERE isin = {ph} AND report_type = {ph}
+                          AND period_year = {ph} AND period_q = {ph}""",
+                        (isin, r["report_type"], r["period_year"], r["period_q"]))
+                    if _kroll:
+                        try:
+                            _d1 = _dnv.fromisoformat(str(dict(_kroll)["report_end_date"])[:10])
+                            _d2 = _dnv.fromisoformat(str(r["report_end_date"])[:10])
+                            if abs((_d1 - _d2).days) > 7:
+                                continue   # annan period under samma nyckel
+                        except Exception:
+                            continue
                     db.execute(ins, (isin, 0, r["report_type"], r["period_year"],
                                      r["period_q"], str(r["report_end_date"])[:10],
                                      r.get("currency") or "USD") + vals)
