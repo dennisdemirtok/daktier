@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Edge Signals — DAKTIER</title>
+    <title>DAKTIER</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet">
     <!-- Markdown rendering för AI Agent -->
@@ -1044,8 +1044,8 @@ window.showWelcome = function() {
 
     <div class="page-header" id="pageHeader">
         <div class="page-header-left">
-            <h2 class="page-title" id="pageTitle">Edge Signals</h2>
-            <p class="page-subtitle" id="pageSubtitle">Live-analys av Stockholmsbörsen</p>
+            <h2 class="page-title" id="pageTitle">DAKTIER</h2>
+            <p class="page-subtitle" id="pageSubtitle">Nordiska & amerikanska aktier — en poäng styr allt</p>
         </div>
     </div>
 
@@ -1668,7 +1668,7 @@ const NAV_SECTIONS = {
                 ] },
 };
 // Edge Signals sist (lägre prioritet, användaren osäker på den)
-const PRIMARY_ORDER = ['agent', 'dashboard', 'koplista', 'owners', 'stocks', 'edge'];
+const PRIMARY_ORDER = ['agent', 'dashboard', 'analytiker', 'owners', 'stocks', 'edge'];
 const TAB_TO_SECTION = {
     agent: 'agent', dashboard: 'dashboard', analytiker: 'analytiker', koplista: 'koplista', hotmovers: 'owners',
     stocks: 'stocks', metrics: 'stocks', ocf: 'stocks', fcf: 'stocks',
@@ -1709,7 +1709,9 @@ window.addEventListener('hashchange', () => {
 function renderTopnavMenu() {
     const el = document.getElementById('topnavMenu');
     if (!el) return;
-    el.innerHTML = PRIMARY_ORDER.map(key => {
+    el.innerHTML = PRIMARY_ORDER.filter(key => NAV_SECTIONS[key]).map(key => {
+        // filter före map: en nyckel som saknas i NAV_SECTIONS kraschade
+        // init() och lämnade HELA siten på "Laddar data..." (2026-08-06)
         const s = NAV_SECTIONS[key];
         const cls = 'topnav-item' + (key === 'agent' ? ' primary' : '');
         return `<button class="${cls}" data-section="${key}" onclick="navTo('${key}')">
@@ -5195,12 +5197,8 @@ function renderQuantRank(s) {
 
 // ── RSI-sparkline ───────────────────────────────────────────
 async function loadRsiSparkline(ticker, containerId) {
-    console.log('[rsi-spark]', ticker, '->', containerId);
     const el = document.getElementById(containerId);
-    if (!el) {
-        console.warn('[rsi-spark] container saknas:', containerId);
-        return;
-    }
+    if (!el) return;  // annan drawer-flik öppen — ofarligt, spamma inte konsolen
     if (!ticker) { el.innerHTML = ''; return; }
     el.innerHTML = '<div style="font-size:11px;color:#9ca3af;padding:6px">⏳ Laddar RSI-historik...</div>';
     try {
