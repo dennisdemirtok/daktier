@@ -13294,20 +13294,21 @@ Citera EXAKTA siffror från DB:n — gissa aldrig på nyckeltal.
 
 **SCORE-HIERARKI — DEPRECATED för multi-strategy-användare:**
 
-⚠️ DAKTIER Score (smart_score) är en LEGACY composite-blandning. Den användes
-tidigare som "bara EN score" men det förstör multi-strategy edge — det är
-exakt vad DEL 6.99-protokollet förbjuder.
+⚠️ NAMNDISCIPLIN (2026-08-06): fältet `smart_score` är den HISTORISKA
+modellscoren (Bok+Meta-blandningen). Den hette tidigare "DAKTIER Score" —
+DET NAMNET ÄR PENSIONERAT. Kalla den ALDRIG DAKTIER-poäng: livetestet
+visade att agenten svarade "DAKTIER-poäng 48,8" när verkliga poängen var
+39,1 (plats 1604) — fel siffra med rätt namn är värre än ingen siffra.
 
-**NY REGEL för svar:**
-- Om användaren har aktiverat multi-strategy-läge (eller frågar om en aktie
-  utan att specificera strategi) — använd DEL 6.99-protokollet med
-  Swing/Quality/Value-matrisen, INTE en singleton-score.
-- DAKTIER Score får nämnas som EN datapunkt bland flera, men ska INTE vara
-  avgörande för rekommendationen.
+**REGLER:**
+- DAKTIER-poängen kommer ENBART ur `daktier_poang`/`daktier_plats`-fälten
+  (eller `daktier`-blocket i djupanalysen). Saknas fälten: säg att bolaget
+  inte är rankat idag — hitta ALDRIG på och lyft ALDRIG in smart_score som
+  ersättning.
+- smart_score/Edge/Meta/Bok får nämnas som "historisk modellscore" — en
+  sekundär datapunkt, aldrig huvudbetyget.
 - Citera EXAKTA siffror från DB:n (P/E, ROE, RSI, owners_change_1y) — gissa
   aldrig.
-- Edge Score (momentum) och Meta Score (4 sub-modeller) är komponent-scores —
-  diskutera dem bara som motivering för DAKTIER Scoren, inte som ersättningar.
 
 **INVESTERAR-FILOSOFI (när relevant — inte i varje svar):**
 Du har tre kloka röster att bjuda in när det passar analysen:
@@ -13847,10 +13848,14 @@ def _agent_search_stocks(db, query, limit=15):
             "market_cap_currency": d.get("currency") or "SEK",
             "ytd_change_pct": d.get("ytd_change_pct"),
             "one_month_change_pct": d.get("one_month_change_pct"),
+            # DAKTIER-poängen FÖRST — sitens enda betyg (2026-08-06):
+            # utan fälten här svarade agenten med smart_score under fel namn
+            "daktier_poang": d.get("daktier_score"),
+            "daktier_plats": d.get("daktier_rank"),
+            "riskklass": d.get("riskklass"),
             "edge_score": d.get("edge_score"), "action": d.get("action"),
-            "smart_score": d.get("smart_score"),
-            "smart_score_change": (d.get("smart_score") - d.get("smart_score_yesterday"))
-                                   if d.get("smart_score") is not None and d.get("smart_score_yesterday") is not None else None,
+            "smart_score_historisk_modellscore": d.get("smart_score"),
+
         })
     return out
 
