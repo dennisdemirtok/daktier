@@ -5900,6 +5900,21 @@ def _yahoo_symbol(db, short_name):
             return dict(r)["yahoo_ticker"]
     except Exception:
         pass
+    # Reserv: Börsdatas nordiska instrument saknar ofta yahoo-fältet.
+    # Yahoo-konventionen är deterministisk: mellanslag → bindestreck +
+    # börssuffix per land ("NOVO B"/DK → "NOVO-B.CO", "ERIC B"/SE →
+    # "ERIC-B.ST"). Utan denna gav nordensynken tyst noll rader.
+    try:
+        r = _fetchone(db, f"""SELECT country FROM stocks
+            WHERE UPPER(short_name) = {ph}
+            ORDER BY COALESCE(number_of_owners, 0) DESC LIMIT 1""",
+            (str(short_name).upper(),))
+        land = (dict(r)["country"] if r else "").upper()
+        suffix = {"SE": ".ST", "DK": ".CO", "NO": ".OL", "FI": ".HE"}.get(land)
+        if suffix:
+            return str(short_name).strip().replace(" ", "-") + suffix
+    except Exception:
+        pass
     return short_name
 
 
