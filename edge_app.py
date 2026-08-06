@@ -10896,6 +10896,29 @@ Svara EXAKT i JSON:
 # anropet betalar vi bara ~10% av pris för dessa tokens.
 # ══════════════════════════════════════════════════════════════
 _AGENT_KNOWLEDGE_BASE = """\
+═══ DAKTIER-POÄNGEN — SITENS ENDA POÄNGSÄTTNING (läs FÖRST, 2026-08-05) ═══
+Bolagskontexten innehåller `daktier`: score 0-100, rank, delpoäng (kvalitet
+24 % · kassaflöde 22 % · tillväxt 18 % · stabilitet 14 % · värdering 14 % ·
+storlek 8 %), riskklass (LÅG/MEDEL/HÖG) och flaggor. Detta är samma siffra
+användaren ser i Aktier, Topplistan och portföljerna — REFERERA ALLTID till
+den när du analyserar ett bolag ("DAKTIER-poäng 87,9, plats 14"). Edge Score
+och Bok-modellerna är HISTORISKA modeller (fördjupning) — nämn dem aldrig
+som primärt betyg. Flaggan 🏦 betyder att analytikerkonsensus rör sig:
+"gatan lämnar" (snitt −0,4+ på 3 mån, riskflagga) är en verklig varning.
+
+Kontexten innehåller även `konsensus`: analytikersnittet på FactSet-skalan
+(Köp=5 … Sälj=1) rekonstruerat ur per-hus-händelser, med fördelning och
+antal hus. Använd det som GATANS bild och kontrastera mot DAKTIER-poängen:
+när gatan älskar (4,6+) men DAKTIER-poängen är låg är förväntningarna redan
+inprisade; när gatan flyr men fundamenta håller kan det vara ett läge.
+Nivån är popularitet — RÖRELSEN är informationen.
+
+Portföljer: `daktier_10` (regelstyrd, kärna 6 + krydda 4, 10 % per innehav,
+tak 10 %) och `claude_10` (diskretionär, byts veckovis). Cykeltopp-monitorn
+körs kvartalsvis (5 signaler → grönt/gult/rött). Nämn dessa när användaren
+frågar om portföljen eller cykelläget.
+═══════════════════════════════════════════════════════════════════════
+
 # EDGE AGENT — KUNSKAPSBANK
 
 Du är **Edge Agent**, personlig analytiker för Dennis svenska aktiedashboard.
@@ -15102,6 +15125,40 @@ def _agent_get_full_stock(db, query):
                 }
     except Exception as e:
         out["borsdata_error"] = str(e)
+
+    # ── DAKTIER-poäng + analytikerkonsensus (2026-08-05): agenten byggdes
+    # före poängsystemet och kände inte till sitens egen primära poäng —
+    # den resonerade på Edge/Bok medan siten gått vidare. Nu ser den samma
+    # siffror som användaren ser.
+    try:
+        from edge_db import _fetchone as _f1
+        _dr = _f1(db, f"""SELECT score, rank, kvalitet, kassa, tillvaxt,
+                       stabilitet, vardering, storlek, riskklass, flaggor
+                FROM daktier_rank WHERE isin = {ph} AND snapshot_date =
+                  (SELECT MAX(snapshot_date) FROM daktier_rank)""",
+                (out.get("isin"),))
+        if _dr:
+            out["daktier"] = dict(_dr)
+        else:
+            out["daktier"] = {"obs": "ej i dagens ranking (datakrav/"
+                                     "hygiengrindar/sekundärnotering)"}
+    except Exception as _e:
+        out["daktier_error"] = str(_e)[:120]
+    try:
+        from edge_db import compute_factset_style_rating
+        _fs = compute_factset_style_rating(db, out.get("short_name") or "")
+        if _fs.get("nu"):
+            _h = _fs.get("historik") or []
+            out["konsensus"] = {
+                "skala": "Köp=5 … Sälj=1 (FactSet-stil, rekonstruerad)",
+                "snitt_nu": _fs["nu"]["snitt"], "n_hus": _fs["nu"]["n_hus"],
+                "fordelning": _fs["nu"]["fordelning"],
+                "snitt_for_1_ar_sedan": next(
+                    (x["snitt"] for x in reversed(_h)
+                     if str(x["datum"]) <= (datetime.now()
+                         - timedelta(days=365)).strftime("%Y-%m-%d")), None)}
+    except Exception:
+        pass
 
     return out
 

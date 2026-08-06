@@ -1259,6 +1259,22 @@ async function fetchData(append = false) {
             }
             isLoadingMore = false;
             return;
+        } else if (currentTab === 'analytiker') {
+            // Analytiker: konsensus-snittet (FactSet-skala, rekonstruerat)
+            document.getElementById('content').innerHTML =
+                '<div class="loading-wrap"><div class="spinner"></div></div>';
+            try {
+                const [rb, rt] = await Promise.all([
+                    fetch('/api/factset-rating/basta?limit=50'),
+                    fetch('/api/factset-rating/toplist?limit=15')
+                ]);
+                renderAnalytiker(await rb.json(), await rt.json());
+            } catch (e) {
+                document.getElementById('content').innerHTML =
+                    `<div style="padding:30px;color:var(--text-muted)">Kunde inte hämta analytikerdata: ${e.message}</div>`;
+            }
+            isLoadingMore = false;
+            return;
         } else if (currentTab === 'koplista') {
             // Köplistan: egen vy (lista + diff + facit-kurva) — ingen paginering
             renderKoplistaLoading();
@@ -1631,7 +1647,7 @@ function switchTab(tab, el) {
 const NAV_SECTIONS = {
     agent:     { label: 'Agent',         icon: 'forum',                 tab: 'agent',     sub: [] },
     dashboard: { label: 'Dashboard',     icon: 'space_dashboard',       tab: 'dashboard', sub: [] },
-    koplista:  { label: 'Köplistan',     icon: 'fact_check',            tab: 'koplista',  sub: [] },
+    analytiker:{ label: 'Analytiker',    icon: 'grade',                 tab: 'analytiker', sub: [] },
     owners:    { label: 'Ägarmomentum',  icon: 'local_fire_department', tab: 'hotmovers', sub: [] },
     stocks:    { label: 'Aktier',        icon: 'bar_chart',             tab: 'stocks',    sub: [
                     { label: 'Alla aktier', icon: 'bar_chart',       tab: 'stocks' },
@@ -1654,7 +1670,7 @@ const NAV_SECTIONS = {
 // Edge Signals sist (lägre prioritet, användaren osäker på den)
 const PRIMARY_ORDER = ['agent', 'dashboard', 'koplista', 'owners', 'stocks', 'edge'];
 const TAB_TO_SECTION = {
-    agent: 'agent', dashboard: 'dashboard', koplista: 'koplista', hotmovers: 'owners',
+    agent: 'agent', dashboard: 'dashboard', analytiker: 'analytiker', koplista: 'koplista', hotmovers: 'owners',
     stocks: 'stocks', metrics: 'stocks', ocf: 'stocks', fcf: 'stocks',
     insiders: 'stocks', backtest: 'stocks',
     signals: 'edge', portfolio: 'settings',
@@ -1664,7 +1680,7 @@ const TAB_TO_SECTION = {
 
 // ── v3.9: Hash-baserad URL-routing (delbara/bokmärkbara URL:er per vy) ──
 const TAB_HASH = {
-    agent: '/agent', dashboard: '/dashboard', koplista: '/koplistan', hotmovers: '/agarmomentum',
+    agent: '/agent', dashboard: '/dashboard', analytiker: '/analytiker', koplista: '/koplistan', hotmovers: '/agarmomentum',
     stocks: '/aktier', metrics: '/aktier/nyckeltal', ocf: '/aktier/kassaflode',
     fcf: '/aktier/fritt-kassaflode',
     insiders: '/aktier/insiders', backtest: '/aktier/utredning',
@@ -2476,6 +2492,43 @@ function renderModelPortfolios(d) {
             }));
         }
     }
+}
+
+function renderAnalytiker(b, t) {
+    const rad = (x, i, delta) => `<div class="mp-row" onclick="openStockByTicker('${(x.ticker||'').replace(/'/g,"\\'")}')">
+        <span class="mp-rank" style="background:var(--brand-navy);min-width:30px">${i+1}</span>
+        <span class="mp-name">${x.name || x.ticker}
+            <br><span class="mp-tick">${x.ticker} · ${x.n_hus} hus</span></span>
+        <span style="margin-left:auto;text-align:right">
+            <span style="font-weight:800;color:var(--brand-navy)">${x.snitt_12m_medel != null ? x.snitt_12m_medel : x.snitt_nu}</span>
+            ${delta != null ? `<br><span style="font-size:11px;font-weight:700;color:${delta >= 0 ? '#059669' : '#dc2626'}">${delta >= 0 ? '+' : ''}${delta}</span>` : (x.snitt_nu != null && x.snitt_12m_medel != null ? `<br><span style="font-size:11px;color:var(--text-muted)">nu ${x.snitt_nu}</span>` : '')}
+        </span></div>`;
+    const lista = (titel, sub, rows, deltaKey) => `
+        <div class="mp-card" style="margin-bottom:16px">
+            <div class="mp-head">${titel}</div>
+            <div class="mp-sub">${sub}</div>
+            ${(rows||[]).map((x,i)=>rad(x, i, deltaKey ? x[deltaKey] : null)).join('') || '<div style="padding:10px;color:var(--text-muted);font-size:12px">Ingen data ännu.</div>'}
+        </div>`;
+    document.getElementById('content').innerHTML = `
+        <div style="background:linear-gradient(135deg,var(--brand-navy-deep),var(--brand-navy));border-radius:var(--radius);padding:18px 20px;color:#fff;margin-bottom:14px">
+            <div style="font-size:var(--fs-lg);font-weight:800">🏛 Analytikernas konsensus</div>
+            <div style="font-size:var(--fs-sm);opacity:0.85;margin-top:4px">
+                Snittbetyg på skalan <strong>Köp = 5 … Sälj = 1</strong>, rekonstruerat ur varje analyshus senaste betyg
+                (samma skala som FactSet/Montrose). Hus tystare än 15 månader räknas inte. <strong>Nivån är popularitet
+                — rörelsen är informationen:</strong> snitt som glider nedåt ger riskflagga i DAKTIER-poängen.
+            </div>
+        </div>
+        <div class="mp-grid">
+            ${lista('⭐ Bästa snittbetyg — 12-månadersmedel', 'Genomsnitt över tolv månadspunkter. Kärlek är redan inprisad — läs som förväntansnivå, inte köplista.', (b && b.basta) || [])}
+            <div>
+                ${lista('📈 Gatan återvänder — 3 mån', 'Störst höjning av snittet senaste kvartalet.', (t && t.upp_3m) || [], 'd3m')}
+                ${lista('📉 Gatan lämnar — 3 mån', 'Störst sänkning. Dessa får 🏦-flagga i DAKTIER-poängen vid −0,4 eller mer.', (t && t.ned_3m) || [], 'd3m')}
+            </div>
+        </div>
+        <div style="margin-top:12px;font-size:var(--fs-xs);color:var(--text-muted)">
+            Källa: per-hus-händelser (flera års historik). Pool = de hus som registrerats per bolag — antalet skiljer mot FactSets.
+            US/CA-bolag. Riktkurshistorik byggs framåt dagligen.
+        </div>`;
 }
 
 function renderKoplistaLoading() {
@@ -6262,7 +6315,7 @@ function openDrawer(s) {
             <div style="margin-top:6px;font-size:13px;color:#475569;line-height:1.5">Ingen poäng i dagens ranking — bolaget saknar tillräcklig rapportserie (minst 8 kvartal), faller på hygienkraven (börsvärde ≥ 500 MUSD · kurs ≥ 10 USD · ej REIT) eller är en sekundärnotering av ett bolag som redan rankas.</div>
         </div>`;
     }
-    B.analys = daktierCard +
+    B.analys = daktierCard + `<div id="dovKonsensusCard"></div>` +
         `<details class="drawer-section" style="background:var(--bg);border:1px solid var(--line);border-radius:14px;padding:12px 16px;margin-bottom:14px">
             <summary style="cursor:pointer;font-weight:700;font-size:12.5px;color:#64748b">🔬 Fördjupning — övriga modeller (styr inte DAKTIER-poängen)</summary>
             <div style="margin-top:12px"><div id="dovFactorCard"></div>` + B.analys + `</div></details>`;
@@ -6348,6 +6401,27 @@ function openDrawer(s) {
                                        grid: { display: false } },
                                   y: { ticks: { maxTicksLimit: 5 }, grid: { color: 'rgba(0,0,0,0.05)' } } } }
                 });
+                // Analytikerkonsensus-kortet (FactSet-skala, rekonstruerad)
+                fetch('/api/factset-rating?ticker=' + encodeURIComponent(s.short_name || '')).then(r=>r.json()).then(ko => {
+                    const kc = document.getElementById('dovKonsensusCard');
+                    if (!kc || !ko || !ko.nu) return;
+                    const fd = ko.nu.fordelning || {};
+                    const stap = (lbl, v, col) => v ? `<div style="text-align:center"><div style="font-size:15px;font-weight:800;color:${col}">${v}</div><div style="font-size:9.5px;color:#64748b">${lbl}</div></div>` : '';
+                    const h = ko.historik || [];
+                    const ettAr = (() => { const c = new Date(Date.now() - 365*864e5).toISOString().slice(0,10);
+                        for (let i = h.length - 1; i >= 0; i--) if (h[i].datum <= c) return h[i].snitt; return null; })();
+                    kc.innerHTML = `<div class="drawer-section" style="background:white;border:1px solid var(--line);border-radius:14px;padding:14px 18px;margin-bottom:14px">
+                        <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+                            <div style="font-size:10.5px;color:#16365C;text-transform:uppercase;letter-spacing:0.08em;font-weight:800">🏛 Analytikernas rating</div>
+                            <div style="font-size:22px;font-weight:900;color:var(--brand-navy)">${ko.nu.snitt}<span style="font-size:12px;color:#94a3b8;font-weight:600"> / 5</span></div>
+                            <div style="font-size:11px;color:#64748b">${ko.nu.n_hus} hus${ettAr != null ? ' · för 1 år sedan: ' + ettAr : ''}</div>
+                        </div>
+                        <div style="display:flex;gap:14px;margin-top:8px">
+                            ${stap('Köp', fd.kop, '#059669')}${stap('Övervikt', fd.overvikt, '#0891b2')}${stap('Behåll', fd.behall, '#d97706')}${stap('Undervikt', fd.undervikt, '#dc2626')}${stap('Sälj', fd.salj, '#b91c1c')}
+                        </div>
+                        <div style="margin-top:8px;font-size:10px;color:#94a3b8">Rekonstruerad ur per-hus-händelser (FactSet-skala) — nivån är popularitet, rörelsen är informationen.</div>
+                    </div>`;
+                }).catch(() => {});
                 // Kvantmodellens betygskort i Analys-fliken
                 const fc = document.getElementById('dovFactorCard');
                 if (fc && pe.factor && pe.factor.total_score != null) {
