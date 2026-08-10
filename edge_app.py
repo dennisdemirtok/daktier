@@ -8612,10 +8612,23 @@ def api_email_daily_digest():
 
 @app.route("/api/email/preview")
 def api_email_preview():
-    """Preview HTML i webbläsare utan att skicka."""
+    """Preview av morgonmejlet i webbläsaren. ?skicka=1 skickar det skarpt
+    via Resend till RESEND_TO (eller ?to=adress) — klickbar testlänk för
+    inloggad användare, eftersom POST-endpointen inte nås från adressfältet.
+    ?v=2 (default) använder v2-bygget, samma som 07:30-jobbet."""
     db = get_db()
     try:
-        html, _ = _build_daily_digest_html(db)
+        if (request.args.get("v") or "2") == "2":
+            html, stats = _build_daily_email_v2(db)
+        else:
+            html, stats = _build_daily_digest_html(db)
+        if request.args.get("skicka") == "1":
+            to_email = request.args.get("to") or RESEND_TO_DEFAULT
+            subject = (f"☀️ DAKTIER Morgonrapport "
+                       f"{datetime.now().strftime('%-d/%-m')} — testutskick")
+            ok, resp = _send_email_via_resend(to_email, subject, html)
+            return jsonify({"sent": ok, "to": to_email, "subject": subject,
+                            "from": RESEND_FROM, "resend_response": resp})
         return html, 200, {"Content-Type": "text/html; charset=utf-8"}
     finally:
         db.close()
