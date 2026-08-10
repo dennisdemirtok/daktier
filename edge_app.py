@@ -23250,6 +23250,26 @@ def _startup():
                           day_of_week='mon-fri', hour=4, minute=50,
                           id='analyst_consensus_daily')
 
+        # 📝 Rekhändelser (04:40, före konsensus): var ALDRIG schemalagd —
+        # Analytiker-fliken räknar live men på händelsedata som skulle ha
+        # frusit vid senaste manuella synken (upptäckt 2026-08-06)
+        def scheduled_analyst_actions():
+            if not _sched_claim("analyst_actions", datetime.now().strftime("%Y-%m-%d")):
+                return
+            try:
+                from edge_db import sync_analyst_actions
+                dbr = get_db()
+                try:
+                    print(f"[AUTO] Rekhändelser: {sync_analyst_actions(dbr, max_n=400)}")
+                finally:
+                    dbr.close()
+            except Exception as e:
+                print(f"[AUTO] Rekhändelser fel: {e}")
+
+        scheduler.add_job(scheduled_analyst_actions, 'cron',
+                          day_of_week='mon-fri', hour=4, minute=40,
+                          id='analyst_actions_daily')
+
         # 🧭 Analytikerbeteende: veckoklassificering (måndag 05:05). Full
         # omklassificering per rapportsäsong sker implicit — mätvärdena
         # läser alltid färsk historik vid varje körning.
