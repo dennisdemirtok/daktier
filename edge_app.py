@@ -6014,9 +6014,26 @@ def api_portfolio_recommend():
 # Sätt RESEND_API_KEY som env-var i Railway:
 # Railway dashboard → service → Variables → + New Variable
 # RESEND_API_KEY=re_xxxxxxxxxxxxxxxx
-RESEND_API_KEY = os.getenv("RESEND_API_KEY", "")
-RESEND_FROM = os.getenv("RESEND_FROM", "Daktier <onboarding@resend.dev>")
-RESEND_TO_DEFAULT = os.getenv("RESEND_TO", "dennis.demirtok@gmail.com")
+def _env_stadad(namn, default=""):
+    """Env-värde rensat från klistringsartefakter: omslutande citattecken,
+    whitespace/radbrytningar och ett inledande 'Bearer '. Testutskicket
+    2026-08-10 gav 401 'API key is invalid' — klassikern är att nyckeln
+    klistras med citattecken eller radbrytning och blir ogiltig i headern."""
+    v = (os.getenv(namn, default) or "").strip()
+    if len(v) >= 2 and v[0] == v[-1] and v[0] in ("'", '"'):
+        v = v[1:-1].strip()
+    if v.lower().startswith("bearer "):
+        v = v[7:].strip()
+    return v
+
+
+RESEND_API_KEY = _env_stadad("RESEND_API_KEY")
+RESEND_FROM = _env_stadad("RESEND_FROM", "Daktier <onboarding@resend.dev>")
+RESEND_TO_DEFAULT = _env_stadad("RESEND_TO", "dennis.demirtok@gmail.com")
+# "<news@daktier.com>" utan visningsnamn: unwrappa till ren adress och sätt
+# DAKTIER som namn — Resend vill ha "adress" eller "Namn <adress>"
+if RESEND_FROM.startswith("<") and RESEND_FROM.endswith(">"):
+    RESEND_FROM = f"DAKTIER {RESEND_FROM}"
 
 
 def _generate_ai_market_summary(stats, top_buys, top_overheat, top_oversold, owner_top,
