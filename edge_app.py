@@ -22656,8 +22656,31 @@ def _startup():
         # 07:30 vardagar — EFTER 06:15-skuggan och 06:45-innehållsgenereringen,
         # så morgonbrief/nyheter/makro är dagsfärska i mejlet (v1 gick 17:30
         # med morgoninnehåll = halvgammalt)
+        # 🕝 13:50: färsk hämtning av US-rekar/konsensus INFÖR mejlet —
+        # morgonsynken 04:40 fångar bara gårdagens amerikanska rörelser;
+        # analytikerhusen släpper sina notiser under USA:s förbörs
+        # (~10:00-14:30 svensk tid). Utskicket 14:30 bär därmed samma dags
+        # rekar, en timme före USA-öppningen (användarbeslut 2026-08-10).
+        def scheduled_pre_email_sync():
+            if not _sched_claim("pre_email_sync", datetime.now().strftime("%Y-%m-%d")):
+                return
+            try:
+                from edge_db import sync_analyst_actions, sync_analyst_consensus
+                dbp = get_db()
+                try:
+                    print(f"[AUTO] 13:50-rekar: {sync_analyst_actions(dbp, max_n=400)}")
+                    print(f"[AUTO] 13:50-konsensus: {sync_analyst_consensus(dbp, max_n=400)}")
+                finally:
+                    dbp.close()
+            except Exception as e:
+                print(f"[AUTO] 13:50-synk fel: {e}")
+
+        scheduler.add_job(scheduled_pre_email_sync, 'cron',
+                          day_of_week='mon-fri', hour=13, minute=50,
+                          id='pre_email_sync')
+
         scheduler.add_job(scheduled_daily_email, 'cron',
-                          day_of_week='mon-fri', hour=7, minute=30,
+                          day_of_week='mon-fri', hour=14, minute=30,
                           id='daily_email_digest')
 
         # Uppdatera fwd-returns på söndagar — utvärderar gamla snapshots
