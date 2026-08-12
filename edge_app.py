@@ -22647,11 +22647,20 @@ def _startup():
                         subject += f" — {stats['subject_hint']}"
                     ok, resp = _send_email_via_resend(RESEND_TO_DEFAULT, subject, html)
                     print(f"[AUTO] Daily email: ok={ok}, stats={stats}")
+                    # SLÄPP LÅSET VID MISSLYCKANDE (2026-08-11): 07:30-försöket
+                    # med ogiltig nyckel tog dagens lås och 14:30-körningen
+                    # hoppade tyst — ett misslyckat utskick får inte bränna
+                    # dagen. Samma mönster som morgonbriefen.
+                    if not ok:
+                        _sched_release("daily_email")
+                        print(f"[AUTO] Daily email misslyckades ({resp}) — "
+                              f"dagens lås släppt för nytt försök")
                 finally:
                     dbe.close()
             except Exception as e:
                 import traceback
                 print(f"[AUTO] Daily email fel: {e}\n{traceback.format_exc()[:500]}")
+                _sched_release("daily_email")
 
         # 07:30 vardagar — EFTER 06:15-skuggan och 06:45-innehållsgenereringen,
         # så morgonbrief/nyheter/makro är dagsfärska i mejlet (v1 gick 17:30
