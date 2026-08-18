@@ -8159,6 +8159,9 @@ def _build_daily_email_v2(db, base_url="https://daktier-production.up.railway.ap
               "augusti", "september", "oktober", "november", "december"]
     _now = datetime.now()
     datum_lang = f"{_VECKODAG[_now.weekday()]} {_now.day} {_MANAD[_now.month]} {_now.year}"
+    # "Morgonrapport" kl 14:30 är fel namn (användare 2026-08-11) —
+    # namnet följer utskickstiden
+    rapportnamn = "Morgonrapport" if _now.hour < 11 else "Marknadsrapport"
 
     def _jload(v):
         if v is None:
@@ -8236,14 +8239,17 @@ def _build_daily_email_v2(db, base_url="https://daktier-production.up.railway.ap
                              + (f' ({_pct_span(it.get("eps_yoy"))})'
                                 if it.get("eps_yoy") is not None else ""))
             reakt = ""
-            if isinstance(it.get("reaction_pct"), (int, float)):
+            # 0,0 % betyder "ingen handel än" (US-förbörsen vid 14:30-utskicket),
+            # inte en verklig nollrörelse — visa då inget alls (användare 2026-08-11)
+            if (isinstance(it.get("reaction_pct"), (int, float))
+                    and abs(it["reaction_pct"]) >= 0.05):
                 reakt = (f' &nbsp;→&nbsp; aktien {_pct_span(it["reaction_pct"])} '
                          f'<span style="color:{MUT};font-size:11px">{it.get("reaction_label")}</span>')
             blurb = blurbs.get(_baseb(it.get("ticker")))
             blurb_html = (f'<br><span style="font-size:12px;color:#334155">'
                           f'{_esc(blurb)}</span>') if blurb else ""
             rx_html += (f'<tr><td style="padding:9px 0;border-bottom:1px solid {LINE};'
-                        f'font-family:{FONT};font-size:13px;line-height:1.6;color:{INK}">'
+                        f'font-family:{FONT};font-size:14px;line-height:1.65;color:{INK}">'
                         f'<strong style="color:{NAVY}">{_esc(it.get("ticker"))}</strong> '
                         f'<span style="color:{MUT}">{_esc((it.get("name") or "")[:26])}</span> '
                         f'<span style="font-size:11px;color:{MUT}">({_esc(it.get("report_date"))})</span><br>'
@@ -8293,7 +8299,7 @@ def _build_daily_email_v2(db, base_url="https://daktier-production.up.railway.ap
                 ch = it.get("change_pct")
                 it_html += (
                     f'<tr><td style="padding:8px 0;border-bottom:1px solid {LINE};'
-                    f'font-family:{FONT};font-size:13px;line-height:1.55;color:{INK}">'
+                    f'font-family:{FONT};font-size:14px;line-height:1.6;color:{INK}">'
                     f'<strong style="color:{NAVY}">{tick}</strong>'
                     + (f' {_pct_span(ch)}' if ch is not None else "")
                     + f' — {_esc(it.get("headline") or "")}'
@@ -8386,97 +8392,42 @@ def _build_daily_email_v2(db, base_url="https://daktier-production.up.railway.ap
         if upc_us:
             rows.append(_p(f'🇺🇸 Kommande: {_upc_line(upc_us)}', size="12px"))
 
-    # ── 6. KÖPLISTAN (kvalitet × trend — dashboardens lista) ──────────────
-    kop = []
+    # ── 6. ANALYTIKERNAS TOPP 5 (ersatte Köplistan + Kvantmodellen —
+    # användarbeslut 2026-08-11: de listorna var inte betrodda; Analytiker-
+    # tabellens 12-månaderssnitt visas i stället) ─────────────────────────
+    an_rows = []
     try:
-        kres = _agent_screen_stocks(db, screen="koplista", country="SE,US", limit=5)
-        kop = (kres or {}).get("stocks") or []
+        from edge_db import compute_factset_level_toplist
+        _an = compute_factset_level_toplist(db, limit=5, min_hus=5)
+        an_rows = (_an or {}).get("basta") or []
     except Exception:
         pass
-    if kop:
-        rows.append(_h2("Köplistan — kvalitet &amp; trend"))
-        k_html = (f'<tr>'
+    if an_rows:
+        rows.append(_h2("Analytikernas topp 5 — bästa snittbetyg 12 mån"))
+        a_html = (f'<tr>'
                   f'<td style="font-family:{FONT};font-size:11px;color:{MUT};padding:4px 0">BOLAG</td>'
-                  f'<td style="font-family:{FONT};font-size:11px;color:{MUT};padding:4px 0" align="right">ROCE</td>'
-                  f'<td style="font-family:{FONT};font-size:11px;color:{MUT};padding:4px 0" align="right">EV/EBIT</td>'
-                  f'<td style="font-family:{FONT};font-size:11px;color:{MUT};padding:4px 0" align="right">vs MA200</td></tr>')
-        for s in kop:
-            roce = s.get("roce_pct")
-            evb = s.get("ev_ebit")
-            ma = s.get("vs_ma200_pct")
-            k_html += (f'<tr>'
-                       f'<td style="font-family:{FONT};font-size:13px;color:{INK};'
-                       f'padding:7px 0;border-top:1px solid {LINE}">'
-                       f'<strong style="color:{NAVY}">{_esc(s.get("ticker") or s.get("short_name") or "")}</strong>'
-                       f' <span style="color:{MUT};font-size:12px">{_esc((s.get("name") or "")[:22])}</span></td>'
-                       f'<td align="right" style="font-family:{FONT};font-size:12px;color:{INK};'
-                       f'padding:7px 0;border-top:1px solid {LINE}">'
-                       + (f'{float(roce):.0f}%' if isinstance(roce, (int, float)) else "–")
-                       + '</td>'
-                       f'<td align="right" style="font-family:{FONT};font-size:12px;color:{INK};'
-                       f'padding:7px 0;border-top:1px solid {LINE}">'
-                       + (f'{float(evb):.1f}' if isinstance(evb, (int, float)) else "–")
-                       + '</td>'
-                       f'<td align="right" style="font-family:{FONT};font-size:12px;'
-                       f'padding:7px 0;border-top:1px solid {LINE}">'
-                       + (_pct_span(ma) if isinstance(ma, (int, float)) else "–")
-                       + '</td></tr>')
+                  f'<td style="font-family:{FONT};font-size:11px;color:{MUT};padding:4px 0" align="right">12M-SNITT</td>'
+                  f'<td style="font-family:{FONT};font-size:11px;color:{MUT};padding:4px 0" align="right">NU</td>'
+                  f'<td style="font-family:{FONT};font-size:11px;color:{MUT};padding:4px 0" align="right">HUS</td></tr>')
+        for s0 in an_rows:
+            a_html += (f'<tr>'
+                       f'<td style="font-family:{FONT};font-size:14px;color:{INK};'
+                       f'padding:8px 0;border-top:1px solid {LINE}">'
+                       f'<strong style="color:{NAVY}">{_esc(s0.get("ticker") or "")}</strong>'
+                       f' <span style="color:{MUT};font-size:12px">{_esc((s0.get("name") or "")[:24])}</span></td>'
+                       f'<td align="right" style="font-family:{FONT};font-size:14px;font-weight:700;'
+                       f'color:{NAVY};padding:8px 0;border-top:1px solid {LINE}">'
+                       f'{s0.get("snitt_12m_medel")}</td>'
+                       f'<td align="right" style="font-family:{FONT};font-size:13px;color:{INK};'
+                       f'padding:8px 0;border-top:1px solid {LINE}">{s0.get("snitt_nu")}</td>'
+                       f'<td align="right" style="font-family:{FONT};font-size:13px;color:{MUT};'
+                       f'padding:8px 0;border-top:1px solid {LINE}">{s0.get("n_hus")}</td></tr>')
         rows.append(_p(f'<table role="presentation" width="100%" cellpadding="0" '
-                       f'cellspacing="0">{k_html}</table>', pad="2px 28px 2px 28px"))
-        rows.append(_p(f'Regler: ROCE ≥ 15 % · EV/EBIT 4–25 · pris &gt; MA200 · '
-                       f'6 m-momentum &gt; 0. Följ upp månadsvis.', size="11px", color=MUT))
-
-    # ── 6b. KVANTMODELLEN (multifaktor — månadens picks + topp 5) ─────────
-    fs_rows = []
-    try:
-        r = _f1(db, "SELECT MAX(snapshot_date) AS d FROM factor_scores")
-        _fd = dict(r).get("d") if r else None
-        if _fd:
-            fs_rows = [dict(x) for x in _fa(db,
-                f"SELECT * FROM factor_scores WHERE snapshot_date = {ph} AND dq = 0 "
-                f"AND n_factors = 5 AND country IN ('SE','US') "
-                f"ORDER BY is_pick DESC, total_score DESC LIMIT 5", (_fd,))]
-    except Exception:
-        pass
-    if fs_rows:
-        rows.append(_h2("Kvantmodellen — sektorranking"))
-        picks = [x for x in fs_rows if x.get("is_pick")]
-        if picks:
-            pick_html = ""
-            for p0 in picks[:2]:
-                pick_html += (
-                    f'<table role="presentation" width="100%" cellpadding="0" cellspacing="0" '
-                    f'style="background:{BG};border:1px solid {CYAN};border-radius:8px;margin-bottom:6px">'
-                    f'<tr><td style="padding:10px 14px;font-family:{FONT};font-size:13px;color:{INK}">'
-                    f'<span style="color:{CYAN};font-size:11px;font-weight:800;letter-spacing:1px">★ MÅNADENS PICK</span><br>'
-                    f'<strong style="font-size:15px;color:{NAVY}">{_esc(p0.get("ticker") or "")}</strong> '
-                    f'<span style="color:{MUT}">{_esc((p0.get("name") or "")[:26])}</span>'
-                    f' &nbsp;<strong>{p0.get("total_score")}</strong>/5'
-                    f' &nbsp;<span style="color:{MUT};font-size:12px">{_esc(p0.get("grades") or "")}</span>'
-                    f'</td></tr></table>')
-            rows.append(_p(pick_html, pad="6px 28px 4px 28px"))
-        t_html = (f'<tr>'
-                  f'<td style="font-family:{FONT};font-size:11px;color:{MUT};padding:4px 0">BOLAG</td>'
-                  f'<td style="font-family:{FONT};font-size:11px;color:{MUT};padding:4px 0" align="right">POÄNG</td>'
-                  f'<td style="font-family:{FONT};font-size:11px;color:{MUT};padding:4px 0" align="right">VINST·MOM·LÖNS·TILLV·VÄRD</td></tr>')
-        for s in fs_rows:
-            t_html += (f'<tr><td style="font-family:{FONT};font-size:13px;color:{INK};'
-                       f'padding:6px 0;border-top:1px solid {LINE}">'
-                       f'<strong style="color:{NAVY}">{_esc(s.get("ticker") or "")}</strong>'
-                       + (' <span style="color:#B45309">★</span>' if s.get("is_pick") else "")
-                       + f'</td>'
-                       f'<td align="right" style="font-family:{FONT};font-size:13px;font-weight:700;'
-                       f'color:{NAVY};padding:6px 0;border-top:1px solid {LINE}">{s.get("total_score")}</td>'
-                       f'<td align="right" style="font-family:{FONT};font-size:12px;'
-                       f'letter-spacing:2px;color:{INK};padding:6px 0;border-top:1px solid {LINE}">'
-                       f'{_esc(s.get("grades") or "")}</td></tr>')
-        rows.append(_p(f'<table role="presentation" width="100%" cellpadding="0" '
-                       f'cellspacing="0">{t_html}</table>', pad="2px 28px 2px 28px"))
-        rows.append(_p('5 faktorer, percentilrankade mot land+sektor (25/25/20/20/10): '
-                       'vinstmomentum · prismomentum 3–12 m · lönsamhet · tillväxt · värdering. '
-                       'Bortsållad under 20:e percentilen i någon faktor. '
-                       'Vinstmomentum: US = äkta konsensusrevisioner (Nasdaq), '
-                       'Norden = rapporterad EPS-utveckling. Tillväxt = rapporterad.',
+                       f'cellspacing="0">{a_html}</table>', pad="2px 28px 2px 28px"))
+        rows.append(_p('Skala Köp = 5 … Sälj = 1, rekonstruerad ur varje analyshus '
+                       'senaste betyg (12-månadersmedel). Nivån är popularitet — '
+                       'redan inprisad. Rörelsen är informationen: snitt som glider '
+                       'nedåt ger riskflagga i DAKTIER-poängen.',
                        size="11px", color=MUT))
 
     # ── 7. INSIDERKÖP ─────────────────────────────────────────────────────
@@ -8546,7 +8497,7 @@ def _build_daily_email_v2(db, base_url="https://daktier-production.up.railway.ap
     <div style="font-family:{FONT};font-size:20px;font-weight:800;color:#FFFFFF;
                 letter-spacing:3px">DAKTIER</div>
     <div style="font-family:{FONT};font-size:12px;color:{CYAN};margin-top:3px;
-                letter-spacing:0.5px">Morgonrapport · {datum_lang}</div>
+                letter-spacing:0.5px">{rapportnamn} · {datum_lang}</div>
 </td></tr>
 {body_rows}
 <tr><td align="center" style="padding:26px 28px 8px 28px">
@@ -8566,7 +8517,8 @@ def _build_daily_email_v2(db, base_url="https://daktier-production.up.railway.ap
              "sections": len(rows),
              "n_reports": len(reactions), "has_macro": bool(mp),
              "has_news": bool(mn), "has_bullets": bool(mb),
-             "n_koplista": len(kop), "n_insiders": len(insiders)}
+             "n_analytiker": len(an_rows), "n_insiders": len(insiders),
+             "rapportnamn": rapportnamn}
     return html, stats
 
 
@@ -8609,7 +8561,8 @@ def api_email_daily_digest():
             return jsonify({"dry_run": True, "stats": stats, "html_length": len(html)})
 
         from datetime import datetime
-        subject = f"☀️ DAKTIER Morgonrapport {datetime.now().strftime('%-d/%-m')}"
+        subject = (f"☀️ DAKTIER {stats.get('rapportnamn', 'Marknadsrapport')} "
+                   f"{datetime.now().strftime('%-d/%-m')}")
         if stats.get("subject_hint"):
             subject += f" — {stats['subject_hint']}"
         ok, resp = _send_email_via_resend(to_email, subject, html)
@@ -8641,7 +8594,7 @@ def api_email_preview():
             html, stats = _build_daily_digest_html(db)
         if request.args.get("skicka") == "1":
             to_email = request.args.get("to") or RESEND_TO_DEFAULT
-            subject = (f"☀️ DAKTIER Morgonrapport "
+            subject = (f"☀️ DAKTIER {stats.get('rapportnamn', 'Marknadsrapport')} "
                        f"{datetime.now().strftime('%-d/%-m')} — testutskick")
             ok, resp = _send_email_via_resend(to_email, subject, html)
             return jsonify({"sent": ok, "to": to_email, "subject": subject,
