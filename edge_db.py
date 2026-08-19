@@ -6413,9 +6413,14 @@ def compute_factset_level_toplist(db, limit=30, min_hus=5, min_punkter=6):
             basta_per[k] = x
     ut = list(basta_per.values())
     ut.sort(key=lambda x: (-x["snitt_12m_medel"], -x["snitt_nu"], -x["n_hus"]))
+    # "Just nu"-listan (användarönskemål 2026-08-11): samma bolag rankade
+    # på DAGENS snitt i stället för årsmedlet — fångar t.ex. Marvell vars
+    # nu (4,53) ligger klart över medlet (4,40) efter höstens svacka
+    basta_nu = sorted(ut, key=lambda x: (-(x["snitt_nu"] or 0), -x["n_hus"]))
     return {"skala": "Köp=5 … Sälj=1 · medel över 12 månatliga mätpunkter",
             "min_hus": min_hus, "bolag": len(ut),
-            "basta": ut[:limit], "samsta": ut[-limit:][::-1]}
+            "basta": ut[:limit], "basta_nu": basta_nu[:limit],
+            "samsta": ut[-limit:][::-1]}
 
 
 def compute_action_toplist(db, manader=12, limit=100):

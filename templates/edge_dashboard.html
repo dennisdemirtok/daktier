@@ -2498,20 +2498,24 @@ function renderModelPortfolios(d) {
 }
 
 function renderAnalytiker(b, t) {
-    const rad = (x, i, delta) => `<div class="an-row" onclick="openStockByTicker('${(x.ticker||'').replace(/'/g,"\\'")}')">
+    const rad = (x, i, delta, subLbl) => `<div class="an-row" onclick="openStockByTicker('${(x.ticker||'').replace(/'/g,"\\'")}')">
         <span class="an-rank">${i+1}</span>
         <span class="an-name">${x.name || x.ticker}
             <br><span class="an-tick">${x.ticker} · ${x.n_hus} hus</span></span>
         <span style="margin-left:auto;text-align:right">
             <span style="font-weight:800;color:var(--brand-navy)">${x.snitt_12m_medel != null ? x.snitt_12m_medel : x.snitt_nu}</span>
-            ${delta != null ? `<br><span style="font-size:11px;font-weight:700;color:${delta >= 0 ? '#059669' : '#dc2626'}">${delta >= 0 ? '+' : ''}${delta}</span>` : (x.snitt_nu != null && x.snitt_12m_medel != null ? `<br><span style="font-size:11px;color:var(--text-muted)">nu ${x.snitt_nu}</span>` : '')}
+            ${delta != null ? `<br><span style="font-size:11px;font-weight:700;color:${delta >= 0 ? '#059669' : '#dc2626'}">${delta >= 0 ? '+' : ''}${delta}</span>` : (x.snitt_nu != null && x.snitt_12m_medel != null ? `<br><span style="font-size:11px;color:var(--text-muted)">${subLbl || 'nu'} ${x.snitt_nu}</span>` : '')}
         </span></div>`;
-    const lista = (titel, sub, rows, deltaKey) => `
+    const lista = (titel, sub, rows, deltaKey, subLbl) => `
         <div class="an-card">
             <div class="an-head">${titel}</div>
             <div class="an-sub">${sub}</div>
-            ${(rows||[]).map((x,i)=>rad(x, i, deltaKey ? x[deltaKey] : null)).join('') || '<div style="padding:10px;color:var(--text-muted);font-size:12px">Ingen data ännu.</div>'}
+            ${(rows||[]).map((x,i)=>rad(x, i, deltaKey ? x[deltaKey] : null, subLbl)).join('') || '<div style="padding:10px;color:var(--text-muted);font-size:12px">Ingen data ännu.</div>'}
         </div>`;
+    // "Just nu"-listan visar dagens snitt som stora talet och årsmedlet
+    // som lilla — spegelvänt mot huvudlistan (fälten byter plats i mappen)
+    const nuRows = ((b && b.basta_nu) || []).map(x => ({
+        ...x, snitt_12m_medel: x.snitt_nu, snitt_nu: x.snitt_12m_medel }));
     document.getElementById('content').innerHTML = `
         <style>
             .an-grid { display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:16px; }
@@ -2546,6 +2550,7 @@ function renderAnalytiker(b, t) {
             <div>
                 ${lista('📈 Gatan återvänder — 3 mån', 'Störst höjning av snittet senaste kvartalet.', (t && t.upp_3m) || [], 'd3m')}
                 ${lista('📉 Gatan lämnar — 3 mån', 'Störst sänkning. Dessa får 🏦-flagga i DAKTIER-poängen vid −0,4 eller mer.', (t && t.ned_3m) || [], 'd3m')}
+                ${lista('🔥 Bästa betyg just nu — topp 50', 'Dagens ögonblicksbild. Bolag där NU ligger klart över 12m-siffran = gatan på väg tillbaka (Marvell-mönstret).', nuRows, null, '12m')}
             </div>
         </div>
         <div style="margin-top:12px;font-size:var(--fs-xs);color:var(--text-muted)">
