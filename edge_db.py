@@ -5980,18 +5980,20 @@ def sync_analyst_actions(db, max_n=600, tickers=None):
     db.commit()
     if not tickers:
         rows = _fetchall(db, f"""
-            SELECT short_name FROM stocks
-            WHERE country IN ('US','CA') AND last_price > 0 AND market_cap > 0
-              AND short_name IS NOT NULL AND short_name != ''
-            ORDER BY market_cap DESC LIMIT {int(max_n)}""")
+            SELECT short_name FROM {_STOCKS_DEDUP} s
+            WHERE s.huvudnotering = 1 AND s.country IN ('US','CA')
+              AND s.last_price > 0 AND s.market_cap > 0
+              AND s.short_name IS NOT NULL AND s.short_name != ''
+            ORDER BY s.market_cap DESC LIMIT {int(max_n)}""")
         tickers = [dict(r)["short_name"] for r in rows if dict(r).get("short_name")]
         # Norden med: Yahoo täcker storbolagen (NOVO-B.CO, ERIC-B.ST) om än
         # tunnare — min_hus-spärrarna i vyerna hanterar glesa pooler
-        nrows = _fetchall(db, """
-            SELECT short_name FROM stocks
-            WHERE country IN ('SE','DK','NO','FI') AND last_price > 0
-              AND market_cap > 0 AND short_name IS NOT NULL AND short_name != ''
-            ORDER BY market_cap DESC LIMIT 120""")
+        nrows = _fetchall(db, f"""
+            SELECT short_name FROM {_STOCKS_DEDUP} s
+            WHERE s.huvudnotering = 1 AND s.country IN ('SE','DK','NO','FI')
+              AND s.last_price > 0 AND s.market_cap > 0
+              AND s.short_name IS NOT NULL AND s.short_name != ''
+            ORDER BY s.market_cap DESC LIMIT 120""")
         tickers += [dict(r)["short_name"] for r in nrows
                     if dict(r).get("short_name") and dict(r)["short_name"] not in tickers]
     ins = _upsert_sql("analyst_actions",
@@ -6067,16 +6069,18 @@ def sync_analyst_consensus(db, max_n=400, tickers=None):
     db.commit()
     if not tickers:
         rows = _fetchall(db, f"""
-            SELECT short_name FROM stocks
-            WHERE country IN ('US','CA') AND last_price > 0 AND market_cap > 0
-              AND short_name IS NOT NULL AND short_name != ''
-            ORDER BY market_cap DESC LIMIT {int(max_n)}""")
+            SELECT short_name FROM {_STOCKS_DEDUP} s
+            WHERE s.huvudnotering = 1 AND s.country IN ('US','CA')
+              AND s.last_price > 0 AND s.market_cap > 0
+              AND s.short_name IS NOT NULL AND s.short_name != ''
+            ORDER BY s.market_cap DESC LIMIT {int(max_n)}""")
         tickers = [dict(r)["short_name"] for r in rows if dict(r).get("short_name")]
-        nrows = _fetchall(db, """
-            SELECT short_name FROM stocks
-            WHERE country IN ('SE','DK','NO','FI') AND last_price > 0
-              AND market_cap > 0 AND short_name IS NOT NULL AND short_name != ''
-            ORDER BY market_cap DESC LIMIT 120""")
+        nrows = _fetchall(db, f"""
+            SELECT short_name FROM {_STOCKS_DEDUP} s
+            WHERE s.huvudnotering = 1 AND s.country IN ('SE','DK','NO','FI')
+              AND s.last_price > 0 AND s.market_cap > 0
+              AND s.short_name IS NOT NULL AND s.short_name != ''
+            ORDER BY s.market_cap DESC LIMIT 120""")
         tickers += [dict(r)["short_name"] for r in nrows
                     if dict(r).get("short_name") and dict(r)["short_name"] not in tickers]
     cins = _upsert_sql("analyst_consensus",
@@ -6293,6 +6297,22 @@ def compute_factset_rating_toplist(db, limit=50, min_hus=5):
         if all(rad[f"d{k}"] is None for k in ("3m", "6m", "12m")):
             continue
         ut.append(rad)
+    # En rad per ISIN — Ferrari-läxan (RACE + RACEm med samma händelser)
+    _iav = {}
+    try:
+        for r in _fetchall(db, """SELECT short_name, isin FROM stocks
+                ORDER BY COALESCE(number_of_owners,0) DESC"""):
+            d0 = dict(r)
+            if d0.get("short_name") and d0["short_name"] not in _iav:
+                _iav[d0["short_name"]] = d0.get("isin")
+    except Exception:
+        pass
+    _bp = {}
+    for x in ut:
+        k = _iav.get(x["ticker"]) or x["ticker"]
+        if k not in _bp or x["n_hus"] > _bp[k]["n_hus"]:
+            _bp[k] = x
+    ut = list(_bp.values())
     def _nyckel(fonster):
         return lambda x: x.get(f"d{fonster}") if x.get(f"d{fonster}") is not None else 0
     return {"skala": "Köp=5 … Sälj=1 · delta = snitt nu minus snitt då",
@@ -6374,6 +6394,24 @@ def compute_factset_level_toplist(db, limit=30, min_hus=5, min_punkter=6):
                    "snitt_12m_medel": round(sum(varden) / len(varden), 2),
                    "snitt_nu": snu, "n_hus": n_nu,
                    "matpunkter": len(varden)})
+    # DUBBLETTLISTNINGAR (2026-08-11): Ferrari låg både som RACE och RACEm
+    # (Milanolistningen) med identiska händelser — samma ISIN, två tickers.
+    # En rad per ISIN; flest hus vinner, ticker som reserv när ISIN saknas.
+    isin_av = {}
+    try:
+        for r in _fetchall(db, """SELECT short_name, isin FROM stocks
+                ORDER BY COALESCE(number_of_owners,0) DESC"""):
+            d0 = dict(r)
+            if d0.get("short_name") and d0["short_name"] not in isin_av:
+                isin_av[d0["short_name"]] = d0.get("isin")
+    except Exception:
+        pass
+    basta_per = {}
+    for x in ut:
+        k = isin_av.get(x["ticker"]) or x["ticker"]
+        if k not in basta_per or x["n_hus"] > basta_per[k]["n_hus"]:
+            basta_per[k] = x
+    ut = list(basta_per.values())
     ut.sort(key=lambda x: (-x["snitt_12m_medel"], -x["snitt_nu"], -x["n_hus"]))
     return {"skala": "Köp=5 … Sälj=1 · medel över 12 månatliga mätpunkter",
             "min_hus": min_hus, "bolag": len(ut),

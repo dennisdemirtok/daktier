@@ -2532,6 +2532,15 @@ function renderAnalytiker(b, t) {
                 — rörelsen är informationen:</strong> snitt som glider nedåt ger riskflagga i DAKTIER-poängen.
             </div>
         </div>
+        <div class="an-card" style="padding:14px 18px">
+            <div style="display:flex;gap:8px;align-items:center">
+                <input id="anSok" type="text" placeholder="Sök bolag — ticker eller namn (t.ex. MRVL, Novo)"
+                       style="flex:1;padding:10px 14px;border:1px solid var(--line);border-radius:10px;font-size:14px;outline:none"
+                       onkeydown="if(event.key==='Enter')anSokKor()">
+                <button class="filter-chip active" style="padding:10px 18px;font-size:13px" onclick="anSokKor()">Sök</button>
+            </div>
+            <div id="anSokResultat"></div>
+        </div>
         <div class="an-grid">
             ${lista('⭐ Bästa snittbetyg — 12-månadersmedel', 'Genomsnitt över tolv månadspunkter. Kärlek är redan inprisad — läs som förväntansnivå, inte köplista.', (b && b.basta) || [])}
             <div>
@@ -2543,6 +2552,53 @@ function renderAnalytiker(b, t) {
             Källa: per-hus-händelser (flera års historik). Pool = de hus som registrerats per bolag — antalet skiljer mot FactSets.
             US/CA-bolag. Riktkurshistorik byggs framåt dagligen.
         </div>`;
+}
+
+async function anSokKor() {
+    const q = (document.getElementById('anSok')?.value || '').trim();
+    const ut = document.getElementById('anSokResultat');
+    if (!q || !ut) return;
+    ut.innerHTML = '<div style="padding:10px 2px;color:var(--text-muted);font-size:13px">Söker…</div>';
+    try {
+        // Ticker eller namn → huvudnoteringens ticker via aktiesök
+        const sr = await (await fetch('/api/stocks?q=' + encodeURIComponent(q) + '&limit=1')).json();
+        const träff = ((sr.stocks || sr.results || [])[0]) || {};
+        const tick = träff.short_name || q.toUpperCase();
+        let ko = await (await fetch('/api/factset-rating?ticker=' + encodeURIComponent(tick))).json();
+        if (!ko || !ko.nu) {
+            // Norden-reserv: händelselogg saknas hos Yahoo för europeiska
+            // listningar — bygg ur månadskonsensusen i stället
+            const k2 = await (await fetch('/api/analyst-consensus?ticker=' + encodeURIComponent(tick))).json();
+            const m0 = (k2.konsensus_manader || [])[0];
+            if (m0 && m0.n >= 3)
+                ko = { nu: { snitt: m0.snitt, n_hus: m0.n,
+                             fordelning: { kop: m0.strong_buy, overvikt: m0.buy, behall: m0.hold,
+                                           undervikt: m0.sell, salj: m0.strong_sell } }, historik: [] };
+        }
+        if (!ko || !ko.nu) {
+            ut.innerHTML = `<div style="padding:10px 2px;color:var(--text-muted);font-size:13px">
+                Ingen konsensusdata för <strong>${tick}</strong> — bolaget kan ligga utanför de ~520 synkade,
+                eller sakna analytikertäckning hos källan.</div>`;
+            return;
+        }
+        const fd = ko.nu.fordelning || {};
+        const h = ko.historik || [];
+        const ettAr = (() => { const c = new Date(Date.now() - 365*864e5).toISOString().slice(0,10);
+            for (let i = h.length - 1; i >= 0; i--) if (h[i].datum <= c) return h[i].snitt; return null; })();
+        const stap = (lbl, v, col) => v ? `<div style="text-align:center"><div style="font-size:16px;font-weight:800;color:${col}">${v}</div><div style="font-size:10px;color:var(--text-muted)">${lbl}</div></div>` : '';
+        ut.innerHTML = `<div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--line)">
+            <div style="display:flex;align-items:baseline;gap:12px;flex-wrap:wrap">
+                <strong style="font-size:15px;color:var(--brand-navy);cursor:pointer" onclick="openStockByTicker('${tick.replace(/'/g,"\\'")}')">${träff.name || tick} ↗</strong>
+                <span style="font-size:24px;font-weight:900;color:var(--brand-navy)">${ko.nu.snitt}<span style="font-size:12px;color:var(--text-muted);font-weight:600"> / 5</span></span>
+                <span style="font-size:12px;color:var(--text-muted)">${ko.nu.n_hus} hus${ettAr != null ? ' · för 1 år sedan: ' + ettAr : ''}</span>
+            </div>
+            <div style="display:flex;gap:16px;margin-top:8px">
+                ${stap('Köp', fd.kop, '#059669')}${stap('Övervikt', fd.overvikt, '#0891b2')}${stap('Behåll', fd.behall, '#d97706')}${stap('Undervikt', fd.undervikt, '#dc2626')}${stap('Sälj', fd.salj, '#b91c1c')}
+            </div>
+        </div>`;
+    } catch (e) {
+        ut.innerHTML = `<div style="padding:10px 2px;color:#dc2626;font-size:13px">Sökfel: ${e.message}</div>`;
+    }
 }
 
 function renderKoplistaLoading() {
