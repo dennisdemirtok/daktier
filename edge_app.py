@@ -17064,6 +17064,30 @@ def api_factset_rating_basta():
         db.close()
 
 
+@app.route("/api/factset-rating/hamta")
+def api_factset_rating_hamta():
+    """Hämtar rekhistorik + konsensus för ETT bolag på begäran och
+    returnerar ratingen direkt. Sökningen i Analytiker-fliken träffade
+    bara de ~520 synkade bolagen (Fabrinet-fyndet 2026-08-12) — nu hämtas
+    okända bolag från källan i samma sökning (~3-5 s) och ligger sedan i
+    databasen så de följer med i de dagliga uppdateringarna."""
+    from edge_db import (sync_analyst_actions, sync_analyst_consensus,
+                         compute_factset_style_rating)
+    t = (request.args.get("ticker") or "").strip().upper()
+    if not t:
+        return jsonify({"error": "ange ?ticker=FN"}), 400
+    db = get_db()
+    try:
+        a = sync_analyst_actions(db, tickers=[t])
+        k = sync_analyst_consensus(db, tickers=[t])
+        res = compute_factset_style_rating(db, t)
+        res["hamtning"] = {"handelser": a.get("rader"),
+                           "konsensusrader": k.get("konsensusrader")}
+        return jsonify(res)
+    finally:
+        db.close()
+
+
 @app.route("/api/factset-rating/toplist")
 def api_factset_rating_toplist():
     """Topplista: förändring i konsensus-snittet 3/6/12 mån, upp och ned."""
@@ -22630,8 +22654,8 @@ def _startup():
                 from edge_db import sync_analyst_actions, sync_analyst_consensus
                 dbp = get_db()
                 try:
-                    print(f"[AUTO] 13:50-rekar: {sync_analyst_actions(dbp, max_n=400)}")
-                    print(f"[AUTO] 13:50-konsensus: {sync_analyst_consensus(dbp, max_n=400)}")
+                    print(f"[AUTO] 13:50-rekar: {sync_analyst_actions(dbp, max_n=600)}")
+                    print(f"[AUTO] 13:50-konsensus: {sync_analyst_consensus(dbp, max_n=600)}")
                 finally:
                     dbp.close()
             except Exception as e:
@@ -23255,7 +23279,7 @@ def _startup():
                 from edge_db import sync_analyst_consensus
                 dbk = get_db()
                 try:
-                    print(f"[AUTO] Konsensus: {sync_analyst_consensus(dbk, max_n=400)}")
+                    print(f"[AUTO] Konsensus: {sync_analyst_consensus(dbk, max_n=600)}")
                 finally:
                     dbk.close()
             except Exception as e:
@@ -23275,7 +23299,7 @@ def _startup():
                 from edge_db import sync_analyst_actions
                 dbr = get_db()
                 try:
-                    print(f"[AUTO] Rekhändelser: {sync_analyst_actions(dbr, max_n=400)}")
+                    print(f"[AUTO] Rekhändelser: {sync_analyst_actions(dbr, max_n=600)}")
                 finally:
                     dbr.close()
             except Exception as e:

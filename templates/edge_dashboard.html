@@ -2581,10 +2581,20 @@ async function anSokKor() {
                                            undervikt: m0.sell, salj: m0.strong_sell } }, historik: [] };
         }
         if (!ko || !ko.nu) {
+            // Utanför de synkade (Fabrinet-fallet) → hämta från källan direkt.
+            // Tar några sekunder första gången; sedan ligger bolaget i
+            // databasen och följer med de dagliga uppdateringarna.
             ut.innerHTML = `<div style="padding:10px 2px;color:var(--text-muted);font-size:13px">
-                Ingen konsensusdata för <strong>${tick}</strong> — bolaget kan ligga utanför de ~520 synkade,
-                eller sakna analytikertäckning hos källan.</div>`;
-            return;
+                <strong>${tick}</strong> är inte synkad än — hämtar från källan… (första gången tar ~5 s)</div>`;
+            try {
+                ko = await (await fetch('/api/factset-rating/hamta?ticker=' + encodeURIComponent(tick))).json();
+            } catch (e3) { ko = null; }
+            if (!ko || !ko.nu) {
+                ut.innerHTML = `<div style="padding:10px 2px;color:var(--text-muted);font-size:13px">
+                    Ingen analytikertäckning hittades för <strong>${tick}</strong> hos källan —
+                    bolaget kan sakna registrerade rekar (vanligt för mindre bolag och vissa ADR:er).</div>`;
+                return;
+            }
         }
         const fd = ko.nu.fordelning || {};
         const h = ko.historik || [];
