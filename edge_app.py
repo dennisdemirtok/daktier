@@ -8030,6 +8030,13 @@ def _get_report_blurbs(db, reactions):
     today = datetime.now().strftime("%Y-%m-%d")
     _base = lambda t: _rb.sub(r"\s+[A-D]$", "", str(t or "").upper()).strip()
 
+    def _tvatta(txt):
+        """Claudes web_search-svar innehåller källhänvisningstaggar
+        (<cite index="37-4">…</cite>) som läckte rakt ut i mejltexten
+        (användarfynd 2026-08-26). Taggarna bort, innehållet kvar."""
+        t = _rb.sub(r"<\s*/?\s*cite[^>]*>", "", str(txt or ""))
+        return _rb.sub(r"\s{2,}", " ", t).strip()
+
     out = {}
     try:
         r = _f1b(db, f"SELECT value FROM meta WHERE key = {ph}", (f"blurbs:{today}",))
@@ -8142,7 +8149,7 @@ def _get_report_blurbs(db, reactions):
     except Exception:
         try: db.rollback()
         except Exception: pass
-    return out
+    return {k: _tvatta(v) for k, v in out.items() if _tvatta(v)}
 
 
 def _build_daily_email_v2(db, base_url="https://daktier-production.up.railway.app"):
