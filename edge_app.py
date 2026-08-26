@@ -93,7 +93,10 @@ ADMIN_EMAILS = {e.strip().lower() for e in
 
 # Öppna paths (allt annat kräver inloggning)
 _OPEN_PREFIXES = ("/login", "/health", "/api/auth/", "/auth/google", "/static/", "/favicon",
-                  "/api/diag/auth-tables")
+                  "/api/diag/auth-tables",
+                  # Nyhetsbrevet är publikt: landningssida + registrering +
+                  # bekräftelse/avregistrering via token (2026-08-26)
+                  "/nyhetsbrev", "/api/nyhetsbrev/")
 
 
 @app.after_request
@@ -8579,6 +8582,170 @@ def _send_email_via_resend(to_email, subject, html_body):
         return ok, resp.json() if resp.text else {"status": resp.status_code}
     except Exception as e:
         return False, {"error": str(e)}
+
+
+# ── 📬 NYHETSBREV: publik registrering med dubbel opt-in ──────────────
+# Enklast möjliga som ändå är rätt: egen tabell, bekräftelsemejl via
+# Resend (listan blir ren + GDPR-vänlig), personlig avregistreringslänk
+# i varje utskick. Inga externa tjänster utöver Resend vi redan kör.
+
+def _nyhetsbrev_tabell(db):
+    db.execute("""CREATE TABLE IF NOT EXISTS nyhetsbrev_prenumeranter (
+        email TEXT PRIMARY KEY, token TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'väntar',
+        skapad TEXT, bekraftad TEXT, avregistrerad TEXT)""")
+    db.commit()
+
+
+def _nyhetsbrev_sida(rubrik, brod, visa_form=False):
+    form = """
+      <form onsubmit="reg(event)" style="margin-top:22px">
+        <input id="nbEmail" type="email" required placeholder="din@epost.se"
+               style="width:100%;box-sizing:border-box;padding:14px 16px;font-size:16px;
+                      border:1px solid #CBD5E1;border-radius:10px;outline:none">
+        <button type="submit"
+                style="width:100%;margin-top:10px;padding:14px;font-size:16px;font-weight:700;
+                       background:#16365C;color:#fff;border:0;border-radius:10px;cursor:pointer">
+          Prenumerera gratis</button>
+      </form>
+      <div id="nbSvar" style="margin-top:12px;font-size:14px"></div>
+      <script>
+      async function reg(e){e.preventDefault();
+        const el=document.getElementById('nbSvar');
+        el.style.color='#64748B'; el.textContent='Skickar…';
+        try{const r=await fetch('/api/nyhetsbrev/registrera',{method:'POST',
+              headers:{'Content-Type':'application/json'},
+              body:JSON.stringify({email:document.getElementById('nbEmail').value})});
+            const j=await r.json();
+            el.style.color = r.ok ? '#059669' : '#DC2626';
+            el.textContent = j.svar || j.error || 'Något gick fel — försök igen.';
+        }catch(x){el.style.color='#DC2626';el.textContent='Något gick fel — försök igen.';}}
+      </script>""" if visa_form else ""
+    return f"""<!doctype html><html lang="sv"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>DAKTIER Marknadsrapport</title></head>
+<body style="margin:0;background:#F1F5F9;font-family:-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif">
+<div style="max-width:480px;margin:0 auto;padding:40px 16px">
+  <div style="background:#fff;border:1px solid #E2E8F0;border-radius:16px;overflow:hidden">
+    <div style="background:#16365C;padding:26px 28px">
+      <div style="font-size:22px;font-weight:800;color:#fff;letter-spacing:3px">DAKTIER</div>
+      <div style="font-size:13px;color:#38B6D9;margin-top:4px">Marknadsrapporten · varje vardag 14:30</div>
+    </div>
+    <div style="padding:26px 28px 30px 28px">
+      <h1 style="font-size:19px;color:#1E293B;margin:0 0 10px 0">{rubrik}</h1>
+      <div style="font-size:14.5px;line-height:1.65;color:#334155">{brod}</div>
+      {form}
+      <div style="margin-top:18px;font-size:11.5px;color:#94A3B8;line-height:1.6">
+        En utgåva per vardag. Avregistrera när som helst via länken i mejlet.
+        Adressen används bara till utskicket och delas aldrig. Beslutsstöd, ej finansiell rådgivning.
+      </div>
+    </div>
+  </div>
+</div></body></html>"""
+
+
+@app.route("/nyhetsbrev")
+def nyhetsbrev_landning():
+    return _nyhetsbrev_sida(
+        "Dagens marknad, färdiganalyserad i din inkorg",
+        "Varje vardag 14:30: dagens rapportbolag med siffror, kursreaktion och "
+        "kontext · makroläget · nordiska nyheter · analytikernas topplista · "
+        "insiderköp. Byggt på samma data som driver DAKTIER.",
+        visa_form=True)
+
+
+@app.route("/api/nyhetsbrev/registrera", methods=["POST"])
+def api_nyhetsbrev_registrera():
+    import re as _rnb
+    import secrets as _sec
+    from edge_db import _fetchone as _f1, _ph as _phn, _upsert_sql as _upn
+    body = request.json if request.is_json else {}
+    email = (body.get("email") or "").strip().lower()
+    if not _rnb.match(r"^[^@\s]+@[^@\s]+\.[^@\s]{2,}$", email):
+        return jsonify({"error": "Ogiltig e-postadress."}), 400
+    db = get_db()
+    try:
+        _nyhetsbrev_tabell(db)
+        ph = _phn()
+        rad = _f1(db, f"SELECT status, token FROM nyhetsbrev_prenumeranter "
+                      f"WHERE email = {ph}", (email,))
+        if rad and dict(rad)["status"] == "aktiv":
+            return jsonify({"svar": "Du prenumererar redan — nästa utgåva "
+                                    "kommer 14:30 nästa vardag. 🎉"})
+        token = _sec.token_urlsafe(24)
+        db.execute(_upn("nyhetsbrev_prenumeranter",
+                        ["email", "token", "status", "skapad"], ["email"]),
+                   (email, token, "väntar", datetime.now().isoformat()))
+        db.commit()
+        lank = f"https://daktier-production.up.railway.app/nyhetsbrev/bekrafta?t={token}"
+        ok, resp = _send_email_via_resend(
+            email, "Bekräfta din prenumeration på DAKTIER",
+            _nyhetsbrev_sida(
+                "Ett klick kvar",
+                f'Bekräfta att du vill ha Marknadsrapporten varje vardag: '
+                f'<div style="margin-top:16px"><a href="{lank}" '
+                f'style="display:inline-block;background:#16365C;color:#fff;'
+                f'padding:13px 26px;border-radius:10px;text-decoration:none;'
+                f'font-weight:700">Bekräfta prenumerationen</a></div>'
+                f'<div style="margin-top:14px;font-size:12px;color:#94A3B8">'
+                f'Var det inte du som registrerade adressen? Ignorera mejlet '
+                f'så händer ingenting.</div>'))
+        if not ok:
+            return jsonify({"error": "Kunde inte skicka bekräftelsemejlet just "
+                                     "nu — försök igen om en stund."}), 502
+        return jsonify({"svar": "Nästan klart! Kolla inkorgen och klicka på "
+                                "bekräftelselänken."})
+    finally:
+        db.close()
+
+
+@app.route("/nyhetsbrev/bekrafta")
+def nyhetsbrev_bekrafta():
+    from edge_db import _fetchone as _f1, _ph as _phn
+    t = (request.args.get("t") or "").strip()
+    db = get_db()
+    try:
+        _nyhetsbrev_tabell(db)
+        ph = _phn()
+        rad = _f1(db, f"SELECT email FROM nyhetsbrev_prenumeranter "
+                      f"WHERE token = {ph}", (t,))
+        if not rad:
+            return _nyhetsbrev_sida("Länken är ogiltig",
+                                    "Registrera dig igen så får du en ny "
+                                    "bekräftelselänk."), 404
+        db.execute(f"UPDATE nyhetsbrev_prenumeranter SET status = 'aktiv', "
+                   f"bekraftad = {ph} WHERE token = {ph}",
+                   (datetime.now().isoformat(), t))
+        db.commit()
+        return _nyhetsbrev_sida("Klart! 🎉",
+                                "Du prenumererar nu på DAKTIER Marknadsrapport. "
+                                "Nästa utgåva landar 14:30 nästa vardag.")
+    finally:
+        db.close()
+
+
+@app.route("/nyhetsbrev/avregistrera")
+def nyhetsbrev_avregistrera():
+    from edge_db import _fetchone as _f1, _ph as _phn
+    t = (request.args.get("t") or "").strip()
+    db = get_db()
+    try:
+        _nyhetsbrev_tabell(db)
+        ph = _phn()
+        rad = _f1(db, f"SELECT email FROM nyhetsbrev_prenumeranter "
+                      f"WHERE token = {ph}", (t,))
+        if not rad:
+            return _nyhetsbrev_sida("Länken är ogiltig",
+                                    "Hittade ingen prenumeration för länken."), 404
+        db.execute(f"UPDATE nyhetsbrev_prenumeranter SET status = 'avregistrerad', "
+                   f"avregistrerad = {ph} WHERE token = {ph}",
+                   (datetime.now().isoformat(), t))
+        db.commit()
+        return _nyhetsbrev_sida("Avregistrerad",
+                                "Du får inga fler utskick. Ändrar du dig är du "
+                                "välkommen tillbaka när som helst.")
+    finally:
+        db.close()
 
 
 @app.route("/api/email/daily-digest", methods=["POST"])
@@ -22665,6 +22832,34 @@ def _startup():
                         subject += f" — {stats['subject_hint']}"
                     ok, resp = _send_email_via_resend(RESEND_TO_DEFAULT, subject, html)
                     print(f"[AUTO] Daily email: ok={ok}, stats={stats}")
+                    # Prenumeranter (dubbel opt-in): samma utgåva, var och en
+                    # med personlig avregistreringslänk i sidfoten
+                    try:
+                        from edge_db import _fetchall as _fap
+                        _nyhetsbrev_tabell(dbe)
+                        subs = [dict(r) for r in _fap(dbe,
+                            "SELECT email, token FROM nyhetsbrev_prenumeranter "
+                            "WHERE status = 'aktiv'")]
+                        n_sub = 0
+                        for su in subs:
+                            if su["email"].strip().lower() == RESEND_TO_DEFAULT.strip().lower():
+                                continue
+                            unsub = (
+                                '<div style="text-align:center;padding:14px 28px 26px 28px;'
+                                'font-family:Arial,sans-serif;font-size:11px;color:#94A3B8">'
+                                'Du får detta för att du prenumererar på DAKTIER Marknadsrapport · '
+                                f'<a href="https://daktier-production.up.railway.app'
+                                f'/nyhetsbrev/avregistrera?t={su["token"]}" '
+                                'style="color:#64748B">Avregistrera</a></div>')
+                            ok2, _ = _send_email_via_resend(
+                                su["email"], subject,
+                                html.replace("</body>", unsub + "</body>"))
+                            if ok2:
+                                n_sub += 1
+                        if subs:
+                            print(f"[AUTO] Nyhetsbrev: {n_sub}/{len(subs)} prenumeranter")
+                    except Exception as _se:
+                        print(f"[AUTO] Prenumerantutskick fel: {_se}")
                     # SLÄPP LÅSET VID MISSLYCKANDE (2026-08-11): 07:30-försöket
                     # med ogiltig nyckel tog dagens lås och 14:30-körningen
                     # hoppade tyst — ett misslyckat utskick får inte bränna
