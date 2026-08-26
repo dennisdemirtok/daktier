@@ -8157,10 +8157,14 @@ def _build_daily_email_v2(db, base_url="https://daktier-production.up.railway.ap
     _VECKODAG = ["måndag", "tisdag", "onsdag", "torsdag", "fredag", "lördag", "söndag"]
     _MANAD = ["", "januari", "februari", "mars", "april", "maj", "juni", "juli",
               "augusti", "september", "oktober", "november", "december"]
-    _now = datetime.now()
+    try:
+        from zoneinfo import ZoneInfo
+        _now = datetime.now(ZoneInfo("Europe/Stockholm"))
+    except Exception:
+        _now = datetime.now()
     datum_lang = f"{_VECKODAG[_now.weekday()]} {_now.day} {_MANAD[_now.month]} {_now.year}"
     # "Morgonrapport" kl 14:30 är fel namn (användare 2026-08-11) —
-    # namnet följer utskickstiden
+    # namnet följer utskickstiden, räknad i SVENSK tid (containern går i UTC)
     rapportnamn = "Morgonrapport" if _now.hour < 11 else "Marknadsrapport"
 
     def _jload(v):
@@ -8221,7 +8225,18 @@ def _build_daily_email_v2(db, base_url="https://daktier-production.up.railway.ap
         _baseb = lambda t: _rbb.sub(r"\s+[A-D]$", "", str(t or "").upper()).strip()
         rows.append(_h2("Rapporterna — siffror &amp; reaktion"))
         rx_html = ""
+        # DEDUP (2026-08-26): BMO/BNS/Intuit låg dubbelt i 25/8-mejlet —
+        # kanadensiska banker har dubbla listningar (US+CA) och Intuit två
+        # aktierader, så samma rapport hämtades en gång per listning. En
+        # per basticker OCH per normaliserat namn ("Intuit"/"Intuit Inc").
+        _sedda = set()
         for it in reactions:
+            _nk = _rbb.sub(r"\s+(inc|corp|ltd|plc|adr|a/s|ab)\.?$", "",
+                           str(it.get("name") or "").lower().strip())
+            _dk = (_baseb(it.get("ticker")), _nk)
+            if _dk[0] in {d[0] for d in _sedda} or (_nk and _nk in {d[1] for d in _sedda}):
+                continue
+            _sedda.add(_dk)
             qlbl = (f"Q{it.get('period_q')} {it.get('period_year')}"
                     if it.get("period_q") else "rapport")
             cur0 = it.get("rep_currency") or ""
@@ -8246,18 +8261,29 @@ def _build_daily_email_v2(db, base_url="https://daktier-production.up.railway.ap
                 reakt = (f' &nbsp;→&nbsp; aktien {_pct_span(it["reaction_pct"])} '
                          f'<span style="color:{MUT};font-size:11px">{it.get("reaction_label")}</span>')
             blurb = blurbs.get(_baseb(it.get("ticker")))
-            blurb_html = (f'<br><span style="font-size:12px;color:#334155">'
-                          f'{_esc(blurb)}</span>') if blurb else ""
-            rx_html += (f'<tr><td style="padding:9px 0;border-bottom:1px solid {LINE};'
-                        f'font-family:{FONT};font-size:14px;line-height:1.65;color:{INK}">'
-                        f'<strong style="color:{NAVY}">{_esc(it.get("ticker"))}</strong> '
-                        f'<span style="color:{MUT}">{_esc((it.get("name") or "")[:26])}</span> '
-                        f'<span style="font-size:11px;color:{MUT}">({_esc(it.get("report_date"))})</span><br>'
-                        f'{qlbl}: ' + (" · ".join(parts) if parts else
-                                       '<span style="color:' + MUT + '">siffror hämtas — kommer i morgonmejlet</span>')
-                        + reakt + blurb_html + '</td></tr>')
+            blurb_html = (f'<div style="font-size:13px;line-height:1.6;color:#334155;'
+                          f'margin-top:6px">{_esc(blurb)}</div>') if blurb else ""
+            # Kantfärg efter reaktionen: grönt upp, rött ner, neutral annars
+            _rp = it.get("reaction_pct")
+            kant = ("#059669" if isinstance(_rp, (int, float)) and _rp >= 0.05 else
+                    "#DC2626" if isinstance(_rp, (int, float)) and _rp <= -0.05 else LINE)
+            rx_html += (
+                f'<tr><td style="padding:0 0 10px 0">'
+                f'<table role="presentation" width="100%" cellpadding="0" cellspacing="0" '
+                f'style="background:#F8FAFC;border:1px solid {LINE};'
+                f'border-left:4px solid {kant};border-radius:10px">'
+                f'<tr><td style="padding:12px 14px;font-family:{FONT}">'
+                f'<div style="font-size:14px;color:{INK}">'
+                f'<strong style="color:{NAVY};font-size:15px">{_esc(it.get("ticker"))}</strong> '
+                f'<span style="color:{MUT}">{_esc((it.get("name") or "")[:28])}</span>'
+                f'<span style="font-size:11px;color:{MUT}"> · {qlbl} · {_esc(it.get("report_date"))}</span></div>'
+                f'<div style="font-size:14px;line-height:1.7;color:{INK};margin-top:4px">'
+                + (" · ".join(parts) if parts else
+                   '<span style="color:' + MUT + '">siffror hämtas — kommer i nästa utskick</span>')
+                + reakt + '</div>' + blurb_html
+                + '</td></tr></table></td></tr>')
         rows.append(_p(f'<table role="presentation" width="100%" cellpadding="0" '
-                       f'cellspacing="0">{rx_html}</table>', pad="2px 28px 6px 28px"))
+                       f'cellspacing="0">{rx_html}</table>', pad="6px 28px 2px 28px"))
 
     # ── 2. MAKRO (senaste macro_pulse) ────────────────────────────────────
     mp = _f1(db, "SELECT headline, sentiment, summary, sections_json, generated_at "
@@ -8518,7 +8544,8 @@ def _build_daily_email_v2(db, base_url="https://daktier-production.up.railway.ap
              "n_reports": len(reactions), "has_macro": bool(mp),
              "has_news": bool(mn), "has_bullets": bool(mb),
              "n_analytiker": len(an_rows), "n_insiders": len(insiders),
-             "rapportnamn": rapportnamn}
+             "rapportnamn": rapportnamn,
+             "datum_kort": f"{_now.day}/{_now.month}"}
     return html, stats
 
 
@@ -22417,7 +22444,10 @@ def _startup():
             print(f"[AUTO] Schemalagd prisuppdatering {datetime.now().strftime('%H:%M')}")
             refresh_prices()
 
-        scheduler = BackgroundScheduler()
+        # Europe/Stockholm EXPLICIT (2026-08-26): Railway-containern går i UTC
+        # och alla cron-tider fyrade därför 2 h senare än avsett svensk
+        # sommartid — 14:30-mejlet landade 16:30 (bevisat i Gmail-huvudet).
+        scheduler = BackgroundScheduler(timezone="Europe/Stockholm")
         scheduler.add_job(scheduled_price_refresh, 'interval', minutes=15, id='price_refresh')
 
         # Nightly historical sync (03:30 lokal) — extended tier (~2000 aktier)
@@ -22619,7 +22649,11 @@ def _startup():
                 try:
                     html, stats = _build_daily_email_v2(dbe)
                     from datetime import datetime as dtm
-                    subject = f"☀️ DAKTIER Morgonrapport {dtm.now().strftime('%-d/%-m')}"
+                    # stats bär rapportnamn + svenskt datum — 25/8-mejlet
+                    # sa "Morgonrapport" i ämnet men "Marknadsrapport" i
+                    # rubriken eftersom jobbet hade en egen ämnesbyggare
+                    subject = (f"☀️ DAKTIER {stats.get('rapportnamn', 'Marknadsrapport')} "
+                               f"{stats.get('datum_kort') or dtm.now().strftime('%-d/%-m')}")
                     if stats.get("subject_hint"):
                         subject += f" — {stats['subject_hint']}"
                     ok, resp = _send_email_via_resend(RESEND_TO_DEFAULT, subject, html)
