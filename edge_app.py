@@ -8559,23 +8559,30 @@ def _build_daily_email_v2(db, base_url="https://daktier-production.up.railway.ap
     return html, stats
 
 
-def _send_email_via_resend(to_email, subject, html_body):
-    """Skicka mail via Resend API. Returnerar (success, response)."""
+def _send_email_via_resend(to_email, subject, html_body, extra_headers=None):
+    """Skicka mail via Resend API. Returnerar (success, response).
+
+    extra_headers: t.ex. List-Unsubscribe för Gmails bulk-krav (2024) —
+    utan one-click-avregistrering klassas nyhetsbrev från nya domäner
+    lätt som skräppost (användarfynd 2026-08-27)."""
     if not RESEND_API_KEY:
         return False, {"error": "RESEND_API_KEY env-var saknas — sätt i Railway dashboard"}
     try:
+        payload = {
+            "from": RESEND_FROM,
+            "to": to_email if isinstance(to_email, list) else [to_email],
+            "subject": subject,
+            "html": html_body,
+        }
+        if extra_headers:
+            payload["headers"] = extra_headers
         resp = requests.post(
             "https://api.resend.com/emails",
             headers={
                 "Authorization": f"Bearer {RESEND_API_KEY}",
                 "Content-Type": "application/json",
             },
-            json={
-                "from": RESEND_FROM,
-                "to": to_email if isinstance(to_email, list) else [to_email],
-                "subject": subject,
-                "html": html_body,
-            },
+            json=payload,
             timeout=30,
         )
         ok = resp.status_code in (200, 201, 202)
@@ -8724,8 +8731,10 @@ def nyhetsbrev_bekrafta():
         db.close()
 
 
-@app.route("/nyhetsbrev/avregistrera")
+@app.route("/nyhetsbrev/avregistrera", methods=["GET", "POST"])
 def nyhetsbrev_avregistrera():
+    # POST = Gmails one-click (List-Unsubscribe-Post) — samma tokenflöde,
+    # men svaret ska vara tomt 200, ingen HTML-sida
     from edge_db import _fetchone as _f1, _ph as _phn
     t = (request.args.get("t") or "").strip()
     db = get_db()
@@ -8741,6 +8750,8 @@ def nyhetsbrev_avregistrera():
                    f"avregistrerad = {ph} WHERE token = {ph}",
                    (datetime.now().isoformat(), t))
         db.commit()
+        if request.method == "POST":
+            return "", 200
         return _nyhetsbrev_sida("Avregistrerad",
                                 "Du får inga fler utskick. Ändrar du dig är du "
                                 "välkommen tillbaka när som helst.")
@@ -22851,9 +22862,14 @@ def _startup():
                                 f'<a href="https://daktier-production.up.railway.app'
                                 f'/nyhetsbrev/avregistrera?t={su["token"]}" '
                                 'style="color:#64748B">Avregistrera</a></div>')
+                            _uu = (f"https://daktier-production.up.railway.app"
+                                   f"/nyhetsbrev/avregistrera?t={su['token']}")
                             ok2, _ = _send_email_via_resend(
                                 su["email"], subject,
-                                html.replace("</body>", unsub + "</body>"))
+                                html.replace("</body>", unsub + "</body>"),
+                                extra_headers={
+                                    "List-Unsubscribe": f"<{_uu}>",
+                                    "List-Unsubscribe-Post": "List-Unsubscribe=One-Click"})
                             if ok2:
                                 n_sub += 1
                         if subs:
