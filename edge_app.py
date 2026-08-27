@@ -49,6 +49,11 @@ from edge_db import (
 )
 
 app = Flask(__name__)
+# Bakom Railway/Cloudflare-proxy: lita på X-Forwarded-Proto/Host så att
+# request.url_root blir https://daktier.com — annars byggs OAuth-återanrop
+# och externa länkar med fel schema/host (domänflytten 2026-08-27)
+from werkzeug.middleware.proxy_fix import ProxyFix
+app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1)
 
 
 # ── Sessioner: stabil SECRET_KEY delad av alla workers ──────────
@@ -6030,6 +6035,10 @@ def _env_stadad(namn, default=""):
     return v
 
 
+# Kanonisk publik adress — används i mejlens länkar. Länkar som matchar
+# avsändardomänen (news@daktier.com) förbättrar dessutom skräppostpoängen.
+BASE_URL = _env_stadad("BASE_URL", "https://daktier.com").rstrip("/")
+
 RESEND_API_KEY = _env_stadad("RESEND_API_KEY")
 RESEND_FROM = _env_stadad("RESEND_FROM", "Daktier <onboarding@resend.dev>")
 RESEND_TO_DEFAULT = _env_stadad("RESEND_TO", "dennis.demirtok@gmail.com")
@@ -7462,7 +7471,8 @@ def _get_top_insider_buys(db, days_back=7, limit=8):
         return []
 
 
-def _build_daily_digest_html(db, base_url="https://daktier-production.up.railway.app"):
+def _build_daily_digest_html(db, base_url=None):
+    base_url = base_url or BASE_URL
     """Bygg HTML för dagligt digest-mail med BUY/AVOID/OVERHEAT/OVERSOLD."""
     from edge_db import compute_quant_scores
     from datetime import datetime
@@ -8155,7 +8165,8 @@ def _get_report_blurbs(db, reactions):
     return {k: _tvatta(v) for k, v in out.items() if _tvatta(v)}
 
 
-def _build_daily_email_v2(db, base_url="https://daktier-production.up.railway.app"):
+def _build_daily_email_v2(db, base_url=None):
+    base_url = base_url or BASE_URL
     """Morgonmejl v2 — återanvänder DASHBOARDENS innehåll (morgonbrief, makro,
     nyheter, marknadspuls, Köplistan) i stället för att generera egen text.
     E-postsäker layout: endast tabeller + inline-CSS (Gmail stryper flex/grid/
@@ -8684,7 +8695,7 @@ def api_nyhetsbrev_registrera():
                         ["email", "token", "status", "skapad"], ["email"]),
                    (email, token, "väntar", datetime.now().isoformat()))
         db.commit()
-        lank = f"https://daktier-production.up.railway.app/nyhetsbrev/bekrafta?t={token}"
+        lank = f"{BASE_URL}/nyhetsbrev/bekrafta?t={token}"
         ok, resp = _send_email_via_resend(
             email, "Bekräfta din prenumeration på DAKTIER",
             _nyhetsbrev_sida(
@@ -22859,11 +22870,10 @@ def _startup():
                                 '<div style="text-align:center;padding:14px 28px 26px 28px;'
                                 'font-family:Arial,sans-serif;font-size:11px;color:#94A3B8">'
                                 'Du får detta för att du prenumererar på DAKTIER Marknadsrapport · '
-                                f'<a href="https://daktier-production.up.railway.app'
+                                f'<a href="{BASE_URL}'
                                 f'/nyhetsbrev/avregistrera?t={su["token"]}" '
                                 'style="color:#64748B">Avregistrera</a></div>')
-                            _uu = (f"https://daktier-production.up.railway.app"
-                                   f"/nyhetsbrev/avregistrera?t={su['token']}")
+                            _uu = f"{BASE_URL}/nyhetsbrev/avregistrera?t={su['token']}"
                             ok2, _ = _send_email_via_resend(
                                 su["email"], subject,
                                 html.replace("</body>", unsub + "</body>"),
