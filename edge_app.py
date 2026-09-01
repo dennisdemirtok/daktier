@@ -22924,20 +22924,44 @@ def _startup():
                             "rekar": _senast("SELECT MAX(hamtad) AS t FROM analyst_actions") == _idag,
                             "konsensus": _senast("SELECT MAX(snapshot_date) AS t FROM analyst_targets") == _idag,
                         }
-                        # US-pulsen: senaste handelsdag (helger ger äldre datum)
+                        # US-pulsen: DAGENS stockanalysis-publicering krävs —
+                        # den släpps ~14:30-15:30 svensk tid och innan dess
+                        # finns inget att hämta (status no_publication).
+                        # Användarregel: utan den infon går inget mejl.
+                        try:
+                            _vantad = _stockanalysis_today().isoformat()
+                        except Exception:
+                            _vantad = datetime.now().strftime("%Y-%m-%d")
                         _bd = _senast("SELECT MAX(bullet_date) AS t FROM market_bullets")
-                        st["us_puls"] = bool(_bd) and _bd >= (
-                            datetime.now() - timedelta(days=4)).strftime("%Y-%m-%d")
+                        st["us_puls"] = (_bd == _vantad)
                         return st
 
-                    for _forsok in range(3):
+                    # VÄNTA TILLS ALLT ÄR BEKRÄFTAT (användarregel 2026-09-01):
+                    # stockanalysis-digesten publiceras när den publiceras —
+                    # blir det 14:50 eller 15:30 så väntar mejlet. Kontroll
+                    # var tionde minut till hård deadline 17:30 svensk tid;
+                    # först då skickas med utelämnade sektioner som sista utväg.
+                    try:
+                        from zoneinfo import ZoneInfo as _ZI
+                        _sthlm = lambda: datetime.now(_ZI("Europe/Stockholm"))
+                    except Exception:
+                        _sthlm = datetime.now
+                    _deadline = _sthlm().replace(hour=17, minute=30,
+                                                 second=0, microsecond=0)
+                    _forsok = 0
+                    while True:
+                        _forsok += 1
                         _st = _kallstatus()
                         _brister = sorted(k for k, v in _st.items() if not v)
                         if not _brister:
-                            print("[AUTO] Källkontroll: alla källor bekräftade ✓")
+                            print(f"[AUTO] Källkontroll: alla källor bekräftade ✓ "
+                                  f"(försök {_forsok}, {_sthlm().strftime('%H:%M')})")
                             break
-                        print(f"[AUTO] Källkontroll försök {_forsok + 1}/3 — "
-                              f"ej bekräftade: {_brister}")
+                        if _sthlm() >= _deadline:
+                            print(f"[AUTO] Deadline 17:30 nådd — skickar utan: {_brister}")
+                            break
+                        print(f"[AUTO] Källkontroll {_sthlm().strftime('%H:%M')} — "
+                              f"väntar på: {_brister}")
                         try:
                             if "makro" in _brister:
                                 _get_or_generate_macro_pulse(dbe, force=True)
@@ -22954,13 +22978,10 @@ def _startup():
                                     sync_analyst_consensus(dbe, max_n=600)
                         except Exception as _ke:
                             print(f"[AUTO] Källåtgärd fel: {_ke}")
-                        if _forsok < 2:
-                            _time.sleep(600)
-                    _st = _kallstatus()
-                    _brister = sorted(k for k, v in _st.items() if not v)
+                        _time.sleep(600)
                     if _brister:
-                        print(f"[AUTO] Skickar utan obekräftade sektioner: {_brister} "
-                              f"— byggarens vakter utelämnar dem")
+                        print(f"[AUTO] Obekräftat vid utskick: {_brister} — "
+                              f"byggarens vakter utelämnar dem")
                     html, stats = _build_daily_email_v2(dbe)
                     from datetime import datetime as dtm
                     # stats bär rapportnamn + svenskt datum — 25/8-mejlet
@@ -23628,6 +23649,27 @@ def _startup():
         scheduler.add_job(_repair_gutted_once, 'date',
                           run_date=datetime.now() + timedelta(seconds=90),
                           id='repair_gutted_once')
+
+        # 📧 Missat utskicksslag hämtas igen efter omstart: deployen 2026-09-01
+        # landade mitt i 14:30-fönstret och cron-slaget slukades. Vid boot en
+        # vardag mellan 14:30 och 18:00 svensk tid anropas utskicksjobbet —
+        # dagslåset inuti gör det idempotent (redan skickat → tyst retur).
+        def _email_boot_atervinning():
+            try:
+                try:
+                    from zoneinfo import ZoneInfo as _ZIb
+                    _nu = datetime.now(_ZIb("Europe/Stockholm"))
+                except Exception:
+                    _nu = datetime.now()
+                if _nu.weekday() < 5 and (_nu.hour, _nu.minute) >= (14, 30) and _nu.hour < 18:
+                    print("[AUTO] Boot i utskicksfönstret — kontrollerar dagens mejl")
+                    scheduled_daily_email()
+            except Exception as e:
+                print(f"[AUTO] Boot-återvinning fel: {e}")
+
+        scheduler.add_job(_email_boot_atervinning, 'date',
+                          run_date=datetime.now() + timedelta(seconds=150),
+                          id='email_boot_atervinning')
 
         # 🔔 Cykeltopp-monitor: MED VILJE LÅNGSAM. Kvartalsvis, ~3 veckor in
         # i varje rapportsäsong när hyperscalers och halvledarkedjan hunnit
