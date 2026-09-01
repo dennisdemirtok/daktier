@@ -8165,6 +8165,30 @@ def _get_report_blurbs(db, reactions):
     return {k: _tvatta(v) for k, v in out.items() if _tvatta(v)}
 
 
+def _hash_kort(txt):
+    import hashlib
+    return hashlib.sha256((txt or "").encode()).hexdigest()[:16]
+
+
+def _meta_las(db, nyckel):
+    try:
+        from edge_db import _fetchone as _f1m, _ph as _phm
+        r = _f1m(db, f"SELECT value FROM meta WHERE key = {_phm()}", (nyckel,))
+        return dict(r)["value"] if r else None
+    except Exception:
+        return None
+
+
+def _meta_skriv(db, nyckel, varde):
+    try:
+        from edge_db import _upsert_sql as _upm
+        db.execute(_upm("meta", ["key", "value"], ["key"]), (nyckel, str(varde)))
+        db.commit()
+    except Exception:
+        try: db.rollback()
+        except Exception: pass
+
+
 def _build_daily_email_v2(db, base_url=None):
     base_url = base_url or BASE_URL
     """Morgonmejl v2 — återanvänder DASHBOARDENS innehåll (morgonbrief, makro,
@@ -8231,6 +8255,7 @@ def _build_daily_email_v2(db, base_url=None):
 
     rows = []
     subject_hint = ""
+    stats_makro_hash = stats_news_hash = stats_bullets_datum = None
 
     # ── 1. DAGENS RAPPORTER (siffror + kursreaktion — mejlets stjärna) ────
     # OBS: den interna briefens simulerade portföljer/stockpick är BORTTAGNA
@@ -8309,8 +8334,21 @@ def _build_daily_email_v2(db, base_url=None):
     # ── 2. MAKRO (senaste macro_pulse) ────────────────────────────────────
     mp = _f1(db, "SELECT headline, sentiment, summary, sections_json, generated_at "
                  "FROM macro_pulse ORDER BY generated_at DESC LIMIT 1")
+    # ANVÄNDARREGEL 2026-09-01: bara DAGENS makro, och aldrig samma innehåll
+    # två mejl i rad — "senaste raden" återanvände tyst gårdagens text när
+    # generatorn missat en dag
     if mp:
         m = dict(mp)
+        _mhash = _hash_kort(str(m.get("headline")) + str(m.get("summary")))
+        stats_makro_hash = _mhash
+        _idag_sv = _now.strftime("%Y-%m-%d")
+        if str(m.get("generated_at"))[:10] != _idag_sv:
+            mp = None
+            m = None
+        elif _mhash == _meta_las(db, "email:makro_hash"):
+            mp = None
+            m = None
+    if mp:
         sent = (m.get("sentiment") or "").lower()
         s_col = {"risk-on": ("#DCFCE7", "#166534"),
                  "risk-off": ("#FEE2E2", "#991B1B")}.get(sent, ("#E2E8F0", "#334155"))
@@ -8333,6 +8371,16 @@ def _build_daily_email_v2(db, base_url=None):
     # ── 3. NYHETER NORDEN (senaste market_news) ───────────────────────────
     mn = _f1(db, "SELECT market_recap, items_json, generated_at FROM market_news "
                  "ORDER BY generated_at DESC LIMIT 1")
+    if mn:
+        n = dict(mn)
+        _nhash = _hash_kort(str(n.get("market_recap")) + str(n.get("items_json"))[:400])
+        stats_news_hash = _nhash
+        if str(n.get("generated_at"))[:10] != _now.strftime("%Y-%m-%d"):
+            mn = None
+            n = None
+        elif _nhash == _meta_las(db, "email:news_hash"):
+            mn = None
+            n = None
     if mn:
         n = dict(mn)
         items = _jload(n.get("items_json")) or []
@@ -8364,6 +8412,12 @@ def _build_daily_email_v2(db, base_url=None):
              ((_now.date() - timedelta(days=3)).isoformat(),))
     if mb:
         b = dict(mb)
+        if str(b.get("bullet_date"))[:10] == _meta_las(db, "email:bullets_datum"):
+            mb = None
+            b = None
+    if mb:
+        b = dict(mb)
+        stats_bullets_datum = str(b.get("bullet_date"))[:10]
         ov = _jload(b.get("market_overview")) or {}
         rows.append(_h2(f"Marknadspuls USA <span style='font-weight:400;color:{MUT}'>"
                         f"· sessionen {str(b.get('bullet_date'))[:10]}</span>"))
@@ -8566,7 +8620,9 @@ def _build_daily_email_v2(db, base_url=None):
              "has_news": bool(mn), "has_bullets": bool(mb),
              "n_analytiker": len(an_rows), "n_insiders": len(insiders),
              "rapportnamn": rapportnamn,
-             "datum_kort": f"{_now.day}/{_now.month}"}
+             "datum_kort": f"{_now.day}/{_now.month}",
+             "makro_hash": stats_makro_hash, "news_hash": stats_news_hash,
+             "bullets_datum": stats_bullets_datum}
     return html, stats
 
 
@@ -22843,6 +22899,68 @@ def _startup():
                 print(f"[AUTO] Daily email start {datetime.now().strftime('%H:%M')}")
                 dbe = get_db()
                 try:
+                    # KÄLLKONTROLL FÖRE UTSKICK (användarregel 2026-09-01):
+                    # varje källa ska vara BEKRÄFTAT hämtad idag innan mejlet
+                    # går. Brister åtgärdas på plats (generatorerna anropas om,
+                    # synkarna körs om) med två omförsök à 10 minuter. Det som
+                    # ändå inte kan bekräftas UTELÄMNAS av byggarens vakter —
+                    # gammalt innehåll visas aldrig som färskt.
+                    def _kallstatus():
+                        from edge_db import _fetchone as _f1k
+                        try:
+                            from zoneinfo import ZoneInfo
+                            _idag = datetime.now(ZoneInfo("Europe/Stockholm")).strftime("%Y-%m-%d")
+                        except Exception:
+                            _idag = datetime.now().strftime("%Y-%m-%d")
+                        def _senast(sql):
+                            try:
+                                r = _f1k(dbe, sql)
+                                return str(dict(r)["t"] or "")[:10]
+                            except Exception:
+                                return ""
+                        st = {
+                            "makro": _senast("SELECT MAX(generated_at) AS t FROM macro_pulse") == _idag,
+                            "nyheter": _senast("SELECT MAX(generated_at) AS t FROM market_news") == _idag,
+                            "rekar": _senast("SELECT MAX(hamtad) AS t FROM analyst_actions") == _idag,
+                            "konsensus": _senast("SELECT MAX(snapshot_date) AS t FROM analyst_targets") == _idag,
+                        }
+                        # US-pulsen: senaste handelsdag (helger ger äldre datum)
+                        _bd = _senast("SELECT MAX(bullet_date) AS t FROM market_bullets")
+                        st["us_puls"] = bool(_bd) and _bd >= (
+                            datetime.now() - timedelta(days=4)).strftime("%Y-%m-%d")
+                        return st
+
+                    for _forsok in range(3):
+                        _st = _kallstatus()
+                        _brister = sorted(k for k, v in _st.items() if not v)
+                        if not _brister:
+                            print("[AUTO] Källkontroll: alla källor bekräftade ✓")
+                            break
+                        print(f"[AUTO] Källkontroll försök {_forsok + 1}/3 — "
+                              f"ej bekräftade: {_brister}")
+                        try:
+                            if "makro" in _brister:
+                                _get_or_generate_macro_pulse(dbe, force=True)
+                            if "nyheter" in _brister:
+                                _get_or_generate_market_news(dbe, force=True)
+                            if "us_puls" in _brister:
+                                _sync_recent_bullets(dbe, days=4)
+                            if "rekar" in _brister or "konsensus" in _brister:
+                                from edge_db import (sync_analyst_actions,
+                                                     sync_analyst_consensus)
+                                if "rekar" in _brister:
+                                    sync_analyst_actions(dbe, max_n=600)
+                                if "konsensus" in _brister:
+                                    sync_analyst_consensus(dbe, max_n=600)
+                        except Exception as _ke:
+                            print(f"[AUTO] Källåtgärd fel: {_ke}")
+                        if _forsok < 2:
+                            _time.sleep(600)
+                    _st = _kallstatus()
+                    _brister = sorted(k for k, v in _st.items() if not v)
+                    if _brister:
+                        print(f"[AUTO] Skickar utan obekräftade sektioner: {_brister} "
+                              f"— byggarens vakter utelämnar dem")
                     html, stats = _build_daily_email_v2(dbe)
                     from datetime import datetime as dtm
                     # stats bär rapportnamn + svenskt datum — 25/8-mejlet
@@ -22894,6 +23012,15 @@ def _startup():
                         _sched_release("daily_email")
                         print(f"[AUTO] Daily email misslyckades ({resp}) — "
                               f"dagens lås släppt för nytt försök")
+                    else:
+                        # Upprepningsvaktens minne: det som skickades idag får
+                        # inte återkomma i morgon
+                        if stats.get("makro_hash"):
+                            _meta_skriv(dbe, "email:makro_hash", stats["makro_hash"])
+                        if stats.get("news_hash"):
+                            _meta_skriv(dbe, "email:news_hash", stats["news_hash"])
+                        if stats.get("bullets_datum"):
+                            _meta_skriv(dbe, "email:bullets_datum", stats["bullets_datum"])
                 finally:
                     dbe.close()
             except Exception as e:
