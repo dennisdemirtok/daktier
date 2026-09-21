@@ -1966,6 +1966,48 @@ def get_macro_history(db, period_type='yearly', limit=200, since=None):
 
 # ── Avanza Stock Import ──────────────────────────────────────
 
+def berika_tomma_isin(db, max_n=150, min_owners=0):
+    """Fyller tomma isin/ticker/sector från Avanzas instrumentsida.
+
+    Skärmaren som bygger stocks lämnar fälten tomma, och efter Börsdatas
+    död berikade ingen nya bolag: de kollapsade i dedup-vyn (osynliga i
+    sök) och EDGAR kunde inte nyckla deras rapporter (Aeluma 2026-09-01).
+    Fyller BARA tomma fält — aldrig över befintligt (regeln: aldrig
+    omsynk över lagad data). Mest ägda först."""
+    ph = _ph()
+    rader = _fetchall(db, f"""SELECT orderbook_id FROM stocks
+        WHERE (COALESCE(isin,'') = '' OR COALESCE(ticker,'') = '')
+          AND COALESCE(number_of_owners,0) >= {ph}
+        ORDER BY COALESCE(number_of_owners,0) DESC LIMIT {ph}""",
+        (min_owners, max_n))
+    n_ok = n_fel = 0
+    for r in rader:
+        oid = dict(r)["orderbook_id"]
+        try:
+            resp = requests.get(
+                f"https://www.avanza.se/_api/market-guide/stock/{oid}",
+                headers=AVANZA_HEADERS, timeout=10)
+            resp.raise_for_status()
+            d = resp.json()
+            lst = d.get("listing") or {}
+            isin = str(d.get("isin") or "").strip()
+            tick = str(lst.get("tickerSymbol") or lst.get("shortName") or "").strip()
+            sekt = ", ".join(x.get("sectorName", "")
+                             for x in (d.get("sectors") or [])[:2])
+            if isin or tick:
+                db.execute(f"""UPDATE stocks SET
+                    isin = CASE WHEN COALESCE(isin,'')='' THEN {ph} ELSE isin END,
+                    ticker = CASE WHEN COALESCE(ticker,'')='' THEN {ph} ELSE ticker END,
+                    sector = CASE WHEN COALESCE(sector,'')='' THEN {ph} ELSE sector END
+                    WHERE orderbook_id = {ph}""", (isin, tick, sekt, oid))
+                db.commit()
+                n_ok += 1
+        except Exception:
+            n_fel += 1
+        time.sleep(0.35)
+    return {"berikade": n_ok, "fel": n_fel, "kandidater": len(rader)}
+
+
 def fetch_all_stocks_from_avanza(db, progress_callback=None):
     """
     Fetch ALL stocks from Avanza screener API and store in DB.
@@ -2797,7 +2839,12 @@ def _parse_number(s):
 
 # ── Query Functions ──────────────────────────────────────────
 
-_STOCKS_DEDUP = ("(SELECT s0.*, ROW_NUMBER() OVER (PARTITION BY s0.isin "
+# Partition på COALESCE(NULLIF(isin,''), orderbook_id): Avanza-skärmaren
+# lämnar isin tomt och efter Börsdatas död berikar ingen nya bolag — rå
+# isin-partition kollapsade då ALLA tomma till en enda rad och gömde
+# varje nytillkommet bolag ur sök (Aeluma-fyndet 2026-09-01).
+_STOCKS_DEDUP = ("(SELECT s0.*, ROW_NUMBER() OVER (PARTITION BY "
+                 "COALESCE(NULLIF(s0.isin,''), CAST(s0.orderbook_id AS TEXT)) "
                  "ORDER BY COALESCE(s0.number_of_owners,0) DESC) AS huvudnotering "
                  "FROM stocks s0)")
 
@@ -5586,6 +5633,9 @@ def edgar_as_truth(db, tickers, radera_motsagda=True):
             resultat[t] = "saknas i stocks"
             continue
         isin = dict(srow)["isin"]
+        if not str(isin or "").strip():
+            resultat[t] = "tomt isin — kör berika_tomma_isin först"
+            continue
         try:
             db.execute("ALTER TABLE shadow_reports ADD COLUMN gross_income DOUBLE PRECISION")
             db.commit()

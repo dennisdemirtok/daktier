@@ -17216,6 +17216,17 @@ def api_action_toplist():
         db.close()
 
 
+@app.route("/api/maintenance/berika-isin", methods=["POST"])
+def api_maintenance_berika_isin():
+    """Fyller tomma isin/ticker/sector från Avanzas instrumentsida
+    (nytillkomna bolag efter Börsdatas död). ?max_n=&min_owners="""
+    from edge_db import berika_tomma_isin
+    max_n = int(request.args.get("max_n", 150))
+    min_owners = int(request.args.get("min_owners", 0))
+    res = berika_tomma_isin(get_db(), max_n=max_n, min_owners=min_owners)
+    return jsonify(res)
+
+
 @app.route("/api/maintenance/fix-ticker-isin", methods=["POST"])
 def api_fix_ticker_isin():
     """Rättar ett felmappat ISIN, verifierat mot OpenFIGI. ?ticker=MRVL&isin=US...
@@ -23693,6 +23704,37 @@ def _startup():
         scheduler.add_job(_email_boot_atervinning, 'date',
                           run_date=datetime.now() + timedelta(seconds=150),
                           id='email_boot_atervinning')
+
+        # 🔎 Engång (2026-09-01, Aeluma-fyndet): berika alla nytillkomna
+        # bolag med tomt isin/ticker (osynliga i sök tills dedup-fixen +
+        # berikningen), hämta sedan ALMU:s EDGAR-fundamenta och konsensus.
+        # Allt gratis (Avanza/SEC/yfinance) — opåverkat av sparläget.
+        def _berika_isin_once():
+            if not _sched_claim("berika_isin", "engang-2026-09"):
+                return
+            try:
+                from edge_db import (berika_tomma_isin, edgar_as_truth,
+                                     sync_analyst_actions, sync_analyst_consensus)
+                dbb = get_db()
+                try:
+                    res = berika_tomma_isin(dbb, max_n=400, min_owners=25)
+                    print(f"[BERIKA] {res}")
+                    print(f"[BERIKA] ALMU edgar: "
+                          f"{edgar_as_truth(dbb, ['ALMU'])}")
+                    try:
+                        sync_analyst_actions(dbb, tickers=["ALMU"])
+                        sync_analyst_consensus(dbb, tickers=["ALMU"])
+                        print("[BERIKA] ALMU analytikerlager synkat")
+                    except Exception as e:
+                        print(f"[BERIKA] ALMU analytiker fel: {e}")
+                except Exception as e:
+                    print(f"[BERIKA] inre fel: {e}")
+            except Exception as e:
+                print(f"[BERIKA] fel: {e}")
+
+        scheduler.add_job(_berika_isin_once, 'date',
+                          run_date=datetime.now() + timedelta(seconds=240),
+                          id='berika_isin_once')
 
         # 🔔 Cykeltopp-monitor: MED VILJE LÅNGSAM. Kvartalsvis, ~3 veckor in
         # i varje rapportsäsong när hyperscalers och halvledarkedjan hunnit
