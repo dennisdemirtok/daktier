@@ -6039,6 +6039,17 @@ def _env_stadad(namn, default=""):
 # avsändardomänen (news@daktier.com) förbättrar dessutom skräppostpoängen.
 BASE_URL = _env_stadad("BASE_URL", "https://daktier.com").rstrip("/")
 
+
+def _sparlage():
+    """SPARLÄGE (användarbeslut 2026-09-01): pausar allt som drar daglig
+    Claude-API-kostnad — makrogenereringen, dashboard-innehållet/nyheterna,
+    US-pulsens strukturering och hela mejlutskicket (vars blurb-körning med
+    web_search är dyrast per dag) — tills sajten har användare. Gratis-
+    synkarna (kurser, rekar, konsensus, portföljer, EDGAR, kvantjobben)
+    fortsätter opåverkade. Styrs av användaren själv i Railway: SPARLAGE=1;
+    ta bort variabeln för att återuppta allt."""
+    return (os.environ.get("SPARLAGE", "") or "").strip().lower() in ("1", "true", "ja")
+
 RESEND_API_KEY = _env_stadad("RESEND_API_KEY")
 RESEND_FROM = _env_stadad("RESEND_FROM", "Daktier <onboarding@resend.dev>")
 RESEND_TO_DEFAULT = _env_stadad("RESEND_TO", "dennis.demirtok@gmail.com")
@@ -22746,6 +22757,9 @@ def _startup():
 
         # Dagligt makro-snapshot (06:00 lokal)
         def scheduled_macro_snapshot():
+            if _sparlage():
+                print("[AUTO] Sparläge — makrogenereringen pausad")
+                return
             if not _sched_claim("macro_snapshot", datetime.now().strftime("%Y-%m-%d")):
                 return
             try:
@@ -22893,6 +22907,9 @@ def _startup():
 
         # 📧 Dagligt mail-digest (vardagar 17:30 — efter snapshot)
         def scheduled_daily_email():
+            if _sparlage():
+                print("[AUTO] Sparläge — mejlutskicket pausad")
+                return
             if not _sched_claim("daily_email", datetime.now().strftime("%Y-%m-%d")):
                 return
             try:
@@ -22963,9 +22980,9 @@ def _startup():
                         print(f"[AUTO] Källkontroll {_sthlm().strftime('%H:%M')} — "
                               f"väntar på: {_brister}")
                         try:
-                            if "makro" in _brister:
+                            if "makro" in _brister and _forsok <= 2:
                                 _get_or_generate_macro_pulse(dbe, force=True)
-                            if "nyheter" in _brister:
+                            if "nyheter" in _brister and _forsok <= 2:
                                 _get_or_generate_market_news(dbe, force=True)
                             if "us_puls" in _brister:
                                 _sync_recent_bullets(dbe, days=4)
@@ -23419,6 +23436,9 @@ def _startup():
         # 📋 Market-bullets var ALDRIG schemalagd — bara manuell endpoint.
         # Dagligt sync-jobb (vardagar 07:30, efter US-stängning) med claim.
         def scheduled_market_bullets():
+            if _sparlage():
+                print("[AUTO] Sparläge — US-pulsen pausad")
+                return
             if not _sched_claim("market_bullets", datetime.now().strftime("%Y-%m-%d")):
                 return
             _hb = {"ts": datetime.now().isoformat()}
@@ -23570,6 +23590,9 @@ def _startup():
         # besök eller boots (läs-triggad regen fastnade tyst → dashboarden
         # frös i 3 dagar utan deploy). Nyheter 2×/vardag, makro+brief 1×/dag.
         def scheduled_dashboard_content():
+            if _sparlage():
+                print("[AUTO] Sparläge — dashboard-innehållet pausad")
+                return
             now = datetime.now()
             slot = "am" if now.hour < 12 else "pm"
             if _sched_claim("news_gen", f"{now:%Y-%m-%d}:{slot}"):
