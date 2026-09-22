@@ -828,6 +828,81 @@
             th, td { padding: 9px 8px; }
             .page-title { font-size: 20px; }
         }
+    
+        /* ═══ v4 APP-SKAL: permanent sidebar + topbar ═══ */
+        :root { --subnav-w: 252px; }
+        .subnav { display: flex; top: 0; padding: 14px 12px 12px; gap: 2px; background: #fff; border-right: 1px solid var(--border); }
+        .main-content, body.has-subnav .main-content { margin-left: var(--subnav-w); }
+        .topnav { left: var(--subnav-w); padding: 0 20px; }
+        .topnav .brand, .topnav-menu, .topnav .topnav-burger { display: none; }
+        .topnav-right { margin-left: auto; }
+        .sb-brand { display: flex; align-items: center; gap: 10px; padding: 6px 8px 14px; cursor: pointer; }
+        .sb-brand .brand-name { font-size: 17px; }
+        .sb-nav { display: flex; flex-direction: column; gap: 2px; }
+        .subnav-item { width: 100%; text-align: left; border: 0; background: none; font-family: inherit; }
+        .subnav-item .sb-chev { margin-left: auto; font-size: 18px; opacity: .55; }
+        .sb-sub { display: flex; flex-direction: column; gap: 1px; margin: 2px 0 6px 20px; padding-left: 8px; border-left: 2px solid var(--border-light); }
+        .sb-subitem { padding: 7px 10px; font-size: 13px; }
+        .sb-extra { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border-light); }
+        .sb-extra .subnav-title { padding-top: 8px; }
+        .sb-foot { margin-top: auto; padding-top: 10px; border-top: 1px solid var(--border-light); }
+        .sb-more summary { list-style: none; display: flex; align-items: center; gap: 11px; padding: 9px 12px; border-radius: 9px; font-size: 13px; font-weight: 500; color: var(--ink-soft); cursor: pointer; }
+        .sb-more summary::-webkit-details-marker { display: none; }
+        .sb-more summary:hover { background: var(--surface-low); color: var(--ink); }
+        .sb-more[open] summary .sb-chev { transform: rotate(180deg); }
+        .sb-more .sb-subitem { text-decoration: none; margin-left: 20px; width: calc(100% - 20px); }
+        .sb-account { display: flex; align-items: center; gap: 8px; padding: 8px 10px 2px; font-size: 12px; color: var(--ink-soft); }
+        .sb-account-mail { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .sb-logout { background: none; border: 0; color: var(--ink-soft); cursor: pointer; padding: 4px; border-radius: 6px; display: inline-flex; }
+        .sb-logout:hover { background: #fee2e2; color: #b91c1c; }
+        .nav-search-kbd { font: 600 11px/1 'Inter', sans-serif; color: var(--text-muted); border: 1px solid var(--border); border-radius: 5px; padding: 3px 5px; background: #fff; margin-left: 4px; }
+        .nav-search { width: 300px; }
+        .nav-search:focus-within { border-color: var(--brand-cyan); box-shadow: 0 0 0 3px var(--brand-cyan-light); }
+        .nav-search-item.sel { background: var(--surface-hover); }
+        @media (max-width: 1100px) { .nav-search { width: 220px; } }
+        @media (max-width: 900px) {
+            .subnav { display: none !important; }
+            .main-content, body.has-subnav .main-content { margin-left: 0 !important; }
+            .topnav { left: 0; }
+            .topnav .brand { display: flex; }
+            .topnav .topnav-burger { display: inline-flex; }
+            .topnav-left { flex-shrink: 0; }
+            .nav-search { width: auto; flex: 1; min-width: 0; max-width: 200px; }
+            .topnav-right { flex: 1; min-width: 0; justify-content: flex-end; }
+            .nav-search-kbd { display: none; }
+        }
+        /* ═══ HEM ═══ */
+        body[data-tab="home"] .page-header { display: none; }
+        .home-hero { background: linear-gradient(135deg, var(--brand-navy-deep), var(--brand-navy) 60%, #2a7fa3); color: #fff; border-radius: 16px; padding: 26px 28px 22px; margin-bottom: 20px; }
+        .home-greet { font-size: 13px; opacity: .8; font-weight: 500; }
+        .home-hero h1 { font-size: 26px; font-weight: 800; letter-spacing: -0.02em; margin: 4px 0 16px; line-height: 1.2; }
+        .home-ask { display: flex; align-items: center; gap: 10px; background: #fff; border-radius: 12px; padding: 6px 6px 6px 14px; box-shadow: 0 10px 30px rgba(0,0,0,0.18); }
+        .home-ask .material-symbols-outlined { color: var(--brand-navy); }
+        .home-ask input { flex: 1; border: 0; font-size: 15px; padding: 10px 0; background: none; box-shadow: none; min-width: 0; }
+        .home-ask input:focus { box-shadow: none; outline: none; }
+        .home-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+        .home-chip { background: rgba(255,255,255,0.14); border: 1px solid rgba(255,255,255,0.22); color: #fff; border-radius: 999px; padding: 6px 12px; font-size: 12.5px; cursor: pointer; font-family: inherit; }
+        .home-chip:hover { background: rgba(255,255,255,0.26); }
+        .home-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 16px; }
+        .home-card { padding: 18px; display: flex; flex-direction: column; min-height: 200px; }
+        .home-card-hd { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 8px; }
+        .home-card-hd h3 { font-size: 14px; font-weight: 700; color: var(--ink); margin: 0; }
+        .home-card-hd a { font-size: 12px; font-weight: 600; text-decoration: none; color: var(--brand-navy); white-space: nowrap; }
+        .home-card-sub { font-size: 12px; color: var(--text-muted); margin-bottom: 8px; line-height: 1.45; }
+        .home-row { display: flex; align-items: center; gap: 10px; padding: 8px 4px; border-top: 1px solid var(--border-light); cursor: pointer; border-radius: 6px; }
+        .home-row:hover { background: var(--surface-hover); }
+        .home-rank { width: 24px; height: 24px; border-radius: 12px; background: var(--brand-navy); color: #fff; font-size: 11px; font-weight: 800; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+        .home-name { flex: 1; min-width: 0; font-size: 13px; font-weight: 600; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .home-name small { display: block; font-size: 11px; color: var(--text-muted); font-weight: 500; }
+        .home-val { font-size: 13px; font-weight: 800; font-variant-numeric: tabular-nums; white-space: nowrap; }
+        .home-val small { display: block; font-size: 11px; font-weight: 500; color: var(--text-muted); text-align: right; }
+        .home-kpi { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
+        .home-kpi > div { flex: 1; min-width: 110px; background: var(--surface-low); border-radius: 10px; padding: 10px 12px; }
+        .home-kpi b { display: block; font-size: 18px; font-weight: 800; font-variant-numeric: tabular-nums; }
+        .home-kpi span { font-size: 11px; color: var(--text-muted); }
+        .home-recap { font-size: 13px; line-height: 1.55; color: var(--ink-soft); }
+        .home-empty { font-size: 12.5px; color: var(--text-muted); padding: 14px 4px; }
+        @media (max-width: 640px) { .home-hero { padding: 18px 16px 16px; border-radius: 12px; } .home-hero h1 { font-size: 21px; } .home-ask { padding-left: 10px; } .home-grid { gap: 12px; } }
     </style>
 </head>
 <body>
@@ -900,8 +975,9 @@ window.showWelcome = function() {
     <div class="topnav-right">
         <div class="nav-search" id="navSearch">
             <span class="material-symbols-outlined nav-search-icon">search</span>
-            <input id="navStockSearch" type="text" placeholder="Sök aktie…" autocomplete="off"
+            <input id="navStockSearch" type="text" placeholder="Sök aktie…" autocomplete="off" aria-label="Sök aktie"
                    oninput="navSearchSuggest(this.value)" onkeydown="navSearchKey(event)" onfocus="navSearchSuggest(this.value)">
+            <kbd class="nav-search-kbd" aria-hidden="true">⌘K</kbd>
             <div class="nav-search-results" id="navSearchResults"></div>
         </div>
         <div class="market-status closed" id="marketStatusSE" title="Stockholmsbörsen">
@@ -930,13 +1006,26 @@ window.showWelcome = function() {
     </div>
 </header>
 
-<!-- ── CONTEXTUAL LEFT SUBNAV ──── -->
-<aside class="subnav" id="subnav"></aside>
+<!-- ── SIDEBAR (v4: permanent på desktop) ──── -->
+<aside class="subnav" id="subnav" aria-label="Huvudnavigation">
+    <div class="sb-brand" onclick="navTo('home')" role="button" tabindex="0">
+        <div class="brand-logo" aria-hidden="true">
+            <svg viewBox="0 0 24 24" width="17" height="17" fill="none">
+                <path d="M12 2.5l4.4 5.4h-2.6v3.6h-3.6V7.9H7.6z" fill="#ffffff"/>
+                <path d="M12 21.5l-4.4-5.4h2.6v-3.6h3.6v3.6h2.6z" fill="var(--brand-cyan)"/>
+            </svg>
+        </div>
+        <span class="brand-name">DAKTIER</span>
+    </div>
+    <nav class="sb-nav" id="sidebarNav"></nav>
+    <div class="sb-extra" id="sidebarExtra"></div>
+    <div class="sb-foot" id="sidebarFoot"></div>
+</aside>
 
 <!-- ── MOBILE BOTTOM NAV ──── -->
 <nav class="mobile-bottom-nav" id="mobileBottomNav">
+    <button data-section="home" onclick="navTo('home')"><span class="material-symbols-outlined">home</span><span>Hem</span></button>
     <button data-section="agent" onclick="navTo('agent')"><span class="material-symbols-outlined">forum</span><span>Agent</span></button>
-    <button data-section="dashboard" onclick="navTo('dashboard')"><span class="material-symbols-outlined">space_dashboard</span><span>Dashboard</span></button>
     <button onclick="focusNavSearch()"><span class="material-symbols-outlined">search</span><span>Sök</span></button>
     <button onclick="openMobileSheet()"><span class="material-symbols-outlined">menu</span><span>Meny</span></button>
 </nav>
@@ -1023,7 +1112,7 @@ function _doLogout() {
 }
 
 // ── State ──────────────────────────────────────────────
-let currentTab = 'agent';   // v3.8: agenten är sidans primära landningsvy
+let currentTab = 'home';   // v4: Hem är landningsvyn — agenten en fråga bort
 let searchQuery = '';
 let countryFilter = '';
 let sortCol = 'meta';
@@ -1151,6 +1240,87 @@ async function apiJson(url, opts) {
 function emptyState(rubrik, text = '', ikon = 'inbox', typ = '') {
     return `<div class="empty-state ${typ}"><span class="material-symbols-outlined">${ikon}</span>
         <div class="empty-state-title">${rubrik}</div>${text ? `<div class="empty-state-text">${text}</div>` : ''}</div>`;
+}
+
+
+// ═══ HEM — landningsvyn: en fråga bort från analysen + dagens läge ═══
+function homeAsk(e) {
+    if (e) e.preventDefault();
+    const inp = document.getElementById('homeAskInput');
+    const q = (inp ? inp.value : '').trim();
+    if (!q) { if (inp) inp.focus(); return; }
+    homeAskText(q);
+}
+function homeAskText(q) {
+    switchTab('agent');
+    setTimeout(() => { try { agentSendExample(q); } catch (e) { toast('Kunde inte skicka frågan: ' + e.message, 'error'); } }, 350);
+}
+function _homeRad(x, i, val, sub, onclick) {
+    return `<div class="home-row" onclick="${onclick}" role="button" tabindex="0">
+        <span class="home-rank">${i + 1}</span>
+        <span class="home-name">${FLAGS[x.country] || ''} ${escapeHtml(x.name || x.ticker || '')}<small>${escapeHtml(x.ticker || x.short_name || '')}</small></span>
+        <span class="home-val">${val}${sub ? `<small>${sub}</small>` : ''}</span></div>`;
+}
+async function renderHome() {
+    const el = document.getElementById('content');
+    if (!el) return;
+    const now = new Date();
+    const h = now.getHours();
+    const halsning = h < 10 ? 'God morgon' : h < 17 ? 'Hej' : 'God kväll';
+    const datum = now.toLocaleDateString('sv-SE', { weekday: 'long', day: 'numeric', month: 'long' });
+    const exempel = ['Analysera Marvell', 'Jämför Novo Nordisk med Eli Lilly', 'Vilka bolag har gatan börjat gilla igen?', 'Bästa fria kassaflödet i Norden'];
+    el.innerHTML = `<div class="home">
+        <section class="home-hero">
+            <div class="home-greet">${halsning} · ${datum}</div>
+            <h1>Vad vill du veta om marknaden i dag?</h1>
+            <form class="home-ask" onsubmit="homeAsk(event)">
+                <span class="material-symbols-outlined">forum</span>
+                <input id="homeAskInput" type="text" placeholder="Fråga agenten — ett bolag, en jämförelse, en idé…" autocomplete="off" aria-label="Fråga agenten">
+                <button class="btn btn-primary" type="submit">Fråga</button>
+            </form>
+            <div class="home-chips">${exempel.map(q => `<button class="home-chip" onclick="homeAskText('${q.replace(/'/g, "\\'")}')">${q}</button>`).join('')}</div>
+        </section>
+        <div class="home-grid">
+            <div class="card home-card" id="homeTop"><div class="home-card-hd"><h3>⭐ Högst DAKTIER-poäng</h3><a href="#/edge-signals">Hela topplistan →</a></div><div class="home-card-sub">Sitens enda poäng: kvalitet, kassaflöde, tillväxt, stabilitet, värdering.</div><div class="loading-wrap" style="padding:20px"><div class="spinner"></div></div></div>
+            <div class="card home-card" id="homeAnalyst"><div class="home-card-hd"><h3>🏦 Gatan rör sig</h3><a href="#/analytiker">Analytiker →</a></div><div class="home-card-sub">Största förändringen i konsensus senaste 3 månaderna — rörelsen är informationen.</div><div class="loading-wrap" style="padding:20px"><div class="spinner"></div></div></div>
+            <div class="card home-card" id="homeOwners"><div class="home-card-hd"><h3>🔥 Ägarmomentum i dag</h3><a href="#/agarmomentum">Alla rörelser →</a></div><div class="home-card-sub">Var Avanzas sparare köpte in sig senaste handelsdagen.</div><div class="loading-wrap" style="padding:20px"><div class="spinner"></div></div></div>
+            <div class="card home-card" id="homeMarket"><div class="home-card-hd"><h3>📰 Marknaden</h3><a href="#/dashboard">Marknad →</a></div><div class="loading-wrap" style="padding:20px"><div class="spinner"></div></div></div>
+            <div class="card home-card" id="homePortfolio"><div class="home-card-hd"><h3>📈 Portföljerna</h3><a href="#/installningar/simulering">Portföljer →</a></div><div class="home-card-sub">Live-facit mot S&P 500 sedan start.</div><div class="loading-wrap" style="padding:20px"><div class="spinner"></div></div></div>
+        </div></div>`;
+    const put = (id, html) => { const c = document.getElementById(id); if (!c) return; const w = c.querySelector('.loading-wrap'); if (w) w.outerHTML = html; else c.insertAdjacentHTML('beforeend', html); };
+    const fel = (id, e) => put(id, `<div class="home-empty">Kunde inte hämta: ${escapeHtml(e.message || String(e))}</div>`);
+    // Kör alla i parallell — varje kort fyller sig självt
+    apiJson('/api/daktier-rank?limit=5').then(d => {
+        const rows = (d && d.rows) || [];
+        put('homeTop', rows.length ? rows.map((x, i) => _homeRad(x, i, `<span style="color:${x.score >= 80 ? '#059669' : 'var(--ink)'}">${Math.round(x.score)}</span>`, x.riskklass ? 'risk ' + x.riskklass.toLowerCase() : '', `openStockByTicker('${(x.ticker || '').replace(/'/g, "\\'")}')`)).join('') : '<div class="home-empty">Rankingen byggs varje morgon.</div>');
+    }).catch(e => fel('homeTop', e));
+    apiJson('/api/factset-rating/toplist?limit=3').then(d => {
+        const upp = (d && d.upp_3m) || [], ned = (d && d.ned_3m) || [];
+        const rad = (x, i, sign) => _homeRad(x, i, `<span style="color:${sign > 0 ? '#059669' : '#b91c1c'}">${sign > 0 ? '+' : ''}${(x.d3m || 0).toFixed(2)}</span>`, `nu ${(x.snitt_nu || 0).toFixed(2)} · ${x.n_hus || 0} hus`, `openStockByTicker('${(x.ticker || '').replace(/'/g, "\\'")}')`);
+        put('homeAnalyst', (upp.length || ned.length) ? `<div style="font-size:11px;font-weight:700;color:#059669;margin:4px 0 2px">↑ Återvänder</div>${upp.map((x, i) => rad(x, i, 1)).join('')}<div style="font-size:11px;font-weight:700;color:#b91c1c;margin:10px 0 2px">↓ Lämnar</div>${ned.map((x, i) => rad(x, i, -1)).join('')}` : '<div class="home-empty">Ingen konsensusrörelse att visa ännu.</div>');
+    }).catch(e => fel('homeAnalyst', e));
+    apiJson('/api/hot-movers?' + new URLSearchParams({ mode: 'daily', direction: 'up', lookback: 1, limit: 5, offset: 0, min_owners: 300 })).then(d => {
+        const rows = (d && d.stocks) || [];
+        put('homeOwners', rows.length ? rows.map((x, i) => _homeRad({ ...x, ticker: x.short_name }, i, `<span style="color:#059669">+${(x.hot_diff_pct || 0).toFixed(1)} %</span>`, `${fmtNum(x.number_of_owners)} ägare`, `openStockDrawer(${x.orderbook_id})`)).join('') : '<div class="home-empty">Inga ägarförändringar registrerade ännu i dag.</div>');
+    }).catch(e => fel('homeOwners', e));
+    Promise.all([apiJson('/api/market-news').catch(() => null), apiJson('/api/report-calendar/today').catch(() => null)]).then(([n, r]) => {
+        const recap = n && n.market_recap ? String(n.market_recap).split(/(?<=[.!?])\s/).slice(0, 2).join(' ') : '';
+        const reps = (r && r.reports) || [];
+        put('homeMarket', `${recap ? `<div class="home-recap">${escapeHtml(recap)}</div>` : '<div class="home-empty">Ingen marknadssammanfattning i dag.</div>'}
+            <div style="margin-top:12px;font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.04em">Rapporter i dag · ${reps.length}</div>
+            ${reps.length ? reps.slice(0, 6).map((x, i) => _homeRad({ name: x.name || x.ticker, ticker: x.ticker, country: x.country }, i, escapeHtml(x.report_type || ''), '', `openStockByTicker('${(x.ticker || '').replace(/'/g, "\\'")}')`)).join('') : '<div class="home-empty">Inga rapporter i kalendern i dag.</div>'}`);
+    });
+    apiJson('/api/model-portfolios').then(d => {
+        const models = (d && d.models) || {};
+        const block = (key, namn) => {
+            const m = models[key]; if (!m || !m.nav) return '';
+            const sp = ((m.facit || {}).sp500) || []; const spc = sp.length ? sp[sp.length - 1].cum_pct : null;
+            const a = m.nav.avkastning_pct || 0;
+            return `<div><span>${namn}</span><b style="color:${a >= 0 ? '#059669' : '#b91c1c'}">${a >= 0 ? '+' : ''}${a.toFixed(1)} %</b><span>${spc != null ? `S&P 500 ${spc >= 0 ? '+' : ''}${spc.toFixed(1)} %` : ''}</span></div>`;
+        };
+        const html = block('daktier_10', 'DAKTIER-10') + block('claude_10', 'Claude-10');
+        put('homePortfolio', html ? `<div class="home-kpi">${html}</div><div class="home-card-sub">Likaviktade topp 10 — facit ur prisarkivet, dagligen.</div>` : '<div class="home-empty">Portföljfacit saknas ännu.</div>');
+    }).catch(e => fel('homePortfolio', e));
 }
 
 // ── Toast + bekräftelsedialog (ersätter alert()/confirm()) ──
@@ -1532,7 +1702,8 @@ function renderFilterBar() {
 // ── Tab Switch ──────────────────────────────────────
 
 const TAB_META = {
-    dashboard:   { title: 'Dashboard',       sub: 'Marknadsöversikt & makro-indikatorer' },
+    home:        { title: 'Hem',             sub: 'Dagens läge — och en fråga bort från analysen' },
+    dashboard:   { title: 'Marknad',         sub: 'Makro, nyheter, US-puls och dagens rapporter' },
     analytiker:  { title: 'Analytiker',      sub: 'Konsensusbetyg på FactSet-skalan — nivån är popularitet, rörelsen är informationen' },
     signals:     { title: 'Topplistan',      sub: 'DAKTIER-poäng — hela universumet rankat efter kvalitet, kassaflöde, tillväxt, stabilitet och värdering' },
     stocks:      { title: 'Alla aktier',     sub: 'Komplett databas över nordiska & US-aktier' },
@@ -1585,6 +1756,7 @@ function switchTab(tab, el) {
     else { sortCol = 'date'; sortOrder = 'desc'; }
 
     // Client-side only tabs (no API fetch)
+    if (tab === 'home')      { renderFilterBar(); renderHome(); return; }
     if (tab === 'dashboard') { renderFilterBar(); renderDashboard(); return; }
     if (tab === 'metrics')   { renderFilterBar(); renderMetricsTool(); return; }
 
@@ -1598,8 +1770,9 @@ function switchTab(tab, el) {
 
 // ══ v3.7 NAVIGATION (top-nav + contextual subnav + mobile) ══════════
 const NAV_SECTIONS = {
+    home:      { label: 'Hem',           icon: 'home',                  tab: 'home',      sub: [] },
     agent:     { label: 'Agent',         icon: 'forum',                 tab: 'agent',     sub: [] },
-    dashboard: { label: 'Dashboard',     icon: 'space_dashboard',       tab: 'dashboard', sub: [] },
+    dashboard: { label: 'Marknad',       icon: 'space_dashboard',       tab: 'dashboard', sub: [] },
     analytiker:{ label: 'Analytiker',    icon: 'grade',                 tab: 'analytiker', sub: [] },
     owners:    { label: 'Ägarmomentum',  icon: 'local_fire_department', tab: 'hotmovers', sub: [] },
     stocks:    { label: 'Aktier',        icon: 'bar_chart',             tab: 'stocks',    sub: [
@@ -1611,9 +1784,9 @@ const NAV_SECTIONS = {
                     { label: 'Utredning',   icon: 'analytics',       tab: 'backtest' },
                 ] },
     edge:      { label: 'Topplistan',    icon: 'trophy',                tab: 'signals',   sub: [] },
-    settings:  { label: 'Inställningar',  icon: 'settings',             tab: null,        sub: [
+    portfolios:{ label: 'Portföljer',    icon: 'monitoring',            tab: 'portfolio', sub: [] },
+    settings:  { label: 'Mer',            icon: 'settings',             tab: null,        sub: [
                     { label: 'Track record',     icon: 'query_stats', ext: '/track-record' },
-                    { label: 'Portföljer',       icon: 'monitoring',  tab: 'portfolio' },
                     { label: 'Backtest-rapport', icon: 'description', ext: '/backtest-report' },
                     { label: 'Live Tracker',     icon: 'visibility',  ext: '/live-tracker' },
                     { label: 'Portfölj-Builder', icon: 'work',        ext: '/portfolio-builder' },
@@ -1621,19 +1794,20 @@ const NAV_SECTIONS = {
                 ] },
 };
 // Edge Signals sist (lägre prioritet, användaren osäker på den)
-const PRIMARY_ORDER = ['agent', 'dashboard', 'analytiker', 'owners', 'stocks', 'edge'];
+const PRIMARY_ORDER = ['home', 'agent', 'edge', 'stocks', 'analytiker', 'owners', 'dashboard', 'portfolios'];
 const TAB_TO_SECTION = {
+    home: 'home',
     agent: 'agent', dashboard: 'dashboard', analytiker: 'analytiker', koplista: 'koplista', hotmovers: 'owners',
     stocks: 'stocks', metrics: 'stocks', ocf: 'stocks', fcf: 'stocks',
     insiders: 'stocks', backtest: 'stocks',
-    signals: 'edge', portfolio: 'settings',
+    signals: 'edge', portfolio: 'portfolios',
     // legacy/borttagna tabbar mappar till dashboard
-    trending: 'dashboard', aitoplist: 'dashboard', myportfolio: 'dashboard',
+    trending: 'dashboard', aitoplist: 'dashboard', myportfolio: 'portfolios',
 };
 
 // ── v3.9: Hash-baserad URL-routing (delbara/bokmärkbara URL:er per vy) ──
 const TAB_HASH = {
-    agent: '/agent', dashboard: '/dashboard', analytiker: '/analytiker', koplista: '/koplistan', hotmovers: '/agarmomentum',
+    home: '/hem', agent: '/agent', dashboard: '/dashboard', analytiker: '/analytiker', koplista: '/koplistan', hotmovers: '/agarmomentum',
     stocks: '/aktier', metrics: '/aktier/nyckeltal', ocf: '/aktier/kassaflode',
     fcf: '/aktier/fritt-kassaflode',
     insiders: '/aktier/insiders', backtest: '/aktier/utredning',
@@ -1655,7 +1829,7 @@ function _splitHash() {
 function _tabFromHash() {
     const { bas, aktie } = _splitHash();
     _pendingDrawerId = aktie;
-    if (!bas || bas === '/') return 'agent';
+    if (!bas || bas === '/') return 'home';
     return HASH_TAB[bas] || null;
 }
 function _navFromHash() {
@@ -1715,26 +1889,45 @@ function _syncNav() {
     renderSubnav(sec);
 }
 
-function renderSubnav(sec) {
-    const el = document.getElementById('subnav');
-    if (!el) return;
-    // v3.8: agent-sektionen visar chat-historik i vänstermenyn (desktop)
-    if (sec === 'agent') { renderAgentSubnav(el); return; }
-    const s = NAV_SECTIONS[sec];
-    const subs = (s && s.sub) || [];
-    if (!subs.length) {
-        document.body.classList.remove('has-subnav');
-        el.innerHTML = '';
-        return;
-    }
+function renderSubnav(sec) { renderSidebar(sec); }
+function renderSidebar(sec) {
+    const nav = document.getElementById('sidebarNav');
+    if (!nav) return;
     document.body.classList.add('has-subnav');
-    el.innerHTML = `<div class="subnav-title">${s.label}</div>` + subs.map(item => {
-        const active = item.tab && item.tab === currentTab;
-        const click = item.ext ? `window.open('${item.ext}','_blank')` : `switchTab('${item.tab}')`;
-        return `<button class="subnav-item ${active ? 'active' : ''}" onclick="${click}">
-            <span class="material-symbols-outlined">${item.icon}</span><span>${item.label}</span>
-            ${item.ext ? '<span class="material-symbols-outlined ext">open_in_new</span>' : ''}</button>`;
+    sec = sec || TAB_TO_SECTION[currentTab] || 'home';
+    nav.innerHTML = PRIMARY_ORDER.filter(k => NAV_SECTIONS[k]).map(key => {
+        const sN = NAV_SECTIONS[key];
+        const active = sec === key;
+        let html = `<button class="subnav-item ${active ? 'active' : ''}" data-section="${key}" onclick="navTo('${key}')" ${active ? 'aria-current="page"' : ''}>
+            <span class="material-symbols-outlined">${sN.icon}</span><span>${sN.label}</span>
+            ${(sN.sub || []).length ? `<span class="material-symbols-outlined sb-chev">${active ? 'expand_less' : 'expand_more'}</span>` : ''}</button>`;
+        if (active && (sN.sub || []).length) {
+            html += `<div class="sb-sub">` + sN.sub.map(item => {
+                const on = item.tab && item.tab === currentTab;
+                return `<button class="subnav-item sb-subitem ${on ? 'active' : ''}" onclick="switchTab('${item.tab}')" ${on ? 'aria-current="page"' : ''}>
+                    <span class="material-symbols-outlined">${item.icon}</span><span>${item.label}</span></button>`;
+            }).join('') + `</div>`;
+        }
+        return html;
     }).join('');
+    // Agentens chatthistorik under navigationen när man är i agenten
+    const extra = document.getElementById('sidebarExtra');
+    if (extra) {
+        if (sec === 'agent') { renderAgentSubnav(extra); extra.style.display = ''; }
+        else { extra.innerHTML = ''; extra.style.display = 'none'; }
+    }
+    // Fot: "Mer" (externa verktyg) + konto
+    const foot = document.getElementById('sidebarFoot');
+    if (foot && !foot.dataset.ready) {
+        const mer = (NAV_SECTIONS.settings.sub || []).filter(i => i.ext);
+        foot.innerHTML = `<details class="sb-more"><summary><span class="material-symbols-outlined">apps</span><span>Fler verktyg</span><span class="material-symbols-outlined sb-chev">expand_more</span></summary>
+            ${mer.map(i => `<a class="subnav-item sb-subitem" href="${i.ext}" target="_blank" rel="noopener"><span class="material-symbols-outlined">${i.icon}</span><span>${i.label}</span><span class="material-symbols-outlined ext">open_in_new</span></a>`).join('')}
+            </details>
+            <div class="sb-account"><span class="material-symbols-outlined">account_circle</span><span class="sb-account-mail" id="sidebarEmail">…</span>
+                <button class="sb-logout" onclick="_doLogout()" title="Logga ut" aria-label="Logga ut"><span class="material-symbols-outlined">logout</span></button></div>`;
+        foot.dataset.ready = '1';
+        try { const em = document.getElementById('accountEmail'); if (em && em.textContent && em.textContent !== '…') document.getElementById('sidebarEmail').textContent = em.textContent; } catch (e) {}
+    }
 }
 
 // v3.8: agent chat-historik i vänster subnav (desktop)
@@ -1819,10 +2012,24 @@ function navSearchPick(oid) {
     if (inp) inp.value = '';
     if (s && typeof openDrawer === 'function') openDrawer(s);
 }
+let _navSearchIdx = -1;
 function navSearchKey(e) {
-    if (e.key === 'Enter') { const f = (_navSearchRows || [])[0]; if (f) navSearchPick(f.orderbook_id); }
-    else if (e.key === 'Escape') { document.getElementById('navSearchResults')?.classList.remove('open'); e.target.blur(); }
+    const rows = _navSearchRows || [];
+    const items = [...document.querySelectorAll('#navSearchResults .nav-search-item')];
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        e.preventDefault();
+        if (!items.length) return;
+        _navSearchIdx = e.key === 'ArrowDown' ? Math.min(items.length - 1, _navSearchIdx + 1) : Math.max(0, _navSearchIdx - 1);
+        items.forEach((it, i) => it.classList.toggle('sel', i === _navSearchIdx));
+        items[_navSearchIdx].scrollIntoView({ block: 'nearest' });
+    } else if (e.key === 'Enter') {
+        const f = rows[_navSearchIdx >= 0 ? _navSearchIdx : 0]; if (f) navSearchPick(f.orderbook_id);
+    } else if (e.key === 'Escape') { document.getElementById('navSearchResults')?.classList.remove('open'); e.target.blur(); }
+    else { _navSearchIdx = -1; }
 }
+document.addEventListener('keydown', e => {
+    if ((e.metaKey || e.ctrlKey) && (e.key === 'k' || e.key === 'K')) { e.preventDefault(); focusNavSearch(); }
+});
 function focusNavSearch() {
     const i = document.getElementById('navStockSearch');
     if (i) { i.focus(); i.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
@@ -9671,7 +9878,8 @@ async function init() {
     const ps = document.getElementById('pageSubtitle'); if (ps) ps.textContent = meta.sub;
 
     renderFilterBar();
-    if (currentTab === 'agent') { renderAgent(); }
+    if (currentTab === 'home') { renderHome(); }
+    else if (currentTab === 'agent') { renderAgent(); }
     else if (currentTab === 'dashboard') { renderDashboard(); }
     else if (currentTab === 'metrics') { renderMetricsTool(); }
     else { await prefetchPromise; await fetchData(); }
