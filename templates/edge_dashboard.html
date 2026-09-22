@@ -43,9 +43,11 @@
             --text: #191c1d;
             --text-sec: #3c4a41;
             --text-muted: #6c7b70;
-            --border: transparent;
-            --border-light: transparent;
-            --shadow: none;
+            --border: #e4e8ee;
+            --border-light: #eef1f5;
+            --shadow: 0 1px 2px rgba(15,23,42,0.04), 0 1px 3px rgba(15,23,42,0.05);
+            --surface: #ffffff;
+            --surface-hover: #f3f6fa;
             --shadow-hover: 0 12px 32px rgba(25,28,29,0.04);
             --radius: 12px;
             --surface-low: #f3f4f5;
@@ -281,7 +283,10 @@
 
         /* ── Loading ──── */
         .loading-wrap { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 60px 20px; }
-        .loading-spinner { width: 28px; height: 28px; border: 3px solid var(--surface-high); border-top-color: var(--green); border-radius: 50%; animation: spin 0.8s linear infinite; margin-bottom: 12px; }
+        .loading-spinner, .spinner { width: 28px; height: 28px; border: 3px solid var(--surface-high); border-top-color: var(--brand-cyan); border-radius: 50%; animation: spin 0.8s linear infinite; margin-bottom: 12px; }
+        /* Fokusring — synlig tangentbordsnavigering i hela appen */
+        :focus-visible { outline: 2px solid var(--brand-cyan); outline-offset: 2px; border-radius: 4px; }
+        button:focus:not(:focus-visible), [tabindex]:focus:not(:focus-visible) { outline: none; }
 
         /* ── Dashboard page ─────────────────────────────── */
         .dash-grid { display: flex; flex-direction: column; gap: 22px; }
@@ -1586,7 +1591,8 @@ const TAB_META = {
     signals:     { title: 'Topplistan',      sub: 'DAKTIER-poäng — hela universumet rankat efter kvalitet, kassaflöde, tillväxt, stabilitet och värdering' },
     stocks:      { title: 'Alla aktier',     sub: 'Komplett databas över nordiska & US-aktier' },
     hotmovers:   { title: 'Ägarmomentum',    sub: 'Ägarförändringar — från intraday till 1 år' },
-    trending:    { title: 'Ägarmomentum',    sub: 'Ägarförändringar — från intraday till 1 år' },
+    trending:    { title: 'Trending Value & Quality', sub: 'Backtest-validerade kvantscreens — värde × kvalitet' },
+    koplista:    { title: 'Köplistan',       sub: 'Dagens regelstyrda köplista' },
     insiders:    { title: 'Insiders',        sub: 'Insidertransaktioner i realtid' },
     metrics:     { title: 'Nyckeltal',       sub: 'Modeller för SE & US marknaden – från böckerna' },
     ocf:         { title: 'Kassaflöde',      sub: 'Topplista: operativt kassaflöde' },
@@ -1686,6 +1692,7 @@ const TAB_HASH = {
     fcf: '/aktier/fritt-kassaflode',
     insiders: '/aktier/insiders', backtest: '/aktier/utredning',
     signals: '/edge-signals', portfolio: '/installningar/simulering',
+    trending: '/trending',
 };
 const HASH_TAB = Object.fromEntries(Object.entries(TAB_HASH).map(([t, h]) => [h, t]));
 let _ignoreHashChange = false;
@@ -2843,7 +2850,7 @@ function renderHotMoversTable() {
         ? `<span style="display:inline-flex;align-items:center;gap:4px"><span class="live-dot"></span>LIVE — intraday vs senaste snapshot (${hotDateTo||'–'})</span>`
         : `📅 Dagligt (${dateInfo} · ${lbLabel})`;
     const titleTxt = hotMode === 'live'
-        ? 'Hot Movers — Live ägarförändring'
+        ? 'Ägarmomentum — live ägarförändring'
         : 'Hot Movers — Daglig ägarförändring';
 
     document.getElementById('content').innerHTML = `
@@ -4129,7 +4136,7 @@ async function loadPriceChartForBuyZone(orderbookId, containerId, zonePrice, cur
         const data = await r.json();
         const prices = data.prices || [];
         if (prices.length < 5) {
-            container.innerHTML = `<div style="font-size:11px;color:var(--text-muted);text-align:center;padding:8px">Otillräcklig prishistorik (Börsdata-prisbulk pågår fortfarande).</div>`;
+            container.innerHTML = `<div style="font-size:11px;color:var(--text-muted);text-align:center;padding:8px">Otillräcklig prishistorik ännu — kurshistoriken fylls på nattetid.</div>`;
             return;
         }
         const closes = prices.map(p => p.close).filter(v => v != null);
@@ -4533,7 +4540,7 @@ function renderHistoricalSection(s) {
             <div style="padding:16px;background:linear-gradient(135deg,#fef3c7,#fde68a);border-radius:10px;font-size:13px;color:#78350f">
                 <div style="font-weight:600;margin-bottom:6px">⚠ Historisk data saknas för detta bolag</div>
                 <div style="font-size:12px;line-height:1.5">
-                    Varken Avanza eller Börsdata har 10-års-historik för bolaget. Detta är vanligt för:
+                    Varken Avanza eller rapportarkivet har 10-års-historik för bolaget. Detta är vanligt för:
                     nyligen noterade bolag, små illikvida aktier, samt vissa globala bolag som inte täcks av Avanza.
                     <a href="#" onclick="event.preventDefault(); checkHistSyncStatus()" style="color:#1e40af;font-weight:600">Visa sync-status</a>.
                 </div>
@@ -4544,7 +4551,7 @@ function renderHistoricalSection(s) {
         </div>`;
     }
     // Markera om datakällan är Börsdata (fallback)
-    const dataSource = s.historical_source === 'borsdata' ? 'Börsdata' : 'Avanza';
+    const dataSource = s.historical_source === 'borsdata' ? 'Rapportarkivet' : 'Avanza';
 
     // Sortera stigande på år
     const sorted = [...annual].sort((a, b) => (a.financial_year||0) - (b.financial_year||0));
@@ -4708,7 +4715,7 @@ function renderFScoreSection(s) {
             <div>
                 <div class="drawer-section-title" style="margin:0;color:${interpStyle.color}">📐 Piotroski F-Score</div>
                 <div style="font-size:11px;color:${interpStyle.color};opacity:0.85;margin-top:2px">
-                    Baserat på Börsdata-rapport ${f.year_prev}→${f.year}
+                    Baserat på årsrapporterna ${f.year_prev}→${f.year}
                 </div>
             </div>
             <div style="text-align:right">
@@ -5236,7 +5243,7 @@ function renderQuantRank(s) {
                     KVANT-RANG (vs ${q.n_universe} bolag)
                 </div>
                 <div style="font-size:11px;color:#3730a3;opacity:0.85;margin-top:2px">
-                    Percent-rank på senaste KPI-värden från Börsdata 20y
+                    Percent-rank på senaste KPI-värden mot 20 års arkiv
                 </div>
             </div>
             <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center">${recBadge} ${trifectaBadge}</div>
@@ -5288,7 +5295,7 @@ async function loadRsiSparkline(ticker, containerId) {
         }).join(' ');
         const currentRsi = d.current_rsi || 50;
         const rsiColor = currentRsi >= 70 ? '#ea580c' : currentRsi <= 30 ? '#0284c7' : '#059669';
-        const rsiLabel = currentRsi >= 70 ? 'Övertköpt' : currentRsi <= 30 ? 'Översålt' : 'Neutral';
+        const rsiLabel = currentRsi >= 70 ? 'Överköpt' : currentRsi <= 30 ? 'Översålt' : 'Neutral';
         // Overheat-zoner (RSI 70+)
         const overheatY = H - (70/100)*H;
         const oversoldY = H - (30/100)*H;
@@ -5374,7 +5381,7 @@ function renderQualityPersistence(s) {
                 `Marginaler: ${trend.label}`)}
         </div>
         <div style="font-size:10px;color:${sty.color};opacity:0.7;margin-top:8px;font-style:italic;line-height:1.4">
-            Källa: Börsdata KPI-history 5 år. Verifierar att kvalitet är PERSISTANT,
+            Källa: KPI-historik 5 år ur rapportarkivet. Verifierar att kvalitet är PERSISTENT,
             inte ett enstaka peak-år. Hög score = svår att fejka.
         </div>
     </div>`;
@@ -6892,7 +6899,7 @@ function _buildReportCard(d, rich) {
                 <div style="font-size:10.5px;font-weight:800;text-transform:uppercase;letter-spacing:0.5px;color:#64748b;margin-bottom:6px">Metod & transparens</div>
                 <div style="font-size:10.5px;line-height:1.6;color:#64748b">
                     <strong style="color:#475569">Metod:</strong> Multi-strategi-ramverk (Swing/Quality/Value) med klassificerings-router, 4-axlad scoring (Value·Quality·Momentum·Risk), reverse-DCF mot baseline och automatisk konsistens-granskning.
-                    <strong style="color:#475569">Datakällor:</strong> Börsdata &amp; Avanza, daterat ${d.report_date}.
+                    <strong style="color:#475569">Datakällor:</strong> SEC EDGAR, rapportarkiv &amp; Avanza, daterat ${d.report_date}.
                     <strong style="color:#475569">Karaktär:</strong> Detta är ett <em>investeringsanalytiskt beslutsstöd</em> — inte en personlig investeringsrekommendation enligt MAR/MiFID II och inte en uppmaning att köpa eller sälja ett specifikt instrument.
                     <strong style="color:#475569">Intressekonflikt:</strong> Analysen genereras maskinellt; DAKTIER innehar inga positioner i analyserade bolag och ersätts inte av emittenten.
                     Gör alltid en egen bedömning utifrån din situation, eller rådgör med en licensierad rådgivare.
@@ -7064,7 +7071,7 @@ function _buildAgentAnalysisCard(text, meta) {
                 <div style="font-size:10.5px;font-weight:800;text-transform:uppercase;letter-spacing:0.5px;color:#64748b;margin-bottom:6px">Metod &amp; transparens</div>
                 <div style="font-size:10.5px;line-height:1.6;color:#64748b">
                     <strong style="color:#475569">Metod:</strong> Multi-strategi-ramverk (Swing/Quality/Value) med klassificerings-router, 4-axlad scoring och reverse-DCF.
-                    <strong style="color:#475569">Datakällor:</strong> Börsdata &amp; Avanza, daterat ${meta.date || ''}.
+                    <strong style="color:#475569">Datakällor:</strong> SEC EDGAR, rapportarkiv &amp; Avanza, daterat ${meta.date || ''}.
                     <strong style="color:#475569">Karaktär:</strong> Investeringsanalytiskt <em>beslutsstöd</em> — inte en personlig investeringsrekommendation enligt MAR/MiFID II och inte en uppmaning att köpa eller sälja ett specifikt instrument.
                     <strong style="color:#475569">Intressekonflikt:</strong> Analysen genereras maskinellt; DAKTIER innehar inga positioner i analyserade bolag.
                     Gör alltid en egen bedömning utifrån din situation, eller rådgör med en licensierad rådgivare.
@@ -7726,7 +7733,7 @@ const TOOL_LABELS = {
     get_quarterly_trends: { icon: 'show_chart',        label: 'Läser kvartalstrend',   labelDone: 'Läste kvartalstrend' },
     get_owner_history:    { icon: 'group',             label: 'Läser ägartrend',       labelDone: 'Läste ägartrend' },
     get_top_stocks:       { icon: 'leaderboard',       label: 'Bygger topplista',      labelDone: 'Byggde topplista' },
-    get_borsdata_history: { icon: 'history',           label: 'Hämtar Börsdata-historik', labelDone: 'Börsdata-historik' },
+    get_borsdata_history: { icon: 'history',           label: 'Hämtar kurshistorik', labelDone: 'Kurshistorik' },
     get_sector_peers:     { icon: 'category',          label: 'Jämför sektor-peers',   labelDone: 'Sektor-peers' },
     get_backtest:         { icon: 'replay',            label: 'Kör backtest',          labelDone: 'Backtestade' },
     web_search:           { icon: 'language',          label: 'Söker på webben',       labelDone: 'Webb-sökning' },
@@ -8963,14 +8970,14 @@ async function fetchTrending() {
         const res = await fetch(url);
         const data = await res.json();
         _trendingData = data;
-        renderTrendingTable();
+        renderTrendingVQTable();
     } catch (e) {
         document.getElementById('trendingContent').innerHTML =
             `<div style="color: #dc2626; padding: 20px">Fel: ${e.message}</div>`;
     }
 }
 
-function renderTrendingTable() {
+function renderTrendingVQTable() {
     const data = _trendingData;
     if (!data || !data.results) return;
     const rows = data.results;
@@ -9142,7 +9149,7 @@ async function renderBacktest() {
         <div class="bt-header">
             <strong>📊 Setup-backtest</strong> — kvartalsvis rebalans, likavikt, 1M SEK startkapital, 2018-nu.
             <div style="font-size:12px;margin-top:4px;opacity:0.85">
-                Lookahead-skydd: report_end + 30 dagar release-lag. Kräver att Börsdata-pris-data är synkad.
+                Lookahead-skydd: report_end + 30 dagar release-lag. Kräver att kurshistoriken är synkad.
             </div>
         </div>
 
@@ -9519,7 +9526,7 @@ async function loadForwardPeTable() {
                 <tbody>${rows}</tbody>
             </table></div>
             <div style="font-size:11px;color:#9ca3af;margin-top:8px">
-                <strong>PEG = P/E ÷ EPS-growth.</strong> Lägre = bättre. &lt;1 = undervärderat tillväxtbolag,
+                <strong>PEG = P/E ÷ vinsttillväxt.</strong> Lägre = bättre. &lt;1 = undervärderat tillväxtbolag,
                 1-2 = rimligt, &gt;3 = mycket dyrt vs sin tillväxt.
             </div>`;
     } catch (e) {
@@ -10072,7 +10079,7 @@ async function renderDashboard() {
             <div class="dash-section" id="reportsWrap">
                 <h3 class="dash-heading" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
                     📊 Rapporter
-                    <span class="dash-sub">allt på ett ställe · Börsdata + stockanalysis</span>
+                    <span class="dash-sub">allt på ett ställe · rapportarkiv + stockanalysis</span>
                     <button id="analyzeReportsBtn" onclick="analyzeReportsToday()"
                         style="margin-left:auto;background:linear-gradient(135deg,#059669,#10b981);color:white;border:none;padding:7px 14px;border-radius:8px;cursor:pointer;font-weight:600;font-family:inherit;font-size:12px">
                         🤖 Analysera dagens rapport-bolag
@@ -10608,7 +10615,7 @@ function renderReportTab() {
             ({pre_market:0,during_market:1,post_market:2}[a.report_time] ?? 3) -
             ({pre_market:0,during_market:1,post_market:2}[b.report_time] ?? 3));
         if (!reps.length) { el.innerHTML = _repEmpty('Inga bolag rapporterar idag.'); return; }
-        el.innerHTML = `<div style="font-size:12px;color:#6b7280;margin-bottom:8px"><strong>${reps.length}</strong> bolag rapporterar idag (Börsdata). Klicka en för analys.</div>
+        el.innerHTML = `<div style="font-size:12px;color:#6b7280;margin-bottom:8px"><strong>${reps.length}</strong> bolag rapporterar idag. Klicka en för analys.</div>
             <div class="rep-grid">${reps.map(rp => {
                 const t = rp.expected_release_at ? String(rp.expected_release_at).slice(11,16) : '';
                 return `<div class="rep-card" onclick="openStockByTicker('${String(rp.ticker||'').replace(/'/g,'')}')">
@@ -11243,7 +11250,7 @@ const METRICS_DB = [
     // === US-SPECIFIC ===
     {cat:'US-specifikt', market:'US', code:'Shiller CAPE', name:'CAPE-ratio', desc:'Pris / snitt 10 års inflationsjusterad vinst (S&P 500).', rule:'< 15 = köp, > 25 = varning, > 35 = krasch risk', book:'Shiller'},
     {cat:'US-specifikt', market:'US', code:'Buffett Ind.', name:'Market Cap / GDP', desc:'Total marknad genom BNP. Buffetts makro-varningsflagg.', rule:'< 100% = rimligt, > 140% = fara', book:'Buffett/Shiller'},
-    {cat:'US-specifikt', market:'US', code:'Beta', name:'Beta (mot S&P500)', desc:'Hur volatil aktien är vs index. Markis avvisar detta som "risk".', rule:'0.8-1.2 = normal, > 1.5 = volatil', book:'Marks'},
+    {cat:'US-specifikt', market:'US', code:'Beta', name:'Beta (mot S&P500)', desc:'Hur volatil aktien är vs index. Marks avvisar detta som "risk".', rule:'0.8-1.2 = normal, > 1.5 = volatil', book:'Marks'},
     {cat:'US-specifikt', market:'US', code:'Forward P/E', name:'Forward P/E', desc:'Pris / förväntad vinst kommande år.', rule:'Jämför med historisk median för bolaget', book:'Damodaran'},
     {cat:'US-specifikt', market:'US', code:'Short Interest', name:'Kort-andel', desc:'Andel av aktier som är blankade.', rule:'> 20% = hög kontroversiell position, short squeeze-risk', book:'–'},
 
