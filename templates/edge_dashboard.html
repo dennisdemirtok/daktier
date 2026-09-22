@@ -736,6 +736,85 @@
 
         .mobile-menu-btn { display: none; background: none; border: none; cursor: pointer; color: var(--text-muted); padding: 8px; border-radius: 6px; min-width: 36px; min-height: 36px; align-items: center; justify-content: center; }
         .mobile-menu-btn:hover { background: var(--surface-low); }
+    
+        /* ═══════════════════════════════════════════════════════════════
+           DESIGNLAGER 2026-09 — sammanhållet, modernt utseende
+           Marinblå = primärt/aktivt · cyan = fokus/markering ·
+           grönt/rött = ENBART upp/ned. Ligger sist så det vinner.
+           ═══════════════════════════════════════════════════════════════ */
+        html { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
+        body { font-size: 14px; }
+        button, input, select, textarea { font-family: inherit; }
+        /* Topnav */
+        .topnav { border-bottom: 1px solid var(--border); box-shadow: 0 1px 0 rgba(15,23,42,0.02); }
+        .topnav-item { border-radius: 9px; font-weight: 600; }
+        .topnav-item.active { background: var(--blue-light); color: var(--brand-navy); }
+        .topnav-item.primary { color: var(--brand-navy); }
+        .topnav-item.primary.active { background: linear-gradient(135deg, var(--brand-navy-deep), var(--brand-navy)); color: #fff; box-shadow: 0 2px 8px rgba(22,54,92,0.28); }
+        .topnav-item.primary:not(.active):hover { background: var(--blue-light); }
+        /* Sidhuvud */
+        .page-title { font-size: 24px; letter-spacing: -0.02em; color: var(--ink); }
+        .page-subtitle { font-size: 13.5px; color: var(--ink-soft); }
+        /* Kort och ytor — synlig ram, mjuk skugga, samma radie överallt */
+        body .card, body .stat-tile, body .macro-card, body .news-card, body .trend-card, body .rep-card,
+        body .mp-card, body .an-card, body .tip-card, body .playbook-card, body .bt-result-card, body .mdo-stat,
+        body .table-container, body .filter-bar { background: #fff; border: 1px solid var(--border); border-radius: 12px; box-shadow: var(--shadow); }
+        body .card:hover, body .news-card:hover, body .trend-card:hover, body .rep-card:hover, body .mp-card:hover, body .an-card:hover { box-shadow: var(--shadow-hover); border-color: #d5dbe4; }
+        body .filter-bar { padding: 10px 12px; backdrop-filter: none; -webkit-backdrop-filter: none; }
+        /* Tabeller — klibbigt huvud, lätta radlinjer, tydlig hover */
+        .table-container { overflow: auto; }
+        table { border-collapse: separate; border-spacing: 0; }
+        th { background: #fafbfc; border-bottom: 1px solid var(--border); font-weight: 600; letter-spacing: 0.04em; padding: 11px 12px; position: sticky; top: 0; z-index: 2; white-space: nowrap; }
+        td { padding: 10px 12px; border-bottom: 1px solid var(--border-light); vertical-align: middle; }
+        tbody tr:last-child td { border-bottom: none; }
+        tbody tr:hover { background: var(--surface-hover); }
+        .stock-name:hover { color: var(--brand-navy); text-decoration: underline; text-decoration-color: var(--brand-cyan); text-underline-offset: 3px; }
+        /* Scroll-skuggor: visar att tabellen fortsätter åt sidan (mobil) */
+        .table-container { background-image:
+            linear-gradient(to right, #fff 30%, rgba(255,255,255,0)), linear-gradient(to left, #fff 30%, rgba(255,255,255,0)),
+            radial-gradient(farthest-side at 0 50%, rgba(15,23,42,0.14), transparent), radial-gradient(farthest-side at 100% 50%, rgba(15,23,42,0.14), transparent);
+            background-position: left, right, left, right; background-size: 40px 100%, 40px 100%, 14px 100%, 14px 100%;
+            background-repeat: no-repeat; background-attachment: local, local, scroll, scroll; }
+        /* Chips — pill-form, marinblå aktiv */
+        .filter-chip, .period-chip, .dir-chip, .signal-chip { border-radius: 999px; font-size: 12px; font-weight: 500; padding: 6px 12px; border: 1px solid transparent; color: var(--ink-soft); }
+        .filter-chip:hover, .period-chip:hover, .signal-chip:hover, .dir-chip:hover { background: var(--surface-low); color: var(--ink); }
+        .filter-chip.active, .period-chip.active, .signal-chip.active { background: var(--brand-navy); color: #fff; box-shadow: none; }
+        .dir-chip.active.up { background: var(--green-dark); } .dir-chip.active.down { background: var(--red); }
+        /* Formulärfält */
+        input[type=text], input[type=search], input[type=email], input[type=number], input[type=date], select, textarea {
+            border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; font-size: 13px; background: #fff; color: var(--text); transition: border-color .15s, box-shadow .15s; }
+        input:focus, select:focus, textarea:focus { border-color: var(--brand-cyan); box-shadow: 0 0 0 3px var(--brand-cyan-light); outline: none; }
+        /* Knappar */
+        .btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 8px 14px; border-radius: 8px; font-size: 13px; font-weight: 600; line-height: 1.2;
+               border: 1px solid var(--border); background: #fff; color: var(--ink); cursor: pointer; transition: background .15s, box-shadow .15s, transform .05s; white-space: nowrap; }
+        .btn:hover { background: var(--surface-hover); border-color: #d5dbe4; }
+        .btn:active { transform: translateY(1px); }
+        .btn-primary { background: var(--brand-navy); border-color: var(--brand-navy); color: #fff; }
+        .btn-primary:hover { background: var(--brand-navy-deep); border-color: var(--brand-navy-deep); }
+        .btn-accent { background: var(--brand-cyan); border-color: var(--brand-cyan); color: #fff; }
+        .btn-accent:hover { filter: brightness(0.94); }
+        .btn-ghost { background: transparent; border-color: transparent; color: var(--brand-navy); }
+        .btn-ghost:hover { background: var(--blue-light); border-color: transparent; }
+        .btn-sm { padding: 5px 10px; font-size: 12px; border-radius: 7px; }
+        .btn-block { width: 100%; }
+        .btn[disabled], .btn:disabled { opacity: .55; cursor: default; transform: none; }
+        .refresh-btn { background: var(--brand-navy); }
+        .refresh-btn:hover { background: var(--brand-navy-deep); opacity: 1; transform: none; }
+        /* Aktielådan */
+        .drawer { box-shadow: -12px 0 48px rgba(15,23,42,0.18); }
+        .drawer-section-title { font-size: 13px; font-weight: 700; color: var(--ink); text-transform: none; letter-spacing: 0; border-bottom: 1px solid var(--border); padding-bottom: 8px; margin: 0 0 12px; line-height: 1.4; }
+        .dtab.active { border-bottom-color: var(--brand-navy); }
+        /* Subnav */
+        .subnav-item.active { background: var(--blue-light); color: var(--brand-navy); }
+        /* Tunna, diskreta rullningslister */
+        *::-webkit-scrollbar { width: 10px; height: 10px; }
+        *::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 8px; border: 2px solid transparent; background-clip: padding-box; }
+        *::-webkit-scrollbar-thumb:hover { background: #94a3b8; border: 2px solid transparent; background-clip: padding-box; }
+        *::-webkit-scrollbar-track { background: transparent; }
+        /* Länkar */
+        a { color: var(--brand-navy); text-decoration-color: rgba(22,54,92,0.35); text-underline-offset: 2px; }
+        /* Reduced motion */
+        @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; } }
     </style>
 </head>
 <body>
@@ -771,7 +850,7 @@
     </div>
 
     <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:22px">
-      <button onclick="dismissWelcome()" style="background:linear-gradient(135deg,#1d4ed8,#3b82f6);color:white;border:none;padding:11px 22px;border-radius:10px;cursor:pointer;font-weight:600;font-family:inherit;font-size:14px">
+      <button onclick="dismissWelcome()" class="btn btn-primary">
         Förstått — visa dashboarden
       </button>
     </div>
@@ -846,7 +925,7 @@ window.showWelcome = function() {
             <div id="accountEmail" style="padding:6px 16px 10px;font-size:12.5px;color:#64748b;border-bottom:1px solid #f1f5f9;word-break:break-all">…</div>
             <div id="accountUsage" style="padding:8px 16px;font-size:11.5px;color:#64748b"></div>
             <a id="adminLink" href="/admin" style="display:none;padding:8px 16px;font-size:13px;color:#1e40af;text-decoration:none;font-weight:600">🛠 Admin — användare &amp; kostnad</a>
-            <div onclick="_doLogout()" style="padding:8px 16px;font-size:13px;color:#b91c1c;cursor:pointer;font-weight:600">Logga ut</div>
+            <button type="button" onclick="_doLogout()" style="display:block;width:100%;text-align:left;background:none;border:0;padding:8px 16px;font-size:13px;color:#b91c1c;cursor:pointer;font-weight:600">Logga ut</button>
         </div>
         <button id="refreshInsidersBtn" onclick="doRefreshInsiders()" style="display:none"></button>
     </div>
@@ -890,15 +969,13 @@ window.showWelcome = function() {
 </div>
 
 <div class="drawer-overlay" id="drawerOverlay" onclick="closeDrawer()"></div>
-<div class="drawer" id="stockDrawer">
+<div class="drawer" id="stockDrawer" role="dialog" aria-modal="true" aria-label="Aktieanalys">
     <div class="drawer-header">
         <div id="drawerHeaderContent"></div>
         <div style="display:flex;gap:6px;align-items:center;flex-shrink:0">
-            <button onclick="downloadStockPng()" title="Ladda ner som PNG"
-                style="background:white;border:1px solid var(--border);color:#1e40af;padding:6px 10px;border-radius:7px;cursor:pointer;font-size:12px;font-weight:600;font-family:inherit">📷 PNG</button>
-            <button onclick="downloadStockPdf()" title="Ladda ner som PDF"
-                style="background:linear-gradient(135deg,#1d4ed8,#3b82f6);border:none;color:white;padding:6px 10px;border-radius:7px;cursor:pointer;font-size:12px;font-weight:600;font-family:inherit">📄 PDF</button>
-            <button class="drawer-close" onclick="closeDrawer()">&#x2715;</button>
+            <button onclick="downloadStockPng()" title="Ladda ner som PNG" class="btn btn-sm">📷 PNG</button>
+            <button onclick="downloadStockPdf()" title="Ladda ner som PDF" class="btn btn-sm btn-primary">📄 PDF</button>
+            <button class="drawer-close" onclick="closeDrawer()" aria-label="Stäng">&#x2715;</button>
         </div>
     </div>
     <div class="drawer-body" id="drawerBody"></div>
@@ -1589,7 +1666,7 @@ function renderTopnavMenu() {
         // init() och lämnade HELA siten på "Laddar data..." (2026-08-06)
         const s = NAV_SECTIONS[key];
         const cls = 'topnav-item' + (key === 'agent' ? ' primary' : '');
-        return `<button class="${cls}" data-section="${key}" onclick="navTo('${key}')">
+        return `<button class="${cls}" data-section="${key}" title="${s.label}" onclick="navTo('${key}')">
             <span class="material-symbols-outlined">${s.icon}</span><span>${s.label}</span></button>`;
     }).join('');
 }
@@ -1611,7 +1688,9 @@ function _syncNav() {
     const sec = TAB_TO_SECTION[currentTab] || 'dashboard';
     document.body.setAttribute('data-tab', currentTab);  // v3.8: för tab-specifik CSS
     document.querySelectorAll('[data-section]').forEach(b => {
-        b.classList.toggle('active', b.dataset.section === sec);
+        const on = b.dataset.section === sec;
+        b.classList.toggle('active', on);
+        if (on) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current');
     });
     renderSubnav(sec);
 }
@@ -3186,7 +3265,7 @@ function renderBookModelSection(s) {
     `).join('');
 
     return `<div class="drawer-section">
-        <div class="drawer-section-title">📚 Bokmodeller (från böckerna)</div>
+        <h3 class="drawer-section-title">📚 Bokmodeller (från böckerna)</h3>
         ${valueTrapBanner}
         <div style="background:linear-gradient(135deg,#f5f3ff,#ede9fe);border-radius:12px;padding:14px 16px;margin-bottom:10px">
             <div style="display:flex;align-items:center;gap:14px">
@@ -3678,7 +3757,7 @@ function renderQuarterlyTrendsSection(s) {
     </div>`;
 
     return `<div class="drawer-section">
-        <div class="drawer-section-title">📈 Vinst- och tillväxtutveckling per kvartal</div>
+        <h3 class="drawer-section-title">📈 Vinst- och tillväxtutveckling per kvartal</h3>
         ${turnaroundBadge ? `<div style="margin-bottom:10px">${turnaroundBadge}</div>` : ''}
         <div style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:12px">
             ${bigStat('Nettoresultat', fmtMoney(latest.net_profit), latest.net_profit > 0 ? '#00a870' : '#c0392b', profitQoQ, profitYoY, sortedAsc.map(r => r.net_profit))}
@@ -3714,7 +3793,7 @@ function renderHistoricalSection(s) {
     const ctx = s.historical_context || {};
     if (!annual.length) {
         return `<div class="drawer-section">
-            <div class="drawer-section-title">📊 10-års historik</div>
+            <h3 class="drawer-section-title">📊 10-års historik</h3>
             <div style="padding:16px;background:linear-gradient(135deg,#fef3c7,#fde68a);border-radius:10px;font-size:13px;color:#78350f">
                 <div style="font-weight:600;margin-bottom:6px">⚠ Historisk data saknas för detta bolag</div>
                 <div style="font-size:12px;line-height:1.5">
@@ -3819,7 +3898,7 @@ function renderHistoricalSection(s) {
     }
 
     return `<div class="drawer-section">
-        <div class="drawer-section-title">📊 ${sorted.length}-års historik (${dataSource})</div>
+        <h3 class="drawer-section-title">📊 ${sorted.length}-års historik (${dataSource})</h3>
         ${contextPills.length ? `<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px">${contextPills.join('')}</div>` : ''}
         ${miniRow('EPS per aktie', eps, '#3b82f6', fmtEps)}
         ${miniRow('Return on Equity', roe, '#10b981', fmtRoe)}
@@ -4213,7 +4292,7 @@ function renderPeersPlaceholder(s) {
             Peer-jämförelse
         </div>
         <div id="peerContent">
-            <button onclick="loadPeers(${s.orderbook_id})" style="padding:10px 16px;background:white;border:1px solid var(--border);border-radius:10px;cursor:pointer;font-size:12px;font-weight:600;width:100%">
+            <button onclick="loadPeers(${s.orderbook_id})" class="btn">
                 <span class="material-symbols-outlined" style="font-size:14px;vertical-align:middle">add_chart</span>
                 Visa jämförelse mot konkurrenter
             </button>
@@ -5311,7 +5390,7 @@ function openDrawer(s) {
         ['1Y','one_year_change_pct'],['3Y','three_years_change_pct'],['5Y','five_years_change_pct'],
         ['10Y','ten_years_change_pct'],['Alltid','infinity_change_pct'],
     ];
-    B.oversikt += `<div class="drawer-section"><div class="drawer-section-title">Prisutveckling</div><div class="drawer-grid-3">${
+    B.oversikt += `<div class="drawer-section"><h3 class="drawer-section-title">Prisutveckling</h3><div class="drawer-grid-3">${
         priceFields.map(([l,k]) => {
             const v = s[k];
             return `<div class="drawer-item"><div class="drawer-item-label">${l}</div><div class="drawer-item-value ${pctClass(v)}">${fmtPct(v)}</div></div>`;
@@ -5324,7 +5403,7 @@ function openDrawer(s) {
         ['1M','owners_change_1m','owners_change_1m_abs'],['3M','owners_change_3m','owners_change_3m_abs'],
         ['YTD','owners_change_ytd','owners_change_ytd_abs'],['1Y','owners_change_1y','owners_change_1y_abs'],
     ];
-    B.agare += `<div class="drawer-section"><div class="drawer-section-title">Ägarförändringar (${fmtNum(s.number_of_owners)} ägare)</div><div class="drawer-grid-3">${
+    B.agare += `<div class="drawer-section"><h3 class="drawer-section-title">Ägarförändringar (${fmtNum(s.number_of_owners)} ägare)</h3><div class="drawer-grid-3">${
         ownerFields.map(([l,pk,ak]) => {
             const v = s[pk]; const abs = s[ak];
             return `<div class="drawer-item"><div class="drawer-item-label">${l}</div>
@@ -5398,7 +5477,7 @@ function openDrawer(s) {
     const sectorBadge = sm
         ? `<span style="font-size:11px;background:#dbeafe;color:#1e40af;padding:2px 8px;border-radius:10px;margin-left:8px">vs ${sm.sector} (${sm.n_stocks} bolag)</span>`
         : '';
-    B.nyckeltal += `<div class="drawer-section"><div class="drawer-section-title">Fundamentala nyckeltal${sectorBadge}</div><div class="drawer-grid">${
+    B.nyckeltal += `<div class="drawer-section"><h3 class="drawer-section-title">Fundamentala nyckeltal${sectorBadge}</h3><div class="drawer-grid">${
         fundItems.map(([l,v,fmt,medFn]) => `<div class="drawer-item"><div class="drawer-item-label">${l}</div><div class="drawer-item-value">${fmt(v)}</div>${medFn()}</div>`).join('')
     }</div></div>`;
 
@@ -5420,7 +5499,7 @@ function openDrawer(s) {
         ['MACD', s.macd_histogram, v => v!=null ? `<span class="${v>0?'num-pos':'num-neg'}">${v.toFixed(3)}</span>` : '-'],
         ['Boll. bredd', s.bollinger_distance_upper_to_lower, v => v!=null ? (v*100).toFixed(1)+'%' : '-'],
     ];
-    B.nyckeltal += `<div class="drawer-section"><div class="drawer-section-title">Tekniska indikatorer</div><div class="drawer-grid">${
+    B.nyckeltal += `<div class="drawer-section"><h3 class="drawer-section-title">Tekniska indikatorer</h3><div class="drawer-grid">${
         techItems.map(([l,v,fmt]) => `<div class="drawer-item"><div class="drawer-item-label">${l}</div><div class="drawer-item-value">${fmt(v)}</div></div>`).join('')
     }</div></div>`;
 
@@ -5470,13 +5549,8 @@ function openDrawer(s) {
 
     // ── AI ANALYS-KNAPP ──
     B.analys += `<div class="drawer-section">
-        <div class="drawer-section-title">🤖 AI-analys (Claude)</div>
-        <button id="aiAnalyzeBtn" onclick="analyzeStock()" style="
-            width:100%;padding:12px 16px;border:none;border-radius:10px;cursor:pointer;font-size:14px;font-weight:700;
-            background:linear-gradient(135deg,#7c3aed,#a855f7);color:white;display:flex;align-items:center;justify-content:center;gap:8px;
-            transition:all 0.2s;box-shadow:0 2px 8px rgba(124,58,237,0.3);
-        " onmouseover="this.style.transform='translateY(-1px)';this.style.boxShadow='0 4px 12px rgba(124,58,237,0.4)'"
-           onmouseout="this.style.transform='none';this.style.boxShadow='0 2px 8px rgba(124,58,237,0.3)'">
+        <h3 class="drawer-section-title">🤖 AI-analys (Claude)</h3>
+        <button id="aiAnalyzeBtn" onclick="analyzeStock()" class="btn btn-primary btn-block" style="padding:12px 16px;font-size:14px">
             🧠 Analysera nyckeltal
         </button>
         <div id="aiAnalysisResult" style="margin-top:12px"></div>
@@ -5484,7 +5558,7 @@ function openDrawer(s) {
 
     // ── INSIDER ──
     if (s.insider_buys > 0 || s.insider_sells > 0) {
-        B.agare += `<div class="drawer-section"><div class="drawer-section-title">Insiderhandel (90d)</div><div class="drawer-grid">
+        B.agare += `<div class="drawer-section"><h3 class="drawer-section-title">Insiderhandel (90d)</h3><div class="drawer-grid">
             <div class="drawer-item"><div class="drawer-item-label">Köp</div><div class="drawer-item-value" style="color:var(--green)">${s.insider_buys}</div></div>
             <div class="drawer-item"><div class="drawer-item-label">Sälj</div><div class="drawer-item-value" style="color:var(--red)">${s.insider_sells}</div></div>
             ${s.insider_cluster_buy ? '<div class="drawer-item" style="grid-column:span 2;background:var(--green-light)"><div class="drawer-item-value" style="color:var(--green)">🔥 Klusterköp (3+ insiders)</div></div>' : ''}
@@ -5493,10 +5567,10 @@ function openDrawer(s) {
 
     // v3.8: Nyheter + Insider-transaktioner (lazy-laddas efter render om data finns)
     B.oversikt += `<div class="drawer-section" id="drawerNewsSection" style="display:none">
-        <div class="drawer-section-title">📰 Senaste nyheter</div>
+        <h3 class="drawer-section-title">📰 Senaste nyheter</h3>
         <div id="drawerNews"></div></div>`;
     B.agare += `<div class="drawer-section" id="drawerInsidersSection" style="display:none">
-        <div class="drawer-section-title">👥 Insider-transaktioner (senaste)</div>
+        <h3 class="drawer-section-title">👥 Insider-transaktioner (senaste)</h3>
         <div id="drawerInsiders"></div></div>`;
 
     // ── Kompositlager: Montrose-stil flikar i stället för lång scroll ──
@@ -5741,6 +5815,9 @@ function openDrawer(s) {
     document.getElementById('stockDrawer').classList.add('open');
     document.getElementById('drawerOverlay').classList.add('open');
     document.body.style.overflow = 'hidden';
+    // Fokus in i dialogen; återställs vid stängning
+    if (!document.getElementById('stockDrawer').contains(document.activeElement)) window._drawerReturnFocus = document.activeElement;
+    setTimeout(() => { const c = document.querySelector('#stockDrawer .drawer-close'); if (c) c.focus({ preventScroll: true }); }, 60);
 
     // v3.8: lazy-ladda nyheter + insider-transaktioner
     if (s.short_name || s.name) { try { loadDrawerNewsAndInsiders(s); } catch (e) {} }
@@ -5759,11 +5836,38 @@ function openDrawer(s) {
 }
 
 function closeDrawer() {
-    document.getElementById('stockDrawer').classList.remove('open');
+    const dr = document.getElementById('stockDrawer');
+    if (!dr.classList.contains('open')) return;
+    dr.classList.remove('open');
     document.getElementById('drawerOverlay').classList.remove('open');
     document.body.style.overflow = '';
+    const rf = window._drawerReturnFocus; window._drawerReturnFocus = null;
+    if (rf && rf.focus && document.contains(rf)) { try { rf.focus({ preventScroll: true }); } catch (e) {} }
 }
 document.addEventListener('keydown', e => { if (e.key === 'Escape') closeDrawer(); });
+
+// ── Tillgänglighetspass: klickbara div/tr/span blir tangentbordsnåbara,
+//    fält utan etikett får aria-label från placeholder/title ──
+function _a11yPass(root) {
+    root = root || document;
+    root.querySelectorAll('[onclick]:not(button):not(a):not(input):not(select):not([role]):not([tabindex])').forEach(el => {
+        el.setAttribute('role', 'button'); el.setAttribute('tabindex', '0');
+    });
+    root.querySelectorAll('input:not([aria-label]):not([type=hidden]), select:not([aria-label]), textarea:not([aria-label])').forEach(el => {
+        const t = el.getAttribute('placeholder') || el.getAttribute('title');
+        if (t) el.setAttribute('aria-label', t);
+    });
+}
+document.addEventListener('keydown', e => {
+    if ((e.key === 'Enter' || e.key === ' ') && e.target && e.target.getAttribute && e.target.getAttribute('role') === 'button' && e.target.hasAttribute('onclick')) {
+        e.preventDefault(); e.target.click();
+    }
+});
+(function () {
+    let t = null;
+    const obs = new MutationObserver(() => { clearTimeout(t); t = setTimeout(() => _a11yPass(document), 80); });
+    document.addEventListener('DOMContentLoaded', () => { _a11yPass(document); obs.observe(document.body, { childList: true, subtree: true }); });
+})();
 
 // ── v3.8: Lazy-ladda nyheter + insider-transaktioner i drawern ──
 async function loadDrawerNewsAndInsiders(s) {
@@ -7948,7 +8052,7 @@ async function renderBacktest() {
             ].map(([k, l]) =>
                 `<button class="bt-setup-chip ${_backtestSelected.includes(k) ? 'active' : ''}" onclick="toggleBacktestSetup('${k}')">${l}</button>`
             ).join('')}
-            <button onclick="runBacktest()" style="background:linear-gradient(135deg,#059669,#10b981);color:white;border:none;padding:10px 20px;border-radius:8px;font-weight:700;cursor:pointer;font-family:inherit;margin-left:auto">▶ Kör jämförelse</button>
+            <button onclick="runBacktest()" class="btn btn-primary">▶ Kör jämförelse</button>
         </div>
 
         <div id="btResult" style="margin-top:14px"></div>
@@ -8391,7 +8495,7 @@ async function renderDashboard() {
                         <select id="bulletsDateSelect" onchange="loadBulletDate(this.value)"
                             style="background:white;border:1px solid var(--border);padding:6px 10px;border-radius:8px;font-size:12px;font-family:inherit;cursor:pointer"></select>
                         <button id="newsRefreshBtn" onclick="refreshBullets()" title="Hämta senaste"
-                            style="background:white;border:1px solid var(--border);padding:6px 12px;border-radius:8px;font-size:12px;cursor:pointer;font-family:inherit;font-weight:600">🔄</button>
+                            class="btn btn-sm">🔄</button>
                     </span>
                 </h3>
                 <div id="marketNewsContent" style="margin-top:6px">
@@ -8405,7 +8509,7 @@ async function renderDashboard() {
                     🇸🇪 Svenska & nordiska nyheter
                     <span class="dash-sub">bolagen vi följer · web-sökt · AI-sammanställt</span>
                     <button id="seNewsRefreshBtn" onclick="refreshSwedishNews()" title="Uppdatera"
-                        style="margin-left:auto;background:white;border:1px solid var(--border);padding:6px 12px;border-radius:8px;font-size:12px;cursor:pointer;font-family:inherit;font-weight:600">🔄</button>
+                        class="btn btn-sm" style="margin-left:auto">🔄</button>
                 </h3>
                 <div id="seNewsContent" style="margin-top:6px">
                     <div class="loading-wrap" style="padding:18px">Hämtar svenska nyheter…</div>
@@ -8418,7 +8522,7 @@ async function renderDashboard() {
                     🔥 Trending nu
                     <span class="dash-sub">mest sedda aktier · 🆕 = nyss inhoppad (tidig signal)</span>
                     <button onclick="syncTrending()" title="Uppdatera trending"
-                        style="margin-left:auto;background:white;border:1px solid var(--border);padding:6px 12px;border-radius:8px;font-size:12px;cursor:pointer;font-family:inherit;font-weight:600">🔄</button>
+                        class="btn btn-sm" style="margin-left:auto">🔄</button>
                 </h3>
                 <div id="trendingContent" style="margin-top:6px">
                     <div class="loading-wrap" style="padding:18px">Hämtar trending…</div>
@@ -8451,7 +8555,7 @@ async function renderDashboard() {
                     🌐 Macro Pulse
                     <span class="dash-sub">veckans makroläge · MarketSense-AI-inspirerat · web-sökt</span>
                     <button onclick="refreshMacroPulse()" title="Uppdatera makro-puls"
-                        style="margin-left:auto;background:white;border:1px solid var(--border);padding:6px 12px;border-radius:8px;font-size:12px;cursor:pointer;font-family:inherit;font-weight:600">🔄</button>
+                        class="btn btn-sm" style="margin-left:auto">🔄</button>
                 </h3>
                 <div id="macroPulseContent" style="margin-top:6px">
                     <div class="loading-wrap" style="padding:18px">Hämtar makro-puls…</div>
@@ -8756,7 +8860,7 @@ async function loadBullets(date) {
         if (!d.found) {
             el.innerHTML = `<div style="padding:16px;text-align:center;color:#6b7280;background:#f8fafc;border-radius:10px;font-size:13px">
                 Inga market bullets ännu. Klicka 🔄 för att hämta dagens, eller kör backfill för historik.
-                <div style="margin-top:8px"><button onclick="backfillBullets()" style="background:#1d4ed8;color:#fff;border:none;padding:7px 14px;border-radius:7px;cursor:pointer;font-size:12px;font-weight:600">⬇ Backfill 6 mån historik</button></div>
+                <div style="margin-top:8px"><button onclick="backfillBullets()" class="btn btn-primary btn-sm">⬇ Backfill 6 mån historik</button></div>
             </div>`;
             return;
         }
