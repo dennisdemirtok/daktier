@@ -720,7 +720,7 @@ def refresh_all_data():
 
 @app.route("/")
 def dashboard():
-    return render_template("edge_dashboard.html")
+    return render_template("edge_dashboard.html", build_id=BUILD_ID)
 
 
 # SPA-djuplänkar: frontend skriver dessa vägar med history.pushState, men
@@ -735,7 +735,7 @@ def dashboard():
 @app.route("/aktier")
 @app.route("/portfolj")
 def spa_djuplankar():
-    return render_template("edge_dashboard.html")
+    return render_template("edge_dashboard.html", build_id=BUILD_ID)
 
 
 @app.route("/backtest-report")
@@ -6038,6 +6038,8 @@ def _env_stadad(namn, default=""):
 # Kanonisk publik adress — används i mejlens länkar. Länkar som matchar
 # avsändardomänen (news@daktier.com) förbättrar dessutom skräppostpoängen.
 BASE_URL = _env_stadad("BASE_URL", "https://daktier.com").rstrip("/")
+# Build-id till klienten: cache-nycklar (dashboard-snapshot) byter per deploy
+BUILD_ID = (os.environ.get("RAILWAY_GIT_COMMIT_SHA") or "")[:8] or str(int(_time.time()))
 
 
 def _sparlage():

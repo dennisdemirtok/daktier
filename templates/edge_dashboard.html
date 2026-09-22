@@ -815,6 +815,19 @@
         a { color: var(--brand-navy); text-decoration-color: rgba(22,54,92,0.35); text-underline-offset: 2px; }
         /* Reduced motion */
         @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; } }
+    
+        /* ── Kolumnprioritet på mobil: bara det som bär beslutet får plats ── */
+        @media (max-width: 640px) {
+            .tbl-stocks th:nth-child(4), .tbl-stocks td:nth-child(4), .tbl-stocks th:nth-child(n+6), .tbl-stocks td:nth-child(n+6) { display: none; }
+            .tbl-hot th:nth-child(n+5), .tbl-hot td:nth-child(n+5) { display: none; }
+            .tbl-trend th:nth-child(n+5), .tbl-trend td:nth-child(n+5) { display: none; }
+            .tbl-ins th:nth-child(3), .tbl-ins td:nth-child(3), .tbl-ins th:nth-child(5), .tbl-ins td:nth-child(5), .tbl-ins th:nth-child(6), .tbl-ins td:nth-child(6) { display: none; }
+            .tbl-ocf th:nth-child(4), .tbl-ocf td:nth-child(4), .tbl-ocf th:nth-child(n+6), .tbl-ocf td:nth-child(n+6) { display: none; }
+            .tbl-fcf th:nth-child(4), .tbl-fcf td:nth-child(4), .tbl-fcf th:nth-child(n+6), .tbl-fcf td:nth-child(n+6) { display: none; }
+            .tbl-top th:nth-child(n+4):nth-child(-n+8), .tbl-top td:nth-child(n+4):nth-child(-n+8) { display: none; }
+            th, td { padding: 9px 8px; }
+            .page-title { font-size: 20px; }
+        }
     </style>
 </head>
 <body>
@@ -857,6 +870,7 @@
   </div>
 </div>
 
+<script>window.DAKTIER_BUILD = "{{ build_id }}";</script>
 <script>
 // Welcome-modal: visa första besök per browser
 (function() {
@@ -1560,6 +1574,7 @@ function switchTab(tab, el) {
         try { const c = document.getElementById('content'); if (c) _saveDashSnapshot(c.innerHTML); } catch (e) {}
     }
     currentTab = tab;
+    window.scrollTo({ top: 0 });
     // v3.7: synka top-nav + contextual subnav + mobile-nav aktiv-states
     if (typeof _syncNav === 'function') _syncNav();
     // v3.9: uppdatera URL-hashen
@@ -1644,14 +1659,33 @@ function _updateHash(tab) {
     const h = TAB_HASH[tab]; if (!h) return;
     if (location.hash !== '#' + h) { _ignoreHashChange = true; location.hash = h; }
 }
-function _tabFromHash() {
+let _pendingDrawerId = null;
+function _splitHash() {
+    // "#/aktier/aktie/12345" → { bas: '/aktier', aktie: '12345' }
     const h = (location.hash || '').replace(/^#/, '');
-    if (!h || h === '/') return 'agent';
-    return HASH_TAB[h] || null;
+    const m = h.match(/^(.*?)\/aktie\/(\d+)$/);
+    return m ? { bas: m[1] || '/', aktie: m[2] } : { bas: h, aktie: null };
+}
+function _tabFromHash() {
+    const { bas, aktie } = _splitHash();
+    _pendingDrawerId = aktie;
+    if (!bas || bas === '/') return 'agent';
+    return HASH_TAB[bas] || null;
 }
 function _navFromHash() {
     const tab = _tabFromHash();
     if (tab && tab !== currentTab) switchTab(tab);
+    if (_pendingDrawerId) { const id = _pendingDrawerId; _pendingDrawerId = null; if (typeof openStockDrawer === 'function') openStockDrawer(id); }
+    else if (document.getElementById('stockDrawer')?.classList.contains('open')) closeDrawer();
+}
+function _setDrawerHash(orderbookId) {
+    const bas = TAB_HASH[currentTab] || '/agent';
+    const h = bas + '/aktie/' + orderbookId;
+    if (location.hash !== '#' + h) { _ignoreHashChange = true; location.hash = h; }
+}
+function _clearDrawerHash() {
+    const { bas, aktie } = _splitHash();
+    if (aktie) history.replaceState(null, '', '#' + (bas || '/agent'));
 }
 window.addEventListener('hashchange', () => {
     if (_ignoreHashChange) { _ignoreHashChange = false; return; }
@@ -1811,6 +1845,20 @@ function focusNavSearch() {
 document.addEventListener('click', e => {
     if (!e.target.closest('#navSearch')) document.getElementById('navSearchResults')?.classList.remove('open');
 });
+
+function setHotDirection(d) { hotDirection = d; fetchData(); renderFilterBar(); }
+function setHotCountry(c) { hotCountry = c; fetchData(); renderFilterBar(); }
+function setInsiderType(t) { insiderType = t; fetchData(); renderFilterBar(); }
+function setSetupFilter(s) { setupFilter = s; fetchData(); renderFilterBar(); }
+function setSignalCountry(c) { signalCountry = c; fetchData(); renderFilterBar(); }
+function setActionFilter(a) { actionFilter = a; fetchData(); renderFilterBar(); }
+
+// Ägarmomentum — enhetlig period-väljare.
+function setMomPeriod(p) {
+    momPeriod = p;
+    fetchData();
+    renderFilterBar();
+}
 
 // ── Filter Actions ──────────────────────────────────
 
@@ -2022,7 +2070,7 @@ function renderDaktierTopplista(d) {
             </div>
         </div>
         <div class="table-container">
-            <table><thead><tr>
+            <table class="tbl-top"><thead><tr>
                 <th style="width:44px">#</th>
                 <th>Bolag</th>
                 <th style="text-align:right">POÄNG</th>
@@ -2549,7 +2597,7 @@ function renderStocksTable() {
 
     document.getElementById('content').innerHTML = `
         <div class="table-container">
-            <table><thead><tr>
+            <table class="tbl-stocks"><thead><tr>
                 <th style="width:40px">#</th>
                 <th onclick="doSort('name')" class="${thClass('name')}">Aktie${sortArrow('name')}</th>
                 <th onclick="doSort('daktier')" class="${thClass('daktier')}" style="text-align:right"
@@ -2621,7 +2669,7 @@ function renderHotMoversTable() {
             <div style="margin-left:auto;font-size:13px;color:#E65100;font-weight:600">${totalResults} aktier ${hotDirection==='up'?'ökar':'minskar'}</div>
         </div>
         <div class="table-container">
-            <table><thead><tr>
+            <table class="tbl-hot"><thead><tr>
                 <th style="width:40px">#</th>
                 <th>Aktie</th>
                 <th style="text-align:right">Ägare</th>
@@ -2672,7 +2720,7 @@ function renderTrendingTable() {
 
     document.getElementById('content').innerHTML = `
         <div class="table-container">
-            <table><thead><tr>
+            <table class="tbl-trend"><thead><tr>
                 <th style="width:40px">#</th>
                 <th>Aktie</th>
                 <th style="text-align:right">Ägare</th>
@@ -2709,7 +2757,7 @@ function renderInsidersTable() {
 
     document.getElementById('content').innerHTML = `
         <div class="table-container">
-            <table><thead><tr>
+            <table class="tbl-ins"><thead><tr>
                 <th style="width:40px">#</th>
                 <th>Emittent</th>
                 <th>Person / Befattning</th>
@@ -2775,7 +2823,7 @@ function renderFcfTable(d) {
             <button class="filter-chip ${!isEv?'active':''}" onclick="setFcfSort('fcf')">🏔 Störst FCF</button>
         </div>
         <div class="table-container">
-            <table><thead><tr>
+            <table class="tbl-fcf"><thead><tr>
                 <th style="width:40px">#</th>
                 <th>Bolag</th>
                 <th style="text-align:right" title="Fritt kassaflöde senaste 4 kvartalen">FCF (TTM)</th>
@@ -2837,7 +2885,7 @@ function renderOcfTable() {
     document.getElementById('content').innerHTML = `
         ${infoBanner}
         <div class="table-container">
-            <table><thead><tr>
+            <table class="tbl-ocf"><thead><tr>
                 <th style="width:40px">#</th>
                 <th onclick="doSort('name')" class="${thClass('name')}">Aktie${sortArrow('name')}</th>
                 <th onclick="doSort('ocf')" class="${thClass('ocf')}" style="text-align:right">OCF${sortArrow('ocf')}</th>
@@ -5815,6 +5863,7 @@ function openDrawer(s) {
     document.getElementById('stockDrawer').classList.add('open');
     document.getElementById('drawerOverlay').classList.add('open');
     document.body.style.overflow = 'hidden';
+    if (s.orderbook_id) _setDrawerHash(s.orderbook_id);
     // Fokus in i dialogen; återställs vid stängning
     if (!document.getElementById('stockDrawer').contains(document.activeElement)) window._drawerReturnFocus = document.activeElement;
     setTimeout(() => { const c = document.querySelector('#stockDrawer .drawer-close'); if (c) c.focus({ preventScroll: true }); }, 60);
@@ -5841,6 +5890,7 @@ function closeDrawer() {
     dr.classList.remove('open');
     document.getElementById('drawerOverlay').classList.remove('open');
     document.body.style.overflow = '';
+    _clearDrawerHash();
     const rf = window._drawerReturnFocus; window._drawerReturnFocus = null;
     if (rf && rf.focus && document.contains(rf)) { try { rf.focus({ preventScroll: true }); } catch (e) {} }
 }
@@ -7994,14 +8044,11 @@ function switchDrawerTab(name) {
 }
 
 function openStockDrawer(orderbookId) {
-    // Reuse existing drawer-fetch logic
-    if (typeof loadStockIntoDrawer === 'function') {
-        loadStockIntoDrawer(orderbookId);
-    } else {
-        fetch(`/api/stock/${orderbookId}`).then(r => r.json()).then(s => {
-            if (typeof openDrawer === 'function') openDrawer(s);
-        });
-    }
+    if (!orderbookId || orderbookId === 'null') return;
+    apiJson(`/api/stock/${orderbookId}`).then(st => {
+        if (st && st.orderbook_id) openDrawer(st);
+        else toast('Hittade ingen aktie med det id:t.', 'warn');
+    }).catch(e => toast('Kunde inte hämta aktien: ' + e.message, 'error'));
 }
 
 // ── Backtest ──
@@ -8422,7 +8469,9 @@ function _renderModelDetail(el, d) {
 // v3.8: snapshot-cache så dashboarden inte laddar om varje gång
 let _dashSnapshot = null;   // {html, ts}
 let _dashSnapTimer = null;
-const _DASH_SNAP_LS = 'daktier_dash_snap_v1';
+// Nyckeln bär build-id: en sparad snapshot får aldrig överleva en deploy
+// (gammal markup låg annars kvar i upp till ett dygn, 2026-09-22).
+const _DASH_SNAP_LS = 'daktier_dash_snap_' + (window.DAKTIER_BUILD || 'v1');
 
 // Persistent dashboard-cache: snapshot sparas i localStorage så den överlever
 // sidladdningar — dashboarden renderar direkt ur cache och revaliderar tyst.
@@ -9636,6 +9685,8 @@ async function init() {
     else if (currentTab === 'dashboard') { renderDashboard(); }
     else if (currentTab === 'metrics') { renderMetricsTool(); }
     else { await prefetchPromise; await fetchData(); }
+    // Delad aktielänk (#/…/aktie/<id>): öppna lådan direkt
+    if (_pendingDrawerId) { const _id = _pendingDrawerId; _pendingDrawerId = null; openStockDrawer(_id); }
 
     // v3.8: Warma dashboarden i bakgrunden så den är klar när man öppnar den
     setTimeout(() => { try { _warmDashboard(); } catch (e) {} }, 800);
