@@ -833,39 +833,24 @@
 <body>
 
 <!-- v3 Welcome Modal — visas första gången per user (localStorage-flag) -->
-<div id="welcomeModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:9999;align-items:center;justify-content:center;padding:20px">
-  <div style="background:white;max-width:540px;width:100%;border-radius:18px;padding:30px;box-shadow:0 16px 48px rgba(0,0,0,0.25);max-height:92vh;overflow-y:auto">
-    <div style="text-align:center;margin-bottom:18px">
-      <div style="font-size:38px;margin-bottom:6px">🎯</div>
-      <h2 style="margin:0;font-size:24px;color:#0f172a">Välkommen till DAKTIER v3</h2>
-      <p style="margin:6px 0 0;color:#6b7280;font-size:13px">Multi-strategi-investeringsanalys driven av agent-validering</p>
+<div id="welcomeModal" role="dialog" aria-modal="true" aria-labelledby="welcomeTitle" style="display:none;position:fixed;inset:0;background:rgba(15,23,42,0.5);z-index:9999;align-items:center;justify-content:center;padding:20px">
+  <div style="background:white;max-width:520px;width:100%;border-radius:16px;padding:28px;box-shadow:0 24px 60px rgba(15,23,42,0.3);max-height:92vh;overflow-y:auto">
+    <div style="text-align:center;margin-bottom:16px">
+      <div style="width:44px;height:44px;border-radius:12px;background:var(--brand-navy);color:#fff;font-weight:800;font-size:22px;display:inline-flex;align-items:center;justify-content:center">D</div>
+      <h2 id="welcomeTitle" style="margin:10px 0 0;font-size:22px;color:var(--ink);letter-spacing:-0.01em">Välkommen till DAKTIER</h2>
+      <p style="margin:6px 0 0;color:var(--ink-soft);font-size:13.5px">Aktieanalys med en enda poäng — och en agent som kan hela databasen.</p>
     </div>
-
-    <div style="background:#f8fafc;border-radius:10px;padding:14px 18px;margin-bottom:16px;font-size:13px;line-height:1.7">
-      All data på dashboarden har granskats av DAKTIER-agenten enligt:
-      <div style="margin-top:8px;display:flex;flex-direction:column;gap:4px">
-        <div><strong style="color:#059669">🎯 Edge Signals</strong> — Din beprövade momentum-strategi (+43% backtest 76 dagar)</div>
-        <div><strong style="color:#1e40af">🏰 Quality</strong> — Buffett/Lynch compounder-bedömning (≥12m horisont)</div>
-        <div><strong style="color:#7c3aed">💎 Value</strong> — Graham/Klarman margin of safety (≥24m horisont)</div>
-        <div><strong style="color:#0f172a">📊 Multi-lens</strong> — Christensen, Thiel, Howard Marks, Spier</div>
-      </div>
+    <div style="display:flex;flex-direction:column;gap:10px;font-size:13.5px;line-height:1.55;color:var(--ink)">
+      <div style="display:flex;gap:10px"><span style="font-size:18px">⭐</span><div><strong>DAKTIER-poängen</strong> (0–100) väger kvalitet, kassaflöde, tillväxt, stabilitet, värdering och storlek. Samma siffra överallt: i listorna, i aktielådan och i portföljerna.</div></div>
+      <div style="display:flex;gap:10px"><span style="font-size:18px">🏦</span><div><strong>Analytiker</strong> visar gatans konsensus på FactSet-skalan — nivån är popularitet, <em>rörelsen</em> är informationen.</div></div>
+      <div style="display:flex;gap:10px"><span style="font-size:18px">🔥</span><div><strong>Ägarmomentum</strong> följer vart Avanzas sparare flyttar pengarna, från i dag till ett år.</div></div>
+      <div style="display:flex;gap:10px"><span style="font-size:18px">💬</span><div><strong>Agenten</strong> svarar på fritext — "analysera Marvell", "jämför Novo med Lilly" — med samma data som listorna.</div></div>
     </div>
-
-    <div style="background:#eff6ff;border-left:3px solid #1e40af;border-radius:8px;padding:10px 14px;margin-bottom:16px;font-size:12px;color:#1e3a8a">
-      <strong>Kärn-princip</strong>: Du ser ALDRIG score 91 utan att agenten har sagt
-      "ja, multi-lens-tesen håller". Kvantitativa screens är input, agenten är gatekeeper.
+    <div style="margin-top:16px;padding:10px 14px;border-radius:10px;background:var(--surface-low);font-size:12px;color:var(--ink-soft)">
+      Beslutsstöd, inte finansiell rådgivning. Siffror som saknas visas som saknade — aldrig påhittade.
     </div>
-
-    <div style="display:flex;flex-direction:column;gap:8px;font-size:12.5px;color:#475569">
-      <div>📊 <strong>Backtest-validerade screens</strong> har dokumenterad alpha 2015–2024.</div>
-      <div>📚 <strong>Bok-baserade topplistor</strong> är idé-generatorer för djupanalys.</div>
-      <div>🏆 <strong>/toplists</strong> visar pre-computed agent-analyser sorterade per strategi.</div>
-    </div>
-
-    <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:22px">
-      <button onclick="dismissWelcome()" class="btn btn-primary">
-        Förstått — visa dashboarden
-      </button>
+    <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:20px">
+      <button onclick="dismissWelcome()" class="btn btn-primary">Kom igång</button>
     </div>
   </div>
 </div>
@@ -875,20 +860,20 @@
 // Welcome-modal: visa första besök per browser
 (function() {
   try {
-    if (!localStorage.getItem('daktier_welcomed_v3')) {
+    if (!localStorage.getItem('daktier_welcomed_v4')) {
       const m = document.getElementById('welcomeModal');
       if (m) m.style.display = 'flex';
     }
   } catch (e) { /* localStorage disabled */ }
 })();
 function dismissWelcome() {
-  try { localStorage.setItem('daktier_welcomed_v3', String(Date.now())); } catch (e) {}
+  try { localStorage.setItem('daktier_welcomed_v4', String(Date.now())); } catch (e) {}
   const m = document.getElementById('welcomeModal');
   if (m) m.style.display = 'none';
 }
 // Manuell trigger för testning
 window.showWelcome = function() {
-  try { localStorage.removeItem('daktier_welcomed_v3'); } catch (e) {}
+  try { localStorage.removeItem('daktier_welcomed_v4'); } catch (e) {}
   const m = document.getElementById('welcomeModal');
   if (m) m.style.display = 'flex';
 };
@@ -1575,6 +1560,7 @@ function switchTab(tab, el) {
     }
     currentTab = tab;
     window.scrollTo({ top: 0 });
+    if (typeof closeMobileSheet === 'function') closeMobileSheet();
     // v3.7: synka top-nav + contextual subnav + mobile-nav aktiv-states
     if (typeof _syncNav === 'function') _syncNav();
     // v3.9: uppdatera URL-hashen
@@ -2614,7 +2600,7 @@ function renderStocksTable() {
             </tr></thead><tbody>${rows}</tbody></table>
         </div>
         ${allLoadedRows.length < totalResults ? '<div class="load-more" id="loadMore"><div class="load-more-spinner"></div></div>' : ''}
-        <div class="table-footer">Visar ${allLoadedRows.length} av ${totalResults.toLocaleString('sv')} aktier</div>
+        <div class="table-footer">Visar ${allLoadedRows.length} av ${(totalResults || 0).toLocaleString('sv')} aktier</div>
     `;
     setupInfiniteScroll();
 }
@@ -2682,7 +2668,7 @@ function renderHotMoversTable() {
             </tr></thead><tbody>${rows}</tbody></table>
         </div>
         ${allLoadedRows.length < totalResults ? '<div class="load-more" id="loadMore"><div class="load-more-spinner"></div></div>' : ''}
-        <div class="table-footer">🔥 Visar ${allLoadedRows.length} av ${totalResults.toLocaleString('sv')} aktier (${lbLabel})</div>
+        <div class="table-footer">🔥 Visar ${allLoadedRows.length} av ${(totalResults || 0).toLocaleString('sv')} aktier (${lbLabel})</div>
     `;
     setupInfiniteScroll();
 }
@@ -2732,7 +2718,7 @@ function renderTrendingTable() {
             </tr></thead><tbody>${rows}</tbody></table>
         </div>
         ${allLoadedRows.length < totalResults ? '<div class="load-more" id="loadMore"><div class="load-more-spinner"></div></div>' : ''}
-        <div class="table-footer">${trendDirection==='up'?'🔥':'📉'} Visar ${allLoadedRows.length} av ${totalResults.toLocaleString('sv')} aktier som ${trendDirection==='up'?'ökar':'minskar'} i ägare (${pLabel})</div>
+        <div class="table-footer">${trendDirection==='up'?'🔥':'📉'} Visar ${allLoadedRows.length} av ${(totalResults || 0).toLocaleString('sv')} aktier som ${trendDirection==='up'?'ökar':'minskar'} i ägare (${pLabel})</div>
     `;
     setupInfiniteScroll();
 }
@@ -2769,7 +2755,7 @@ function renderInsidersTable() {
             </tr></thead><tbody>${rows}</tbody></table>
         </div>
         ${allLoadedRows.length < totalResults ? '<div class="load-more" id="loadMore"><div class="load-more-spinner"></div></div>' : ''}
-        <div class="table-footer">Visar ${allLoadedRows.length} av ${totalResults.toLocaleString('sv')} transaktioner · Källa: FI Insynsregistret</div>
+        <div class="table-footer">Visar ${allLoadedRows.length} av ${(totalResults || 0).toLocaleString('sv')} transaktioner · Källa: FI Insynsregistret</div>
     `;
     setupInfiniteScroll();
 }
@@ -2901,7 +2887,7 @@ function renderOcfTable() {
             </tr></thead><tbody>${rows}</tbody></table>
         </div>
         ${allLoadedRows.length < totalResults ? '<div class="load-more" id="loadMore"><div class="load-more-spinner"></div></div>' : ''}
-        <div class="table-footer">Visar ${allLoadedRows.length} av ${totalResults.toLocaleString('sv')} aktier sorterade efter operativt kassaflöde · Δ TTM = rapportarkivets senaste 4 kvartal vs föregående 4 (dagsfärskt via rapportinflödet)</div>
+        <div class="table-footer">Visar ${allLoadedRows.length} av ${(totalResults || 0).toLocaleString('sv')} aktier sorterade efter operativt kassaflöde · Δ TTM = rapportarkivets senaste 4 kvartal vs föregående 4 (dagsfärskt via rapportinflödet)</div>
     `;
     setupInfiniteScroll();
     // Δ TTM-kolumnen: hämta OCF-deltan ur rapportarkivet (färskt varje dag)
@@ -5895,7 +5881,7 @@ function closeDrawer() {
     const rf = window._drawerReturnFocus; window._drawerReturnFocus = null;
     if (rf && rf.focus && document.contains(rf)) { try { rf.focus({ preventScroll: true }); } catch (e) {} }
 }
-document.addEventListener('keydown', e => { if (e.key === 'Escape') closeDrawer(); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape') { closeDrawer(); if (typeof closeMobileSheet === 'function') closeMobileSheet(); } });
 
 // ── Tillgänglighetspass: klickbara div/tr/span blir tangentbordsnåbara,
 //    fält utan etikett får aria-label från placeholder/title ──

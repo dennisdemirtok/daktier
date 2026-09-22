@@ -119,6 +119,14 @@ def _auth_gate():
     p = request.path or "/"
     if any(p.startswith(x) for x in _OPEN_PREFIXES):
         return None
+    # Lokal designgranskning (2026-09-22): DAKTIER_LOKAL_DEV=1 OCH värd
+    # 127.0.0.1/localhost ger en icke-admin-session utan inloggning.
+    # Railway sätter aldrig variabeln och har aldrig den värden.
+    if (os.environ.get("DAKTIER_LOKAL_DEV") == "1"
+            and (request.host or "").split(":")[0] in ("127.0.0.1", "localhost")
+            and not session.get("uid")):
+        session["uid"] = "lokal-dev"
+        session["email"] = "lokal-dev@localhost"
     if session.get("uid"):
         # Diag/diagnostics är drift-verktyg (kan trigga tunga syncar) —
         # endast admin efter go-live. auth-tables är öppen via _OPEN_PREFIXES.
@@ -24085,6 +24093,9 @@ def _startup():
 # kunde överskrida gunicorn timeout (120s) och worker dödades med SIGKILL
 # i en evig loop. Nu boots:ar Flask direkt och _startup() körs parallellt.
 def _run_startup_in_background():
+    if os.environ.get("DAKTIER_LOKAL_DEV") == "1":
+        print("[STARTUP] Lokal dev — hoppar över uppstartsjobb och schemaläggare")
+        return
     try:
         _startup()
     except Exception as _startup_err:
