@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>DAKTIER</title>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet">
     <!-- Markdown rendering för AI Agent -->
     <script src="https://cdn.jsdelivr.net/npm/marked@12.0.0/marked.min.js"></script>
@@ -910,9 +910,95 @@
         .home-recap { font-size: 13px; line-height: 1.55; color: var(--ink-soft); }
         .home-empty { font-size: 12.5px; color: var(--text-muted); padding: 14px 4px; }
         @media (max-width: 640px) { .home-hero { padding: 18px 16px 16px; border-radius: 12px; } .home-hero h1 { font-size: 21px; } .home-ask { padding-left: 10px; } .home-grid { gap: 12px; } }
+    
+        /* ═══ TYPOGRAFI v4: Plus Jakarta Sans för rubriker/stora tal, Inter för brödtext & siffror ═══ */
+        :root { --font-display: 'Plus Jakarta Sans', 'Inter', -apple-system, sans-serif; }
+        h1, h2, h3, .page-title, .home-hero h1, .home-card-hd h3, .an-head, .mp-head, .drawer-section-title, .brand-name,
+        .dlg-title, .empty-state-title, .dash-heading, .dov-ring-val, .home-kpi b, .dov-score, .dov-chip .v { font-family: var(--font-display); }
+        .page-title { font-size: 26px; font-weight: 800; letter-spacing: -0.025em; }
+        .page-subtitle { font-size: 14px; }
+        .dash-heading { text-transform: none; letter-spacing: -0.01em; font-size: 16px; font-weight: 700; display: flex; align-items: center; gap: 10px; }
+        .dash-heading .dash-sub { font-family: 'Inter', sans-serif; font-size: 12.5px; }
+        td { font-size: 13.5px; font-variant-numeric: tabular-nums; }
+        th { font-size: 11.5px; }
+        .an-head { font-size: 16px; display: flex; align-items: center; gap: 8px; }
+        .mp-head { display: flex; align-items: center; gap: 8px; }
+        /* ═══ IKONER (eget set, #dk-*) ═══ */
+        .dk-ic { width: 20px; height: 20px; flex-shrink: 0; vertical-align: middle; stroke: currentColor; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+        .dk-ic .acc { fill: var(--brand-cyan); stroke: none; }
+        .dk-ic.sm { width: 16px; height: 16px; } .dk-ic.lg { width: 26px; height: 26px; }
+        .subnav-item .dk-ic { color: var(--ink-soft); } .subnav-item.active .dk-ic { color: var(--brand-navy); }
+        .topnav-icon .dk-ic, .topnav-burger .dk-ic { width: 21px; height: 21px; }
+        .mobile-bottom-nav .dk-ic { width: 22px; height: 22px; }
+        .sheet-item .dk-ic, .sheet-subitem .dk-ic { width: 20px; height: 20px; }
+        .ic-hd { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; border-radius: 8px; background: var(--blue-light); color: var(--brand-navy); flex-shrink: 0; }
+        .ic-hd .dk-ic { width: 17px; height: 17px; }
+        .home-card-hd h3 { display: flex; align-items: center; gap: 8px; }
+        .nav-search-icon.dk-ic { width: 19px; height: 19px; color: var(--text-muted); }
+        /* ═══ RÖRELSE mot i går ═══ */
+        .mv { display: inline-flex; align-items: center; font-size: 11px; font-weight: 800; padding: 1px 6px; border-radius: 6px; margin-left: 6px; vertical-align: middle; letter-spacing: .02em; font-variant-numeric: tabular-nums; line-height: 1.5; font-family: 'Inter', sans-serif; }
+        .mv.up { background: #dcfce7; color: #047857; } .mv.down { background: #fee2e2; color: #b91c1c; }
+        .mv.new { background: var(--brand-cyan-light); color: var(--brand-navy); } .mv.same { background: var(--surface-low); color: var(--text-muted); }
+        .mv-legend { font-size: 11.5px; color: var(--text-muted); margin: 0 0 10px; }
+        /* ═══ LÅDAN v4 ═══ */
+        .drawer { width: 820px; background: var(--bg); }
+        .drawer-header { background: #fff; border-bottom: 1px solid var(--border); padding: 18px 24px 22px; position: static; }
+        #drawerHeaderContent > div > div:first-child { font-family: var(--font-display); font-size: 22px; font-weight: 800; letter-spacing: -0.02em; line-height: 1.2; }
+        .drawer-body { padding: 0 20px 32px; }
+        .dtab-bar { position: sticky; top: 0; z-index: 6; background: var(--bg); padding: 10px 20px 8px; margin: 0 -20px 10px; gap: 4px; border-bottom: 1px solid var(--border); }
+        .dtab { padding: 7px 14px; border-radius: 999px; border-bottom: 0 !important; font-size: 13px; color: var(--ink-soft); background: transparent; }
+        .dtab:hover { background: var(--surface-low); color: var(--ink); }
+        .dtab.active { background: var(--brand-navy); color: #fff !important; }
+        .drawer .drawer-section { background: #fff; border: 1px solid var(--border); border-radius: 12px; padding: 16px 18px; margin: 0 0 12px; }
+        .drawer .drawer-section .drawer-section-title { margin: -2px 0 12px; }
+        .drawer details.drawer-section > summary { list-style: none; }
+        .dov-chips { grid-template-columns: repeat(auto-fit, minmax(96px, 1fr)); gap: 8px; margin: 0 0 12px; }
+        .dov-chip { background: #fff; border: 1px solid var(--border); border-radius: 10px; padding: 10px 8px; }
+        .dov-chip .l { font-size: 11px; color: var(--text-muted); letter-spacing: 0.04em; }
+        .dov-chip .v { font-size: 15px; font-weight: 800; margin-top: 3px; }
+        .dov-score-card { background: #fff; border: 1px solid var(--border); border-left: 4px solid var(--brand-navy); border-radius: 12px; padding: 16px 18px; margin: 0 0 12px; }
+        .dov-score-card .dov-eyebrow { display: flex; align-items: center; gap: 8px; font-size: 11px; color: var(--brand-navy); text-transform: uppercase; letter-spacing: 0.1em; font-weight: 800; }
+        .dov-score { font-size: 50px; font-weight: 800; line-height: 1; letter-spacing: -0.03em; }
+        .dov-bar { flex: 1; height: 6px; background: #e8edf3; border-radius: 3px; overflow: hidden; }
+        .dov-bar > i { display: block; height: 100%; background: linear-gradient(90deg, var(--brand-navy), var(--brand-cyan)); border-radius: 3px; }
+        @media (max-width: 768px) { .drawer { width: 100vw; } .drawer-body { padding: 0 12px 24px; } .dov-score { font-size: 42px; } }
     </style>
 </head>
 <body>
+<svg xmlns="http://www.w3.org/2000/svg" style="position:absolute;width:0;height:0;overflow:hidden" aria-hidden="true" focusable="false">
+<symbol id="dk-home" viewBox="0 0 24 24"><path d="M4 11.5 12 5l8 6.5"/><path d="M6 10v9h12v-9"/><path d="M10 19v-5h4v5"/><circle class="acc" cx="15.5" cy="8" r="1.4"/></symbol>
+<symbol id="dk-agent" viewBox="0 0 24 24"><path d="M5 6.5A2.5 2.5 0 0 1 7.5 4h9A2.5 2.5 0 0 1 19 6.5v7a2.5 2.5 0 0 1-2.5 2.5H11l-4 3.5V16H7.5A2.5 2.5 0 0 1 5 13.5z"/><path class="acc" d="M15 7l.8 1.7 1.7.8-1.7.8-.8 1.7-.8-1.7-1.7-.8 1.7-.8z"/></symbol>
+<symbol id="dk-score" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="4.2"/><circle class="acc" cx="12" cy="12" r="1.6"/></symbol>
+<symbol id="dk-stocks" viewBox="0 0 24 24"><path d="M6 4v3M6 15v5M12 3v2M12 17v4M18 6v2M18 14v4"/><rect x="4" y="7" width="4" height="8" rx="1"/><rect class="acc" x="10" y="5" width="4" height="12" rx="1"/><rect x="16" y="8" width="4" height="6" rx="1"/></symbol>
+<symbol id="dk-metrics" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M8 9h8M8 12.5h5"/><circle class="acc" cx="15.5" cy="16" r="1.5"/></symbol>
+<symbol id="dk-cash" viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="12" rx="2.5"/><circle cx="12" cy="12" r="2.6"/><circle class="acc" cx="12" cy="12" r="1.1"/><path d="M6.5 9.5h.01M17.5 14.5h.01"/></symbol>
+<symbol id="dk-fcf" viewBox="0 0 24 24"><ellipse cx="12" cy="7" rx="7" ry="3"/><path d="M5 7v5c0 1.7 3.1 3 7 3s7-1.3 7-3V7"/><path d="M5 12v5c0 1.7 3.1 3 7 3s7-1.3 7-3v-5"/><circle class="acc" cx="12" cy="7" r="1.3"/></symbol>
+<symbol id="dk-insiders" viewBox="0 0 24 24"><circle cx="11" cy="8" r="3.5"/><path d="M4.5 19.5c0-3.6 2.9-6 6.5-6s6.5 2.4 6.5 6"/><circle class="acc" cx="17.5" cy="7" r="2"/></symbol>
+<symbol id="dk-research" viewBox="0 0 24 24"><path d="M9.5 3h5v5.5l4.5 8.5a2 2 0 0 1-1.8 3H6.8A2 2 0 0 1 5 17l4.5-8.5z"/><path d="M8 14h8"/><circle class="acc" cx="13" cy="16.5" r="1.3"/></symbol>
+<symbol id="dk-analyst" viewBox="0 0 24 24"><circle cx="12" cy="9" r="5.5"/><path d="M9 13.8 7.5 21l4.5-2.5L16.5 21 15 13.8"/><circle class="acc" cx="12" cy="9" r="1.7"/></symbol>
+<symbol id="dk-owners" viewBox="0 0 24 24"><path d="M4 17c3-1 4.5-4 6-7 1.5 3 3 6 6 7"/><path d="M13 5.5 16 4l.5 3.3"/><path d="M4 21h16"/><circle class="acc" cx="16" cy="4" r="1.5"/></symbol>
+<symbol id="dk-market" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M3.5 12h17M12 3.5c2.6 2.6 2.6 14.4 0 17M12 3.5c-2.6 2.6-2.6 14.4 0 17"/><circle class="acc" cx="12" cy="12" r="1.5"/></symbol>
+<symbol id="dk-portfolio" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 12V3.5"/><path class="acc" d="M12 12V3.5A8.5 8.5 0 0 1 20.5 12z"/></symbol>
+<symbol id="dk-apps" viewBox="0 0 24 24"><circle cx="6" cy="6" r="1.6"/><circle cx="12" cy="6" r="1.6"/><circle cx="18" cy="6" r="1.6"/><circle cx="6" cy="12" r="1.6"/><circle class="acc" cx="12" cy="12" r="1.9"/><circle cx="18" cy="12" r="1.6"/><circle cx="6" cy="18" r="1.6"/><circle cx="12" cy="18" r="1.6"/><circle cx="18" cy="18" r="1.6"/></symbol>
+<symbol id="dk-logout" viewBox="0 0 24 24"><path d="M10 4H6.5A2.5 2.5 0 0 0 4 6.5v11A2.5 2.5 0 0 0 6.5 20H10"/><path d="M14 8l4 4-4 4M18 12H9"/></symbol>
+<symbol id="dk-search" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6"/><path d="M15 15l5 5"/><circle class="acc" cx="10.5" cy="10.5" r="1.5"/></symbol>
+<symbol id="dk-refresh" viewBox="0 0 24 24"><path d="M19 12a7 7 0 1 1-2-4.9"/><path d="M19 4v4.5h-4.5"/><circle class="acc" cx="12" cy="12" r="1.5"/></symbol>
+<symbol id="dk-settings" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 3v2.5M12 18.5V21M3 12h2.5M18.5 12H21M5.6 5.6l1.8 1.8M16.6 16.6l1.8 1.8M5.6 18.4l1.8-1.8M16.6 7.4l1.8-1.8"/></symbol>
+<symbol id="dk-account" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="10" r="3"/><path d="M6.5 18.5c1.2-2.4 3.2-3.5 5.5-3.5s4.3 1.1 5.5 3.5"/></symbol>
+<symbol id="dk-menu" viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h10"/><circle class="acc" cx="18" cy="17" r="1.5"/></symbol>
+<symbol id="dk-star" viewBox="0 0 24 24"><path d="M12 3.5l2.6 5.4 5.9.8-4.3 4.1 1.1 5.9L12 16.9l-5.3 2.8 1.1-5.9-4.3-4.1 5.9-.8z"/><circle class="acc" cx="12" cy="11.5" r="1.5"/></symbol>
+<symbol id="dk-up" viewBox="0 0 24 24"><path d="M4 17l6-6 4 4 6-7"/><path d="M15 8h5v5"/><circle class="acc" cx="20" cy="8" r="1.5"/></symbol>
+<symbol id="dk-down" viewBox="0 0 24 24"><path d="M4 7l6 6 4-4 6 7"/><path d="M15 16h5v-5"/><circle class="acc" cx="20" cy="16" r="1.5"/></symbol>
+<symbol id="dk-news" viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="14" rx="2.5"/><path d="M8 9h8M8 12.5h8M8 16h5"/><circle class="acc" cx="16" cy="16" r="1.3"/></symbol>
+<symbol id="dk-report" viewBox="0 0 24 24"><path d="M7 3h7l4 4v12a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z"/><path d="M14 3v4h4"/><path d="M9 13h6M9 16.5h4"/><circle class="acc" cx="9.5" cy="10" r="1.3"/></symbol>
+<symbol id="dk-bank" viewBox="0 0 24 24"><path d="M4 9.5 12 4l8 5.5"/><path d="M5 10v8M9 10v8M15 10v8M19 10v8M3.5 20h17"/><circle class="acc" cx="12" cy="7.5" r="1.4"/></symbol>
+<symbol id="dk-chart" viewBox="0 0 24 24"><path d="M4 20V5M4 20h16"/><path d="M7 15l3.5-4 3 2.5L18 8"/><circle class="acc" cx="18" cy="8" r="1.5"/></symbol>
+<symbol id="dk-check" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M8.5 12.5l2.3 2.3L15.5 10"/></symbol>
+<symbol id="dk-alert" viewBox="0 0 24 24"><path d="M12 4l8.5 15h-17z"/><path d="M12 10v4"/><circle class="acc" cx="12" cy="16.5" r="1.1"/></symbol>
+<symbol id="dk-spark" viewBox="0 0 24 24"><path d="M12 4l1.8 4.7L18.5 10.5l-4.7 1.8L12 17l-1.8-4.7L5.5 10.5l4.7-1.8z"/><circle class="acc" cx="18.5" cy="5.5" r="1.3"/></symbol>
+<symbol id="dk-calc" viewBox="0 0 24 24"><rect x="6" y="3" width="12" height="18" rx="2.5"/><path d="M9 7h6M9 11h.01M12 11h.01M15 11h.01M9 14.5h.01M12 14.5h.01M15 14.5h.01M9 18h6"/><circle class="acc" cx="15" cy="18" r="1.1"/></symbol>
+<symbol id="dk-history" viewBox="0 0 24 24"><path d="M4.5 12a7.5 7.5 0 1 0 2.2-5.3"/><path d="M4 4v4.5h4.5"/><path d="M12 8v4.5l3 2"/><circle class="acc" cx="12" cy="12" r="1.2"/></symbol>
+</svg>
 
 <!-- v3 Welcome Modal — visas första gången per user (localStorage-flag) -->
 <div id="welcomeModal" role="dialog" aria-modal="true" aria-labelledby="welcomeTitle" style="display:none;position:fixed;inset:0;background:rgba(15,23,42,0.5);z-index:9999;align-items:center;justify-content:center;padding:20px">
@@ -923,10 +1009,10 @@
       <p style="margin:6px 0 0;color:var(--ink-soft);font-size:13.5px">Aktieanalys med en enda poäng — och en agent som kan hela databasen.</p>
     </div>
     <div style="display:flex;flex-direction:column;gap:10px;font-size:13.5px;line-height:1.55;color:var(--ink)">
-      <div style="display:flex;gap:10px"><span style="font-size:18px">⭐</span><div><strong>DAKTIER-poängen</strong> (0–100) väger kvalitet, kassaflöde, tillväxt, stabilitet, värdering och storlek. Samma siffra överallt: i listorna, i aktielådan och i portföljerna.</div></div>
-      <div style="display:flex;gap:10px"><span style="font-size:18px">🏦</span><div><strong>Analytiker</strong> visar gatans konsensus på FactSet-skalan — nivån är popularitet, <em>rörelsen</em> är informationen.</div></div>
-      <div style="display:flex;gap:10px"><span style="font-size:18px">🔥</span><div><strong>Ägarmomentum</strong> följer vart Avanzas sparare flyttar pengarna, från i dag till ett år.</div></div>
-      <div style="display:flex;gap:10px"><span style="font-size:18px">💬</span><div><strong>Agenten</strong> svarar på fritext — "analysera Marvell", "jämför Novo med Lilly" — med samma data som listorna.</div></div>
+      <div style="display:flex;gap:10px"><span class="ic-hd"><svg class="dk-ic" aria-hidden="true"><use href="#dk-star"/></svg></span><div><strong>DAKTIER-poängen</strong> (0–100) väger kvalitet, kassaflöde, tillväxt, stabilitet, värdering och storlek. Samma siffra överallt: i listorna, i aktielådan och i portföljerna.</div></div>
+      <div style="display:flex;gap:10px"><span class="ic-hd"><svg class="dk-ic" aria-hidden="true"><use href="#dk-bank"/></svg></span><div><strong>Analytiker</strong> visar gatans konsensus på FactSet-skalan — nivån är popularitet, <em>rörelsen</em> är informationen.</div></div>
+      <div style="display:flex;gap:10px"><span class="ic-hd"><svg class="dk-ic" aria-hidden="true"><use href="#dk-owners"/></svg></span><div><strong>Ägarmomentum</strong> följer vart Avanzas sparare flyttar pengarna, från i dag till ett år.</div></div>
+      <div style="display:flex;gap:10px"><span class="ic-hd"><svg class="dk-ic" aria-hidden="true"><use href="#dk-agent"/></svg></span><div><strong>Agenten</strong> svarar på fritext — "analysera Marvell", "jämför Novo med Lilly" — med samma data som listorna.</div></div>
     </div>
     <div style="margin-top:16px;padding:10px 14px;border-radius:10px;background:var(--surface-low);font-size:12px;color:var(--ink-soft)">
       Beslutsstöd, inte finansiell rådgivning. Siffror som saknas visas som saknade — aldrig påhittade.
@@ -966,7 +1052,7 @@ window.showWelcome = function() {
 <header class="topnav">
     <div class="topnav-left">
         <button class="topnav-burger" onclick="openMobileSheet()" aria-label="Meny">
-            <span class="material-symbols-outlined">menu</span>
+            <svg class="dk-ic" aria-hidden="true"><use href="#dk-menu"/></svg>
         </button>
         <div class="brand" onclick="navTo('agent')">
             <div class="brand-logo" aria-hidden="true">
@@ -981,7 +1067,7 @@ window.showWelcome = function() {
     </div>
     <div class="topnav-right">
         <div class="nav-search" id="navSearch">
-            <span class="material-symbols-outlined nav-search-icon">search</span>
+            <svg class="dk-ic nav-search-icon" aria-hidden="true"><use href="#dk-search"/></svg>
             <input id="navStockSearch" type="text" placeholder="Sök aktie…" autocomplete="off" aria-label="Sök aktie"
                    oninput="navSearchSuggest(this.value)" onkeydown="navSearchKey(event)" onfocus="navSearchSuggest(this.value)">
             <kbd class="nav-search-kbd" aria-hidden="true">⌘K</kbd>
@@ -994,14 +1080,11 @@ window.showWelcome = function() {
             <div class="market-dot closed" id="marketDotUS"></div><span id="marketLabelUS">US</span>
         </div>
         <span class="update-time" id="liveClock"></span>
-        <button class="topnav-icon" id="refreshPricesBtn" onclick="doRefreshPrices()" title="Uppdatera priser">
-            <span class="material-symbols-outlined">refresh</span>
+        <button class="topnav-icon" id="refreshPricesBtn" onclick="doRefreshPrices()" title="Uppdatera priser" aria-label="Uppdatera priser">
+            <svg class="dk-ic" aria-hidden="true"><use href="#dk-refresh"/></svg>
         </button>
-        <button class="topnav-icon" data-section="settings" onclick="navTo('settings')" title="Inställningar">
-            <span class="material-symbols-outlined">settings</span>
-        </button>
-        <button class="topnav-icon" id="accountBtn" title="Konto" onclick="_toggleAccountMenu(event)">
-            <span class="material-symbols-outlined">account_circle</span>
+        <button class="topnav-icon" id="accountBtn" title="Konto" aria-label="Konto" onclick="_toggleAccountMenu(event)">
+            <svg class="dk-ic" aria-hidden="true"><use href="#dk-account"/></svg>
         </button>
         <div id="accountMenu" style="display:none;position:absolute;top:52px;right:14px;background:var(--card-bg,#fff);border:1px solid #e2e8f0;border-radius:12px;box-shadow:0 8px 30px rgba(15,23,42,.12);padding:10px 0;min-width:230px;z-index:1000">
             <div id="accountEmail" style="padding:6px 16px 10px;font-size:12.5px;color:#64748b;border-bottom:1px solid #f1f5f9;word-break:break-all">…</div>
@@ -1015,7 +1098,7 @@ window.showWelcome = function() {
 
 <!-- ── SIDEBAR (v4: permanent på desktop) ──── -->
 <aside class="subnav" id="subnav" aria-label="Huvudnavigation">
-    <div class="sb-brand" onclick="navTo('home')" role="button" tabindex="0">
+    <div class="sb-brand" onclick="navTo('home')" role="button" tabindex="0" aria-label="DAKTIER — Hem">
         <div class="brand-logo" aria-hidden="true">
             <svg viewBox="0 0 24 24" width="17" height="17" fill="none">
                 <path d="M12 2.5l4.4 5.4h-2.6v3.6h-3.6V7.9H7.6z" fill="#ffffff"/>
@@ -1031,10 +1114,10 @@ window.showWelcome = function() {
 
 <!-- ── MOBILE BOTTOM NAV ──── -->
 <nav class="mobile-bottom-nav" id="mobileBottomNav">
-    <button data-section="home" onclick="navTo('home')"><span class="material-symbols-outlined">home</span><span>Hem</span></button>
-    <button data-section="agent" onclick="navTo('agent')"><span class="material-symbols-outlined">forum</span><span>Agent</span></button>
-    <button onclick="focusNavSearch()"><span class="material-symbols-outlined">search</span><span>Sök</span></button>
-    <button onclick="openMobileSheet()"><span class="material-symbols-outlined">menu</span><span>Meny</span></button>
+    <button data-section="home" onclick="navTo('home')"><svg class="dk-ic" aria-hidden="true"><use href="#dk-home"/></svg><span>Hem</span></button>
+    <button data-section="agent" onclick="navTo('agent')"><svg class="dk-ic" aria-hidden="true"><use href="#dk-agent"/></svg><span>Agent</span></button>
+    <button onclick="focusNavSearch()"><svg class="dk-ic" aria-hidden="true"><use href="#dk-search"/></svg><span>Sök</span></button>
+    <button onclick="openMobileSheet()"><svg class="dk-ic" aria-hidden="true"><use href="#dk-menu"/></svg><span>Meny</span></button>
 </nav>
 
 <!-- ── MOBILE SHEET (hamburger) ──── -->
@@ -1232,6 +1315,26 @@ async function fetchStatus() {
     } catch(e) { console.error('Status fetch error:', e); }
 }
 
+// ── Ikoner: eget ritat set (#dk-*), mappar gamla Material-namn ──
+const DK_ICON_MAP = { home: 'home', forum: 'agent', trophy: 'score', bar_chart: 'stocks', functions: 'metrics', account_balance: 'cash',
+    savings: 'fcf', person_search: 'insiders', analytics: 'research', grade: 'analyst', local_fire_department: 'owners',
+    space_dashboard: 'market', monitoring: 'portfolio', settings: 'settings', apps: 'apps', logout: 'logout', search: 'search',
+    refresh: 'refresh', account_circle: 'account', menu: 'menu', query_stats: 'chart', description: 'report', visibility: 'chart',
+    work: 'portfolio', rss_feed: 'news' };
+function dkIcon(name, cls) { const id = DK_ICON_MAP[name] || name; return `<svg class="dk-ic${cls ? ' ' + cls : ''}" aria-hidden="true"><use href="#dk-${id}"/></svg>`; }
+function dkHd(name) { return `<span class="ic-hd">${dkIcon(name)}</span>`; }
+// ── Rörelse mot i går (▲▼NY) — serverns 'rorelse'-fält per rad ──
+function rorelseChip(r) {
+    if (!r) return '';
+    if (r.typ === 'ny') return '<span class="mv new" title="Ny på listan sedan i går">NY</span>';
+    if (r.typ === 'upp') return `<span class="mv up" title="Upp ${r.platser} plats${r.platser === 1 ? '' : 'er'} sedan i går">▲${r.platser}</span>`;
+    if (r.typ === 'ned') return `<span class="mv down" title="Ned ${r.platser} plats${r.platser === 1 ? '' : 'er'} sedan i går">▼${r.platser}</span>`;
+    return '<span class="mv same" title="Oförändrad plats sedan i går">=</span>';
+}
+function rorelseLegend(rows) {
+    return (rows || []).some(x => x && x.rorelse) ? '<div class="mv-legend">▲ ▼ = plats mot i går · NY = ny på listan</div>' : '';
+}
+
 // ── Gemensam API-hämtare: statuskontroll + läsbart fel (en 500 med
 //    HTML-body gav förut "Unexpected token <") ──
 async function apiJson(url, opts) {
@@ -1264,7 +1367,7 @@ function homeAskText(q) {
 }
 function _homeRad(x, i, val, sub, onclick) {
     return `<div class="home-row" onclick="${onclick}" role="button" tabindex="0">
-        <span class="home-rank">${i + 1}</span>
+        <span class="home-rank">${i + 1}</span>${rorelseChip(x.rorelse)}
         <span class="home-name">${FLAGS[x.country] || ''} ${escapeHtml(x.name || x.ticker || '')}<small>${escapeHtml(x.ticker || x.short_name || '')}</small></span>
         <span class="home-val">${val}${sub ? `<small>${sub}</small>` : ''}</span></div>`;
 }
@@ -1288,11 +1391,11 @@ async function renderHome() {
             <div class="home-chips">${exempel.map(q => `<button class="home-chip" onclick="homeAskText('${q.replace(/'/g, "\\'")}')">${q}</button>`).join('')}</div>
         </section>
         <div class="home-grid">
-            <div class="card home-card" id="homeTop"><div class="home-card-hd"><h3>⭐ Högst DAKTIER-poäng</h3><a href="#/edge-signals">Hela topplistan →</a></div><div class="home-card-sub">Sitens enda poäng: kvalitet, kassaflöde, tillväxt, stabilitet, värdering.</div><div class="loading-wrap" style="padding:20px"><div class="spinner"></div></div></div>
-            <div class="card home-card" id="homeAnalyst"><div class="home-card-hd"><h3>🏦 Gatan rör sig</h3><a href="#/analytiker">Analytiker →</a></div><div class="home-card-sub">Största förändringen i konsensus senaste 3 månaderna — rörelsen är informationen.</div><div class="loading-wrap" style="padding:20px"><div class="spinner"></div></div></div>
-            <div class="card home-card" id="homeOwners"><div class="home-card-hd"><h3>🔥 Ägarmomentum i dag</h3><a href="#/agarmomentum">Alla rörelser →</a></div><div class="home-card-sub">Var Avanzas sparare köpte in sig senaste handelsdagen.</div><div class="loading-wrap" style="padding:20px"><div class="spinner"></div></div></div>
-            <div class="card home-card" id="homeMarket"><div class="home-card-hd"><h3>📰 Marknaden</h3><a href="#/dashboard">Marknad →</a></div><div class="loading-wrap" style="padding:20px"><div class="spinner"></div></div></div>
-            <div class="card home-card" id="homePortfolio"><div class="home-card-hd"><h3>📈 Portföljerna</h3><a href="#/installningar/simulering">Portföljer →</a></div><div class="home-card-sub">Live-facit mot S&P 500 sedan start.</div><div class="loading-wrap" style="padding:20px"><div class="spinner"></div></div></div>
+            <div class="card home-card" id="homeTop"><div class="home-card-hd"><h3>${dkHd('star')}Högst DAKTIER-poäng</h3><a href="#/edge-signals">Hela topplistan →</a></div><div class="home-card-sub">Sitens enda poäng: kvalitet, kassaflöde, tillväxt, stabilitet, värdering.</div><div class="loading-wrap" style="padding:20px"><div class="spinner"></div></div></div>
+            <div class="card home-card" id="homeAnalyst"><div class="home-card-hd"><h3>${dkHd('bank')}Gatan rör sig</h3><a href="#/analytiker">Analytiker →</a></div><div class="home-card-sub">Största förändringen i konsensus senaste 3 månaderna — rörelsen är informationen.</div><div class="loading-wrap" style="padding:20px"><div class="spinner"></div></div></div>
+            <div class="card home-card" id="homeOwners"><div class="home-card-hd"><h3>${dkHd('owners')}Ägarmomentum i dag</h3><a href="#/agarmomentum">Alla rörelser →</a></div><div class="home-card-sub">Var Avanzas sparare köpte in sig senaste handelsdagen.</div><div class="loading-wrap" style="padding:20px"><div class="spinner"></div></div></div>
+            <div class="card home-card" id="homeMarket"><div class="home-card-hd"><h3>${dkHd('news')}Marknaden</h3><a href="#/dashboard">Marknad →</a></div><div class="loading-wrap" style="padding:20px"><div class="spinner"></div></div></div>
+            <div class="card home-card" id="homePortfolio"><div class="home-card-hd"><h3>${dkHd('chart')}Portföljerna</h3><a href="#/installningar/simulering">Portföljer →</a></div><div class="home-card-sub">Live-facit mot S&P 500 sedan start.</div><div class="loading-wrap" style="padding:20px"><div class="spinner"></div></div></div>
         </div></div>`;
     const put = (id, html) => { const c = document.getElementById(id); if (!c) return; const w = c.querySelector('.loading-wrap'); if (w) w.outerHTML = html; else c.insertAdjacentHTML('beforeend', html); };
     const fel = (id, e) => put(id, `<div class="home-empty">Kunde inte hämta: ${escapeHtml(e.message || String(e))}</div>`);
@@ -1906,13 +2009,13 @@ function renderSidebar(sec) {
         const sN = NAV_SECTIONS[key];
         const active = sec === key;
         let html = `<button class="subnav-item ${active ? 'active' : ''}" data-section="${key}" onclick="navTo('${key}')" ${active ? 'aria-current="page"' : ''}>
-            <span class="material-symbols-outlined">${sN.icon}</span><span>${sN.label}</span>
+            ${dkIcon(sN.icon)}<span>${sN.label}</span>
             ${(sN.sub || []).length ? `<span class="material-symbols-outlined sb-chev">${active ? 'expand_less' : 'expand_more'}</span>` : ''}</button>`;
         if (active && (sN.sub || []).length) {
             html += `<div class="sb-sub">` + sN.sub.map(item => {
                 const on = item.tab && item.tab === currentTab;
                 return `<button class="subnav-item sb-subitem ${on ? 'active' : ''}" onclick="switchTab('${item.tab}')" ${on ? 'aria-current="page"' : ''}>
-                    <span class="material-symbols-outlined">${item.icon}</span><span>${item.label}</span></button>`;
+                    ${dkIcon(item.icon)}<span>${item.label}</span></button>`;
             }).join('') + `</div>`;
         }
         return html;
@@ -1927,11 +2030,11 @@ function renderSidebar(sec) {
     const foot = document.getElementById('sidebarFoot');
     if (foot && !foot.dataset.ready) {
         const mer = (NAV_SECTIONS.settings.sub || []).filter(i => i.ext);
-        foot.innerHTML = `<details class="sb-more"><summary><span class="material-symbols-outlined">apps</span><span>Fler verktyg</span><span class="material-symbols-outlined sb-chev">expand_more</span></summary>
-            ${mer.map(i => `<a class="subnav-item sb-subitem" href="${i.ext}" target="_blank" rel="noopener"><span class="material-symbols-outlined">${i.icon}</span><span>${i.label}</span><span class="material-symbols-outlined ext">open_in_new</span></a>`).join('')}
+        foot.innerHTML = `<details class="sb-more"><summary>${dkIcon('apps')}<span>Fler verktyg</span><span class="material-symbols-outlined sb-chev">expand_more</span></summary>
+            ${mer.map(i => `<a class="subnav-item sb-subitem" href="${i.ext}" target="_blank" rel="noopener">${dkIcon(i.icon)}<span>${i.label}</span><span class="material-symbols-outlined ext">open_in_new</span></a>`).join('')}
             </details>
-            <div class="sb-account"><span class="material-symbols-outlined">account_circle</span><span class="sb-account-mail" id="sidebarEmail">…</span>
-                <button class="sb-logout" onclick="_doLogout()" title="Logga ut" aria-label="Logga ut"><span class="material-symbols-outlined">logout</span></button></div>`;
+            <div class="sb-account">${dkIcon('account')}<span class="sb-account-mail" id="sidebarEmail">…</span>
+                <button class="sb-logout" onclick="_doLogout()" title="Logga ut" aria-label="Logga ut">${dkIcon('logout')}</button></div>`;
         foot.dataset.ready = '1';
         // E-posten laddades förut bara när kontomenyn öppnades — hämta en gång
         apiJson('/api/auth/me').then(d => {
@@ -1975,11 +2078,11 @@ function renderMobileSheet() {
     for (const key of [...PRIMARY_ORDER, 'settings']) {
         const s = NAV_SECTIONS[key];
         html += `<button class="sheet-item ${sec === key ? 'active' : ''}" onclick="navTo('${key}')">
-            <span class="material-symbols-outlined">${s.icon}</span>${s.label}</button>`;
+            ${dkIcon(s.icon)}${s.label}</button>`;
         for (const item of (s.sub || [])) {
             const click = item.ext ? `window.open('${item.ext}','_blank');closeMobileSheet()` : `switchTab('${item.tab}');closeMobileSheet()`;
             html += `<button class="sheet-subitem" onclick="${click}">
-                <span class="material-symbols-outlined">${item.icon}</span>${item.label}</button>`;
+                ${dkIcon(item.icon)}${item.label}</button>`;
         }
     }
     el.innerHTML = html;
@@ -2250,7 +2353,7 @@ function renderDaktierTopplista(d) {
     const col = v => v >= 80 ? '#059669' : v >= 65 ? '#0891b2' : v >= 50 ? 'var(--ink)' : 'var(--text-muted)';
     const body = rows.map(x => `
         <tr onclick="openStockByTicker('${(x.ticker || '').replace(/'/g, "\\'")}')" style="cursor:pointer">
-            <td style="color:var(--text-muted)">${x.rank}</td>
+            <td style="color:var(--text-muted);white-space:nowrap">${x.rank}${rorelseChip(x.rorelse)}</td>
             <td>${FLAGS[x.country] || ''} <span class="stock-name">${(x.name || x.ticker || '').slice(0, 30)}</span>
                 ${x.i_portfolj ? `<span style="background:var(--brand-cyan);color:#fff;font-size:11px;font-weight:800;padding:1px 6px;border-radius:8px;margin-left:5px">PORTFÖLJ</span>` : ''}
                 ${x.riskklass === 'HÖG' ? `<span style="background:#fef2f2;color:#991b1b;font-size:11px;font-weight:800;padding:1px 6px;border-radius:8px;margin-left:5px" title="${(x.flaggor || '').replace(/"/g, '')}">HÖG RISK</span>`
@@ -2268,7 +2371,7 @@ function renderDaktierTopplista(d) {
         </tr>`).join('');
     document.getElementById('content').innerHTML = `
         <div class="info-banner" style="background:linear-gradient(135deg,var(--brand-cyan-light),#eef6ff)">
-            <div class="info-banner-icon">🏆</div>
+            <div class="info-banner-icon">${dkIcon('score', 'lg')}</div>
             <div class="info-banner-text">
                 <strong>DAKTIER-poäng</strong> — sitens enda poängsättning, samma som styr Köplistan och portföljerna.<br>
                 ${d.modell || ''}<br>
@@ -2409,7 +2512,7 @@ function renderModelPortfolios(d) {
         const ccum = cnav.avkastning_pct || 0;
         const cspc = csp.length ? csp[csp.length - 1].cum_pct : null;
         claudeBlock = `<div class="mp-card" style="margin-top:16px;border-left:4px solid var(--brand-cyan)">
-            <div class="mp-head">🤖 Claude-10 — alternativportföljen</div>
+            <div class="mp-head">${dkHd('agent')}Claude-10 — alternativportföljen</div>
             <div class="mp-sub">Diskretionära val, byts veckovis/månadsvis — inte dagligen. Samma mätning: 10 % per innehav (tak 10 %), live mot S&P 500 och marknadssnittet. Ambitionen är att slå index — kurvan är beviset, inga backtester.</div>
             <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:baseline;margin-bottom:8px">
                 <span style="font-size:20px;font-weight:900;color:var(--brand-navy)">${Math.round(cnav.nu || 100000).toLocaleString('sv-SE')} kr</span>
@@ -2465,7 +2568,7 @@ function renderModelPortfolios(d) {
         <div class="mp-grid">${sleeveBlock('karna')}${sleeveBlock('krydda')}</div>
         ${utChips}
         <div class="mp-card" style="margin-top:16px">
-            <div class="mp-head">🏆 Hela rankingen — DAKTIER-poäng</div>
+            <div class="mp-head">${dkHd('score')}Hela rankingen — DAKTIER-poäng</div>
             <div class="mp-sub">Alla bolag som klarar grundkraven, rankade. De 10 översta blir portföljen.</div>
             <div class="filter-group tight" style="margin-bottom:10px">
                 <span class="filter-label">Lager</span>
@@ -2518,7 +2621,7 @@ function renderModelPortfolios(d) {
 
 function renderAnalytiker(b, t) {
     const rad = (x, i, delta, subLbl) => `<div class="an-row" onclick="openStockByTicker('${(x.ticker||'').replace(/'/g,"\\'")}')">
-        <span class="an-rank">${i+1}</span>
+        <span class="an-rank">${i+1}</span>${rorelseChip(x.rorelse)}
         <span class="an-name">${x.name || x.ticker}
             <br><span class="an-tick">${x.ticker} · ${x.n_hus} hus</span></span>
         <span style="margin-left:auto;text-align:right">
@@ -2529,6 +2632,7 @@ function renderAnalytiker(b, t) {
         <div class="an-card">
             <div class="an-head">${titel}</div>
             <div class="an-sub">${sub}</div>
+            ${rorelseLegend(rows)}
             ${(rows||[]).map((x,i)=>rad(x, i, deltaKey ? x[deltaKey] : null, subLbl)).join('') || '<div style="padding:10px;color:var(--text-muted);font-size:12px">Ingen data ännu.</div>'}
         </div>`;
     // "Just nu"-listan visar dagens snitt som stora talet och årsmedlet
@@ -2548,7 +2652,7 @@ function renderAnalytiker(b, t) {
             .an-tick { font-size:11px;color:var(--text-muted);font-weight:400; }
         </style>
         <div style="background:linear-gradient(135deg,var(--brand-navy-deep),var(--brand-navy));border-radius:var(--radius);padding:18px 20px;color:#fff;margin-bottom:14px">
-            <div style="font-size:var(--fs-lg);font-weight:800">🏛 Analytikernas konsensus</div>
+            <div style="font-size:var(--fs-lg);font-weight:800;font-family:var(--font-display)">Analytikernas konsensus</div>
             <div style="font-size:var(--fs-sm);opacity:0.85;margin-top:4px">
                 Snittbetyg på skalan <strong>Köp = 5 … Sälj = 1</strong>, rekonstruerat ur varje analyshus senaste betyg
                 (samma skala som FactSet/Montrose). Hus tystare än 15 månader räknas inte. <strong>Nivån är popularitet
@@ -2565,11 +2669,11 @@ function renderAnalytiker(b, t) {
             <div id="anSokResultat"></div>
         </div>
         <div class="an-grid">
-            ${lista('⭐ Bästa snittbetyg — 12-månadersmedel', 'Genomsnitt över tolv månadspunkter. Kärlek är redan inprisad — läs som förväntansnivå, inte köplista.', (b && b.basta) || [])}
+            ${lista(dkHd('star') + 'Bästa snittbetyg — 12-månadersmedel', 'Genomsnitt över tolv månadspunkter. Kärlek är redan inprisad — läs som förväntansnivå, inte köplista.', (b && b.basta) || [])}
             <div>
-                ${lista('📈 Gatan återvänder — 3 mån', 'Störst höjning av snittet senaste kvartalet.', (t && t.upp_3m) || [], 'd3m')}
-                ${lista('📉 Gatan lämnar — 3 mån', 'Störst sänkning. Dessa får 🏦-flagga i DAKTIER-poängen vid −0,4 eller mer.', (t && t.ned_3m) || [], 'd3m')}
-                ${lista('🔥 Bästa betyg just nu — topp 50', 'Dagens ögonblicksbild. Bolag där NU ligger klart över 12m-siffran = gatan på väg tillbaka (Marvell-mönstret).', nuRows, null, '12m')}
+                ${lista(dkHd('up') + 'Gatan återvänder — 3 mån', 'Störst höjning av snittet senaste kvartalet.', (t && t.upp_3m) || [], 'd3m')}
+                ${lista(dkHd('down') + 'Gatan lämnar — 3 mån', 'Störst sänkning. Dessa får 🏦-flagga i DAKTIER-poängen vid −0,4 eller mer.', (t && t.ned_3m) || [], 'd3m')}
+                ${lista(dkHd('spark') + 'Bästa betyg just nu — topp 50', 'Dagens ögonblicksbild. Bolag där NU ligger klart över 12m-siffran = gatan på väg tillbaka (Marvell-mönstret).', nuRows, null, '12m')}
             </div>
         </div>
         <div style="margin-top:12px;font-size:var(--fs-xs);color:var(--text-muted)">
@@ -2676,7 +2780,7 @@ function renderKoplista(d, fs) {
             ${d.dropped.map(t => `<span style="background:#fef2f2;color:#991b1b;padding:2px 8px;border-radius:10px;margin-left:4px;font-weight:600">${t}</span>`).join('')}
         </div>` : '';
 
-    // 🧮 Kvantmodellen — 5-faktor sektorranking (egen sektion under listan)
+    // Kvantmodellen — 5-faktor sektorranking (egen sektion under listan)
     const fsRows = (fs && fs.rows) || [];
     const gradeChip = g => {
         const c = { A: ['#DCFCE7', '#166534'], B: ['#E0F2FE', '#075985'],
@@ -2695,7 +2799,7 @@ function renderKoplista(d, fs) {
     </tr>`;
     const kvantBlock = fsRows.length ? `
         <div style="background:var(--white);border-radius:var(--radius);padding:16px;margin-top:14px;box-shadow:var(--shadow-hover)">
-            <div style="font-size:var(--fs-md);font-weight:700;color:var(--brand-navy);margin-bottom:2px">🧮 Kvantmodellen — sektorranking</div>
+            <div style="font-size:var(--fs-md);font-weight:700;color:var(--brand-navy);margin-bottom:2px">Kvantmodellen — sektorranking</div>
             <div style="font-size:var(--fs-sm);color:var(--text-muted);margin-bottom:10px">
                 5 faktorer percentilrankade mot land + sektor (vikt 25/25/20/20/10):
                 vinstmomentum · prismomentum 3–12 m · lönsamhet · tillväxt · värdering.
@@ -2867,7 +2971,7 @@ function renderHotMoversTable() {
 
     document.getElementById('content').innerHTML = `
         <div style="background:linear-gradient(135deg,#eaf7fb,#d7eef6);border:1px solid rgba(56,182,217,0.35);border-radius:var(--radius);padding:12px 16px;margin-bottom:12px;display:flex;align-items:center;gap:12px">
-            <span style="font-size:24px">🔥</span>
+            ${dkIcon('owners', 'lg')}
             <div>
                 <div style="font-weight:700;color:var(--brand-navy)">${titleTxt}</div>
                 <div style="font-size:12px;color:#BF360C">${modeLabel}</div>
@@ -4011,7 +4115,7 @@ function renderQuarterlyTrendsSection(s) {
     </div>`;
 
     return `<div class="drawer-section">
-        <h3 class="drawer-section-title">📈 Vinst- och tillväxtutveckling per kvartal</h3>
+        <h3 class="drawer-section-title">Vinst- och tillväxtutveckling per kvartal</h3>
         ${turnaroundBadge ? `<div style="margin-bottom:10px">${turnaroundBadge}</div>` : ''}
         <div style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:12px">
             ${bigStat('Nettoresultat', fmtMoney(latest.net_profit), latest.net_profit > 0 ? '#00a870' : '#c0392b', profitQoQ, profitYoY, sortedAsc.map(r => r.net_profit))}
@@ -4152,7 +4256,7 @@ function renderHistoricalSection(s) {
     }
 
     return `<div class="drawer-section">
-        <h3 class="drawer-section-title">📊 ${sorted.length}-års historik (${dataSource})</h3>
+        <h3 class="drawer-section-title">${sorted.length}-års historik (${dataSource})</h3>
         ${contextPills.length ? `<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px">${contextPills.join('')}</div>` : ''}
         ${miniRow('EPS per aktie', eps, '#3b82f6', fmtEps)}
         ${miniRow('Return on Equity', roe, '#10b981', fmtRoe)}
@@ -4224,7 +4328,7 @@ function renderFScoreSection(s) {
     return `<div class="drawer-section" style="background:${interpStyle.bg};border-radius:12px;padding:14px 16px">
         <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:10px">
             <div>
-                <div class="drawer-section-title" style="margin:0;color:${interpStyle.color}">📐 Piotroski F-Score</div>
+                <div class="drawer-section-title" style="margin:0;color:${interpStyle.color}">Piotroski F-Score</div>
                 <div style="font-size:11px;color:${interpStyle.color};opacity:0.85;margin-top:2px">
                     Baserat på årsrapporterna ${f.year_prev}→${f.year}
                 </div>
@@ -5832,7 +5936,7 @@ function openDrawer(s) {
 
     // v3.8: Nyheter + Insider-transaktioner (lazy-laddas efter render om data finns)
     B.oversikt += `<div class="drawer-section" id="drawerNewsSection" style="display:none">
-        <h3 class="drawer-section-title">📰 Senaste nyheter</h3>
+        <h3 class="drawer-section-title">Senaste nyheter</h3>
         <div id="drawerNews"></div></div>`;
     B.agare += `<div class="drawer-section" id="drawerInsidersSection" style="display:none">
         <h3 class="drawer-section-title">👥 Insider-transaktioner (senaste)</h3>
@@ -5880,7 +5984,7 @@ function openDrawer(s) {
         const c = val >= 80 ? '#059669' : val >= 55 ? '#0891b2' : val >= 35 ? '#d97706' : '#dc2626';
         return `<div style="display:flex;align-items:center;gap:8px;margin-top:6px">
             <span style="font-size:11px;color:#475569;font-weight:600;width:64px">${label}</span>
-            <div style="flex:1;height:6px;background:#e2e8f0;border-radius:3px;overflow:hidden"><div style="width:${Math.max(2,Math.min(100,val))}%;height:100%;background:${c}"></div></div>
+            <div class="dov-bar"><i style="width:${Math.max(2,Math.min(100,val))}%"></i></div>
             <span style="font-size:12px;font-weight:800;color:${c};width:26px;text-align:right">${Math.round(val)}</span>
         </div>`;
     };
@@ -5892,15 +5996,15 @@ function openDrawer(s) {
         const rkBg = rk === 'HÖG' ? '#fee2e2' : rk === 'MEDEL' ? '#fef3c7' : '#d1fae5';
         const rkFg = rk === 'HÖG' ? '#b91c1c' : rk === 'MEDEL' ? '#b45309' : '#047857';
         const dflag = (s.flaggor || '').split(' | ').filter(Boolean);
-        daktierCard = `<div class="drawer-section" style="background:linear-gradient(135deg,#f0f9ff,#e0f2fe);border:1px solid rgba(22,54,92,0.14);border-radius:14px;padding:18px;margin-bottom:14px">
+        daktierCard = `<div class="drawer-section dov-score-card">
             <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
-                <div style="font-size:11px;color:#16365C;text-transform:uppercase;letter-spacing:0.1em;font-weight:800">⭐ DAKTIER-poäng</div>
+                <div class="dov-eyebrow">${dkIcon('score', 'sm')} DAKTIER-poäng</div>
                 ${rk ? `<span style="font-size:11px;font-weight:800;padding:3px 8px;border-radius:999px;background:${rkBg};color:${rkFg}">RISK ${rk}</span>` : ''}
             </div>
             <div style="display:flex;align-items:baseline;gap:10px;margin-top:6px;flex-wrap:wrap">
-                <div style="font-size:46px;font-weight:900;color:${dc};line-height:1">${ds.toFixed(0)}</div>
+                <div class="dov-score" style="color:${dc}">${ds.toFixed(0)}</div>
                 ${s.daktier_rank ? `<div style="font-size:13px;color:#475569;font-weight:700">plats ${s.daktier_rank} i dagens ranking</div>` : ''}
-                ${s.i_portfolj ? `<span style="font-size:11px;font-weight:800;padding:3px 8px;border-radius:999px;background:#cffafe;color:#0e7490">PORTFÖLJ${s.portfolj_sleeve ? ' · ' + String(s.portfolj_sleeve).toUpperCase() : ''}</span>` : ''}
+                ${s.i_portfolj ? `<span style="font-size:11px;font-weight:800;padding:3px 8px;border-radius:999px;background:#cffafe;color:#0e7490">PORTFÖLJ${s.portfolj_sleeve ? ' · ' + ({ karna: 'KÄRNAN', krydda: 'KRYDDAN' }[String(s.portfolj_sleeve).toLowerCase()] || String(s.portfolj_sleeve).toUpperCase()) : ''}</span>` : ''}
             </div>
             <div style="margin-top:10px">
                 ${dpBar('Kvalitet', s.dp_kvalitet)}${dpBar('Kassa', s.dp_kassa)}${dpBar('Tillväxt', s.dp_tillvaxt)}${dpBar('Stabilitet', s.dp_stabilitet)}${dpBar('Värdering', s.dp_vardering)}${dpBar('Storlek', s.dp_storlek)}
@@ -5909,8 +6013,8 @@ function openDrawer(s) {
             <div style="margin-top:10px;font-size:11px;color:#64748b">Sitens enda poängsättning — samma siffra som i Aktier, Topplistan och portföljerna. Vikter: kvalitet 24 % · kassaflöde 22 % · tillväxt 18 % · stabilitet 14 % · värdering 14 % · storlek 8 %.</div>
         </div>`;
     } else {
-        daktierCard = `<div class="drawer-section" style="background:#f8fafc;border:1px solid var(--line);border-radius:14px;padding:16px;margin-bottom:14px">
-            <div style="font-size:11px;color:#16365C;text-transform:uppercase;letter-spacing:0.1em;font-weight:800">⭐ DAKTIER-poäng</div>
+        daktierCard = `<div class="drawer-section dov-score-card" style="border-left-color:var(--border)">
+            <div class="dov-eyebrow">${dkIcon('score', 'sm')} DAKTIER-poäng</div>
             <div style="margin-top:6px;font-size:13px;color:#475569;line-height:1.5">Ingen poäng i dagens ranking — bolaget saknar tillräcklig rapportserie (minst 8 kvartal), faller på hygienkraven (börsvärde ≥ 500 MUSD · kurs ≥ 10 USD · ej REIT) eller är en sekundärnotering av ett bolag som redan rankas.</div>
         </div>`;
     }
@@ -6051,7 +6155,7 @@ function openDrawer(s) {
                     fc.innerHTML = `<div class="drawer-section" style="background:linear-gradient(135deg,#f8fafc,#f1f9fc);border:1px solid var(--brand-cyan);border-radius:14px;padding:16px 18px">
                         <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
                             <div>
-                                <div class="drawer-section-title" style="border:none;margin:0;padding:0">🧮 Kvantmodellen ${f.is_pick ? '· <span style="color:#b45309">★ månadens pick</span>' : ''}</div>
+                                <div class="drawer-section-title" style="border:none;margin:0;padding:0">Kvantmodellen ${f.is_pick ? '· <span style="color:#b45309">★ månadens pick</span>' : ''}</div>
                                 <div style="font-size:11px;color:var(--text-muted)">${f.sector || ''} · sektorpercentiler · ${String(f.snapshot_date).slice(0,10)}</div>
                             </div>
                             <div style="font-size:26px;font-weight:800;color:var(--brand-navy)">${Number(f.total_score).toFixed(2)}<span style="font-size:13px;color:var(--text-muted)">/5</span></div>
@@ -6333,7 +6437,7 @@ function _buildReportCard(d, rich) {
     // Nyheter
     let newsHtml = '';
     if (d.news && d.news.length) {
-        newsHtml = _secTitle('📰 Senaste nyheter') + d.news.map(nw => `
+        newsHtml = _secTitle('Senaste nyheter') + d.news.map(nw => `
             <div style="padding:7px 0;border-bottom:1px solid #f1f5f9">
                 <div style="font-size:12px;font-weight:600;color:#1f2937;line-height:1.45">${escapeHtml(nw.headline || '')}${nw.change_pct != null ? ` <span style="color:${nw.change_pct >= 0 ? '#047857' : '#b91c1c'};font-weight:700">${nw.change_pct >= 0 ? '+' : ''}${Number(nw.change_pct).toFixed(1)}%</span>` : ''}</div>
                 ${nw.summary ? `<div style="font-size:11px;color:#64748b;margin-top:2px;line-height:1.5">${escapeHtml(nw.summary)}</div>` : ''}
@@ -8748,7 +8852,7 @@ async function renderDashboard() {
 
             <!-- v3.3 ① DAGLIG BRIEF — en mening om dagen -->
             <div class="daily-brief" id="dailyBriefWrap">
-                <div class="brief-eyebrow">📋 Dagens brief · ${new Date().toLocaleDateString('sv-SE', {weekday:'long', day:'numeric', month:'long'})}</div>
+                <div class="brief-eyebrow">Dagens brief · ${new Date().toLocaleDateString('sv-SE', {weekday:'long', day:'numeric', month:'long'})}</div>
                 <div class="brief-text" id="briefText" style="opacity:0.6">Sammanställer dagens läge…</div>
                 <div class="brief-chips" id="briefChips"></div>
             </div>
@@ -8756,7 +8860,7 @@ async function renderDashboard() {
             <!-- v3.4 ② MARKNADSNYHETER (Market Bullets från stockanalysis.com) -->
             <div class="dash-section" id="marketNewsWrap">
                 <h3 class="dash-heading" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-                    📰 Market Bullets
+                    ${dkHd('news')}Market Bullets
                     <span class="dash-sub" id="bulletsDateSub">nyheter · politik · rapporter</span>
                     <span style="margin-left:auto;display:flex;gap:6px">
                         <select id="bulletsDateSelect" onchange="loadBulletDate(this.value)"
@@ -8773,7 +8877,7 @@ async function renderDashboard() {
             <!-- v3.6 ②a SVENSKA NYHETER (Nordic-fokus, web-sökt) -->
             <div class="dash-section" id="seNewsWrap">
                 <h3 class="dash-heading" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-                    🇸🇪 Svenska & nordiska nyheter
+                    ${dkHd('report')}Svenska & nordiska nyheter
                     <span class="dash-sub">bolagen vi följer · web-sökt · AI-sammanställt</span>
                     <button id="seNewsRefreshBtn" onclick="refreshSwedishNews()" title="Uppdatera"
                         class="btn btn-sm" style="margin-left:auto">🔄</button>
@@ -8786,7 +8890,7 @@ async function renderDashboard() {
             <!-- v3.4 ②b TRENDING (top-20 by views, stockanalysis.com) -->
             <div class="dash-section" id="trendingWrap">
                 <h3 class="dash-heading" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-                    🔥 Trending nu
+                    ${dkHd('owners')}Trending nu
                     <span class="dash-sub">mest sedda aktier · 🆕 = nyss inhoppad (tidig signal)</span>
                     <button onclick="syncTrending()" title="Uppdatera trending"
                         class="btn btn-sm" style="margin-left:auto">🔄</button>
@@ -8799,7 +8903,7 @@ async function renderDashboard() {
             <!-- v3.6 ④ RAPPORTER (konsoliderat: Idag / Kommande / Senaste) -->
             <div class="dash-section" id="reportsWrap">
                 <h3 class="dash-heading" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-                    📊 Rapporter
+                    ${dkHd('calc')}Rapporter
                     <span class="dash-sub">allt på ett ställe · rapportarkiv + stockanalysis</span>
                     <button id="analyzeReportsBtn" onclick="analyzeReportsToday()" class="btn btn-primary btn-sm" style="margin-left:auto">
                         🤖 Analysera dagens rapportbolag

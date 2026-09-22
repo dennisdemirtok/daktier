@@ -17399,15 +17399,73 @@ def api_fix_ticker_isin():
         db.close()
 
 
+def _lista_rorelse(db, lista, rader, nyckel="ticker"):
+    """Sparar dagens placeringar för en topplista och märker varje rad med
+    'rorelse' mot senaste tidigare dag: {'typ': upp|ned|ny|lika, 'platser': n}.
+    Användarönskemål 2026-09-22: "svårt att veta hur de har rört sig om man
+    inte kommer ihåg". Första dagen (ingen tidigare bild) → None."""
+    from edge_db import _ph, _fetchall, _fetchone, _upsert_sql
+    ph = _ph()
+    try:
+        db.execute("CREATE TABLE IF NOT EXISTS topplista_snapshot ("
+                   "datum TEXT NOT NULL, lista TEXT NOT NULL, nyckel TEXT NOT NULL, "
+                   "plats INTEGER, PRIMARY KEY (datum, lista, nyckel))")
+        db.commit()
+    except Exception:
+        try: db.rollback()
+        except Exception: pass
+    try:
+        from zoneinfo import ZoneInfo
+        idag = datetime.now(ZoneInfo("Europe/Stockholm")).strftime("%Y-%m-%d")
+    except Exception:
+        idag = datetime.now().strftime("%Y-%m-%d")
+    forra, prev_d = {}, None
+    try:
+        r = _fetchone(db, f"SELECT MAX(datum) AS d FROM topplista_snapshot "
+                          f"WHERE lista = {ph} AND datum < {ph}", (lista, idag))
+        prev_d = dict(r)["d"] if r else None
+        if prev_d:
+            forra = {dict(x)["nyckel"]: dict(x)["plats"] for x in _fetchall(
+                db, f"SELECT nyckel, plats FROM topplista_snapshot WHERE lista = {ph} AND datum = {ph}",
+                (lista, prev_d))}
+        sql = _upsert_sql("topplista_snapshot", ["datum", "lista", "nyckel", "plats"],
+                          ["datum", "lista", "nyckel"])
+        for i, rad in enumerate(rader or []):
+            k = str(rad.get(nyckel) or "").strip()
+            if k:
+                db.execute(sql, (idag, lista, k, i + 1))
+        db.commit()
+    except Exception as e:
+        try: db.rollback()
+        except Exception: pass
+        print(f"[RORELSE] {lista}: {e}", file=sys.stderr)
+    for i, rad in enumerate(rader or []):
+        if not prev_d:
+            rad["rorelse"] = None
+            continue
+        k = str(rad.get(nyckel) or "").strip()
+        if k not in forra:
+            rad["rorelse"] = {"typ": "ny", "platser": 0}
+        else:
+            diff = int(forra[k]) - (i + 1)
+            rad["rorelse"] = {"typ": "upp" if diff > 0 else "ned" if diff < 0 else "lika",
+                              "platser": abs(diff)}
+    return rader
+
+
 @app.route("/api/factset-rating/basta")
 def api_factset_rating_basta():
     """Topplista på nivån: bästa snittbetyg som 12-månadersmedel."""
     from edge_db import compute_factset_level_toplist
     db = get_db()
     try:
-        return jsonify(compute_factset_level_toplist(
+        d = compute_factset_level_toplist(
             db, limit=request.args.get("limit", 30, type=int),
-            min_hus=request.args.get("min_hus", 5, type=int)))
+            min_hus=request.args.get("min_hus", 5, type=int))
+        for k in ("basta", "basta_nu", "samsta"):
+            if isinstance(d.get(k), list):
+                _lista_rorelse(db, "analytiker:" + k, d[k])
+        return jsonify(d)
     finally:
         db.close()
 
@@ -17442,9 +17500,13 @@ def api_factset_rating_toplist():
     from edge_db import compute_factset_rating_toplist
     db = get_db()
     try:
-        return jsonify(compute_factset_rating_toplist(
+        d = compute_factset_rating_toplist(
             db, limit=request.args.get("limit", 25, type=int),
-            min_hus=request.args.get("min_hus", 5, type=int)))
+            min_hus=request.args.get("min_hus", 5, type=int))
+        for k, v in list(d.items()):
+            if isinstance(v, list) and (k.startswith("upp_") or k.startswith("ned_")):
+                _lista_rorelse(db, "analytiker:" + k, v)
+        return jsonify(d)
     finally:
         db.close()
 
@@ -18124,6 +18186,24 @@ def api_daktier_rank():
             f"ORDER BY score DESC LIMIT {ph}", tuple(a + [limit]))]
         tot = _fetchone(db, f"SELECT COUNT(*) AS n FROM daktier_rank "
                             f"WHERE snapshot_date = {ph}", (d,))
+        # Rörelse mot föregående ranking (▲▼NY i listan)
+        try:
+            pr = _fetchone(db, f"SELECT MAX(snapshot_date) AS d FROM daktier_rank "
+                               f"WHERE snapshot_date < {ph}", (d,))
+            pd_ = dict(pr)["d"] if pr else None
+            if pd_ and rows:
+                forra = {dict(x)["isin"]: dict(x)["rank"] for x in _fetchall(
+                    db, f"SELECT isin, rank FROM daktier_rank WHERE snapshot_date = {ph}", (pd_,))}
+                for x in rows:
+                    fr = forra.get(x.get("isin"))
+                    if fr is None:
+                        x["rorelse"] = {"typ": "ny", "platser": 0}
+                    else:
+                        diff = int(fr) - int(x.get("rank") or 0)
+                        x["rorelse"] = {"typ": "upp" if diff > 0 else "ned" if diff < 0 else "lika",
+                                        "platser": abs(diff)}
+        except Exception as e:
+            print(f"[RANK] rörelse: {e}", file=sys.stderr)
         return jsonify({
             "snapshot_date": str(d), "rows": rows,
             "total_rankade": (dict(tot)["n"] if tot else 0),
