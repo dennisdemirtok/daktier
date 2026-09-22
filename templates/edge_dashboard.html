@@ -121,7 +121,7 @@
         .subnav { position: fixed; left: 0; top: var(--topnav-h); bottom: 0; width: var(--subnav-w); background: #fff; border-right: 1px solid var(--line);
             display: none; flex-direction: column; padding: 16px 12px; gap: 2px; z-index: 90; overflow-y: auto; }
         body.has-subnav .subnav { display: flex; }
-        .subnav-title { font-size: 10.5px; font-weight: 800; text-transform: uppercase; letter-spacing: 1px; color: var(--text-muted); padding: 4px 12px 10px; }
+        .subnav-title { font-size:11px; font-weight: 800; text-transform: uppercase; letter-spacing: 1px; color: var(--text-muted); padding: 4px 12px 10px; }
         .subnav-item { display: flex; align-items: center; gap: 11px; padding: 10px 12px; border-radius: 9px; font-size: 13.5px; font-weight: 500; color: var(--ink-soft); cursor: pointer; transition: all 0.14s; border: none; background: none; font-family: inherit; text-align: left; width: 100%; }
         .subnav-item:hover { background: var(--surface-low); color: var(--ink); }
         .subnav-item.active { background: rgba(30,64,175,0.08); color: #1e40af; font-weight: 700; }
@@ -133,7 +133,7 @@
         .subnav-chat.active { background: rgba(30,64,175,0.08); }
         .subnav-chat-title { font-size: 12.5px; font-weight: 600; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .subnav-chat.active .subnav-chat-title { color: #1e40af; }
-        .subnav-chat-meta { font-size: 10px; color: var(--text-muted); margin-top: 1px; }
+        .subnav-chat-meta { font-size:11px; color: var(--text-muted); margin-top: 1px; }
         .subnav-chat-del { position: absolute; right: 6px; top: 50%; transform: translateY(-50%); background: none; border: none; color: var(--text-muted); cursor: pointer; opacity: 0; padding: 4px; border-radius: 6px; display: flex; }
         .subnav-chat:hover .subnav-chat-del { opacity: 0.6; }
         .subnav-chat-del:hover { opacity: 1 !important; background: #fee2e2; color: #dc2626; }
@@ -148,7 +148,7 @@
             backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); border-top: 1px solid var(--line); z-index: 200;
             padding-bottom: env(safe-area-inset-bottom, 0); }
         .mobile-bottom-nav button { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
-            background: none; border: none; cursor: pointer; color: var(--text-muted); font-family: inherit; font-size: 10px; font-weight: 600; padding: 0; }
+            background: none; border: none; cursor: pointer; color: var(--text-muted); font-family: inherit; font-size:11px; font-weight: 600; padding: 0; }
         .mobile-bottom-nav button .material-symbols-outlined { font-size: 23px; }
         .mobile-bottom-nav button.active { color: #1e40af; }
         .mobile-sheet-overlay { display: none; position: fixed; inset: 0; background: rgba(15,23,42,0.4); z-index: 300; }
@@ -182,7 +182,7 @@
         .filter-bar:empty { display: none; }  /* v3.7: dölj tom filter-bar (t.ex. på dashboard) */
         .filter-group { display: inline-flex; align-items: center; gap: 4px; background: var(--surface-low); padding: 4px; border-radius: 10px; }
         .filter-group.tight { gap: 2px; }
-        .filter-label { font-size: 9px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.8px; padding: 0 6px 0 10px; white-space: nowrap; }
+        .filter-label { font-size:11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.8px; padding: 0 6px 0 10px; white-space: nowrap; }
         .search-input { padding: 8px 14px 8px 34px; border: none; border-radius: 10px; font-family: inherit; font-size: 13px; width: 280px; outline: none; transition: all 0.2s; background: var(--surface-low) url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%236c7b70'><path d='M15.5 14h-.79l-.28-.27a6.5 6.5 0 1 0-.7.7l.27.28v.79l5 4.99L20.49 19zM9.5 14A4.5 4.5 0 1 1 14 9.5 4.5 4.5 0 0 1 9.5 14'/></svg>") no-repeat 10px center; background-size: 16px; color: var(--text); }
         .search-input::placeholder { color: var(--text-muted); }
         .search-input:focus { background-color: var(--white); box-shadow: 0 0 0 2px rgba(0,194,129,0.18); }
@@ -216,8 +216,8 @@
         .mv-icon { font-size: 18px; flex-shrink: 0; }
         .mv-title-wrap { flex: 1; min-width: 0; }
         .mv-title { font-size: 12px; font-weight: 700; color: var(--text); line-height: 1.2; }
-        .mv-sub { font-size: 10px; color: var(--text-muted); margin-top: 2px; line-height: 1.2; }
-        .mv-badge { font-size: 10px; font-weight: 700; padding: 3px 8px; border-radius: 5px; white-space: nowrap; background: var(--white); flex-shrink: 0; }
+        .mv-sub { font-size:11px; color: var(--text-muted); margin-top: 2px; line-height: 1.2; }
+        .mv-badge { font-size:11px; font-weight: 700; padding: 3px 8px; border-radius: 5px; white-space: nowrap; background: var(--white); flex-shrink: 0; }
         .v-pass .mv-badge { color: var(--green-dark); }
         .v-warn .mv-badge { color: #92400e; }
         .v-fail .mv-badge { color: var(--red); }
@@ -229,7 +229,7 @@
         .table-container { background: var(--white); border-radius: var(--radius); overflow-x: auto; }
         table { width: 100%; border-collapse: collapse; }
         thead { position: relative; z-index: 2; }
-        th { padding: 14px 14px; text-align: left; font-size: 10px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; border-bottom: none; cursor: pointer; user-select: none; background: var(--surface-low); white-space: nowrap; }
+        th { padding: 14px 14px; text-align: left; font-size:11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; border-bottom: none; cursor: pointer; user-select: none; background: var(--surface-low); white-space: nowrap; }
         th:first-child { border-radius: var(--radius) 0 0 0; }
         th:last-child { border-radius: 0 var(--radius) 0 0; }
         th:hover { color: var(--text); }
@@ -240,7 +240,7 @@
         tbody tr { transition: background 0.1s; }
         .stock-name { font-weight: 600; color: var(--text); cursor: pointer; transition: color 0.15s; }
         .stock-name:hover { color: var(--green-dark); }
-        .stock-ticker { font-size: 10px; color: var(--text-muted); }
+        .stock-ticker { font-size:11px; color: var(--text-muted); }
 
         /* ── Numbers ──── */
         .num-pos { color: var(--green-dark); font-weight: 600; }
@@ -248,7 +248,7 @@
         .num-zero { color: var(--text-muted); }
 
         /* ── Badges ──── */
-        .badge { display: inline-block; padding: 3px 10px; border-radius: 6px; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.3px; }
+        .badge { display: inline-block; padding: 3px 10px; border-radius: 6px; font-size:11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.3px; }
         .badge-buy { background: rgba(0,194,129,0.12); color: var(--green-dark); }
         .badge-sell { background: rgba(190,0,51,0.12); color: var(--red); }
         .badge-strong-buy { background: var(--green-dark); color: white; }
@@ -263,7 +263,7 @@
         .comp-bars { display: flex; gap: 3px; align-items: center; }
         .comp-bar { width: 28px; height: 14px; background: var(--surface-low); border-radius: 3px; position: relative; overflow: hidden; cursor: help; }
         .comp-bar-fill { height: 100%; border-radius: 3px; }
-        .comp-label { font-size: 9px; color: var(--text-muted); text-align: center; line-height: 1; margin-top: 1px; }
+        .comp-label { font-size:11px; color: var(--text-muted); text-align: center; line-height: 1; margin-top: 1px; }
 
         /* ── Tooltip ──── */
         .tooltip-wrap { position: relative; }
@@ -276,6 +276,33 @@
         .loading-spinner, .spinner { width: 28px; height: 28px; border: 3px solid var(--surface-high); border-top-color: var(--brand-cyan); border-radius: 50%; animation: spin 0.8s linear infinite; margin-bottom: 12px; }
         /* Fokusring — synlig tangentbordsnavigering i hela appen */
         :focus-visible { outline: 2px solid var(--brand-cyan); outline-offset: 2px; border-radius: 4px; }
+        /* ── Tomt/fel-tillstånd ── */
+        .empty-state { display: flex; flex-direction: column; align-items: center; text-align: center; padding: 48px 20px; color: var(--text-muted); }
+        .empty-state .material-symbols-outlined { font-size: 40px; color:#64748b; margin-bottom: 10px; }
+        .empty-state-title { font-size: 15px; font-weight: 600; color: var(--ink); }
+        .empty-state-text { font-size: 13px; margin-top: 4px; max-width: 460px; line-height: 1.5; }
+        .empty-state.error .material-symbols-outlined { color: #ef4444; }
+        /* ── Toasts (ersätter alert()) ── */
+        .toast-wrap { position: fixed; right: 16px; bottom: 16px; z-index: 4000; display: flex; flex-direction: column; gap: 8px; max-width: min(380px, calc(100vw - 32px)); pointer-events: none; }
+        .toast { pointer-events: auto; display: flex; align-items: flex-start; gap: 10px; padding: 12px 14px; background: var(--ink); color: #fff; border-radius: 10px; box-shadow: 0 10px 30px rgba(15,23,42,0.25); font-size: 13px; line-height: 1.45; border-left: 4px solid var(--brand-cyan); animation: toastIn .22s ease-out; }
+        .toast.success { border-left-color: var(--green); } .toast.error { border-left-color: #ef4444; } .toast.warn { border-left-color: var(--orange); }
+        .toast .material-symbols-outlined { font-size: 20px; flex-shrink: 0; margin-top: 1px; }
+        .toast-msg { flex: 1; white-space: pre-line; }
+        .toast-x { background: none; border: 0; color: rgba(255,255,255,0.7); cursor: pointer; font-size: 16px; line-height: 1; padding: 2px; }
+        .toast-x:hover { color: #fff; }
+        @keyframes toastIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+        @media (max-width: 900px) { .toast-wrap { bottom: calc(72px + env(safe-area-inset-bottom)); left: 16px; right: 16px; max-width: none; } }
+        /* ── Bekräftelsedialog (ersätter confirm()) ── */
+        .dlg-overlay { position: fixed; inset: 0; background: rgba(15,23,42,0.45); z-index: 3900; display: flex; align-items: center; justify-content: center; padding: 20px; animation: fadeIn .15s ease-out; }
+        .dlg { background: #fff; border-radius: 14px; padding: 22px 22px 18px; width: min(440px, 100%); box-shadow: 0 24px 60px rgba(15,23,42,0.3); }
+        .dlg-title { font-size: 16px; font-weight: 700; color: var(--ink); margin-bottom: 8px; }
+        .dlg-msg { font-size: 13.5px; color: var(--ink-soft); line-height: 1.55; white-space: pre-line; }
+        .dlg-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }
+        .dlg-btn { padding: 8px 16px; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; border: 1px solid var(--border); background: #fff; color: var(--ink); }
+        .dlg-btn:hover { background: var(--surface-hover); }
+        .dlg-btn.primary { background: var(--brand-navy); border-color: var(--brand-navy); color: #fff; }
+        .dlg-btn.primary:hover { background: var(--brand-navy-deep); }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
         button:focus:not(:focus-visible), [tabindex]:focus:not(:focus-visible) { outline: none; }
 
         /* ── Dashboard page ─────────────────────────────── */
@@ -307,7 +334,7 @@
         .news-ticker.linked { color: #1e40af; }
         .news-ticker.linked:hover { text-decoration: underline; }
         .news-chg { font-size: 12px; font-weight: 700; font-variant-numeric: tabular-nums; }
-        .news-cat { font-size: 9.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.4px;
+        .news-cat { font-size:11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.4px;
             padding: 2px 7px; border-radius: 6px; }
         .news-cat.earnings { background: #dbeafe; color: #1e40af; }
         .news-cat.mna { background: #fae8ff; color: #86198f; }
@@ -318,8 +345,8 @@
         .news-cat.other { background: #f1f5f9; color: #475569; }
         .news-headline { font-size: 13px; font-weight: 600; color: #1f2937; line-height: 1.4; margin-bottom: 3px; }
         .news-summary { font-size: 12px; color: #6b7280; line-height: 1.5; }
-        .news-source { font-size: 10.5px; color: #9ca3af; margin-top: 5px; }
-        .news-source a { color: #9ca3af; }
+        .news-source { font-size:11px; color:#6b7280; margin-top: 5px; }
+        .news-source a { color:#6b7280; }
 
         /* v3.3 — Collapsible "Mer data"-sektion */
         .dash-more { border-top: 1px dashed #d1d5db; padding-top: 6px; margin-top: 4px; }
@@ -337,7 +364,7 @@
         .mkt-strip { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }
         .mkt-pill { background: #f8fafc; border: 1px solid #eef0f2; border-radius: 9px; padding: 8px 14px;
             display: flex; flex-direction: column; gap: 1px; min-width: 96px; }
-        .mkt-pill .mkt-name { font-size: 10px; color: #6b7280; font-weight: 600; text-transform: uppercase; letter-spacing: 0.4px; }
+        .mkt-pill .mkt-name { font-size:11px; color: #6b7280; font-weight: 600; text-transform: uppercase; letter-spacing: 0.4px; }
         .mkt-pill .mkt-val { font-size: 15px; font-weight: 800; font-variant-numeric: tabular-nums; }
         .bullet-sec { margin-bottom: 14px; }
         .bullet-sec-title { font-size: 11.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;
@@ -348,7 +375,7 @@
         .bullet-tk.linked { color: #1e40af; cursor: pointer; }
         .bullet-tk.linked:hover { text-decoration: underline; }
         .bullet-txt { font-size: 12.5px; color: #374151; line-height: 1.5; }
-        .bullet-txt .src { color: #9ca3af; font-size: 11px; }
+        .bullet-txt .src { color:#6b7280; font-size: 11px; }
         .earn-card .et { font-weight: 800; color: #0f172a; font-size: 12.5px; }
         .earn-card .em { color: #6b7280; margin-top: 3px; }
         .yoy-pos { color: #059669; font-weight: 700; }
@@ -360,13 +387,13 @@
             cursor: pointer; transition: all 0.15s; position: relative; }
         .trend-card:hover { box-shadow: 0 3px 10px rgba(0,0,0,0.06); transform: translateY(-1px); }
         .trend-card.is-new { border-color: #fbbf24; background: linear-gradient(135deg, #fffbeb, #fff); }
-        .trend-rank { font-size: 10px; color: #9ca3af; font-weight: 700; }
+        .trend-rank { font-size:11px; color:#6b7280; font-weight: 700; }
         .trend-tk { font-size: 15px; font-weight: 800; color: #0f172a; }
         .trend-tk.linked { color: #1e40af; }
-        .trend-co { font-size: 10.5px; color: #9ca3af; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .trend-co { font-size:11px; color:#6b7280; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .trend-meta { display: flex; justify-content: space-between; align-items: center; margin-top: 5px; font-size: 11px; }
         .trend-views { color: #6b7280; }
-        .new-badge { position: absolute; top: 8px; right: 8px; background: #f59e0b; color: #fff; font-size: 9px;
+        .new-badge { position: absolute; top: 8px; right: 8px; background: #f59e0b; color: #fff; font-size:11px;
             font-weight: 800; padding: 2px 6px; border-radius: 6px; letter-spacing: 0.5px; }
 
         /* v3.5 — Macro Pulse */
@@ -380,9 +407,9 @@
         .mp-summary { font-size: 13px; color: #374151; line-height: 1.55; margin-bottom: 12px; }
         .mp-ind-strip { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
         .mp-ind { background: #fff; border: 1px solid #eef0f2; border-radius: 8px; padding: 7px 11px; min-width: 88px; }
-        .mp-ind .n { font-size: 9.5px; color: #6b7280; font-weight: 600; text-transform: uppercase; letter-spacing: 0.3px; }
+        .mp-ind .n { font-size:11px; color: #6b7280; font-weight: 600; text-transform: uppercase; letter-spacing: 0.3px; }
         .mp-ind .v { font-size: 14px; font-weight: 800; color: #0f172a; }
-        .mp-ind .note { font-size: 10px; color: #9ca3af; }
+        .mp-ind .note { font-size:11px; color:#6b7280; }
         .mp-secs { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
         .mp-sec-title { font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.4px; color: #475569; margin-bottom: 5px; }
         .mp-sec ul { margin: 0; padding-left: 16px; }
@@ -401,9 +428,9 @@
         .rep-card.beat { border-left-color: #059669; }
         .rep-card.miss { border-left-color: #dc2626; }
         .rep-tk { font-size: 14px; font-weight: 800; color: #0f172a; }
-        .rep-co { font-size: 10.5px; color: #9ca3af; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .rep-co { font-size:11px; color:#6b7280; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .rep-meta { font-size: 11px; color: #6b7280; margin-top: 5px; line-height: 1.5; }
-        .rep-time { font-size: 10px; font-weight: 700; padding: 1px 7px; border-radius: 6px; background: #eff6ff; color: #1e40af; }
+        .rep-time { font-size:11px; font-weight: 700; padding: 1px 7px; border-radius: 6px; background: #eff6ff; color: #1e40af; }
         .dash-heading { font-size: 14px; font-weight: 600; color: var(--text); text-transform: uppercase; letter-spacing: 0.08em; margin: 0 0 14px; }
         .dash-heading .dash-sub { font-weight: 400; text-transform: none; letter-spacing: 0; color: var(--text-muted); font-size: 12px; margin-left: 8px; }
         .dash-top-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
@@ -448,11 +475,11 @@
         .mdo-v { flex: 1; color: var(--text); line-height: 1.5; }
         .mdo-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; }
         .mdo-stat { background: var(--white); border-radius: 10px; padding: 12px 14px; }
-        .mdo-stat-l { font-size: 10px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.3px; }
+        .mdo-stat-l { font-size:11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.3px; }
         .mdo-stat-v { font-size: 16px; font-weight: 700; margin-top: 4px; }
         .mdo-table-wrap { background: var(--white); border-radius: 12px; overflow: hidden; }
         .mdo-table { width: 100%; border-collapse: collapse; font-size: 12px; }
-        .mdo-table th { text-align: left; padding: 10px 12px; background: var(--surface-low); font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.3px; color: var(--text-muted); }
+        .mdo-table th { text-align: left; padding: 10px 12px; background: var(--surface-low); font-size:11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.3px; color: var(--text-muted); }
         .mdo-table td { padding: 8px 12px; border-top: 1px solid var(--border-light); }
         .mdo-table tbody tr:hover { background: var(--surface-low); }
         @keyframes spin { to { transform: rotate(360deg); } }
@@ -503,7 +530,7 @@
         /* ── DD Risk ──── */
         .dd-risk-bar { width: 50px; height: 8px; background: var(--surface-high); border-radius: 4px; display: inline-block; vertical-align: middle; overflow: hidden; }
         .dd-risk-fill { height: 100%; border-radius: 4px; }
-        .dd-risk-label { font-size: 10px; display: block; margin-top: 1px; }
+        .dd-risk-label { font-size:11px; display: block; margin-top: 1px; }
 
         /* ── 7d Trend ──── */
         .trend-7d { font-size: 11px; font-weight: 600; white-space: nowrap; }
@@ -523,7 +550,7 @@
         .drawer-close:hover { background:var(--bg);color:var(--text); }
         .drawer-body { padding:0 28px 32px;flex:1; }
         .drawer-section { margin-top:22px; }
-        .drawer-section-title { font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;color:var(--text-muted);margin-bottom:11px;padding-bottom:7px;border-bottom:1px solid var(--line); }
+        .drawer-section-title { font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;color:var(--text-muted);margin-bottom:11px;padding-bottom:7px;border-bottom:1px solid var(--line); }
         /* Flikad aktievy (Montrose-inspirerad): toppmeny inne i lådan i stället
            för en enda lång scroll — gäller desktop och mobil */
         .dtab-bar { display:flex;gap:2px;position:sticky;top:0;z-index:5;background:var(--white);
@@ -540,11 +567,11 @@
         .dtab-empty { padding:32px;text-align:center;color:var(--text-muted);font-size:13px; }
         .dov-chips { display:grid;grid-template-columns:repeat(auto-fit,minmax(88px,1fr));gap:8px;margin-bottom:14px; }
         .dov-chip { background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:9px 10px;text-align:center; }
-        .dov-chip .l { font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--text-muted); }
+        .dov-chip .l { font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--text-muted); }
         .dov-chip .v { font-size:14.5px;font-weight:800;margin-top:2px; }
         /* v3.8: ren, läsbar tabell-stil i drawern */
         .drawer-tbl { width:100%;border-collapse:collapse;font-size:12.5px; }
-        .drawer-tbl th { text-align:left;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.4px;color:var(--text-muted);padding:6px 8px;border-bottom:1px solid var(--line); }
+        .drawer-tbl th { text-align:left;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.4px;color:var(--text-muted);padding:6px 8px;border-bottom:1px solid var(--line); }
         .drawer-tbl td { padding:8px 8px;border-bottom:1px solid #f3f4f6;color:var(--ink);vertical-align:top; }
         .drawer-tbl tr:last-child td { border-bottom:none; }
         .drawer-tbl tr:hover td { background:#f8fafc; }
@@ -559,17 +586,17 @@
         .report-md table { width:100%; border-collapse:collapse; font-size:11px; margin:6px 0; }
         .report-md th { background:#f8fafc; text-align:left; padding:5px 7px; border:1px solid #eef0f2; font-weight:700; }
         .report-md td { padding:5px 7px; border:1px solid #f1f5f9; }
-        .report-md code { background:#f1f5f9; padding:1px 4px; border-radius:3px; font-size:10.5px; }
+        .report-md code { background:#f1f5f9; padding:1px 4px; border-radius:3px; font-size:11px; }
         .report-md blockquote { border-left:3px solid #93c5fd; padding:2px 10px; margin:6px 0; color:#475569; background:#f8fafc; }
         .report-md hr { border:none; border-top:1px solid #eef0f2; margin:8px 0; }
         .drawer-grid { display:grid;grid-template-columns:1fr 1fr;gap:8px; }
         .drawer-grid-3 { display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px; }
         .drawer-item { background:var(--bg);border-radius:8px;padding:10px 12px; }
-        .drawer-item-label { font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.3px;font-weight:600; }
+        .drawer-item-label { font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.3px;font-weight:600; }
         .drawer-item-value { font-size:15px;font-weight:700;margin-top:2px; }
 
         /* ── Market Status ──── */
-        .market-status { display: flex; align-items: center; gap: 5px; font-size: 10px; font-weight: 700; letter-spacing: 0.5px; text-transform: uppercase; }
+        .market-status { display: flex; align-items: center; gap: 5px; font-size:11px; font-weight: 700; letter-spacing: 0.5px; text-transform: uppercase; }
         .market-status.open { color: var(--green-dark); }
         .market-status.closed { color: var(--text-muted); opacity: 0.5; }
         .market-dot { width: 6px; height: 6px; border-radius: 50%; }
@@ -584,7 +611,7 @@
         .sim-pcard-return.neg { background: var(--red-light); color: var(--red); }
         .sim-pcard-return.neu { background: var(--surface-low); color: var(--text-muted); }
         .sim-ranking-rank.gold { color: #d4a017; }
-        .sim-ranking-rank.silver { color: #94a3b8; }
+        .sim-ranking-rank.silver { color:#64748b; }
         .sim-ranking-rank.bronze { color: #b87333; }
 
         /* ── Owner Maturity Badge ──── */
@@ -643,7 +670,7 @@
             .filter-chip, .period-chip, .signal-chip, .dir-chip {
                 padding: 9px 14px; font-size: 12px; min-height: 36px;
             }
-            .filter-label { font-size: 9px; padding: 0 4px 0 8px; }
+            .filter-label { font-size:11px; padding: 0 4px 0 8px; }
 
             /* Drawer — full skärm på mobil */
             .drawer { width: 100vw; max-width: 100vw; }
@@ -653,7 +680,7 @@
 
             /* Tabeller — kompakt + dölj icke-essentiella kolumner */
             .table-container { margin: 0 -12px; border-radius: 0; }
-            th { padding: 10px 8px; font-size: 9px; }
+            th { padding: 10px 8px; font-size:11px; }
             td { padding: 8px; font-size: 11px; }
 
             /* Dashboard-grids stackar till 1 kolumn */
@@ -704,7 +731,7 @@
             .drawer-grid { grid-template-columns: 1fr !important; }
             /* Macro/insider tabeller — gömma datum-kolumn */
             .table-container th:nth-child(n+5),
-            .table-container td:nth-child(n+5) { font-size: 10px; }
+            .table-container td:nth-child(n+5) { font-size:11px; }
         }
 
         .mobile-menu-btn { display: none; background: none; border: none; cursor: pointer; color: var(--text-muted); padding: 8px; border-radius: 6px; min-width: 36px; min-height: 36px; align-items: center; justify-content: center; }
@@ -817,7 +844,7 @@ window.showWelcome = function() {
         </button>
         <div id="accountMenu" style="display:none;position:absolute;top:52px;right:14px;background:var(--card-bg,#fff);border:1px solid #e2e8f0;border-radius:12px;box-shadow:0 8px 30px rgba(15,23,42,.12);padding:10px 0;min-width:230px;z-index:1000">
             <div id="accountEmail" style="padding:6px 16px 10px;font-size:12.5px;color:#64748b;border-bottom:1px solid #f1f5f9;word-break:break-all">…</div>
-            <div id="accountUsage" style="padding:8px 16px;font-size:11.5px;color:#94a3b8"></div>
+            <div id="accountUsage" style="padding:8px 16px;font-size:11.5px;color:#64748b"></div>
             <a id="adminLink" href="/admin" style="display:none;padding:8px 16px;font-size:13px;color:#1e40af;text-decoration:none;font-weight:600">🛠 Admin — användare &amp; kostnad</a>
             <div onclick="_doLogout()" style="padding:8px 16px;font-size:13px;color:#b91c1c;cursor:pointer;font-weight:600">Logga ut</div>
         </div>
@@ -1033,6 +1060,57 @@ async function fetchStatus() {
     } catch(e) { console.error('Status fetch error:', e); }
 }
 
+// ── Gemensam API-hämtare: statuskontroll + läsbart fel (en 500 med
+//    HTML-body gav förut "Unexpected token <") ──
+async function apiJson(url, opts) {
+    const r = await fetch(url, opts);
+    if (!r.ok) {
+        let detalj = '';
+        try { const j = await r.json(); detalj = j.error || j.message || ''; } catch (e) {}
+        throw new Error(detalj || `Servern svarade ${r.status}`);
+    }
+    return r.json();
+}
+// Enhetligt tomt/fel-tillstånd: ikon + rubrik + valfri förklaring
+function emptyState(rubrik, text = '', ikon = 'inbox', typ = '') {
+    return `<div class="empty-state ${typ}"><span class="material-symbols-outlined">${ikon}</span>
+        <div class="empty-state-title">${rubrik}</div>${text ? `<div class="empty-state-text">${text}</div>` : ''}</div>`;
+}
+
+// ── Toast + bekräftelsedialog (ersätter alert()/confirm()) ──
+function toast(msg, type = 'info', ms = 4200) {
+    let wrap = document.getElementById('toastWrap');
+    if (!wrap) { wrap = document.createElement('div'); wrap.id = 'toastWrap'; wrap.className = 'toast-wrap'; document.body.appendChild(wrap); }
+    const ikon = { success: 'check_circle', error: 'error', warn: 'warning', info: 'info' }[type] || 'info';
+    const el = document.createElement('div');
+    el.className = 'toast ' + type; el.setAttribute('role', type === 'error' ? 'alert' : 'status');
+    el.innerHTML = `<span class="material-symbols-outlined">${ikon}</span><div class="toast-msg"></div><button class="toast-x" aria-label="Stäng">✕</button>`;
+    el.querySelector('.toast-msg').textContent = String(msg);
+    el.querySelector('.toast-x').onclick = () => el.remove();
+    wrap.appendChild(el);
+    if (ms > 0) setTimeout(() => { el.style.transition = 'opacity .25s'; el.style.opacity = '0'; setTimeout(() => el.remove(), 260); }, ms);
+    return el;
+}
+function confirmDialog(msg, opts = {}) {
+    return new Promise(resolve => {
+        const ov = document.createElement('div'); ov.className = 'dlg-overlay';
+        ov.innerHTML = `<div class="dlg" role="dialog" aria-modal="true" aria-labelledby="dlgTitle">
+            <div class="dlg-title" id="dlgTitle"></div><div class="dlg-msg"></div>
+            <div class="dlg-actions"><button class="dlg-btn" data-v="0"></button><button class="dlg-btn primary" data-v="1"></button></div></div>`;
+        ov.querySelector('.dlg-title').textContent = opts.title || 'Bekräfta';
+        ov.querySelector('.dlg-msg').textContent = String(msg);
+        ov.querySelector('[data-v="0"]').textContent = opts.cancel || 'Avbryt';
+        ov.querySelector('[data-v="1"]').textContent = opts.ok || 'Fortsätt';
+        const done = v => { ov.remove(); document.removeEventListener('keydown', onKey); resolve(v); };
+        const onKey = e => { if (e.key === 'Escape') done(false); };
+        ov.querySelectorAll('.dlg-btn').forEach(b => b.onclick = () => done(b.dataset.v === '1'));
+        ov.addEventListener('click', e => { if (e.target === ov) done(false); });
+        document.addEventListener('keydown', onKey);
+        document.body.appendChild(ov);
+        ov.querySelector('[data-v="1"]').focus();
+    });
+}
+
 async function fetchData(append = false) {
     if (isLoadingMore) return;
     if (!append) {
@@ -1148,7 +1226,7 @@ async function fetchData(append = false) {
             // 2026-07-31: gamla simuleringsportföljerna UTBYTTA — kändes svaga
             // mot index. Nu: två modellportföljer, topp 10, dagligt utbyte.
             try {
-                const mp = await (await fetch('/api/model-portfolios')).json();
+                const mp = await apiJson('/api/model-portfolios');
                 renderModelPortfolios(mp);
             } catch (e) {
                 document.getElementById('content').innerHTML =
@@ -1169,7 +1247,7 @@ async function fetchData(append = false) {
         // Generic cached fetch for table tabs
         if (url) {
             cached = getCached(ck);
-            data = cached || await (await fetch(url)).json();
+            data = cached || await apiJson(url);
             if (!cached) setCache(ck, data);
             totalResults = data.total;
             allLoadedRows = allLoadedRows.concat(data[dataKey] || []);
@@ -1178,7 +1256,7 @@ async function fetchData(append = false) {
         }
     } catch(e) {
         document.getElementById('content').innerHTML =
-            `<div class="loading-wrap"><p style="color:var(--red)">Fel: ${e.message}</p></div>`;
+            emptyState('Kunde inte hämta data', escapeHtml(e.message), 'cloud_off', 'error');
     } finally {
         isLoadingMore = false;
     }
@@ -1190,7 +1268,7 @@ async function doRefreshPrices() {
     await fetch('/api/refresh-prices', {method:'POST'});
 
     const poll = setInterval(async () => {
-        const st = await (await fetch('/api/status')).json();
+        const st = await apiJson('/api/status');
         btn.textContent = st.progress || 'Uppdaterar...';
         if (!st.loading) {
             clearInterval(poll);
@@ -1208,7 +1286,7 @@ async function doRefreshInsiders() {
     await fetch('/api/refresh-insiders', {method:'POST'});
 
     const poll = setInterval(async () => {
-        const st = await (await fetch('/api/status')).json();
+        const st = await apiJson('/api/status');
         btn.textContent = st.progress || 'Laddar...';
         if (!st.loading) {
             clearInterval(poll);
@@ -1728,21 +1806,21 @@ function phaseBadge(phase) {
 
 function metaSignalBadge(signal) {
     const map = {
-        'STARK_KOP': '<span class="badge" style="background:#00563B;color:white;font-size:10px">STARK KÖP</span>',
-        'KOP': '<span class="badge" style="background:#00a870;color:white;font-size:10px">KÖP</span>',
-        'NEUTRAL': '<span class="badge badge-hold" style="font-size:10px">NEUTRAL</span>',
-        'SALJ': '<span class="badge" style="background:var(--red-light);color:var(--red);font-size:10px">SÄLJ</span>',
-        'STARK_SALJ': '<span class="badge" style="background:var(--red);color:white;font-size:10px">STARK SÄLJ</span>',
+        'STARK_KOP': '<span class="badge" style="background:#00563B;color:white;font-size:11px">STARK KÖP</span>',
+        'KOP': '<span class="badge" style="background:#00a870;color:white;font-size:11px">KÖP</span>',
+        'NEUTRAL': '<span class="badge badge-hold" style="font-size:11px">NEUTRAL</span>',
+        'SALJ': '<span class="badge" style="background:var(--red-light);color:var(--red);font-size:11px">SÄLJ</span>',
+        'STARK_SALJ': '<span class="badge" style="background:var(--red);color:white;font-size:11px">STARK SÄLJ</span>',
     };
     return map[signal] || '';
 }
 
 function modelAgreementBadge(agree, total) {
     const t = total || 4;
-    if (agree >= 3) return `<span style="font-size:10px;font-weight:700;color:var(--green)">${agree}/${t}</span>`;
-    if (agree >= 2) return `<span style="font-size:10px;font-weight:600;color:var(--blue)">${agree}/${t}</span>`;
-    if (agree >= 1) return `<span style="font-size:10px;font-weight:600;color:var(--orange)">${agree}/${t}</span>`;
-    return `<span style="font-size:10px;color:var(--text-muted)">${agree}/${t}</span>`;
+    if (agree >= 3) return `<span style="font-size:11px;font-weight:700;color:var(--green)">${agree}/${t}</span>`;
+    if (agree >= 2) return `<span style="font-size:11px;font-weight:600;color:var(--blue)">${agree}/${t}</span>`;
+    if (agree >= 1) return `<span style="font-size:11px;font-weight:600;color:var(--orange)">${agree}/${t}</span>`;
+    return `<span style="font-size:11px;color:var(--text-muted)">${agree}/${t}</span>`;
 }
 
 function maturityBadge(stock) {
@@ -1823,7 +1901,7 @@ function insiderBadge(s) {
     let html = '';
     if (cluster) html += '<span title="Klusterköp: 3+ insiders" style="font-size:12px">🔥</span> ';
     if (buys > 0) html += `<span style="color:var(--green);font-size:11px;font-weight:600">${buys}K</span>`;
-    if (buys > 0 && sells > 0) html += '<span style="color:var(--text-muted);font-size:10px">/</span>';
+    if (buys > 0 && sells > 0) html += '<span style="color:var(--text-muted);font-size:11px">/</span>';
     if (sells > 0) html += `<span style="color:var(--red);font-size:11px;font-weight:600">${sells}S</span>`;
     return html;
 }
@@ -1841,11 +1919,11 @@ function renderDaktierTopplista(d) {
         <tr onclick="openStockByTicker('${(x.ticker || '').replace(/'/g, "\\'")}')" style="cursor:pointer">
             <td style="color:var(--text-muted)">${x.rank}</td>
             <td>${FLAGS[x.country] || ''} <span class="stock-name">${(x.name || x.ticker || '').slice(0, 30)}</span>
-                ${x.i_portfolj ? `<span style="background:var(--brand-cyan);color:#fff;font-size:9px;font-weight:800;padding:1px 6px;border-radius:8px;margin-left:5px">PORTFÖLJ</span>` : ''}
-                ${x.riskklass === 'HÖG' ? `<span style="background:#fef2f2;color:#991b1b;font-size:9px;font-weight:800;padding:1px 6px;border-radius:8px;margin-left:5px" title="${(x.flaggor || '').replace(/"/g, '')}">HÖG RISK</span>`
-                  : x.riskklass === 'MEDEL' ? `<span style="background:#fff7ed;color:#9a3412;font-size:9px;font-weight:700;padding:1px 6px;border-radius:8px;margin-left:5px" title="${(x.flaggor || '').replace(/"/g, '')}">BEVAKA</span>` : ''}
+                ${x.i_portfolj ? `<span style="background:var(--brand-cyan);color:#fff;font-size:11px;font-weight:800;padding:1px 6px;border-radius:8px;margin-left:5px">PORTFÖLJ</span>` : ''}
+                ${x.riskklass === 'HÖG' ? `<span style="background:#fef2f2;color:#991b1b;font-size:11px;font-weight:800;padding:1px 6px;border-radius:8px;margin-left:5px" title="${(x.flaggor || '').replace(/"/g, '')}">HÖG RISK</span>`
+                  : x.riskklass === 'MEDEL' ? `<span style="background:#fff7ed;color:#9a3412;font-size:11px;font-weight:700;padding:1px 6px;border-radius:8px;margin-left:5px" title="${(x.flaggor || '').replace(/"/g, '')}">BEVAKA</span>` : ''}
                 <br><span class="stock-ticker">${x.ticker || ''} · ${(x.sector || '').slice(0, 22)}</span>
-                ${x.flaggor ? `<br><span style="font-size:10.5px;color:var(--text-muted)">${x.flaggor.slice(0, 90)}</span>` : ''}</td>
+                ${x.flaggor ? `<br><span style="font-size:11px;color:var(--text-muted)">${x.flaggor.slice(0, 90)}</span>` : ''}</td>
             <td style="text-align:right;font-weight:800;font-size:15px;color:${col(x.score)}">${x.score}</td>
             <td style="text-align:center;font-weight:700;color:${col(x.kvalitet)}">${x.kvalitet ?? '–'}</td>
             <td style="text-align:center;font-weight:700;color:${col(x.kassa)}">${x.kassa ?? '–'}</td>
@@ -1906,10 +1984,10 @@ async function loadScores(sleeve) {
         el.innerHTML = `
             <div style="overflow-x:auto"><table style="width:100%;min-width:560px;border-collapse:collapse;font-size:12.5px">
                 <thead><tr style="border-bottom:1px solid var(--line)">
-                    <th style="text-align:left;padding:6px 4px;font-size:10.5px;color:var(--text-muted)">#</th>
-                    <th style="text-align:left;padding:6px 4px;font-size:10.5px;color:var(--text-muted)">BOLAG</th>
-                    <th style="text-align:right;padding:6px 4px;font-size:10.5px;color:var(--text-muted)">POÄNG</th>
-                    ${keys.map(k => `<th style="text-align:center;padding:6px 3px;font-size:10.5px;color:var(--text-muted)" title="${k}">${LBL[k] || k}</th>`).join('')}
+                    <th style="text-align:left;padding:6px 4px;font-size:11px;color:var(--text-muted)">#</th>
+                    <th style="text-align:left;padding:6px 4px;font-size:11px;color:var(--text-muted)">BOLAG</th>
+                    <th style="text-align:right;padding:6px 4px;font-size:11px;color:var(--text-muted)">POÄNG</th>
+                    ${keys.map(k => `<th style="text-align:center;padding:6px 3px;font-size:11px;color:var(--text-muted)" title="${k}">${LBL[k] || k}</th>`).join('')}
                 </tr></thead>
                 <tbody>${rows.map(x => `
                     <tr style="border-bottom:1px solid var(--line);${x.vald ? 'background:var(--brand-cyan-light)' : ''}"
@@ -1918,8 +1996,8 @@ async function loadScores(sleeve) {
                         <td style="padding:6px 4px">
                             ${x.vald ? '<span style="color:var(--brand-cyan);font-weight:800">●</span> ' : ''}
                             <span style="font-weight:600;cursor:pointer">${(x.name || x.ticker || '').slice(0,26)}</span>
-                            ${x.spar === 'mjukvara' ? '<span style="background:#ede9fe;color:#5b21b6;font-size:9px;font-weight:800;padding:1px 6px;border-radius:8px;margin-left:5px">MJUKVARA</span>' : ''}
-                            <br><span style="font-size:10.5px;color:var(--text-muted)">${x.ticker || ''} · ${(x.motiv || '').slice(0,62)}</span>
+                            ${x.spar === 'mjukvara' ? '<span style="background:#ede9fe;color:#5b21b6;font-size:11px;font-weight:800;padding:1px 6px;border-radius:8px;margin-left:5px">MJUKVARA</span>' : ''}
+                            <br><span style="font-size:11px;color:var(--text-muted)">${x.ticker || ''} · ${(x.motiv || '').slice(0,62)}</span>
                         </td>
                         <td style="text-align:right;padding:6px 4px;font-weight:800;color:var(--brand-navy)">${x.score}</td>
                         ${keys.map(k => {
@@ -2032,7 +2110,7 @@ function renderModelPortfolios(d) {
             .mp-rank { width:24px;height:24px;border-radius:50%;background:var(--brand-navy);color:#fff;font-size:11px;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0; }
             .mp-name { font-size:13.5px;font-weight:600;color:var(--ink); }
             .mp-tick { font-size:11px;color:var(--text-muted);font-weight:400; }
-            .mp-ny { background:var(--brand-cyan);color:#fff;font-size:9.5px;font-weight:800;padding:2px 7px;border-radius:10px;margin-left:6px;vertical-align:middle; }
+            .mp-ny { background:var(--brand-cyan);color:#fff;font-size:11px;font-weight:800;padding:2px 7px;border-radius:10px;margin-left:6px;vertical-align:middle; }
             .mp-ut { margin-top:10px;font-size:var(--fs-sm);color:var(--text-muted); }
             .mp-ut-chip { background:#fef2f2;color:#991b1b;padding:2px 8px;border-radius:10px;margin-left:4px;font-weight:600;font-size:11px; }
             .mp-sleeve { background:var(--white);border:1px solid var(--line);border-radius:14px;padding:16px 18px;box-shadow:var(--shadow-hover); }
@@ -2174,14 +2252,14 @@ async function anSokKor() {
     ut.innerHTML = '<div style="padding:10px 2px;color:var(--text-muted);font-size:13px">Söker…</div>';
     try {
         // Ticker eller namn → huvudnoteringens ticker via aktiesök
-        const sr = await (await fetch('/api/stocks?q=' + encodeURIComponent(q) + '&limit=1')).json();
+        const sr = await apiJson('/api/stocks?q=' + encodeURIComponent(q) + '&limit=1');
         const träff = ((sr.stocks || sr.results || [])[0]) || {};
         const tick = träff.short_name || q.toUpperCase();
-        let ko = await (await fetch('/api/factset-rating?ticker=' + encodeURIComponent(tick))).json();
+        let ko = await apiJson('/api/factset-rating?ticker=' + encodeURIComponent(tick));
         if (!ko || !ko.nu) {
             // Norden-reserv: händelselogg saknas hos Yahoo för europeiska
             // listningar — bygg ur månadskonsensusen i stället
-            const k2 = await (await fetch('/api/analyst-consensus?ticker=' + encodeURIComponent(tick))).json();
+            const k2 = await apiJson('/api/analyst-consensus?ticker=' + encodeURIComponent(tick));
             const m0 = (k2.konsensus_manader || [])[0];
             if (m0 && m0.n >= 3)
                 ko = { nu: { snitt: m0.snitt, n_hus: m0.n,
@@ -2195,7 +2273,7 @@ async function anSokKor() {
             ut.innerHTML = `<div style="padding:10px 2px;color:var(--text-muted);font-size:13px">
                 <strong>${tick}</strong> är inte synkad än — hämtar från källan… (första gången tar ~5 s)</div>`;
             try {
-                ko = await (await fetch('/api/factset-rating/hamta?ticker=' + encodeURIComponent(tick))).json();
+                ko = await apiJson('/api/factset-rating/hamta?ticker=' + encodeURIComponent(tick));
             } catch (e3) { ko = null; }
             if (!ko || !ko.nu) {
                 ut.innerHTML = `<div style="padding:10px 2px;color:var(--text-muted);font-size:13px">
@@ -2208,7 +2286,7 @@ async function anSokKor() {
         const h = ko.historik || [];
         const ettAr = (() => { const c = new Date(Date.now() - 365*864e5).toISOString().slice(0,10);
             for (let i = h.length - 1; i >= 0; i--) if (h[i].datum <= c) return h[i].snitt; return null; })();
-        const stap = (lbl, v, col) => v ? `<div style="text-align:center"><div style="font-size:16px;font-weight:800;color:${col}">${v}</div><div style="font-size:10px;color:var(--text-muted)">${lbl}</div></div>` : '';
+        const stap = (lbl, v, col) => v ? `<div style="text-align:center"><div style="font-size:16px;font-weight:800;color:${col}">${v}</div><div style="font-size:11px;color:var(--text-muted)">${lbl}</div></div>` : '';
         ut.innerHTML = `<div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--line)">
             <div style="display:flex;align-items:baseline;gap:12px;flex-wrap:wrap">
                 <strong style="font-size:15px;color:var(--brand-navy);cursor:pointer" onclick="openStockByTicker('${tick.replace(/'/g,"\\'")}')">${träff.name || tick} ↗</strong>
@@ -2245,7 +2323,7 @@ function renderKoplista(d, fs) {
     const rowHtml = (s, i) => `<tr>
         <td style="font-weight:700;color:var(--brand-navy)">${i + 1}</td>
         <td>${FLAGS[s.country] || ''} <span class="stock-name" onclick="openStockByTicker('${(s.ticker || '').replace(/'/g, "\\'")}')">${s.name || s.ticker}</span>
-            ${s.is_new ? '<span style="background:var(--brand-cyan);color:#fff;font-size:10px;font-weight:800;padding:2px 7px;border-radius:10px;margin-left:6px;vertical-align:middle">NY</span>' : ''}
+            ${s.is_new ? '<span style="background:var(--brand-cyan);color:#fff;font-size:11px;font-weight:800;padding:2px 7px;border-radius:10px;margin-left:6px;vertical-align:middle">NY</span>' : ''}
             <br><span class="stock-ticker">${s.ticker || ''}</span></td>
         <td style="text-align:right">${s.price != null ? Number(s.price).toFixed(2) : '–'} ${s.currency || ''}</td>
         <td style="text-align:right;font-weight:600">${s.roce_pct != null ? Number(s.roce_pct).toFixed(0) + '%' : '–'}</td>
@@ -2277,7 +2355,7 @@ function renderKoplista(d, fs) {
     const fsRowHtml = (s, i) => `<tr>
         <td style="font-weight:700;color:var(--brand-navy)">${i + 1}</td>
         <td>${FLAGS[s.country] || ''} <span class="stock-name" onclick="openStockByTicker('${(s.ticker || '').replace(/'/g, "\\'")}')">${s.name || s.ticker}</span>
-            ${s.is_pick ? '<span style="background:#B45309;color:#fff;font-size:10px;font-weight:800;padding:2px 7px;border-radius:10px;margin-left:6px;vertical-align:middle">★ MÅNADENS PICK</span>' : ''}
+            ${s.is_pick ? '<span style="background:#B45309;color:#fff;font-size:11px;font-weight:800;padding:2px 7px;border-radius:10px;margin-left:6px;vertical-align:middle">★ MÅNADENS PICK</span>' : ''}
             <br><span class="stock-ticker">${s.ticker || ''} · ${s.sector || 'sektor okänd'}</span></td>
         <td style="text-align:right;font-weight:800;color:var(--brand-navy);font-size:var(--fs-md)">${s.total_score != null ? Number(s.total_score).toFixed(2) : '–'}</td>
         <td style="text-align:right;white-space:nowrap">${gradesHtml(s.grades)}</td>
@@ -2372,7 +2450,7 @@ function renderStocksTable() {
         return `<tr>
             <td>${i+1}</td>
             <td>${flag} <span class="stock-name" onclick="openDrawer(allLoadedRows[${i}])">${s.name}</span>
-                ${s.i_portfolj ? `<span style="background:var(--brand-cyan);color:#fff;font-size:9px;font-weight:800;padding:1px 6px;border-radius:8px;margin-left:5px" title="I DAKTIER-portföljen (${s.portfolj_sleeve || ''})">PORTFÖLJ</span>` : ''}
+                ${s.i_portfolj ? `<span style="background:var(--brand-cyan);color:#fff;font-size:11px;font-weight:800;padding:1px 6px;border-radius:8px;margin-left:5px" title="I DAKTIER-portföljen (${s.portfolj_sleeve || ''})">PORTFÖLJ</span>` : ''}
                 <br><span class="stock-ticker">${s.short_name || ''}</span></td>
             <td style="text-align:right">${s.daktier_score != null
                 ? `<span style="font-weight:800;color:${s.daktier_score >= 80 ? '#059669' : s.daktier_score >= 65 ? '#0891b2' : s.daktier_score >= 50 ? 'var(--ink)' : 'var(--text-muted)'}"
@@ -2429,9 +2507,9 @@ function renderHotMoversTable() {
         const disc = s.discovery_score || 0;
         const owners = s.number_of_owners || 0;
         let discBadge = '';
-        if (disc >= 70 && owners < 2000) discBadge = `<span class="badge" style="background:#FF6D00;color:white;font-size:10px">DISC ${disc}</span>`;
-        else if (disc >= 50 && owners < 2000) discBadge = `<span class="badge" style="background:#FFB74D;color:#4E342E;font-size:10px">DISC ${disc}</span>`;
-        else if (disc >= 50 && owners >= 2000 && owners < 10000) discBadge = `<span class="badge" style="background:#42A5F5;color:white;font-size:10px">GROWTH ${disc}</span>`;
+        if (disc >= 70 && owners < 2000) discBadge = `<span class="badge" style="background:#FF6D00;color:white;font-size:11px">DISC ${disc}</span>`;
+        else if (disc >= 50 && owners < 2000) discBadge = `<span class="badge" style="background:#FFB74D;color:#4E342E;font-size:11px">DISC ${disc}</span>`;
+        else if (disc >= 50 && owners >= 2000 && owners < 10000) discBadge = `<span class="badge" style="background:#42A5F5;color:white;font-size:11px">GROWTH ${disc}</span>`;
 
         return `<tr>
             <td>${i+1}</td>
@@ -2591,7 +2669,7 @@ function renderFcfTable(d) {
             <td>${i + 1}</td>
             <td>${FLAGS[s.country] || ''} <span class="stock-name" onclick="openStockByTicker('${(s.short_name||'').replace(/'/g,"\\'")}')">${s.name}</span>
                 <br><span class="stock-ticker">${s.short_name || ''}${s.kalla !== 'FCF' ? ' · <span title="Fritt kassaflöde saknas i arkivet — operativt kassaflöde används" style="color:var(--orange)">OCF</span>' : ''}</span></td>
-            <td style="text-align:right;font-weight:700" class="${s.fcf_ttm>0?'num-pos':'num-neg'}">${fmtM(s.fcf_ttm)} <span style="font-size:10px;color:var(--text-muted)">${s.currency||''}</span></td>
+            <td style="text-align:right;font-weight:700" class="${s.fcf_ttm>0?'num-pos':'num-neg'}">${fmtM(s.fcf_ttm)} <span style="font-size:11px;color:var(--text-muted)">${s.currency||''}</span></td>
             <td style="text-align:right;font-size:11.5px">${d0 == null ? '–'
                 : `<span style="color:${d0>0?'var(--green)':'var(--red)'};font-weight:700" title="TTM mot föregående 4 kvartal">${d0>0?'▲ +':'▼ '}${d0}%</span>`}</td>
             <td style="text-align:right;font-weight:${isEv?'700':'400'}">${s.ev_fcf != null ? s.ev_fcf.toFixed(1) : '–'}</td>
@@ -2799,11 +2877,11 @@ async function analyzeStock() {
                 </div>
                 <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
                     <div>
-                        <div style="font-size:10px;font-weight:700;color:var(--green);text-transform:uppercase;margin-bottom:4px">✅ Fördelar</div>
+                        <div style="font-size:11px;font-weight:700;color:var(--green);text-transform:uppercase;margin-bottom:4px">✅ Fördelar</div>
                         ${a.pros.map(p => `<div style="font-size:12px;line-height:1.6;color:var(--text)">• ${p}</div>`).join('')}
                     </div>
                     <div>
-                        <div style="font-size:10px;font-weight:700;color:var(--red);text-transform:uppercase;margin-bottom:4px">⚠️ Risker</div>
+                        <div style="font-size:11px;font-weight:700;color:var(--red);text-transform:uppercase;margin-bottom:4px">⚠️ Risker</div>
                         ${a.cons.map(c => `<div style="font-size:12px;line-height:1.6;color:var(--text)">• ${c}</div>`).join('')}
                     </div>
                 </div>
@@ -3114,7 +3192,7 @@ function renderBookModelSection(s) {
             <div style="display:flex;align-items:center;gap:14px">
                 <div>
                     <div style="font-size:24px;font-weight:900;color:${verdictColor}">${passCount}/${total}</div>
-                    <div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.6px;font-weight:700">Pass</div>
+                    <div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.6px;font-weight:700">Pass</div>
                 </div>
                 <div style="flex:1">
                     <div style="font-size:13px;font-weight:700;color:${verdictColor}">${verdict}</div>
@@ -3174,7 +3252,7 @@ function renderBuyZoneSection(s) {
     // Stora siffror — grid med 3 KPI:er
     const kpiCard = (label, value, accent) => `
         <div style="background:white;border-radius:10px;padding:10px 12px;border:1px solid rgba(0,0,0,0.05);text-align:center">
-            <div style="font-size:10px;color:#6b7280;font-weight:700;text-transform:uppercase;letter-spacing:0.5px">${label}</div>
+            <div style="font-size:11px;color:#6b7280;font-weight:700;text-transform:uppercase;letter-spacing:0.5px">${label}</div>
             <div style="font-size:18px;font-weight:800;color:${accent || '#0f172a'};margin-top:2px;line-height:1.2">${value}</div>
         </div>`;
 
@@ -3192,7 +3270,7 @@ function renderBuyZoneSection(s) {
     return `<div class="drawer-section" style="background:${statusBg};border-left:4px solid ${statusBorder};border-radius:10px;padding:14px 16px;margin-top:12px">
         <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:8px">
             <div style="font-size:13px;font-weight:700;color:#0f172a">När är aktien köpvärd?</div>
-            <span style="background:${statusBadgeBg};color:${statusBadgeColor};font-size:10.5px;font-weight:800;padding:3px 10px;border-radius:12px;letter-spacing:0.5px">${statusLabel}</span>
+            <span style="background:${statusBadgeBg};color:${statusBadgeColor};font-size:11px;font-weight:800;padding:3px 10px;border-radius:12px;letter-spacing:0.5px">${statusLabel}</span>
         </div>
         <div style="font-size:14px;color:#0f172a;line-height:1.5">${headline}</div>
         <div style="font-size:12.5px;color:#475569;line-height:1.5;margin-top:4px">${sub}</div>
@@ -3311,7 +3389,7 @@ async function loadPriceChartForBuyZone(orderbookId, containerId, zonePrice, cur
                 <text x="${padX}" y="${h - 6}" font-size="9" fill="#6b7280">${startDate}</text>
                 <text x="${w - padX}" y="${h - 6}" text-anchor="end" font-size="9" fill="#6b7280">${endDate}</text>
             </svg>
-            <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--text-muted);margin-top:4px">
+            <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text-muted);margin-top:4px">
                 <span>📊 ${closes.length} handelsdagar</span>
                 <span>💚 Streckad grön = köpzonspris</span>
             </div>
@@ -3407,12 +3485,12 @@ async function triggerHistSync(tier) {
                     </div>`;
             }
         } else if (d.status === 'already_running') {
-            alert('Sync pågår redan: ' + (d.progress?.current || 0) + '/' + (d.progress?.total || 0));
+            toast('Sync pågår redan: ' + (d.progress?.current || 0) + '/' + (d.progress?.total || 0), 'warn');
         } else {
-            alert('Oväntat svar: ' + JSON.stringify(d));
+            toast('Oväntat svar: ' + JSON.stringify(d), 'error');
         }
     } catch (e) {
-        alert('Fel: ' + e.message);
+        toast('Fel: ' + e.message, 'error');
     }
 }
 
@@ -3543,7 +3621,7 @@ function renderQuarterlyTrendsSection(s) {
         return `<tr onclick="const d=document.getElementById('qdet-${ri}');if(d)d.style.display=d.style.display==='none'?'':'none'"
                     style="cursor:pointer" title="Klicka för rapportens YoY-jämförelse">
             <td style="padding:6px 10px;font-weight:600">${r.quarter} ${r.financial_year}
-                <span style="color:var(--brand-cyan);font-size:10px">▾</span></td>
+                <span style="color:var(--brand-cyan);font-size:11px">▾</span></td>
             <td style="padding:6px 10px;text-align:right">${fmtMoney(sales)}</td>
             <td style="padding:6px 10px;text-align:right;color:${npCol};font-weight:600">${fmtMoney(np)}</td>
             <td style="padding:6px 10px;text-align:right">${fmtPct(margin)}</td>
@@ -3590,12 +3668,12 @@ function renderQuarterlyTrendsSection(s) {
 
     // Tre extra mini-stats: ROE-trend + Sales YoY + Margin YoY
     const roeStatHtml = `<div style="flex:1;min-width:140px;padding:10px;background:white;border:1px solid var(--border);border-radius:10px">
-        <div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;font-weight:700;margin-bottom:4px">📊 ROE-trend (8 kv)</div>
+        <div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;font-weight:700;margin-bottom:4px">📊 ROE-trend (8 kv)</div>
         ${tinyTrendCell('ROE', roeSeries, '#10b981', v => fmtPct(v))}
-        ${roeYoY != null ? `<div style="margin-top:4px;font-size:10px">YoY: ${deltaTag(roeYoY, '')}</div>` : ''}
+        ${roeYoY != null ? `<div style="margin-top:4px;font-size:11px">YoY: ${deltaTag(roeYoY, '')}</div>` : ''}
     </div>`;
     const salesYoyStatHtml = `<div style="flex:1;min-width:140px;padding:10px;background:white;border:1px solid var(--border);border-radius:10px">
-        <div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;font-weight:700;margin-bottom:4px">📈 Omsättning YoY</div>
+        <div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;font-weight:700;margin-bottom:4px">📈 Omsättning YoY</div>
         ${tinyTrendCell('Sales YoY', salesYoYSeries, '#3b82f6', v => v != null ? (v*100).toFixed(1) + '%' : '–')}
     </div>`;
 
@@ -3625,7 +3703,7 @@ function renderQuarterlyTrendsSection(s) {
                 <tbody>${tableRows}</tbody>
             </table>
         </div>
-        <div style="font-size:10px;color:var(--text-muted);margin-top:8px;font-style:italic">
+        <div style="font-size:11px;color:var(--text-muted);margin-top:8px;font-style:italic">
             ⓘ Avanza levererar ej FCF/cash flow per kvartal — vi visar nettoresultat som proxy för lönsamhetsutveckling. ${latest.financial_year ? 'Senaste rapport: ' + latest.quarter + ' ' + latest.financial_year : ''}
         </div>
     </div>`;
@@ -3701,7 +3779,7 @@ function renderHistoricalSection(s) {
                 <span style="font-size:14px;font-weight:700;color:${color}">${latestStr}</span>
             </div>
             ${sparkline(data, color, fmtFn)}
-            <div style="display:flex;justify-content:space-between;font-size:9px;color:var(--text-muted);margin-top:2px">
+            <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text-muted);margin-top:2px">
                 <span>${years[0] || ''}</span>
                 <span>${years[years.length-1] || ''}</span>
             </div>
@@ -3747,7 +3825,7 @@ function renderHistoricalSection(s) {
         ${miniRow('Return on Equity', roe, '#10b981', fmtRoe)}
         ${miniRow(isInvCo ? 'Nettoresultat (inkl. portföljvärdering)' : 'Omsättning', sales, '#8b5cf6', fmtSales)}
         ${miniRow('Utdelning per aktie', divs, '#f59e0b', fmtDiv)}
-        ${isInvCo ? `<div style="font-size:10px;color:var(--text-muted);margin-top:6px;font-style:italic;line-height:1.4">
+        ${isInvCo ? `<div style="font-size:11px;color:var(--text-muted);margin-top:6px;font-style:italic;line-height:1.4">
             ⓘ För investmentbolag är "omsättning" = förvaltningsavgifter (~50M) och inte värdedrivande.
             Vi visar nettoresultat istället, vilket inkluderar realiserade och orealiserade portföljvinster/-förluster.
         </div>` : ''}
@@ -3829,11 +3907,11 @@ function renderFScoreSection(s) {
         </div>
         ${groups.map(g => `
             <div style="margin-top:10px">
-                <div style="font-size:10px;font-weight:700;color:${interpStyle.color};opacity:0.8;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px">${g.title}</div>
+                <div style="font-size:11px;font-weight:700;color:${interpStyle.color};opacity:0.8;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px">${g.title}</div>
                 ${g.items.map(row).join('')}
             </div>
         `).join('')}
-        <div style="font-size:10px;color:${interpStyle.color};opacity:0.7;margin-top:10px;font-style:italic;line-height:1.4">
+        <div style="font-size:11px;color:${interpStyle.color};opacity:0.7;margin-top:10px;font-style:italic;line-height:1.4">
             Akademisk bas: Piotroski (2000). Bolag med F-Score ≥ 7 har historiskt slagit marknaden signifikant.
             ≥ 5 = ok finansiell hälsa. ≤ 3 = varningssignal.
         </div>
@@ -3879,7 +3957,7 @@ function renderDilutionSection(s) {
             }).join('');
             sparkHtml = `
                 <div style="margin-top:10px;background:rgba(255,255,255,0.5);padding:8px;border-radius:8px">
-                    <div style="font-size:10px;font-weight:700;color:${sty.color};opacity:0.7;margin-bottom:4px">Utspädning YoY (${hist[0].year}-${hist[hist.length-1].year})</div>
+                    <div style="font-size:11px;font-weight:700;color:${sty.color};opacity:0.7;margin-bottom:4px">Utspädning YoY (${hist[0].year}-${hist[hist.length-1].year})</div>
                     <svg viewBox="0 0 ${w} ${h}" style="width:100%;height:${h}px">
                         <line x1="0" y1="${zeroY}" x2="${w}" y2="${zeroY}" stroke="${sty.color}" stroke-width="0.5" opacity="0.4"/>
                         ${bars}
@@ -3903,17 +3981,17 @@ function renderDilutionSection(s) {
         </div>
         <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-top:10px">
             <div style="background:rgba(255,255,255,0.6);padding:10px;border-radius:8px">
-                <div style="font-size:10px;text-transform:uppercase;font-weight:700;color:${sty.color};opacity:0.7">Total</div>
+                <div style="font-size:11px;text-transform:uppercase;font-weight:700;color:${sty.color};opacity:0.7">Total</div>
                 <div style="font-size:18px;font-weight:800;color:${sty.color}">${totalPct > 0 ? '+' : ''}${totalPct}%</div>
             </div>
             <div style="background:rgba(255,255,255,0.6);padding:10px;border-radius:8px">
-                <div style="font-size:10px;text-transform:uppercase;font-weight:700;color:${sty.color};opacity:0.7">Per år (CAGR)</div>
+                <div style="font-size:11px;text-transform:uppercase;font-weight:700;color:${sty.color};opacity:0.7">Per år (CAGR)</div>
                 <div style="font-size:18px;font-weight:800;color:${sty.color}">${annPct > 0 ? '+' : ''}${annPct}%</div>
             </div>
         </div>
         ${sparkHtml}
         <div style="font-size:11px;color:${sty.color};margin-top:10px;line-height:1.4">${sty.interp}</div>
-        <div style="font-size:9px;color:${sty.color};opacity:0.5;margin-top:6px">
+        <div style="font-size:11px;color:${sty.color};opacity:0.5;margin-top:6px">
             Tröskel: >5%/år = hög, 2-5% = moderat, <2% = ingen.
         </div>
     </div>`;
@@ -3982,14 +4060,14 @@ function renderInsiderSection(s) {
         </div>
         <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-top:10px">
             <div style="background:rgba(255,255,255,0.6);padding:10px;border-radius:8px">
-                <div style="font-size:10px;text-transform:uppercase;font-weight:700;color:${sty.color};opacity:0.7">Köp</div>
+                <div style="font-size:11px;text-transform:uppercase;font-weight:700;color:${sty.color};opacity:0.7">Köp</div>
                 <div style="font-size:18px;font-weight:800;color:#059669">${buys} st</div>
                 <div style="font-size:11px;color:${sty.color};opacity:0.8">
                     ${fmtMoney(buyValue)} SEK · ${buyPersonsCount} pers.
                 </div>
             </div>
             <div style="background:rgba(255,255,255,0.6);padding:10px;border-radius:8px">
-                <div style="font-size:10px;text-transform:uppercase;font-weight:700;color:${sty.color};opacity:0.7">Sälj</div>
+                <div style="font-size:11px;text-transform:uppercase;font-weight:700;color:${sty.color};opacity:0.7">Sälj</div>
                 <div style="font-size:18px;font-weight:800;color:#dc2626">${sells} st</div>
                 <div style="font-size:11px;color:${sty.color};opacity:0.8">
                     ${fmtMoney(sellValue)} SEK · ${sellPersonsCount} pers.
@@ -4000,7 +4078,7 @@ function renderInsiderSection(s) {
             <strong>Net flow:</strong> ${netValue > 0 ? '+' : ''}${fmtMoney(netValue)} SEK<br>
             ${interp}
         </div>
-        <div style="font-size:10px;color:${sty.color};opacity:0.6;margin-top:6px;font-style:italic">
+        <div style="font-size:11px;color:${sty.color};opacity:0.6;margin-top:6px;font-style:italic">
             ⓘ Riktig "smart money" — verifierat via Finansinspektionens insynsregister.
             Skiljer sig från Avanza-ägarflöde (= retail).
         </div>
@@ -4069,20 +4147,20 @@ function renderRunwaySection(s) {
         </div>
         <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:10px">
             <div style="background:rgba(255,255,255,0.6);padding:10px;border-radius:8px">
-                <div style="font-size:10px;text-transform:uppercase;font-weight:700;color:${sty.color};opacity:0.7">Cash</div>
+                <div style="font-size:11px;text-transform:uppercase;font-weight:700;color:${sty.color};opacity:0.7">Cash</div>
                 <div style="font-size:18px;font-weight:800;color:${sty.color}">${fmtM(r.cash)} ${r.currency || ''}</div>
             </div>
             <div style="background:rgba(255,255,255,0.6);padding:10px;border-radius:8px">
-                <div style="font-size:10px;text-transform:uppercase;font-weight:700;color:${sty.color};opacity:0.7">Q-burn</div>
+                <div style="font-size:11px;text-transform:uppercase;font-weight:700;color:${sty.color};opacity:0.7">Q-burn</div>
                 <div style="font-size:18px;font-weight:800;color:${sty.color}">${fmtM(r.quarterly_burn)}</div>
             </div>
             <div style="background:rgba(255,255,255,0.6);padding:10px;border-radius:8px">
-                <div style="font-size:10px;text-transform:uppercase;font-weight:700;color:${sty.color};opacity:0.7">Runway</div>
+                <div style="font-size:11px;text-transform:uppercase;font-weight:700;color:${sty.color};opacity:0.7">Runway</div>
                 <div style="font-size:18px;font-weight:800;color:${sty.color}">${runwayDisplay}</div>
             </div>
         </div>
         ${interpretation ? `<div style="font-size:11px;color:${sty.color};margin-top:10px;line-height:1.4">${interpretation}</div>` : ''}
-        <div style="font-size:9px;color:${sty.color};opacity:0.5;margin-top:6px">
+        <div style="font-size:11px;color:${sty.color};opacity:0.5;margin-top:6px">
             Källa: ${r.data_source} (${r.year})
         </div>
     </div>`;
@@ -4107,7 +4185,7 @@ function renderMacroOverlay(s) {
 
     const stat = (label, val, suffix) => `
         <div style="flex:1;text-align:center;background:rgba(255,255,255,0.6);padding:8px;border-radius:8px;min-width:80px">
-            <div style="font-size:9px;text-transform:uppercase;font-weight:700;color:${color};opacity:0.7">${label}</div>
+            <div style="font-size:11px;text-transform:uppercase;font-weight:700;color:${color};opacity:0.7">${label}</div>
             <div style="font-size:16px;font-weight:800;color:${color}">${val != null ? val.toFixed(2) : '–'}<span style="font-size:11px;font-weight:600;opacity:0.7">${suffix || ''}</span></div>
         </div>`;
 
@@ -4123,7 +4201,7 @@ function renderMacroOverlay(s) {
             ${stat('VIX', vix)}
         </div>
         ${m.note ? `<div style="font-size:11px;color:${color};margin-top:8px;line-height:1.4;font-style:italic">⚠ ${m.note}</div>` : ''}
-        <div style="font-size:9px;color:${color};opacity:0.5;margin-top:6px">Påverkar inte score — bara kontext.</div>
+        <div style="font-size:11px;color:${color};opacity:0.5;margin-top:6px">Påverkar inte score — bara kontext.</div>
     </div>`;
 }
 
@@ -4197,7 +4275,7 @@ function renderPeerTable(data, container) {
         const rowBg = isTgt ? 'background:linear-gradient(90deg,#dbeafe,transparent)' : '';
         const cells = isInv
             ? [
-                `<td style="padding:7px 10px;font-weight:${isTgt ? 700 : 500}">${flag} ${c.name}${isTgt ? ' <span style="font-size:9px;background:#3b82f6;color:white;padding:1px 5px;border-radius:6px;margin-left:4px">Du</span>' : ''}</td>`,
+                `<td style="padding:7px 10px;font-weight:${isTgt ? 700 : 500}">${flag} ${c.name}${isTgt ? ' <span style="font-size:11px;background:#3b82f6;color:white;padding:1px 5px;border-radius:6px;margin-left:4px">Du</span>' : ''}</td>`,
                 `<td style="padding:7px 10px;text-align:right">${c.last_price != null ? c.last_price.toFixed(2) : '–'} ${c.currency || ''}</td>`,
                 `<td style="padding:7px 10px;text-align:right">${fmtMC(c.market_cap)}</td>`,
                 `<td style="padding:7px 10px;text-align:right;${pctClass(c.nav_data ? -c.nav_data.discount_pct : null)}">${c.nav_data && c.nav_data.discount_pct != null ? (c.nav_data.discount_pct > 0 ? '+' : '') + c.nav_data.discount_pct + '%' : '–'}</td>`,
@@ -4207,7 +4285,7 @@ function renderPeerTable(data, container) {
                 `<td style="padding:7px 10px;text-align:right;font-weight:600">${fmt(c.smart_score, '', 0)}</td>`,
             ]
             : [
-                `<td style="padding:7px 10px;font-weight:${isTgt ? 700 : 500}">${flag} ${c.name}${isTgt ? ' <span style="font-size:9px;background:#3b82f6;color:white;padding:1px 5px;border-radius:6px;margin-left:4px">Du</span>' : ''}</td>`,
+                `<td style="padding:7px 10px;font-weight:${isTgt ? 700 : 500}">${flag} ${c.name}${isTgt ? ' <span style="font-size:11px;background:#3b82f6;color:white;padding:1px 5px;border-radius:6px;margin-left:4px">Du</span>' : ''}</td>`,
                 `<td style="padding:7px 10px;text-align:right">${c.last_price != null ? c.last_price.toFixed(2) : '–'} ${c.currency || ''}</td>`,
                 `<td style="padding:7px 10px;text-align:right">${fmtMC(c.market_cap)}</td>`,
                 `<td style="padding:7px 10px;text-align:right">${fmt(c.pe_ratio, '', 1)}</td>`,
@@ -4223,12 +4301,12 @@ function renderPeerTable(data, container) {
         <div style="background:white;border:1px solid var(--border);border-radius:10px;overflow-x:auto;margin-bottom:8px">
             <table style="width:100%;border-collapse:collapse;font-size:11.5px;min-width:600px">
                 <thead style="background:#f9fafb">
-                    <tr>${cols.map(c => `<th style="text-align:${c==='Bolag'?'left':'right'};padding:8px 10px;font-size:10px;text-transform:uppercase;color:var(--text-muted)">${c}</th>`).join('')}</tr>
+                    <tr>${cols.map(c => `<th style="text-align:${c==='Bolag'?'left':'right'};padding:8px 10px;font-size:11px;text-transform:uppercase;color:var(--text-muted)">${c}</th>`).join('')}</tr>
                 </thead>
                 <tbody>${rows}</tbody>
             </table>
         </div>
-        <div style="font-size:10px;color:var(--text-muted);font-style:italic">
+        <div style="font-size:11px;color:var(--text-muted);font-style:italic">
             ⓘ ${isInv ? 'Investmentbolag i Norden — sorterat efter marknadsvärde.' : 'Bolag i samma sektor + land.'}
             Klicka rad för att öppna drawer.
         </div>`;
@@ -4327,7 +4405,7 @@ function renderQuantRank(s) {
     const hasSector = q.sector_quality_rank != null || q.sector_value_rank != null || q.sector_momentum_rank != null;
     const sectorPanel = hasSector ? `
         <div style="background:rgba(255,255,255,0.7);padding:10px;border-radius:8px;margin-top:8px">
-            <div style="font-size:10.5px;font-weight:700;color:#3730a3;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px">
+            <div style="font-size:11px;font-weight:700;color:#3730a3;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px">
                 Inom sektor: <span style="text-transform:none">${q.sector_name || 'okänd'}</span> (n=${q.sector_n || '?'})
             </div>
             ${scoreBar('💰 Value (sektor)', q.sector_value_rank)}
@@ -4360,7 +4438,7 @@ function renderQuantRank(s) {
             </div>
         </div>
         ${sectorPanel}
-        <div style="font-size:10px;color:#3730a3;opacity:0.7;margin-top:8px;font-style:italic;line-height:1.4">
+        <div style="font-size:11px;color:#3730a3;opacity:0.7;margin-top:8px;font-style:italic;line-height:1.4">
             Ovanför: rank vs hela universumet. Sektor-rank: rank inom samma bransch
             (mer rättvist — banker, tech, REIT har olika multipel-nivåer).
         </div>
@@ -4373,7 +4451,7 @@ async function loadRsiSparkline(ticker, containerId) {
     const el = document.getElementById(containerId);
     if (!el) return;  // annan drawer-flik öppen — ofarligt, spamma inte konsolen
     if (!ticker) { el.innerHTML = ''; return; }
-    el.innerHTML = '<div style="font-size:11px;color:#9ca3af;padding:6px">⏳ Laddar RSI-historik...</div>';
+    el.innerHTML = '<div style="font-size:11px;color:#6b7280;padding:6px">⏳ Laddar RSI-historik...</div>';
     try {
         const r = await fetch(`/api/stock/${encodeURIComponent(ticker)}/rsi-history?days=90`);
         const d = await r.json();
@@ -4382,7 +4460,7 @@ async function loadRsiSparkline(ticker, containerId) {
             return;
         }
         if (!d.rsi || !d.rsi.length) {
-            el.innerHTML = `<div style="font-size:11px;color:#9ca3af;padding:6px">Ingen RSI-data tillgänglig (${ticker})</div>`;
+            el.innerHTML = `<div style="font-size:11px;color:#6b7280;padding:6px">Ingen RSI-data tillgänglig (${ticker})</div>`;
             return;
         }
         // Bygg SVG-sparkline
@@ -4403,7 +4481,7 @@ async function loadRsiSparkline(ticker, containerId) {
         el.innerHTML = `<div style="background:rgba(255,255,255,0.7);padding:10px;border-radius:8px">
             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
                 <div style="font-size:11px;color:#374151;font-weight:600">📊 RSI(14) · 90 dagar</div>
-                <div style="font-size:13px;font-weight:700;color:${rsiColor}">${currentRsi.toFixed(1)} <span style="font-weight:400;font-size:10px">(${rsiLabel})</span></div>
+                <div style="font-size:13px;font-weight:700;color:${rsiColor}">${currentRsi.toFixed(1)} <span style="font-weight:400;font-size:11px">(${rsiLabel})</span></div>
             </div>
             <svg width="100%" height="${H}" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" style="display:block">
                 <rect x="0" y="0" width="${W}" height="${overheatY}" fill="#fef3c7" opacity="0.3"/>
@@ -4412,7 +4490,7 @@ async function loadRsiSparkline(ticker, containerId) {
                 <line x1="0" y1="${oversoldY}" x2="${W}" y2="${oversoldY}" stroke="#0284c7" stroke-width="1" stroke-dasharray="2,3" opacity="0.5"/>
                 <polyline points="${points}" fill="none" stroke="${rsiColor}" stroke-width="2"/>
             </svg>
-            <div style="display:flex;justify-content:space-between;font-size:9px;color:#9ca3af;margin-top:2px">
+            <div style="display:flex;justify-content:space-between;font-size:11px;color:#6b7280;margin-top:2px">
                 <span>${d.dates[0] || ''}</span>
                 <span style="color:#ea580c">70 = overheat</span>
                 <span style="color:#0284c7">30 = oversold</span>
@@ -4480,7 +4558,7 @@ function renderQualityPersistence(s) {
             ${checkMark(qp.margin_trend === 'improving' || qp.margin_trend === 'stable',
                 `Marginaler: ${trend.label}`)}
         </div>
-        <div style="font-size:10px;color:${sty.color};opacity:0.7;margin-top:8px;font-style:italic;line-height:1.4">
+        <div style="font-size:11px;color:${sty.color};opacity:0.7;margin-top:8px;font-style:italic;line-height:1.4">
             Källa: KPI-historik 5 år ur rapportarkivet. Verifierar att kvalitet är PERSISTENT,
             inte ett enstaka peak-år. Hög score = svår att fejka.
         </div>
@@ -4535,7 +4613,7 @@ function renderBacktestValidation(s) {
                 n=${stat.n} obs · ${conf} statistisk power
             </span>
         </div>
-        <div style="font-size:10px;color:#6b7280;margin-top:8px;font-style:italic">
+        <div style="font-size:11px;color:#6b7280;margin-top:8px;font-style:italic">
             Källa: backtest 2015-2024, 50 svenska bolag, anti-leakage validerat.
             Faktor-just. alpha = 0% (alfan är setup-exponering, inte stock-picking inom setup).
         </div>
@@ -4597,7 +4675,7 @@ function renderInvestmentCompanySection(s) {
 
         historyHtml = `
         <div style="margin-top:12px;padding:10px;background:rgba(255,255,255,0.5);border-radius:10px">
-            <div style="font-size:10px;font-weight:700;color:${color};text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px">
+            <div style="font-size:11px;font-weight:700;color:${color};text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px">
                 Historisk substansrabatt (${hist[0].year}-${hist[hist.length-1].year})
             </div>
             <svg viewBox="0 0 ${w} ${h}" style="width:100%;height:${h}px">
@@ -4632,20 +4710,20 @@ function renderInvestmentCompanySection(s) {
         </div>
         <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:10px">
             <div style="background:rgba(255,255,255,0.6);padding:10px;border-radius:8px">
-                <div style="font-size:10px;text-transform:uppercase;font-weight:700;color:${color};opacity:0.7">NAV/aktie</div>
+                <div style="font-size:11px;text-transform:uppercase;font-weight:700;color:${color};opacity:0.7">NAV/aktie</div>
                 <div style="font-size:18px;font-weight:800;color:${color}">${nav.nav_per_share} ${nav.currency}</div>
             </div>
             <div style="background:rgba(255,255,255,0.6);padding:10px;border-radius:8px">
-                <div style="font-size:10px;text-transform:uppercase;font-weight:700;color:${color};opacity:0.7">Pris/aktie</div>
+                <div style="font-size:11px;text-transform:uppercase;font-weight:700;color:${color};opacity:0.7">Pris/aktie</div>
                 <div style="font-size:18px;font-weight:800;color:${color}">${nav.current_price} ${nav.currency}</div>
             </div>
             <div style="background:rgba(255,255,255,0.6);padding:10px;border-radius:8px">
-                <div style="font-size:10px;text-transform:uppercase;font-weight:700;color:${color};opacity:0.7">${disc < 0 ? 'Rabatt' : 'Premium'}</div>
+                <div style="font-size:11px;text-transform:uppercase;font-weight:700;color:${color};opacity:0.7">${disc < 0 ? 'Rabatt' : 'Premium'}</div>
                 <div style="font-size:18px;font-weight:800;color:${color}">${disc > 0 ? '+' : ''}${disc}%</div>
             </div>
         </div>
         ${historyHtml}
-        <div style="font-size:10px;color:${color};opacity:0.7;margin-top:10px;font-style:italic;line-height:1.4">
+        <div style="font-size:11px;color:${color};opacity:0.7;margin-top:10px;font-style:italic;line-height:1.4">
             ⓘ ${nav.note} För investmentbolag är substansrabatt det primära värderingsmåttet
             — kvartalsvinst/FCF speglar inte värdet. Klassiska modeller (P/E, EV/EBIT, Magic Formula)
             är ej tillämpliga och visas inte.
@@ -4804,12 +4882,12 @@ function openDrawer(s) {
             positionTableHtml = `
             <div style="background:white;border-radius:10px;padding:12px;margin-top:12px;border:1px solid rgba(0,0,0,0.05)">
                 <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:10px">
-                    <div style="font-size:10.5px;text-transform:uppercase;letter-spacing:0.5px;color:#475569;font-weight:700">📊 Position-plan</div>
+                    <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.5px;color:#475569;font-weight:700">📊 Position-plan</div>
                     <div style="font-size:11px;color:#64748b">Mål: <b style="color:${setupTheme.accent}">${target}%</b> av portfölj</div>
                 </div>
                 <table style="width:100%;border-collapse:collapse;font-size:12px">
                     <thead>
-                        <tr style="color:#94a3b8;font-size:10px;text-transform:uppercase;letter-spacing:0.4px">
+                        <tr style="color:#64748b;font-size:11px;text-transform:uppercase;letter-spacing:0.4px">
                             <th style="text-align:left;padding:4px 0;font-weight:700">Fas</th>
                             <th style="text-align:left;padding:4px 0;font-weight:700">Trigger</th>
                             <th style="text-align:right;padding:4px 0;font-weight:700">Allokering</th>
@@ -4825,7 +4903,7 @@ function openDrawer(s) {
                     </tbody>
                 </table>
                 ${pos.philosophy_note ? `
-                    <div style="font-size:10.5px;color:#94a3b8;margin-top:8px;padding-top:8px;border-top:1px solid #f1f5f9;font-style:italic">
+                    <div style="font-size:11px;color:#64748b;margin-top:8px;padding-top:8px;border-top:1px solid #f1f5f9;font-style:italic">
                         ${pos.philosophy_note}
                     </div>` : ''}
             </div>`;
@@ -4839,7 +4917,7 @@ function openDrawer(s) {
 
         // Backtest-badge
         const btBadge = bt ? `
-            <span style="background:rgba(255,255,255,0.7);padding:3px 8px;border-radius:8px;font-size:10.5px;border:1px solid rgba(0,0,0,0.06)">
+            <span style="background:rgba(255,255,255,0.7);padding:3px 8px;border-radius:8px;font-size:11px;border:1px solid rgba(0,0,0,0.06)">
                 <b style="color:${bt.alpha > 5 ? '#059669' : bt.alpha > 0 ? '#475569' : '#dc2626'}">${bt.alpha > 0 ? '+' : ''}${bt.alpha}%</b>
                 <span style="color:#64748b"> · ${bt.hit}% hit · n=${bt.n}</span>
             </span>` : '';
@@ -4848,16 +4926,16 @@ function openDrawer(s) {
         setupHtml = `<div class="drawer-section" style="background:${setupTheme.bg};border-radius:14px;padding:16px 18px;margin-bottom:14px;border:1px solid rgba(0,0,0,0.04)">
             <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:10px">
                 <div style="flex:1;min-width:0">
-                    <div style="font-size:10.5px;color:#64748b;text-transform:uppercase;letter-spacing:0.5px;font-weight:700">Setup-klassificering</div>
+                    <div style="font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:0.5px;font-weight:700">Setup-klassificering</div>
                     <div style="display:flex;align-items:baseline;gap:8px;margin-top:4px">
                         <span style="font-size:22px">${setupTheme.icon}</span>
                         <div style="font-size:18px;font-weight:800;color:#0f172a;line-height:1.2">${v.setup_label}</div>
                     </div>
                     <div style="font-size:12px;color:#475569;margin-top:4px">${v.setup_action || ''}</div>
                 </div>
-                <div style="text-align:right;font-size:10.5px">
+                <div style="text-align:right;font-size:11px">
                     <div style="background:white;padding:5px 10px;border-radius:8px;border:1px solid rgba(0,0,0,0.05);font-weight:700;color:${setupTheme.accent}">Conf ${conf}%</div>
-                    <div style="margin-top:4px;color:#64748b;font-size:10px">${[cls.asset_intensity, cls.quality_regime, cls.sector].filter(Boolean).join(' · ') || '–'}</div>
+                    <div style="margin-top:4px;color:#64748b;font-size:11px">${[cls.asset_intensity, cls.quality_regime, cls.sector].filter(Boolean).join(' · ') || '–'}</div>
                 </div>
             </div>
             ${btBadge ? `<div style="margin-bottom:10px">${btBadge}</div>` : ''}
@@ -4870,7 +4948,7 @@ function openDrawer(s) {
             </div>
             ${v.reverse_dcf_details ? `
                 <div style="background:white;border-radius:10px;padding:10px 14px;margin-top:10px;font-size:12px;border:1px solid rgba(0,0,0,0.04)">
-                    <div style="font-size:10.5px;text-transform:uppercase;letter-spacing:0.5px;color:#64748b;font-weight:700;margin-bottom:4px">🧮 Reverse DCF</div>
+                    <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.5px;color:#64748b;font-weight:700;margin-bottom:4px">🧮 Reverse DCF</div>
                     <div style="color:#0f172a;line-height:1.5">
                         Marknaden prisar in <b>${v.reverse_dcf_details.implied_growth}%</b> årlig FCF-tillväxt över 10 år
                         <span style="color:#64748b">(rimlig ${v.reverse_dcf_details.reasonable_g}%, gap ${v.reverse_dcf_details.realism_gap > 0 ? '+' : ''}${v.reverse_dcf_details.realism_gap}%, WACC ${v.reverse_dcf_details.wacc_used}%)</span>
@@ -4898,7 +4976,7 @@ function openDrawer(s) {
                         ${v.fcf_debug ? `
                             <div>
                                 <b style="color:#0f172a">FCF Pipeline</b>
-                                <div style="display:grid;grid-template-columns:1fr 1fr;gap:2px 12px;font-family:monospace;font-size:10.5px;margin-top:4px">
+                                <div style="display:grid;grid-template-columns:1fr 1fr;gap:2px 12px;font-family:monospace;font-size:11px;margin-top:4px">
                                     <span>OCF TTM: ${(v.fcf_debug.operating_cash_flow_ttm/1e9).toFixed(1)}B ${v.fcf_debug.currency}</span>
                                     <span>CapEx: ${v.fcf_debug.capex_pct_of_ocf}% av OCF ${v.fcf_debug.capex_source && v.fcf_debug.capex_source !== 'sector_proxy' ? '<b style="color:#059669">(riktig)</b>' : '<span style="color:#dc2626">(sektor-proxy)</span>'}
                                     <span>FCF SBC-just: <b>${(v.fcf_debug.fcf_sbc_adjusted/1e9).toFixed(1)}B</b></span>
@@ -4908,7 +4986,7 @@ function openDrawer(s) {
                         ${v.earnings_revision_debug ? `
                             <div>
                                 <b style="color:#0f172a">Earnings Revision</b>
-                                <div style="font-family:monospace;font-size:10.5px;margin-top:2px">
+                                <div style="font-family:monospace;font-size:11px;margin-top:2px">
                                     Senaste 4Q EPS ${v.earnings_revision_debug.recent_4q_eps_sum} vs föregående ${v.earnings_revision_debug.older_4q_eps_sum}
                                     → YoY <b>${v.earnings_revision_debug.yoy_growth_pct}%</b> (score ${v.earnings_revision_debug.score})
                                 </div>
@@ -4916,14 +4994,14 @@ function openDrawer(s) {
                         ${v.ownership_signals ? `
                             <div>
                                 <b style="color:#0f172a">Ägarsignaler</b>
-                                <div style="font-size:10.5px;margin-top:2px">
+                                <div style="font-size:11px;margin-top:2px">
                                     Insider: ${v.ownership_signals.insider_activity.data_available
                                         ? `${v.ownership_signals.insider_activity.buy_transactions}K/${v.ownership_signals.insider_activity.sell_transactions}S — ${v.ownership_signals.insider_activity.interpretation.replace(/_/g,' ')}`
                                         : 'data saknas'} · Retail (Avanza): ${v.ownership_signals.retail_activity.owner_change_3m_pct?.toFixed(1)}% 3m
                                 </div>
                             </div>` : ''}
                         ${(v.na_models || []).length > 0 ? `
-                            <div style="font-size:10px;color:#94a3b8;font-style:italic;border-top:1px dashed #e2e8f0;padding-top:6px">
+                            <div style="font-size:11px;color:#64748b;font-style:italic;border-top:1px dashed #e2e8f0;padding-top:6px">
                                 Ej tillämpliga modeller: ${v.na_models.join(', ')}
                             </div>` : ''}
                     </div>
@@ -4944,12 +5022,12 @@ function openDrawer(s) {
 
         // Helper för delta-badge
         const deltaBadge = (val, label) => {
-            if (val == null) return `<div style="text-align:center;padding:6px 8px;background:rgba(255,255,255,0.5);border-radius:8px"><div style="font-size:9.5px;color:#94a3b8;font-weight:700;text-transform:uppercase">${label}</div><div style="font-size:13px;color:#94a3b8;margin-top:2px">—</div></div>`;
+            if (val == null) return `<div style="text-align:center;padding:6px 8px;background:rgba(255,255,255,0.5);border-radius:8px"><div style="font-size:11px;color:#64748b;font-weight:700;text-transform:uppercase">${label}</div><div style="font-size:13px;color:#64748b;margin-top:2px">—</div></div>`;
             const c = val > 0.5 ? '#10b981' : val < -0.5 ? '#dc2626' : '#64748b';
             const arrow = val > 0.5 ? '▲' : val < -0.5 ? '▼' : '●';
             const sign = val > 0 ? '+' : '';
             return `<div style="text-align:center;padding:6px 8px;background:rgba(255,255,255,0.7);border-radius:8px">
-                <div style="font-size:9.5px;color:#64748b;font-weight:700;text-transform:uppercase">${label}</div>
+                <div style="font-size:11px;color:#64748b;font-weight:700;text-transform:uppercase">${label}</div>
                 <div style="font-size:13px;color:${c};font-weight:700;margin-top:2px">${arrow} ${sign}${val.toFixed(1)}p</div>
             </div>`;
         };
@@ -4961,7 +5039,7 @@ function openDrawer(s) {
             return `<div style="background:rgba(255,255,255,0.6);border-radius:6px;padding:5px 9px;display:flex;align-items:center;gap:6px">
                 <span style="font-size:11px;color:#475569;font-weight:600">${label}</span>
                 <span style="font-size:13px;font-weight:800;color:${c}">${val.toFixed(0)}</span>
-                ${weight ? `<span style="font-size:9.5px;color:#94a3b8">${weight}</span>` : ''}
+                ${weight ? `<span style="font-size:11px;color:#64748b">${weight}</span>` : ''}
             </div>`;
         };
 
@@ -4970,7 +5048,7 @@ function openDrawer(s) {
         B.analys += `<div class="drawer-section" style="background:${ssBg};border-radius:14px;padding:18px;margin-bottom:14px;border:1px solid rgba(0,0,0,0.05)">
             <div style="display:flex;align-items:center;justify-content:space-between;gap:14px;margin-bottom:14px">
                 <div>
-                    <div style="font-size:10.5px;color:#475569;text-transform:uppercase;letter-spacing:0.1em;font-weight:800">Historisk modellscore (Bok + Meta)</div>
+                    <div style="font-size:11px;color:#475569;text-transform:uppercase;letter-spacing:0.1em;font-weight:800">Historisk modellscore (Bok + Meta)</div>
                     <div style="display:flex;align-items:baseline;gap:10px;margin-top:4px">
                         <div style="font-size:46px;font-weight:900;color:${ssColor};line-height:1">${ss.toFixed(0)}</div>
                         <div style="font-size:13px;color:${ssColor};font-weight:800;letter-spacing:0.5px">${ssLabel}</div>
@@ -5042,7 +5120,7 @@ function openDrawer(s) {
                 return `<div title="${meta.desc} — N/A för denna bolagstyp" style="display:flex;align-items:center;gap:8px;padding:5px 0;opacity:0.45">
                     <span style="font-size:14px;width:18px">${meta.icon}</span>
                     <span style="font-size:12px;flex:1;color:#64748b">${meta.name}</span>
-                    <span style="font-size:10.5px;color:#94a3b8;font-style:italic">N/A</span>
+                    <span style="font-size:11px;color:#64748b;font-style:italic">N/A</span>
                 </div>`;
             }
             const c = v >= 75 ? '#059669' : v >= 60 ? '#10b981' : v >= 45 ? '#64748b' : v >= 30 ? '#f59e0b' : '#dc2626';
@@ -5067,7 +5145,7 @@ function openDrawer(s) {
             const g = GROUP_META[gKey];
             const keys = modelsByGroup[gKey];
             return `<div style="margin-top:8px">
-                <div style="font-size:10px;font-weight:700;color:${g.color};text-transform:uppercase;letter-spacing:0.5px;margin-bottom:2px">${g.label}</div>
+                <div style="font-size:11px;font-weight:700;color:${g.color};text-transform:uppercase;letter-spacing:0.5px;margin-bottom:2px">${g.label}</div>
                 ${keys.map(modelRow).join('')}
             </div>`;
         };
@@ -5081,7 +5159,7 @@ function openDrawer(s) {
         B.analys += `<details class="drawer-section" style="background:white;border-radius:14px;padding:14px 18px;margin-bottom:14px;border:1px solid rgba(0,0,0,0.06)">
             <summary style="cursor:pointer;list-style:none;display:flex;align-items:center;justify-content:space-between;gap:10px">
                 <div>
-                    <div style="font-size:10.5px;color:#64748b;text-transform:uppercase;letter-spacing:0.5px;font-weight:700">📚 Bok-modeller</div>
+                    <div style="font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:0.5px;font-weight:700">📚 Bok-modeller</div>
                     <div style="display:flex;align-items:baseline;gap:8px;margin-top:2px">
                         <span style="font-size:24px;font-weight:900;color:${compColor}">${bookComp != null ? bookComp.toFixed(0) : '–'}</span>
                         <span style="font-size:12px;color:#64748b;font-weight:600">composite · ${nAvail}/13 har data</span>
@@ -5094,7 +5172,7 @@ function openDrawer(s) {
                 ${groupSection('quality')}
                 ${groupSection('momentum')}
                 ${groupSection('risk')}
-                <div style="margin-top:10px;padding-top:8px;border-top:1px dashed #e2e8f0;font-size:10.5px;color:#94a3b8;font-style:italic;line-height:1.5">
+                <div style="margin-top:10px;padding-top:8px;border-top:1px dashed #e2e8f0;font-size:11px;color:#64748b;font-style:italic;line-height:1.5">
                     Pabrai/Marks/Spier tillkom 2026 som komplement till de 10 ursprungliga modellerna.
                     Pabrai bygger på ROA som moat-proxy, Marks på asymmetrisk risk/reward,
                     Spier på 5y ROIC-stabilitet. Alla tre flyter in i bok-composite med vikt 1.0-1.1×.
@@ -5129,19 +5207,19 @@ function openDrawer(s) {
                 <div style="font-size:11px;font-weight:700;color:#475569;margin-bottom:4px;text-transform:uppercase;letter-spacing:0.4px">Meta-modell (4 sub-modeller)</div>
                 <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px">
                     <div style="background:white;border:1px solid #e5e7eb;border-radius:8px;padding:6px;text-align:center">
-                        <div style="font-size:9.5px;color:#64748b">Trav</div>
+                        <div style="font-size:11px;color:#64748b">Trav</div>
                         <div style="font-size:14px;font-weight:700;color:${scoreColor(s.edge_score||0)}">${(s.edge_score||0).toFixed(0)}</div>
                     </div>
                     <div style="background:white;border:1px solid #e5e7eb;border-radius:8px;padding:6px;text-align:center">
-                        <div style="font-size:9.5px;color:#64748b">DSM</div>
+                        <div style="font-size:11px;color:#64748b">DSM</div>
                         <div style="font-size:14px;font-weight:700;color:${scoreColor(dsc)}">${dsc.toFixed(0)}</div>
                     </div>
                     <div style="background:white;border:1px solid #e5e7eb;border-radius:8px;padding:6px;text-align:center">
-                        <div style="font-size:9.5px;color:#64748b">ACE</div>
+                        <div style="font-size:11px;color:#64748b">ACE</div>
                         <div style="font-size:14px;font-weight:700;color:${scoreColor(asc)}">${asc.toFixed(0)}</div>
                     </div>
                     <div style="background:white;border:1px solid #e5e7eb;border-radius:8px;padding:6px;text-align:center">
-                        <div style="font-size:9.5px;color:#64748b">Magic</div>
+                        <div style="font-size:11px;color:#64748b">Magic</div>
                         <div style="font-size:14px;font-weight:700;color:${msc != null ? scoreColor(msc) : '#9ca3af'}">${msc != null ? msc.toFixed(0) : '—'}</div>
                     </div>
                 </div>
@@ -5291,7 +5369,7 @@ function openDrawer(s) {
             cls = isBetter ? 'color:#059669;font-weight:600' : 'color:#dc2626;font-weight:600';
             arrow = isBetter ? '▲' : '▼';
         }
-        return `<div style="font-size:10px;${cls};margin-top:2px">${arrow} sektor-median: ${displayVal}</div>`;
+        return `<div style="font-size:11px;${cls};margin-top:2px">${arrow} sektor-median: ${displayVal}</div>`;
     }
     const fundItems = [
         ['P/E', s.pe_ratio, v => fmtPosMult(v, 1),
@@ -5318,7 +5396,7 @@ function openDrawer(s) {
         ['Börsvärde', s.market_cap, v => v!=null ? (v/1e9).toFixed(2)+' Md' : '-', () => ''],
     ];
     const sectorBadge = sm
-        ? `<span style="font-size:10px;background:#dbeafe;color:#1e40af;padding:2px 8px;border-radius:10px;margin-left:8px">vs ${sm.sector} (${sm.n_stocks} bolag)</span>`
+        ? `<span style="font-size:11px;background:#dbeafe;color:#1e40af;padding:2px 8px;border-radius:10px;margin-left:8px">vs ${sm.sector} (${sm.n_stocks} bolag)</span>`
         : '';
     B.nyckeltal += `<div class="drawer-section"><div class="drawer-section-title">Fundamentala nyckeltal${sectorBadge}</div><div class="drawer-grid">${
         fundItems.map(([l,v,fmt,medFn]) => `<div class="drawer-item"><div class="drawer-item-label">${l}</div><div class="drawer-item-value">${fmt(v)}</div>${medFn()}</div>`).join('')
@@ -5477,23 +5555,23 @@ function openDrawer(s) {
         const dflag = (s.flaggor || '').split(' | ').filter(Boolean);
         daktierCard = `<div class="drawer-section" style="background:linear-gradient(135deg,#f0f9ff,#e0f2fe);border:1px solid rgba(22,54,92,0.14);border-radius:14px;padding:18px;margin-bottom:14px">
             <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
-                <div style="font-size:10.5px;color:#16365C;text-transform:uppercase;letter-spacing:0.1em;font-weight:800">⭐ DAKTIER-poäng</div>
-                ${rk ? `<span style="font-size:10px;font-weight:800;padding:3px 8px;border-radius:999px;background:${rkBg};color:${rkFg}">RISK ${rk}</span>` : ''}
+                <div style="font-size:11px;color:#16365C;text-transform:uppercase;letter-spacing:0.1em;font-weight:800">⭐ DAKTIER-poäng</div>
+                ${rk ? `<span style="font-size:11px;font-weight:800;padding:3px 8px;border-radius:999px;background:${rkBg};color:${rkFg}">RISK ${rk}</span>` : ''}
             </div>
             <div style="display:flex;align-items:baseline;gap:10px;margin-top:6px;flex-wrap:wrap">
                 <div style="font-size:46px;font-weight:900;color:${dc};line-height:1">${ds.toFixed(0)}</div>
                 ${s.daktier_rank ? `<div style="font-size:13px;color:#475569;font-weight:700">plats ${s.daktier_rank} i dagens ranking</div>` : ''}
-                ${s.i_portfolj ? `<span style="font-size:10px;font-weight:800;padding:3px 8px;border-radius:999px;background:#cffafe;color:#0e7490">PORTFÖLJ${s.portfolj_sleeve ? ' · ' + String(s.portfolj_sleeve).toUpperCase() : ''}</span>` : ''}
+                ${s.i_portfolj ? `<span style="font-size:11px;font-weight:800;padding:3px 8px;border-radius:999px;background:#cffafe;color:#0e7490">PORTFÖLJ${s.portfolj_sleeve ? ' · ' + String(s.portfolj_sleeve).toUpperCase() : ''}</span>` : ''}
             </div>
             <div style="margin-top:10px">
                 ${dpBar('Kvalitet', s.dp_kvalitet)}${dpBar('Kassa', s.dp_kassa)}${dpBar('Tillväxt', s.dp_tillvaxt)}${dpBar('Stabilitet', s.dp_stabilitet)}${dpBar('Värdering', s.dp_vardering)}${dpBar('Storlek', s.dp_storlek)}
             </div>
             ${dflag.length ? `<div style="margin-top:10px;font-size:11.5px;color:#92400e;line-height:1.5">${dflag.map(f => `<div>${f}</div>`).join('')}</div>` : ''}
-            <div style="margin-top:10px;font-size:10.5px;color:#64748b">Sitens enda poängsättning — samma siffra som i Aktier, Topplistan och portföljerna. Vikter: kvalitet 24 % · kassaflöde 22 % · tillväxt 18 % · stabilitet 14 % · värdering 14 % · storlek 8 %.</div>
+            <div style="margin-top:10px;font-size:11px;color:#64748b">Sitens enda poängsättning — samma siffra som i Aktier, Topplistan och portföljerna. Vikter: kvalitet 24 % · kassaflöde 22 % · tillväxt 18 % · stabilitet 14 % · värdering 14 % · storlek 8 %.</div>
         </div>`;
     } else {
         daktierCard = `<div class="drawer-section" style="background:#f8fafc;border:1px solid var(--line);border-radius:14px;padding:16px;margin-bottom:14px">
-            <div style="font-size:10.5px;color:#16365C;text-transform:uppercase;letter-spacing:0.1em;font-weight:800">⭐ DAKTIER-poäng</div>
+            <div style="font-size:11px;color:#16365C;text-transform:uppercase;letter-spacing:0.1em;font-weight:800">⭐ DAKTIER-poäng</div>
             <div style="margin-top:6px;font-size:13px;color:#475569;line-height:1.5">Ingen poäng i dagens ranking — bolaget saknar tillräcklig rapportserie (minst 8 kvartal), faller på hygienkraven (börsvärde ≥ 500 MUSD · kurs ≥ 10 USD · ej REIT) eller är en sekundärnotering av ett bolag som redan rankas.</div>
         </div>`;
     }
@@ -5591,7 +5669,7 @@ function openDrawer(s) {
                     // konsensusen i stället (samma skala, annan källa)
                     if (!ko || !ko.nu) {
                         try {
-                            const k2 = await (await fetch('/api/analyst-consensus?ticker=' + encodeURIComponent(s.short_name || ''))).json();
+                            const k2 = await apiJson('/api/analyst-consensus?ticker=' + encodeURIComponent(s.short_name || ''));
                             const m0 = (k2.konsensus_manader || [])[0];
                             if (m0 && m0.n >= 3) {
                                 ko = { nu: { snitt: m0.snitt, n_hus: m0.n,
@@ -5607,20 +5685,20 @@ function openDrawer(s) {
                     const kc = document.getElementById('dovKonsensusCard');
                     if (!kc || !ko || !ko.nu) return;
                     const fd = ko.nu.fordelning || {};
-                    const stap = (lbl, v, col) => v ? `<div style="text-align:center"><div style="font-size:15px;font-weight:800;color:${col}">${v}</div><div style="font-size:9.5px;color:#64748b">${lbl}</div></div>` : '';
+                    const stap = (lbl, v, col) => v ? `<div style="text-align:center"><div style="font-size:15px;font-weight:800;color:${col}">${v}</div><div style="font-size:11px;color:#64748b">${lbl}</div></div>` : '';
                     const h = ko.historik || [];
                     const ettAr = (() => { const c = new Date(Date.now() - 365*864e5).toISOString().slice(0,10);
                         for (let i = h.length - 1; i >= 0; i--) if (h[i].datum <= c) return h[i].snitt; return null; })();
                     kc.innerHTML = `<div class="drawer-section" style="background:white;border:1px solid var(--line);border-radius:14px;padding:14px 18px;margin-bottom:14px">
                         <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
-                            <div style="font-size:10.5px;color:#16365C;text-transform:uppercase;letter-spacing:0.08em;font-weight:800">🏛 Analytikernas rating</div>
-                            <div style="font-size:22px;font-weight:900;color:var(--brand-navy)">${ko.nu.snitt}<span style="font-size:12px;color:#94a3b8;font-weight:600"> / 5</span></div>
+                            <div style="font-size:11px;color:#16365C;text-transform:uppercase;letter-spacing:0.08em;font-weight:800">🏛 Analytikernas rating</div>
+                            <div style="font-size:22px;font-weight:900;color:var(--brand-navy)">${ko.nu.snitt}<span style="font-size:12px;color:#64748b;font-weight:600"> / 5</span></div>
                             <div style="font-size:11px;color:#64748b">${ko.nu.n_hus} hus${ettAr != null ? ' · för 1 år sedan: ' + ettAr : ''}</div>
                         </div>
                         <div style="display:flex;gap:14px;margin-top:8px">
                             ${stap('Köp', fd.kop, '#059669')}${stap('Övervikt', fd.overvikt, '#0891b2')}${stap('Behåll', fd.behall, '#d97706')}${stap('Undervikt', fd.undervikt, '#dc2626')}${stap('Sälj', fd.salj, '#b91c1c')}
                         </div>
-                        <div style="margin-top:8px;font-size:10px;color:#94a3b8">Rekonstruerad ur per-hus-händelser (FactSet-skala) — nivån är popularitet, rörelsen är informationen.</div>
+                        <div style="margin-top:8px;font-size:11px;color:#64748b">Rekonstruerad ur per-hus-händelser (FactSet-skala) — nivån är popularitet, rörelsen är informationen.</div>
                     </div>`;
                 }).catch(() => {});
                 // Kvantmodellens betygskort i Analys-fliken
@@ -5641,7 +5719,7 @@ function openDrawer(s) {
                         <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px">
                             ${parts.map((g, i) => `<div style="flex:1;min-width:78px;text-align:center;background:white;border:1px solid var(--line);border-radius:10px;padding:8px 6px">
                                 <div style="font-size:20px;font-weight:800;color:${gradeCol(g)}">${g}</div>
-                                <div style="font-size:10px;color:var(--text-muted);font-weight:600">${fLbl[i] || ''}</div>
+                                <div style="font-size:11px;color:var(--text-muted);font-weight:600">${fLbl[i] || ''}</div>
                             </div>`).join('')}
                         </div>
                         ${f.dq ? '<div style="margin-top:10px;font-size:12px;color:#b91c1c;font-weight:600">⚠ Diskvalificerad — under 20:e percentilen i minst en faktor</div>' : ''}
@@ -5719,7 +5797,7 @@ async function loadDrawerNewsAndInsiders(s) {
                     <div style="padding:9px 0;border-bottom:1px solid #f3f4f6">
                         <div style="font-size:13px;font-weight:600;color:#1f2937;line-height:1.45">${escapeHtml(n.headline || '')}${n.chg != null ? ` <span style="color:${n.chg >= 0 ? '#059669' : '#dc2626'};font-weight:700">${n.chg >= 0 ? '+' : ''}${Number(n.chg).toFixed(1)}%</span>` : ''}</div>
                         ${n.summary ? `<div style="font-size:12px;color:#6b7280;margin-top:3px;line-height:1.5">${escapeHtml(n.summary)}</div>` : ''}
-                        ${n.source ? `<div style="font-size:10.5px;color:#9ca3af;margin-top:3px">${escapeHtml(n.source)}</div>` : ''}
+                        ${n.source ? `<div style="font-size:11px;color:#6b7280;margin-top:3px">${escapeHtml(n.source)}</div>` : ''}
                     </div>`).join('');
                 document.getElementById('drawerNewsSection').style.display = '';
             }
@@ -5780,7 +5858,7 @@ function _reportLoading(show, msg) {
         ov.innerHTML = `<div style="background:#fff;border-radius:16px;padding:28px 34px;text-align:center;max-width:340px;box-shadow:0 16px 48px rgba(0,0,0,0.25)">
             <div style="width:42px;height:42px;border:3px solid #e5e7eb;border-top-color:#1d4ed8;border-radius:50%;margin:0 auto 14px;animation:spin 0.8s linear infinite"></div>
             <div id="reportLoadingMsg" style="font-size:14px;font-weight:600;color:#0f172a"></div>
-            <div style="font-size:11.5px;color:#94a3b8;margin-top:6px">DAKTIER genererar rapport…</div>
+            <div style="font-size:11.5px;color:#64748b;margin-top:6px">DAKTIER genererar rapport…</div>
         </div>`;
         document.body.appendChild(ov);
     }
@@ -5806,14 +5884,14 @@ function _buildReportCard(d, rich) {
     const sigCard = (k, label) => {
         const v = (d.signals || {})[k]; const [c, bg] = _repSigColors(v); const mot = (d.motivations || {})[k] || '';
         return `<div style="flex:1;background:#fff;border:1px solid #eef0f2;border-radius:12px;padding:13px 15px">
-            <div style="font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:0.6px;color:#94a3b8">${label}</div>
+            <div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:0.6px;color:#64748b">${label}</div>
             <div style="display:inline-block;margin-top:6px;background:${bg};color:${c};font-weight:800;font-size:13px;padding:4px 11px;border-radius:8px">${v || '–'}</div>
             ${mot ? `<div style="font-size:11px;color:#64748b;margin-top:8px;line-height:1.5">${escapeHtml(mot)}</div>` : ''}
         </div>`;
     };
     const scoreBox = (label, v) => `<div style="flex:1;text-align:center;background:#f8fafc;border-radius:10px;padding:10px 6px">
         <div style="font-size:22px;font-weight:800;color:${_repScoreColor(v)}">${v != null ? Math.round(v) : '–'}</div>
-        <div style="font-size:9.5px;color:#94a3b8;font-weight:600;text-transform:uppercase;letter-spacing:0.4px;margin-top:2px">${label}</div></div>`;
+        <div style="font-size:11px;color:#64748b;font-weight:600;text-transform:uppercase;letter-spacing:0.4px;margin-top:2px">${label}</div></div>`;
     const km = d.key_metrics || {};
     const mc = km.market_cap != null ? ((km.market_cap >= 1e9 ? (km.market_cap / 1e9).toFixed(1) + ' Mdr' : (km.market_cap / 1e6).toFixed(0) + ' M') + ' ' + (km.market_cap_currency || '')) : null;
     const metric = (label, val) => (val != null && val !== '' && val !== 'null') ? `<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid #f1f5f9"><span style="color:#64748b;font-size:12px">${label}</span><span style="font-weight:700;font-size:12.5px">${val}</span></div>` : '';
@@ -5827,7 +5905,7 @@ function _buildReportCard(d, rich) {
     ].filter(Boolean).join(' ');
 
     // ── v3.10: RIK DATA (det som gör rapporten unik) ──
-    const _secTitle = (t) => `<div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:0.6px;color:#94a3b8;margin:20px 0 9px">${t}</div>`;
+    const _secTitle = (t) => `<div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:0.6px;color:#64748b;margin:20px 0 9px">${t}</div>`;
     // NAV / substansvärde (investmentbolag — t.ex. Investor)
     let navHtml = '';
     if (rich.is_investment_company && rich.nav_data && rich.nav_data.discount_pct != null) {
@@ -5848,7 +5926,7 @@ function _buildReportCard(d, rich) {
             const v = Math.round(bms[k]), col = _repScoreColor(v);
             return `<div style="flex:1;min-width:88px;text-align:center;background:#f8fafc;border-radius:9px;padding:9px 4px">
                 <div style="font-size:18px;font-weight:800;color:${col}">${v}</div>
-                <div style="font-size:9px;color:#94a3b8;font-weight:700;text-transform:uppercase;letter-spacing:0.3px;margin-top:1px">${label}</div></div>`;
+                <div style="font-size:11px;color:#64748b;font-weight:700;text-transform:uppercase;letter-spacing:0.3px;margin-top:1px">${label}</div></div>`;
         }).join('');
     if (bmCells) bookHtml = _secTitle('Bokmodeller (klassiska investerare)') + `<div style="display:flex;gap:7px;flex-wrap:wrap">${bmCells}</div>`;
     // F-Score
@@ -5865,9 +5943,9 @@ function _buildReportCard(d, rich) {
     if (q.length >= 2) {
         const last = q.slice(-4);
         qHtml = _secTitle('Kvartalstrend (senaste)') + `<table style="width:100%;border-collapse:collapse;font-size:12px">
-            <thead><tr><th style="text-align:left;color:#94a3b8;font-size:10px;text-transform:uppercase;padding:5px 6px">Kvartal</th>
-            <th style="text-align:right;color:#94a3b8;font-size:10px;text-transform:uppercase;padding:5px 6px">Omsättning</th>
-            <th style="text-align:right;color:#94a3b8;font-size:10px;text-transform:uppercase;padding:5px 6px">EPS</th></tr></thead><tbody>
+            <thead><tr><th style="text-align:left;color:#64748b;font-size:11px;text-transform:uppercase;padding:5px 6px">Kvartal</th>
+            <th style="text-align:right;color:#64748b;font-size:11px;text-transform:uppercase;padding:5px 6px">Omsättning</th>
+            <th style="text-align:right;color:#64748b;font-size:11px;text-transform:uppercase;padding:5px 6px">EPS</th></tr></thead><tbody>
             ${last.map(r => `<tr><td style="padding:6px;border-top:1px solid #f1f5f9">${r.financial_year || ''} Q${r.period || r.quarter || ''}</td>
             <td style="padding:6px;text-align:right;border-top:1px solid #f1f5f9">${r.sales != null ? (r.sales / 1e6).toFixed(0) + ' M' : '–'}</td>
             <td style="padding:6px;text-align:right;border-top:1px solid #f1f5f9">${r.eps != null ? Number(r.eps).toFixed(2) : '–'}</td></tr>`).join('')}</tbody></table>`;
@@ -5887,17 +5965,17 @@ function _buildReportCard(d, rich) {
             <div style="padding:7px 0;border-bottom:1px solid #f1f5f9">
                 <div style="font-size:12px;font-weight:600;color:#1f2937;line-height:1.45">${escapeHtml(nw.headline || '')}${nw.change_pct != null ? ` <span style="color:${nw.change_pct >= 0 ? '#047857' : '#b91c1c'};font-weight:700">${nw.change_pct >= 0 ? '+' : ''}${Number(nw.change_pct).toFixed(1)}%</span>` : ''}</div>
                 ${nw.summary ? `<div style="font-size:11px;color:#64748b;margin-top:2px;line-height:1.5">${escapeHtml(nw.summary)}</div>` : ''}
-                ${nw.source ? `<div style="font-size:10px;color:#94a3b8;margin-top:2px">${escapeHtml(nw.source)}</div>` : ''}
+                ${nw.source ? `<div style="font-size:11px;color:#64748b;margin-top:2px">${escapeHtml(nw.source)}</div>` : ''}
             </div>`).join('');
     }
     // Insider-transaktioner
     let insHtml = '';
     if (d.insiders && d.insiders.length) {
         insHtml = _secTitle('👥 Insider-transaktioner (senaste)') + `<table style="width:100%;border-collapse:collapse;font-size:11.5px">
-            <thead><tr><th style="text-align:left;color:#94a3b8;font-size:10px;text-transform:uppercase;padding:4px 6px">Datum</th>
-            <th style="text-align:left;color:#94a3b8;font-size:10px;text-transform:uppercase;padding:4px 6px">Person</th>
-            <th style="text-align:left;color:#94a3b8;font-size:10px;text-transform:uppercase;padding:4px 6px">Typ</th>
-            <th style="text-align:right;color:#94a3b8;font-size:10px;text-transform:uppercase;padding:4px 6px">Belopp</th></tr></thead><tbody>
+            <thead><tr><th style="text-align:left;color:#64748b;font-size:11px;text-transform:uppercase;padding:4px 6px">Datum</th>
+            <th style="text-align:left;color:#64748b;font-size:11px;text-transform:uppercase;padding:4px 6px">Person</th>
+            <th style="text-align:left;color:#64748b;font-size:11px;text-transform:uppercase;padding:4px 6px">Typ</th>
+            <th style="text-align:right;color:#64748b;font-size:11px;text-transform:uppercase;padding:4px 6px">Belopp</th></tr></thead><tbody>
             ${d.insiders.map(x => { const buy = /förvärv|köp|tilldel/i.test(x.transaction_type || ''); return `<tr>
                 <td style="padding:5px 6px;border-top:1px solid #f1f5f9">${escapeHtml((x.transaction_date || '').slice(0, 10))}</td>
                 <td style="padding:5px 6px;border-top:1px solid #f1f5f9">${escapeHtml((x.person || '').slice(0, 24))}</td>
@@ -5913,7 +5991,7 @@ function _buildReportCard(d, rich) {
             <ul style="margin:0;padding-left:18px;font-size:11.5px;line-height:1.6;color:#92400e">
                 ${d.consistency_flags.map(f => `<li>${escapeHtml(String(f))}</li>`).join('')}
             </ul>
-            <div style="font-size:10px;color:#b45309;margin-top:7px;opacity:0.85">Automatisk faktagranskning flaggade detta för manuell kontroll innan beslut.</div>
+            <div style="font-size:11px;color:#b45309;margin-top:7px;opacity:0.85">Automatisk faktagranskning flaggade detta för manuell kontroll innan beslut.</div>
         </div>`;
     }
     const richBlock = navHtml + bookHtml + fHtml + qHtml + newsHtml + insHtml + analysisHtml + flagsHtml;
@@ -5935,8 +6013,8 @@ function _buildReportCard(d, rich) {
                     <div style="margin-top:2px">${chgHtml}</div>
                     ${(function(){ const pv=d.price_verification; if(!pv) return '';
                         const src = pv.source || 'källa';
-                        if(pv.status==='overridden') return `<div style="font-size:9.5px;font-weight:700;margin-top:6px;background:rgba(248,113,113,0.22);color:#fecaca;padding:2px 8px;border-radius:6px;display:inline-block">⚠ Pris uppdaterat (${src})</div>`;
-                        if(pv.status==='verified') return `<div style="font-size:9.5px;font-weight:700;margin-top:6px;background:rgba(52,211,153,0.22);color:#bbf7d0;padding:2px 8px;border-radius:6px;display:inline-block">✓ Pris verifierat (${src})</div>`;
+                        if(pv.status==='overridden') return `<div style="font-size:11px;font-weight:700;margin-top:6px;background:rgba(248,113,113,0.22);color:#fecaca;padding:2px 8px;border-radius:6px;display:inline-block">⚠ Pris uppdaterat (${src})</div>`;
+                        if(pv.status==='verified') return `<div style="font-size:11px;font-weight:700;margin-top:6px;background:rgba(52,211,153,0.22);color:#bbf7d0;padding:2px 8px;border-radius:6px;display:inline-block">✓ Pris verifierat (${src})</div>`;
                         return ''; })()}
                     <div style="font-size:11px;opacity:0.7;margin-top:8px">Rapport ${d.report_date}</div>
                 </div>
@@ -5953,7 +6031,7 @@ function _buildReportCard(d, rich) {
                 ${scoreBox('Value', d.value_score)}${scoreBox('Quality', d.quality_score)}${scoreBox('Momentum', d.momentum_score)}${scoreBox('Risk', d.risk_score)}
                 <div style="flex:1;text-align:center;background:linear-gradient(135deg,#1e3a8a,#3b82f6);border-radius:10px;padding:10px 6px;color:#fff">
                     <div style="font-size:22px;font-weight:800">${d.composite != null ? Math.round(d.composite) : '–'}</div>
-                    <div style="font-size:9.5px;opacity:0.85;font-weight:600;text-transform:uppercase;letter-spacing:0.4px;margin-top:2px">Composite</div></div>
+                    <div style="font-size:11px;opacity:0.85;font-weight:600;text-transform:uppercase;letter-spacing:0.4px;margin-top:2px">Composite</div></div>
             </div>
             ${metaChips ? `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px">${metaChips}</div>` : ''}
             ` : `<div style="background:#fef3c7;color:#92400e;border-radius:10px;padding:14px 16px;font-size:13px;margin-bottom:16px">Ingen agent-analys kunde genereras just nu — rapporten visar live nyckeltal. Försök igen om en stund.</div>`}
@@ -5961,12 +6039,12 @@ function _buildReportCard(d, rich) {
             <!-- Nyckeltal + Reverse DCF -->
             <div style="display:flex;gap:24px">
                 <div style="flex:1">
-                    <div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:0.6px;color:#94a3b8;margin-bottom:6px">Nyckeltal</div>
+                    <div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:0.6px;color:#64748b;margin-bottom:6px">Nyckeltal</div>
                     ${metric('P/E', n(km.pe))}${metric('P/B', n(km.pb))}${metric('ROE', km.roe != null ? n(km.roe) + '%' : null)}
                     ${metric('EV/EBIT', n(km.ev_ebit))}${metric('Direktavkastning', km.direct_yield != null ? n(km.direct_yield) + '%' : null)}
                 </div>
                 <div style="flex:1">
-                    <div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:0.6px;color:#94a3b8;margin-bottom:6px">Värdering & övrigt</div>
+                    <div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:0.6px;color:#64748b;margin-bottom:6px">Värdering & övrigt</div>
                     ${metric('Market cap', mc)}${metric('RSI (14)', n(km.rsi, 0))}${metric('Ägare (Avanza)', km.owners != null ? Number(km.owners).toLocaleString('sv') : null)}
                     ${km.short_selling_ratio != null && km.short_selling_ratio > 0 ? metric('Blankningsandel', n(km.short_selling_ratio) + '%') : ''}
                     ${rdcf.implied != null ? metric('Reverse DCF (implied)', n(rdcf.implied) + '%') : ''}
@@ -5975,7 +6053,7 @@ function _buildReportCard(d, rich) {
                 </div>
             </div>
             ${(d.market_cap_check && d.market_cap_check.flag) ? `
-            <div style="margin-top:10px;background:#fff7ed;border:1px solid #fed7aa;border-radius:9px;padding:8px 12px;font-size:10.5px;color:#9a3412">
+            <div style="margin-top:10px;background:#fff7ed;border:1px solid #fed7aa;border-radius:9px;padding:8px 12px;font-size:11px;color:#9a3412">
                 ⚠️ Datakontroll: lagrat börsvärde avviker ${Math.abs(d.market_cap_check.diff_pct).toFixed(0)}% från pris×härledda aktier — börsvärdet kan vara inaktuellt. Verifiera mot senaste rapport.
             </div>` : ''}
 
@@ -5986,7 +6064,7 @@ function _buildReportCard(d, rich) {
             <div style="margin-top:18px;background:#f0f9ff;border:1px solid #bae6fd;border-radius:11px;padding:11px 16px;display:flex;justify-content:space-between;align-items:center">
                 <div>
                     <div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:0.5px;color:#0369a1">📊 Agentens track record</div>
-                    <div style="font-size:10.5px;color:#0c4a6e;margin-top:2px;opacity:0.85">${d.track_record.n} mätta rekommendationer · ${d.track_record.horizon === 'live' ? 'löpande' : d.track_record.horizon} horisont</div>
+                    <div style="font-size:11px;color:#0c4a6e;margin-top:2px;opacity:0.85">${d.track_record.n} mätta rekommendationer · ${d.track_record.horizon === 'live' ? 'löpande' : d.track_record.horizon} horisont</div>
                 </div>
                 <div style="text-align:right">
                     <div style="font-size:20px;font-weight:800;color:#0369a1">${Number(d.track_record.hit_rate).toFixed(0)}%<span style="font-size:11px;font-weight:600;opacity:0.7"> träff</span></div>
@@ -5996,8 +6074,8 @@ function _buildReportCard(d, rich) {
 
             <!-- Metod & compliance (MAR/MiFID-ram) -->
             <div style="margin-top:20px;background:#f8fafc;border:1px solid #eef2f7;border-radius:11px;padding:13px 16px">
-                <div style="font-size:10.5px;font-weight:800;text-transform:uppercase;letter-spacing:0.5px;color:#64748b;margin-bottom:6px">Metod & transparens</div>
-                <div style="font-size:10.5px;line-height:1.6;color:#64748b">
+                <div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:0.5px;color:#64748b;margin-bottom:6px">Metod & transparens</div>
+                <div style="font-size:11px;line-height:1.6;color:#64748b">
                     <strong style="color:#475569">Metod:</strong> Multi-strategi-ramverk (Swing/Quality/Value) med klassificerings-router, 4-axlad scoring (Value·Quality·Momentum·Risk), reverse-DCF mot baseline och automatisk konsistens-granskning.
                     <strong style="color:#475569">Datakällor:</strong> SEC EDGAR, rapportarkiv &amp; Avanza, daterat ${d.report_date}.
                     <strong style="color:#475569">Karaktär:</strong> Detta är ett <em>investeringsanalytiskt beslutsstöd</em> — inte en personlig investeringsrekommendation enligt MAR/MiFID II och inte en uppmaning att köpa eller sälja ett specifikt instrument.
@@ -6007,7 +6085,7 @@ function _buildReportCard(d, rich) {
             </div>
 
             <!-- Footer -->
-            <div style="margin-top:14px;padding-top:12px;border-top:1px solid #e5e7eb;display:flex;justify-content:space-between;align-items:center;font-size:10px;color:#94a3b8">
+            <div style="margin-top:14px;padding-top:12px;border-top:1px solid #e5e7eb;display:flex;justify-content:space-between;align-items:center;font-size:11px;color:#64748b">
                 <span>Agent-validerad analys (DEL 6.99 v3.2)${d.analysis_date ? ' · analys ' + d.analysis_date : ''}${d.ran_fresh ? ' · färsk' : ''}${d.has_analysis ? (d.consistency_flags && d.consistency_flags.length ? ' · ⚠️ ' + d.consistency_flags.length + ' konsistens-flagg' : ' · ✓ konsistens-granskad') : ''}</span>
                 <span>DAKTIER · Beslutsstöd, ej finansiell rådgivning</span>
             </div>
@@ -6017,25 +6095,25 @@ function _buildReportCard(d, rich) {
 
 async function generateStockReport(format) {
     const s = _currentDrawerStock;
-    if (!s || !s.orderbook_id) { alert('Ingen aktie vald.'); return; }
-    if (typeof html2canvas === 'undefined') { alert('Bild-biblioteket laddas än, försök strax igen.'); return; }
+    if (!s || !s.orderbook_id) { toast('Ingen aktie vald.', 'warn'); return; }
+    if (typeof html2canvas === 'undefined') { toast('Bild-biblioteket laddas än, försök strax igen.', 'info'); return; }
     _reportLoading(true, 'Hämtar data + kör agent-check…');
     try {
         const r = await fetch('/api/stock/' + s.orderbook_id + '/quick-report');
         const d = await r.json();
-        if (d.error) { _reportLoading(false); alert('Kunde ej generera rapport: ' + d.error); return; }
+        if (d.error) { _reportLoading(false); toast('Kunde ej generera rapport: ' + d.error, 'error'); return; }
         _reportLoading(true, 'Renderar rapport…');
         const card = _buildReportCard(d, _currentDrawerStock || {});
         const fname = `DAKTIER_${(d.ticker || 'aktie').replace(/[^A-Za-z0-9]+/g, '_')}_${d.report_date}`;
         await _cardToFile(card, fname, format);
         _reportLoading(false);
-    } catch (e) { _reportLoading(false); alert('Fel vid rapport: ' + e.message); }
+    } catch (e) { _reportLoading(false); toast('Fel vid rapport: ' + e.message, 'error'); }
 }
 
 // Delad renderare: kort-element → PDF (A4, flersidig) eller PNG. Kortet
 // renderas off-screen, fångas med html2canvas och tas bort igen.
 async function _cardToFile(card, fname, format) {
-    if (typeof html2canvas === 'undefined') { alert('Bild-biblioteket laddas än, försök strax igen.'); return; }
+    if (typeof html2canvas === 'undefined') { toast('Bild-biblioteket laddas än, försök strax igen.', 'info'); return; }
     document.body.appendChild(card);
     let canvas, breaksCss = [], cardCssWidth = 760;
     try {
@@ -6075,7 +6153,7 @@ async function _cardToFile(card, fname, format) {
         const a = document.createElement('a'); a.download = fname + '.png'; a.href = canvas.toDataURL('image/png'); a.click();
         return;
     }
-    if (typeof window.jspdf === 'undefined') { alert('PDF-biblioteket laddas än.'); return; }
+    if (typeof window.jspdf === 'undefined') { toast('PDF-biblioteket laddas än.', 'info'); return; }
     const { jsPDF } = window.jspdf;
     const pdf = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'p' });
     const pw = 210, ph = 297, m = 10;
@@ -6168,8 +6246,8 @@ function _buildAgentAnalysisCard(text, meta) {
             <div class="report-md" style="font-size:12px;line-height:1.62;color:#1e293b">${bodyHtml}</div>
 
             <div style="margin-top:20px;background:#f8fafc;border:1px solid #eef2f7;border-radius:11px;padding:13px 16px">
-                <div style="font-size:10.5px;font-weight:800;text-transform:uppercase;letter-spacing:0.5px;color:#64748b;margin-bottom:6px">Metod &amp; transparens</div>
-                <div style="font-size:10.5px;line-height:1.6;color:#64748b">
+                <div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:0.5px;color:#64748b;margin-bottom:6px">Metod &amp; transparens</div>
+                <div style="font-size:11px;line-height:1.6;color:#64748b">
                     <strong style="color:#475569">Metod:</strong> Multi-strategi-ramverk (Swing/Quality/Value) med klassificerings-router, 4-axlad scoring och reverse-DCF.
                     <strong style="color:#475569">Datakällor:</strong> SEC EDGAR, rapportarkiv &amp; Avanza, daterat ${meta.date || ''}.
                     <strong style="color:#475569">Karaktär:</strong> Investeringsanalytiskt <em>beslutsstöd</em> — inte en personlig investeringsrekommendation enligt MAR/MiFID II och inte en uppmaning att köpa eller sälja ett specifikt instrument.
@@ -6177,7 +6255,7 @@ function _buildAgentAnalysisCard(text, meta) {
                     Gör alltid en egen bedömning utifrån din situation, eller rådgör med en licensierad rådgivare.
                 </div>
             </div>
-            <div style="margin-top:14px;padding-top:12px;border-top:1px solid #e5e7eb;display:flex;justify-content:space-between;align-items:center;font-size:10px;color:#94a3b8">
+            <div style="margin-top:14px;padding-top:12px;border-top:1px solid #e5e7eb;display:flex;justify-content:space-between;align-items:center;font-size:11px;color:#64748b">
                 <span>DAKTIER Edge Agent${meta.modelLabel ? ' · ' + escapeHtml(meta.modelLabel) : ''}</span>
                 <span>DAKTIER · Beslutsstöd, ej finansiell rådgivning</span>
             </div>
@@ -6189,8 +6267,8 @@ async function downloadAgentAnalysisPdf(idx, format) {
     const h = _agentHistory[idx];
     if (!h || h.role !== 'assistant') return;
     const text = typeof h.content === 'string' ? h.content : '';
-    if (!text.trim()) { alert('Inget innehåll att exportera ännu.'); return; }
-    if (typeof html2canvas === 'undefined') { alert('Bild-biblioteket laddas än, försök strax igen.'); return; }
+    if (!text.trim()) { toast('Inget innehåll att exportera ännu.', 'warn'); return; }
+    if (typeof html2canvas === 'undefined') { toast('Bild-biblioteket laddas än, försök strax igen.', 'info'); return; }
     if (window.__agentPdfBusy) return;   // förhindra överlappande rendering (dubbelklick)
     window.__agentPdfBusy = true;
     // Hitta knappen för loading-state
@@ -6204,7 +6282,7 @@ async function downloadAgentAnalysisPdf(idx, format) {
         const fname = `DAKTIER_${meta.fileslug}_${meta.date}`;
         await _cardToFile(card, fname, format || 'pdf');
     } catch (e) {
-        alert('Fel vid nedladdning: ' + (e && e.message ? e.message : e));
+        toast('Fel vid nedladdning: ' + (e && e.message ? e.message : e), 'error');
     } finally {
         window.__agentPdfBusy = false;
         if (btn) { btn.disabled = false; btn.innerHTML = orig; }
@@ -6655,8 +6733,8 @@ function renderAgent() {
             border:1px solid rgba(59,130,246,0.15);
             white-space:nowrap;
         }
-        .agent-tool-pill .pill-count { font-size:10px; background:rgba(255,255,255,0.7); padding:1px 6px; border-radius:8px; font-weight:700; }
-        .agent-tool-pill .pill-names { font-weight:500; opacity:0.85; font-size:10.5px; }
+        .agent-tool-pill .pill-count { font-size:11px; background:rgba(255,255,255,0.7); padding:1px 6px; border-radius:8px; font-weight:700; }
+        .agent-tool-pill .pill-names { font-weight:500; opacity:0.85; font-size:11px; }
         .agent-tool-pill .material-symbols-outlined {
             vertical-align:middle; line-height:1;
             font-variation-settings: 'FILL' 0, 'wght' 500, 'GRAD' 0, 'opsz' 20;
@@ -6678,7 +6756,7 @@ function renderAgent() {
         .agent-history-item.active { background:linear-gradient(135deg,#dbeafe,#eff6ff); }
         .agent-history-item-content { flex:1; min-width:0; }
         .agent-history-title { font-size:13px; font-weight:600; color:var(--text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-        .agent-history-meta { font-size:10.5px; color:var(--text-muted); margin-top:2px; }
+        .agent-history-meta { font-size:11px; color:var(--text-muted); margin-top:2px; }
         .agent-history-del { opacity:0; transition:opacity 0.15s; background:transparent; border:none; color:#dc2626; cursor:pointer; padding:2px 6px; border-radius:6px; font-size:14px; line-height:1; }
         .agent-history-item:hover .agent-history-del { opacity:0.6; }
         .agent-history-del:hover { opacity:1 !important; background:#fee2e2; }
@@ -6718,7 +6796,7 @@ function renderAgent() {
         .agent-md hr { border:none; border-top:1px solid #e5e7eb; margin:14px 0; }
         .agent-md a { color:#2563eb; text-decoration:underline; }
         .agent-md em { font-style:italic; color:#6b7280; }
-        .agent-foot { font-size:10.5px; color:var(--text-muted); margin-top:10px; padding-top:8px; border-top:1px dashed #e5e7eb; display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
+        .agent-foot { font-size:11px; color:var(--text-muted); margin-top:10px; padding-top:8px; border-top:1px dashed #e5e7eb; display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
         .agent-dl-btn { display:inline-flex; align-items:center; gap:5px; background:#0f172a; color:#fff; border:none; border-radius:8px; padding:5px 11px; font-size:11px; font-weight:600; font-family:inherit; cursor:pointer; transition:background .15s, opacity .15s; }
         .agent-dl-btn:hover { background:#1e3a8a; }
         .agent-dl-btn.secondary { background:#fff; color:#334155; border:1px solid #e2e8f0; }
@@ -6735,7 +6813,7 @@ function renderAgent() {
     let historyDropdown = '';
     if (_agentShowHistory) {
         const items = sortedChats.length === 0
-            ? `<div class="agent-history-empty">${_msIcon('inbox', 24, { color: 'var(--text-muted)' })}<br>Inga sparade chattar än.<br><span style="font-size:10.5px">Varje konversation sparas automatiskt.</span></div>`
+            ? `<div class="agent-history-empty">${_msIcon('inbox', 24, { color: 'var(--text-muted)' })}<br>Inga sparade chattar än.<br><span style="font-size:11px">Varje konversation sparas automatiskt.</span></div>`
             : sortedChats.map(c => `
                 <div class="agent-history-item ${c.id === _agentChatId ? 'active' : ''}"
                      onclick="agentLoadChat('${c.id}')">
@@ -6769,7 +6847,7 @@ function renderAgent() {
                 <span class="material-symbols-outlined" style="font-size:24px;color:#3b82f6">smart_toy</span>
                 <div style="min-width:0">
                     <div style="font-weight:700;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(activeTitle || 'Ny chatt')}</div>
-                    <div style="font-size:10.5px;color:var(--text-muted)">${_agentHistory.length === 0 ? 'Edge Agent är redo' : `${_agentHistory.length} meddelanden`}</div>
+                    <div style="font-size:11px;color:var(--text-muted)">${_agentHistory.length === 0 ? 'Edge Agent är redo' : `${_agentHistory.length} meddelanden`}</div>
                 </div>
             </div>
             <div style="display:flex;gap:6px;position:relative;align-items:center">
@@ -6873,7 +6951,7 @@ function renderAgentTurn(h, idx) {
             footer += `<div style="background:#fee2e2;color:#991b1b;border-radius:8px;padding:8px 12px;margin-top:8px;font-size:11px">
                 <strong>🚫 Sentiment-regelbrott upptäckt (${h.v22_violations.length}):</strong>
                 <ul style="margin:4px 0 0 16px;padding:0">${list}</ul>
-                <div style="margin-top:4px;font-size:10px;font-style:italic">Disclaimer-prefix räddar inte regeln. Slutsatsen ska INTE förlita sig på dessa källor.</div>
+                <div style="margin-top:4px;font-size:11px;font-style:italic">Disclaimer-prefix räddar inte regeln. Slutsatsen ska INTE förlita sig på dessa källor.</div>
             </div>`;
         }
         // v3 WARN-MODE: inline källkritik-caveat, ingen blockering.
@@ -6882,8 +6960,8 @@ function renderAgentTurn(h, idx) {
             const list = violations.slice(0, 5).map(v => `<li><strong>${v.rule}:</strong> "${escapeHtml(v.sample)}"</li>`).join('');
             footer += `<div style="background:#eff6ff;color:#1e3a8a;border-radius:8px;padding:8px 12px;margin-top:8px;font-size:11.5px;border-left:3px solid #3b82f6">
                 <div style="font-weight:600;display:flex;align-items:center;gap:6px">📎 Källkritik: ${escapeHtml(h.validation_warning.message)}</div>
-                ${list ? `<ul style="margin:4px 0 0 16px;padding:0;font-size:10.5px;opacity:0.85">${list}</ul>` : ''}
-                <div style="margin-top:4px;font-size:10px;font-style:italic;opacity:0.7">High-confidence: SEC, IR-presentationer, Reuters, Bloomberg, FT, WSJ, Gartner/IDC/TrendForce. Medium: aggregatorer (SA, Yahoo, MF, Stockanalysis).</div>
+                ${list ? `<ul style="margin:4px 0 0 16px;padding:0;font-size:11px;opacity:0.85">${list}</ul>` : ''}
+                <div style="margin-top:4px;font-size:11px;font-style:italic;opacity:0.7">High-confidence: SEC, IR-presentationer, Reuters, Bloomberg, FT, WSJ, Gartner/IDC/TrendForce. Medium: aggregatorer (SA, Yahoo, MF, Stockanalysis).</div>
             </div>`;
         }
         // Legacy fallback: gamla sparade chattar kan ha was_blocked/validation_blocked.
@@ -6897,7 +6975,7 @@ function renderAgentTurn(h, idx) {
         // PASS-indikator när validatorn passerat utan retry
         if (h.model && !h.v22_violations && !h.validation_retry && !h.validation_blocked && h.validated !== false) {
             // Subtil — kan tas bort om för noisy
-            // footer += `<div style="font-size:10px;color:#059669;margin-top:6px">✓ Sentiment-validatorn passerade</div>`;
+            // footer += `<div style="font-size:11px;color:#059669;margin-top:6px">✓ Sentiment-validatorn passerade</div>`;
         }
 
         // Försök igen-knapp: stream-fel eller tappad anslutning → kör om
@@ -6924,7 +7002,7 @@ function renderAgentTurn(h, idx) {
         // gamla sparade chattar. I v3 triggas detta inte längre.
         let headerBanner = '';
         if (h.is_retry_attempt) {
-            headerBanner = `<div style="background:#f1f5f9;color:#475569;border-radius:6px;padding:5px 10px;margin-bottom:8px;font-size:10.5px;border-left:2px solid #94a3b8;display:flex;align-items:center;gap:6px">
+            headerBanner = `<div style="background:#f1f5f9;color:#475569;border-radius:6px;padding:5px 10px;margin-bottom:8px;font-size:11px;border-left:2px solid #94a3b8;display:flex;align-items:center;gap:6px">
                 <span>📜</span><span>Tidigare regenererat svar (legacy)</span>
             </div>`;
         }
@@ -7246,7 +7324,7 @@ function _renderAgentCharts(root, opts) {
         const canvas = document.createElement('canvas'); cv.appendChild(canvas); wrap.appendChild(cv);
         holder.replaceWith(wrap);
         try { _buildChart(canvas, spec, opts); }
-        catch (e) { wrap.innerHTML = '<div style="color:#94a3b8;font-size:12px;padding:8px">Diagram kunde inte ritas.</div>'; }
+        catch (e) { wrap.innerHTML = '<div style="color:#64748b;font-size:12px;padding:8px">Diagram kunde inte ritas.</div>'; }
     });
 }
 // Samlad efter-rendering: tabeller + signaler + diagram
@@ -7266,7 +7344,7 @@ function agentClearImage() { _agentImage = null; renderAgent(); }
 function agentHandleImage(ev) {
     const f = ev.target.files?.[0];
     if (!f) return;
-    if (f.size > 5 * 1024 * 1024) { alert('Max 5 MB'); return; }
+    if (f.size > 5 * 1024 * 1024) { toast('Max 5 MB', 'warn'); return; }
     const fr = new FileReader();
     fr.onload = e => {
         const dataUrl = e.target.result;
@@ -7839,7 +7917,7 @@ async function renderBacktest() {
         .bt-result-card { background:white; border:1px solid var(--border); border-radius:12px; padding:16px; }
         .bt-result-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:12px; }
         .bt-stat { padding:10px 12px; background:#f9fafb; border-radius:8px; }
-        .bt-stat-label { font-size:10px; color:var(--text-muted); text-transform:uppercase; font-weight:700; letter-spacing:0.05em; }
+        .bt-stat-label { font-size:11px; color:var(--text-muted); text-transform:uppercase; font-weight:700; letter-spacing:0.05em; }
         .bt-stat-val { font-size:22px; font-weight:800; line-height:1.1; margin-top:3px; }
         .bt-comparison-table { width:100%; border-collapse:collapse; font-size:13px; }
         .bt-comparison-table th { padding:10px; text-align:left; background:#f1f5f9; font-size:11px; text-transform:uppercase; }
@@ -7997,7 +8075,7 @@ function _renderBacktestResults() {
                 <text x="${W-pad}" y="${H-pad+12}" text-anchor="end" font-size="9" fill="#6b7280">${allDates[allDates.length-1] || ''}</text>
                 ${lines}
             </svg>
-            <div style="font-size:10px;color:var(--text-muted);margin-top:8px;font-style:italic">
+            <div style="font-size:11px;color:var(--text-muted);margin-top:8px;font-style:italic">
                 Notera: survivorship bias i datan kan addera 1-3% CAGR. Inga transaktionskostnader.
             </div>
         </div>`;
@@ -8466,7 +8544,7 @@ async function loadSwedishNews() {
             </div>`;
             return;
         }
-        const genAt = d.generated_at ? ` <span style="font-size:10.5px;color:#9ca3af;font-weight:400">· uppdaterad ${String(d.generated_at).slice(0, 16).replace('T', ' ')}</span>` : '';
+        const genAt = d.generated_at ? ` <span style="font-size:11px;color:#6b7280;font-weight:400">· uppdaterad ${String(d.generated_at).slice(0, 16).replace('T', ' ')}</span>` : '';
         const recap = d.market_recap ? `<div class="news-recap">🇸🇪 ${escapeHtml(_stripCites(d.market_recap))}${genAt}</div>` : '';
         const cards = items.map(it => {
             const cat = (it.category || 'other').toLowerCase();
@@ -8482,7 +8560,7 @@ async function loadSwedishNews() {
             return `<div class="news-card">
                 <div class="news-card-head">
                     <span class="news-ticker linked" onclick="openStockByTicker('${bare}')">${escapeHtml(tk)}</span>
-                    ${it.company ? `<span style="font-size:11px;color:#9ca3af">${escapeHtml(it.company)}</span>` : ''}
+                    ${it.company ? `<span style="font-size:11px;color:#6b7280">${escapeHtml(it.company)}</span>` : ''}
                     ${_seNewsChg(it.change_pct)}
                     <span class="news-cat ${cat}" style="margin-left:auto">${escapeHtml(cat)}</span>
                 </div>
@@ -8542,7 +8620,7 @@ async function loadMacroPulse() {
         const secs = (d.sections || []).map(s =>
             `<div class="mp-sec"><div class="mp-sec-title">${escapeHtml(s.title || '')}</div><ul>${(s.points || []).map(p => `<li>${escapeHtml(p)}</li>`).join('')}</ul></div>`).join('');
         const src = (d.sources || []).slice(0, 4).map(s =>
-            s.url ? `<a href="${escapeHtml(s.url)}" target="_blank" rel="noopener" style="color:#9ca3af">${escapeHtml(s.title || 'källa')}</a>` : '').filter(Boolean).join(' · ');
+            s.url ? `<a href="${escapeHtml(s.url)}" target="_blank" rel="noopener" style="color:#6b7280">${escapeHtml(s.title || 'källa')}</a>` : '').filter(Boolean).join(' · ');
         _swapIfChanged(el, `<div class="mp-card">
             <div class="mp-head">
                 <span class="mp-sent ${sentCls}">${escapeHtml(d.sentiment || 'neutral')}</span>
@@ -8551,7 +8629,7 @@ async function loadMacroPulse() {
             ${d.summary ? `<div class="mp-summary">${escapeHtml(d.summary)}</div>` : ''}
             ${inds ? `<div class="mp-ind-strip">${inds}</div>` : ''}
             ${secs ? `<div class="mp-secs">${secs}</div>` : ''}
-            ${(src || d.generated_at) ? `<div style="font-size:10.5px;color:#9ca3af;margin-top:12px">${src ? 'Källor: ' + src + ' · ' : ''}${d.generated_at ? 'uppdaterad ' + new Date(d.generated_at + (String(d.generated_at).endsWith('Z') ? '' : 'Z')).toLocaleDateString('sv-SE') : ''}</div>` : ''}
+            ${(src || d.generated_at) ? `<div style="font-size:11px;color:#6b7280;margin-top:12px">${src ? 'Källor: ' + src + ' · ' : ''}${d.generated_at ? 'uppdaterad ' + new Date(d.generated_at + (String(d.generated_at).endsWith('Z') ? '' : 'Z')).toLocaleDateString('sv-SE') : ''}</div>` : ''}
         </div>`);
     } catch (e) {
         if (!el.dataset.h) el.innerHTML = `<div style="padding:14px;color:#dc2626;font-size:12px">Kunde ej ladda makro-puls: ${e.message}</div>`;
@@ -8658,7 +8736,7 @@ function _bulletTicker(tk, inDb) {
     return `<span class="bullet-tk linked" onclick="openStockByTicker('${bare}')">${escapeHtml(tk)}</span>`;
 }
 function _ovPct(v) {
-    if (v == null) return '<span style="color:#9ca3af">–</span>';
+    if (v == null) return '<span style="color:#6b7280">–</span>';
     const c = v >= 0 ? '#059669' : '#dc2626';
     return `<span style="color:${c}">${v >= 0 ? '+' : ''}${Number(v).toFixed(2)}%</span>`;
 }
@@ -8718,7 +8796,7 @@ async function loadBullets(date) {
         // OBS: earnings (recent/upcoming) renderas INTE här längre — de samlas
         // i den konsoliderade "📊 Rapporter"-sektionen (loadReports).
         if (d.source_url) {
-            html += `<div style="font-size:10.5px;color:#9ca3af;margin-top:8px">Källa: <a href="${escapeHtml(d.source_url)}" target="_blank" rel="noopener" style="color:#9ca3af">stockanalysis.com market bullets</a></div>`;
+            html += `<div style="font-size:11px;color:#6b7280;margin-top:8px">Källa: <a href="${escapeHtml(d.source_url)}" target="_blank" rel="noopener" style="color:#6b7280">stockanalysis.com market bullets</a></div>`;
         }
         _swapIfChanged(el, html || '<div style="padding:14px;color:#6b7280">Inget innehåll.</div>');
     } catch (e) {
@@ -8766,14 +8844,14 @@ async function refreshBullets() {
 }
 
 async function backfillBullets() {
-    if (!confirm('Hämta senaste ~6 månaders market bullets (≈120 publicerade dagar)?\n\nKör i bakgrunden ~10-20 min, kostar ~$2-3 i AI-strukturering. Du kan stänga sidan.')) return;
+    if (!await confirmDialog('Hämta senaste ~6 månaders market bullets (≈120 publicerade dagar)?\n\nKör i bakgrunden ~10-20 min, kostar ~$2-3 i AI-strukturering. Du kan stänga sidan.', { title: 'Hämta market bullets', ok: 'Starta' })) return;
     try {
         const r = await fetch('/api/market-bullets/backfill?days=180', { method: 'POST' });
         const d = await r.json();
-        alert(d.status === 'started'
-            ? `Backfill startad (${d.days} dagar). Följ /api/market-bullets/status — bullets dyker upp i datum-väljaren efterhand.`
-            : `Status: ${d.status}`);
-    } catch (e) { alert('Fel: ' + e.message); }
+        toast(d.status === 'started'
+            ? `Backfill startad (${d.days} dagar). Bullets dyker upp i datum-väljaren efterhand.`
+            : `Status: ${d.status}`, d.status === 'started' ? 'success' : 'info', 7000);
+    } catch (e) { toast('Fel: ' + e.message, 'error'); }
 }
 
 // ── v3.4 Trending
@@ -8809,7 +8887,7 @@ async function loadTrending() {
             </div>`;
         }).join('');
         _swapIfChanged(el, newInfo + `<div class="trend-grid">${cards}</div>` +
-            `<div style="font-size:10.5px;color:#9ca3af;margin-top:8px">${d.date} · sorterat efter sidvisningar · stockanalysis.com</div>`);
+            `<div style="font-size:11px;color:#6b7280;margin-top:8px">${d.date} · sorterat efter sidvisningar · stockanalysis.com</div>`);
     } catch (e) {
         if (!el.dataset.h) el.innerHTML = `<div style="padding:14px;color:#dc2626;font-size:12px">Kunde ej ladda trending: ${e.message}</div>`;
     }
@@ -8927,14 +9005,14 @@ function _repEmpty(msg) {
 
 async function analyzeReportsToday() {
     if (!_reportsTodayTickers.length) {
-        alert('Inga rapport-bolag att analysera idag.');
+        toast('Inga rapport-bolag att analysera idag.', 'warn');
         return;
     }
     const btn = document.getElementById('analyzeReportsBtn');
     const n = _reportsTodayTickers.length;
-    if (!confirm(`Kör DAKTIER-analys på ${n} bolag som rapporterar idag?\n\n` +
+    if (!await confirmDialog(`Kör DAKTIER-analys på ${n} bolag som rapporterar idag?\n\n` +
                  `Det startar en batch-analys i bakgrunden (~${Math.ceil(n*0.7)} min). ` +
-                 `Resultatet hamnar i Agent-topplistorna.`)) return;
+                 `Resultatet hamnar i Agent-topplistorna.`, { title: 'Analysera dagens rapportbolag', ok: 'Kör analys' })) return;
     if (btn) { btn.disabled = true; btn.textContent = 'Startar…'; }
     try {
         const r = await fetch('/api/batch/run', {
@@ -8944,16 +9022,15 @@ async function analyzeReportsToday() {
         });
         const d = await r.json();
         if (!r.ok) {
-            alert('Fel: ' + (d.error || 'okänt') +
-                  (d.run_id ? ` (batch ${d.run_id} körs redan)` : ''));
+            toast('Fel: ' + (d.error || 'okänt') +
+                  (d.run_id ? ` (batch ${d.run_id} körs redan)` : ''), 'error');
             if (btn) { btn.disabled = false; btn.textContent = '🤖 Analysera dagens rapport-bolag'; }
             return;
         }
         if (btn) btn.textContent = `✅ Batch startad (${d.tickers} bolag)`;
-        alert(`Batch-analys startad på ${d.tickers} rapport-bolag.\n\n` +
-              `Följ progress på /toplists — den körs i bakgrunden även om du stänger sidan.`);
+        toast(`Batch-analys startad på ${d.tickers} rapport-bolag. Den körs i bakgrunden även om du stänger sidan.`, 'success', 7000);
     } catch (e) {
-        alert('Network error: ' + e.message);
+        toast('Network error: ' + e.message, 'error');
         if (btn) { btn.disabled = false; btn.textContent = '🤖 Analysera dagens rapport-bolag'; }
     }
 }
@@ -9406,7 +9483,7 @@ async function prefetchAllTabs() {
 
     const fetches = urls.map(async ({tab, url, dataKey}) => {
         try {
-            const data = await (await fetch(url)).json();
+            const data = await apiJson(url);
             // Build cache keys that match what fetchData() generates
             if (tab === 'signals') {
                 const params = {country:'SE', sort:'smart', order:'desc', limit:50, offset:0, min_owners:10, signal:'', action:''};
