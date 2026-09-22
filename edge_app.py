@@ -19734,7 +19734,7 @@ def api_market_bullets():
             row = _fetchone(db, f"SELECT * FROM market_bullets WHERE bullet_date={ph}", (date_q,))
         else:
             row = _fetchone(db, "SELECT * FROM market_bullets "
-                                "WHERE COALESCE(sections_json, '[]') NOT IN ('[]', '', 'null') "
+                                "WHERE COALESCE(CAST(sections_json AS TEXT), '[]') NOT IN ('[]', '', 'null') "
                                 "ORDER BY bullet_date DESC LIMIT 1")
         if not row:
             return jsonify({"found": False, "note": "Inga bullets ännu — kör sync/backfill."})
@@ -19768,7 +19768,7 @@ def api_market_bullets_dates():
     db = get_db()
     try:
         rows = _fetchall(db, "SELECT bullet_date, summary FROM market_bullets "
-                             "WHERE COALESCE(sections_json, '[]') NOT IN ('[]', '', 'null') "
+                             "WHERE COALESCE(CAST(sections_json AS TEXT), '[]') NOT IN ('[]', '', 'null') "
                              "ORDER BY bullet_date DESC LIMIT 200")
         return jsonify({"dates": [{"date": str(dict(r)["bullet_date"]),
                                     "summary": dict(r).get("summary")} for r in rows]
@@ -22979,7 +22979,7 @@ def _startup():
                         except Exception:
                             _vantad = datetime.now().strftime("%Y-%m-%d")
                         _bd = _senast("SELECT MAX(bullet_date) AS t FROM market_bullets "
-                                      "WHERE COALESCE(sections_json, '[]') NOT IN ('[]', '', 'null')")
+                                      "WHERE COALESCE(CAST(sections_json AS TEXT), '[]') NOT IN ('[]', '', 'null')")
                         st["us_puls"] = (_bd == _vantad)
                         return st
 
