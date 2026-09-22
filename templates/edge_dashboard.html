@@ -871,6 +871,13 @@
             .topnav-right { flex: 1; min-width: 0; justify-content: flex-end; }
             .nav-search-kbd { display: none; }
         }
+        /* ═══ Lådans hero: poängring ═══ */
+        #drawerHeaderContent { display: flex; align-items: center; gap: 14px; min-width: 0; }
+        .dov-ring { position: relative; width: 52px; height: 52px; flex-shrink: 0; }
+        .dov-ring svg { position: absolute; inset: 0; }
+        .dov-ring-val { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 15px; font-weight: 900; font-variant-numeric: tabular-nums; }
+        .dov-ring-lbl { position: absolute; top: 100%; left: 50%; transform: translateX(-50%); margin-top: 3px; font-size: 11px; font-weight: 700; color: var(--text-muted); white-space: nowrap; }
+        .drawer-header { padding-bottom: 22px; }
         /* ═══ HEM ═══ */
         body[data-tab="home"] .page-header { display: none; }
         .home-hero { background: linear-gradient(135deg, var(--brand-navy-deep), var(--brand-navy) 60%, #2a7fa3); color: #fff; border-radius: 16px; padding: 26px 28px 22px; margin-bottom: 20px; }
@@ -5057,9 +5064,20 @@ function openDrawer(s) {
     const flag = FLAGS[s.country] || '';
 
     // Header — visa direkt med slim data (snabb feedback)
+    const _ring = (() => {
+        if (s.daktier_score == null) return '';
+        const v = Math.max(0, Math.min(100, s.daktier_score)), r = 21, c = 2 * Math.PI * r;
+        const col = v >= 80 ? '#059669' : v >= 65 ? '#0891b2' : v >= 50 ? '#475569' : '#b45309';
+        return `<div class="dov-ring" title="DAKTIER-poäng ${v.toFixed(1)}${s.daktier_rank ? ' · plats ' + s.daktier_rank : ''}">
+            <svg viewBox="0 0 52 52" width="52" height="52" aria-hidden="true"><circle cx="26" cy="26" r="${r}" fill="none" stroke="#e8edf3" stroke-width="5"/>
+            <circle cx="26" cy="26" r="${r}" fill="none" stroke="${col}" stroke-width="5" stroke-linecap="round" stroke-dasharray="${(c * v / 100).toFixed(1)} ${c.toFixed(1)}" transform="rotate(-90 26 26)"/></svg>
+            <div class="dov-ring-val" style="color:${col}">${Math.round(v)}</div>
+            <div class="dov-ring-lbl">DAKTIER${s.daktier_rank ? ' · #' + s.daktier_rank : ''}</div></div>`;
+    })();
     document.getElementById('drawerHeaderContent').innerHTML = `
+        ${_ring}
         <div>
-            <div style="font-size:20px;font-weight:700">${flag} ${s.name}</div>
+            <div style="font-size:20px;font-weight:700">${flag} ${escapeHtml(s.name || '')}</div>
             <div style="font-size:13px;color:var(--text-muted)">${s.short_name || ''} · ${s.country || ''} · ${s.market_place || ''}</div>
             <div style="font-size:24px;font-weight:700;margin-top:6px">${s.last_price != null ? s.last_price.toFixed(2) + ' ' + (s.currency || 'SEK') : '-'}
                 ${s.one_day_change_pct != null ? (() => { const p = Number(s.one_day_change_pct) * 100;

@@ -127,6 +127,8 @@ def _auth_gate():
             and not session.get("uid")):
         session["uid"] = "lokal-dev"
         session["email"] = "lokal-dev@localhost"
+    if p == "/" and request.method == "GET" and not session.get("uid"):
+        return None  # publik landningssida (routen avgör själv)
     if session.get("uid"):
         # Diag/diagnostics är drift-verktyg (kan trigga tunga syncar) —
         # endast admin efter go-live. auth-tables är öppen via _OPEN_PREFIXES.
@@ -728,7 +730,37 @@ def refresh_all_data():
 
 @app.route("/")
 def dashboard():
+    if not session.get("uid") or (request.args.get("landning")
+                                   and os.environ.get("DAKTIER_LOKAL_DEV") == "1"):
+        return _landningssida()
     return render_template("edge_dashboard.html", build_id=BUILD_ID)
+
+
+def _landningssida():
+    """Publik landningssida (2026-09-22): säljer produkten med LIVE-siffror
+    ur databasen — topp 5 DAKTIER-poäng, antal rankade bolag, antal aktier,
+    analytikertäckning. Saknas något visas det inte (REGEL 0)."""
+    from edge_db import _fetchone, _fetchall, _ph
+    ph = _ph()
+    ctx = {"topp": [], "n_rankade": None, "n_aktier": None, "n_analytiker": None, "snapshot": None}
+    try:
+        db = get_db()
+        r = _fetchone(db, "SELECT MAX(snapshot_date) AS d FROM daktier_rank")
+        d = dict(r).get("d") if r else None
+        if d:
+            ctx["snapshot"] = str(d)[:10]
+            ctx["topp"] = [dict(x) for x in _fetchall(db,
+                f"SELECT name, ticker, country, score FROM daktier_rank "
+                f"WHERE snapshot_date = {ph} ORDER BY score DESC LIMIT 5", (d,))]
+            n = _fetchone(db, f"SELECT COUNT(*) AS n FROM daktier_rank WHERE snapshot_date = {ph}", (d,))
+            ctx["n_rankade"] = dict(n)["n"] if n else None
+        n = _fetchone(db, "SELECT COUNT(*) AS n FROM stocks WHERE COALESCE(number_of_owners, 0) > 0")
+        ctx["n_aktier"] = dict(n)["n"] if n else None
+        n = _fetchone(db, "SELECT COUNT(DISTINCT ticker) AS n FROM analyst_targets")
+        ctx["n_analytiker"] = dict(n)["n"] if n else None
+    except Exception as e:
+        print(f"[LANDING] livedata fel: {e}")
+    return render_template("landing.html", **ctx)
 
 
 # SPA-djuplänkar: frontend skriver dessa vägar med history.pushState, men

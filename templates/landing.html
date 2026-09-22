@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DAKTIER — En poäng. Hela marknaden.</title>
+<meta name="description" content="DAKTIER väger kvalitet, kassaflöde, tillväxt, stabilitet och värdering till en enda poäng för nordiska och amerikanska aktier. Analytikernas konsensus, ägarnas flöden och en agent som kan hela databasen.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,400,0,0" rel="stylesheet">
+<style>
+  :root { --navy:#16365C; --navy-deep:#0E2440; --cyan:#38B6D9; --cyan-light:rgba(56,182,217,0.14); --ink:#0f172a; --ink-soft:#475569; --muted:#64748b; --line:#e4e8ee; --bg:#f7f9fb; --green:#059669; --red:#b91c1c; }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  html { -webkit-font-smoothing:antialiased; scroll-behavior:smooth; }
+  body { font-family:'Inter', -apple-system, sans-serif; color:var(--ink); background:#fff; line-height:1.55; }
+  a { color:var(--navy); }
+  .wrap { max-width:1140px; margin:0 auto; padding:0 24px; }
+  .material-symbols-outlined { font-variation-settings:'FILL' 0,'wght' 400,'GRAD' 0,'opsz' 24; vertical-align:middle; }
+  /* Top */
+  .top { position:sticky; top:0; background:rgba(255,255,255,0.86); backdrop-filter:blur(16px); border-bottom:1px solid var(--line); z-index:10; }
+  .top .wrap { display:flex; align-items:center; gap:18px; height:64px; }
+  .brand { display:flex; align-items:center; gap:10px; text-decoration:none; color:var(--ink); font-weight:800; font-size:17px; letter-spacing:-0.3px; }
+  .logo { width:32px; height:32px; border-radius:9px; background:linear-gradient(135deg,var(--navy-deep),var(--navy)); display:flex; align-items:center; justify-content:center; }
+  .top nav { margin-left:auto; display:flex; align-items:center; gap:6px; }
+  .top nav a { text-decoration:none; font-size:14px; font-weight:600; color:var(--ink-soft); padding:8px 12px; border-radius:8px; white-space:nowrap; }
+  .top nav a:hover { background:var(--bg); color:var(--ink); }
+  .btn { display:inline-flex; align-items:center; gap:8px; padding:11px 18px; border-radius:10px; font-weight:700; font-size:14px; text-decoration:none; border:1px solid var(--line); background:#fff; color:var(--ink); cursor:pointer; font-family:inherit; }
+  .btn-primary { background:var(--navy); border-color:var(--navy); color:#fff; }
+  .btn-primary:hover { background:var(--navy-deep); }
+  .btn-lg { padding:14px 22px; font-size:15px; }
+  .top nav .btn { padding:9px 14px; margin-left:6px; }
+  /* Hero */
+  .hero { padding:72px 0 56px; background:radial-gradient(1200px 500px at 80% -10%, var(--cyan-light), transparent 60%), radial-gradient(800px 400px at -10% 30%, rgba(22,54,92,0.06), transparent 60%); }
+  .hero .wrap { display:grid; grid-template-columns:1.1fr 0.9fr; gap:48px; align-items:center; }
+  .eyebrow { display:inline-flex; align-items:center; gap:8px; font-size:12px; font-weight:700; letter-spacing:0.08em; text-transform:uppercase; color:var(--navy); background:var(--cyan-light); padding:6px 12px; border-radius:999px; }
+  h1 { font-size:52px; line-height:1.05; letter-spacing:-0.03em; font-weight:900; margin:18px 0 16px; }
+  h1 span { color:var(--navy); background:linear-gradient(90deg,var(--navy),#2a7fa3); -webkit-background-clip:text; background-clip:text; color:transparent; }
+  .lead { font-size:18px; color:var(--ink-soft); max-width:560px; }
+  .cta { display:flex; gap:12px; flex-wrap:wrap; margin-top:26px; }
+  .proof { display:flex; gap:22px; flex-wrap:wrap; margin-top:26px; font-size:13px; color:var(--muted); }
+  .proof b { display:block; font-size:22px; color:var(--ink); font-weight:800; font-variant-numeric:tabular-nums; }
+  /* Live-kort */
+  .live { background:#fff; border:1px solid var(--line); border-radius:18px; box-shadow:0 30px 60px -20px rgba(15,23,42,0.25); padding:20px; }
+  .live-hd { display:flex; align-items:center; justify-content:space-between; margin-bottom:6px; }
+  .live-hd h3 { font-size:14px; font-weight:800; }
+  .live-hd span { font-size:11px; color:var(--muted); }
+  .live-sub { font-size:12px; color:var(--muted); margin-bottom:10px; }
+  .row { display:flex; align-items:center; gap:12px; padding:10px 6px; border-top:1px solid #eef1f5; }
+  .rank { width:26px; height:26px; border-radius:13px; background:var(--navy); color:#fff; font-size:11px; font-weight:800; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+  .name { flex:1; min-width:0; font-weight:600; font-size:14px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .name small { display:block; font-size:11px; color:var(--muted); font-weight:500; }
+  .score { font-weight:900; font-size:18px; font-variant-numeric:tabular-nums; color:var(--green); }
+  .bar { height:5px; background:#e8edf3; border-radius:3px; overflow:hidden; width:70px; }
+  .bar i { display:block; height:100%; background:linear-gradient(90deg,var(--navy),var(--cyan)); }
+  .live-foot { margin-top:10px; font-size:11px; color:var(--muted); }
+  /* Sections */
+  section { padding:64px 0; }
+  .sec-hd { max-width:640px; margin-bottom:34px; }
+  .sec-hd h2 { font-size:32px; letter-spacing:-0.02em; font-weight:800; line-height:1.15; }
+  .sec-hd p { color:var(--ink-soft); font-size:16px; margin-top:10px; }
+  .grid4 { display:grid; grid-template-columns:repeat(4,1fr); gap:16px; }
+  .feat { background:var(--bg); border:1px solid var(--line); border-radius:14px; padding:22px; }
+  .feat .ic { width:40px; height:40px; border-radius:10px; background:#fff; border:1px solid var(--line); display:flex; align-items:center; justify-content:center; color:var(--navy); margin-bottom:14px; }
+  .feat h3 { font-size:16px; font-weight:800; margin-bottom:6px; }
+  .feat p { font-size:14px; color:var(--ink-soft); }
+  .weights { display:grid; grid-template-columns:repeat(6,1fr); gap:10px; margin-top:22px; }
+  .w { background:#fff; border:1px solid var(--line); border-radius:12px; padding:14px; text-align:center; }
+  .w b { display:block; font-size:22px; font-weight:900; color:var(--navy); }
+  .w span { font-size:12px; color:var(--muted); }
+  .dark { background:linear-gradient(135deg,var(--navy-deep),var(--navy) 60%,#2a7fa3); color:#fff; }
+  .dark .sec-hd h2 { color:#fff; } .dark .sec-hd p { color:rgba(255,255,255,0.8); }
+  .srcs { display:flex; gap:10px; flex-wrap:wrap; }
+  .src { background:rgba(255,255,255,0.1); border:1px solid rgba(255,255,255,0.18); border-radius:999px; padding:8px 14px; font-size:13px; font-weight:600; }
+  .honest { margin-top:26px; padding:16px 18px; border-radius:12px; background:rgba(255,255,255,0.08); border:1px solid rgba(255,255,255,0.16); font-size:14px; max-width:720px; }
+  .nb { background:var(--bg); }
+  .nb .wrap { display:grid; grid-template-columns:1fr 1fr; gap:40px; align-items:center; }
+  .nb form { display:flex; gap:8px; margin-top:18px; }
+  .nb input { flex:1; padding:13px 14px; border:1px solid var(--line); border-radius:10px; font:inherit; font-size:15px; }
+  .nb input:focus { outline:none; border-color:var(--cyan); box-shadow:0 0 0 3px var(--cyan-light); }
+  .nb small { display:block; margin-top:10px; font-size:12px; color:var(--muted); }
+  .nb-card { background:#fff; border:1px solid var(--line); border-radius:14px; padding:20px; font-size:14px; color:var(--ink-soft); }
+  .nb-card ul { list-style:none; display:flex; flex-direction:column; gap:8px; margin-top:8px; }
+  .nb-card li { display:flex; gap:10px; align-items:flex-start; }
+  .nb-card li .material-symbols-outlined { color:var(--green); font-size:20px; }
+  footer { border-top:1px solid var(--line); padding:28px 0; font-size:13px; color:var(--muted); }
+  footer .wrap { display:flex; justify-content:space-between; gap:16px; flex-wrap:wrap; }
+  footer a { color:var(--muted); margin-left:14px; text-decoration:none; }
+  @media (max-width:900px) { .hero .wrap { grid-template-columns:1fr; gap:32px; } h1 { font-size:38px; } .grid4 { grid-template-columns:1fr 1fr; } .weights { grid-template-columns:repeat(3,1fr); } .nb .wrap { grid-template-columns:1fr; } .top nav a:not(.btn) { display:none; } }
+  @media (max-width:560px) { .top nav .btn { padding:8px 11px; font-size:13px; } .top .wrap { gap:10px; } .hero { padding:44px 0 36px; } h1 { font-size:32px; } .grid4 { grid-template-columns:1fr; } .weights { grid-template-columns:repeat(2,1fr); } .nb form { flex-direction:column; } section { padding:48px 0; } }
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="wrap">
+    <a class="brand" href="/">
+      <span class="logo" aria-hidden="true"><svg viewBox="0 0 24 24" width="17" height="17" fill="none"><path d="M12 2.5l4.4 5.4h-2.6v3.6h-3.6V7.9H7.6z" fill="#fff"/><path d="M12 21.5l-4.4-5.4h2.6v-3.6h3.6v3.6h2.6z" fill="#38B6D9"/></svg></span>
+      DAKTIER
+    </a>
+    <nav>
+      <a href="#sa-funkar">Så funkar det</a>
+      <a href="#kallor">Källor</a>
+      <a href="#nyhetsbrev">Marknadsrapporten</a>
+      <a class="btn" href="/login">Logga in</a>
+      <a class="btn btn-primary" href="/login#register">Skapa konto</a>
+    </nav>
+  </div>
+</header>
+
+<section class="hero">
+  <div class="wrap">
+    <div>
+      <span class="eyebrow"><span class="material-symbols-outlined" style="font-size:16px">insights</span> Aktieanalys · Norden &amp; USA</span>
+      <h1>En poäng.<br><span>Hela marknaden.</span></h1>
+      <p class="lead">DAKTIER väger kvalitet, kassaflöde, tillväxt, stabilitet och värdering till en enda poäng per bolag — samma siffra i listorna, i analysen och i portföljerna. Ovanpå det: analytikernas konsensus, spararnas flöden och en agent som kan hela databasen.</p>
+      <div class="cta">
+        <a class="btn btn-primary btn-lg" href="/login#register">Skapa konto gratis</a>
+        <a class="btn btn-lg" href="#sa-funkar">Se hur poängen räknas</a>
+      </div>
+      <div class="proof">
+        {% if n_rankade %}<div><b>{{ '{:,}'.format(n_rankade).replace(',', ' ') }}</b>bolag med DAKTIER-poäng</div>{% endif %}
+        {% if n_aktier %}<div><b>{{ '{:,}'.format(n_aktier).replace(',', ' ') }}</b>aktier i databasen</div>{% endif %}
+        {% if n_analytiker %}<div><b>{{ '{:,}'.format(n_analytiker).replace(',', ' ') }}</b>bolag med analytikerkonsensus</div>{% endif %}
+      </div>
+    </div>
+    <div class="live">
+      <div class="live-hd"><h3>⭐ Högst DAKTIER-poäng just nu</h3>{% if snapshot %}<span>{{ snapshot }}</span>{% endif %}</div>
+      <div class="live-sub">Live ur rankingen — uppdateras varje morgon.</div>
+      {% if topp %}
+        {% for x in topp %}
+        <div class="row">
+          <span class="rank">{{ loop.index }}</span>
+          <span class="name">{{ x.name }}<small>{{ x.ticker }}{% if x.country %} · {{ x.country }}{% endif %}</small></span>
+          <span class="bar"><i style="width:{{ x.score|int }}%"></i></span>
+          <span class="score">{{ x.score|round|int }}</span>
+        </div>
+        {% endfor %}
+        <div class="live-foot">Poäng 0–100. Logga in för hela listan, delpoängen och riskflaggorna.</div>
+      {% else %}
+        <div class="row" style="border:0;color:var(--muted);font-size:13px">Rankingen byggs varje morgon — logga in för att se den.</div>
+      {% endif %}
+    </div>
+  </div>
+</section>
+
+<section id="sa-funkar">
+  <div class="wrap">
+    <div class="sec-hd">
+      <h2>Fyra saker, en helhet</h2>
+      <p>Allt på sajten pekar mot samma fråga: är det här ett bolag värt att äga, och är det rätt läge?</p>
+    </div>
+    <div class="grid4">
+      <div class="feat"><div class="ic"><span class="material-symbols-outlined">star</span></div><h3>DAKTIER-poängen</h3><p>Sex delpoäng ur bolagens egna rapporter blir en siffra 0–100. Samma poäng överallt — ingen förvirring mellan olika modeller.</p></div>
+      <div class="feat"><div class="ic"><span class="material-symbols-outlined">grade</span></div><h3>Analytiker</h3><p>Konsensus på FactSet-skalan, rekonstruerad per hus. Nivån är popularitet — <em>rörelsen</em> är informationen.</p></div>
+      <div class="feat"><div class="ic"><span class="material-symbols-outlined">local_fire_department</span></div><h3>Ägarmomentum</h3><p>Var spararna flyttar pengarna, från i dag till ett år. Tidiga flöden syns innan de blir rubriker.</p></div>
+      <div class="feat"><div class="ic"><span class="material-symbols-outlined">forum</span></div><h3>Agenten</h3><p>Fråga i fritext — "analysera Marvell", "jämför Novo med Lilly". Svarar med samma data som listorna, och hittar aldrig på siffror.</p></div>
+    </div>
+    <div class="weights" aria-label="Vikter i DAKTIER-poängen">
+      <div class="w"><b>24 %</b><span>Kvalitet</span></div>
+      <div class="w"><b>22 %</b><span>Kassaflöde</span></div>
+      <div class="w"><b>18 %</b><span>Tillväxt</span></div>
+      <div class="w"><b>14 %</b><span>Stabilitet</span></div>
+      <div class="w"><b>14 %</b><span>Värdering</span></div>
+      <div class="w"><b>8 %</b><span>Storlek</span></div>
+    </div>
+  </div>
+</section>
+
+<section id="kallor" class="dark">
+  <div class="wrap">
+    <div class="sec-hd">
+      <h2>Byggt på riktiga källor</h2>
+      <p>Siffrorna kommer från bolagens egna rapporter och verifierade dataflöden. Det som saknas visas som saknat — aldrig påhittat.</p>
+    </div>
+    <div class="srcs">
+      <span class="src">SEC EDGAR</span><span class="src">Bolagens kvartalsrapporter</span><span class="src">Avanza — kurser &amp; ägare</span>
+      <span class="src">Analytikerhistorik</span><span class="src">Finansinspektionens insynsregister</span><span class="src">stockanalysis.com</span>
+    </div>
+    <div class="honest">DAKTIER är beslutsstöd, inte finansiell rådgivning. Poängen mäter bolagskvalitet ur rapportdata — den förutsäger inte kursen, och den ersätter inte ditt eget omdöme.</div>
+  </div>
+</section>
+
+<section id="nyhetsbrev" class="nb">
+  <div class="wrap">
+    <div>
+      <div class="sec-hd" style="margin-bottom:0">
+        <h2>Marknadsrapporten — varje vardag</h2>
+        <p>Dagens rapportbolag med siffror och kursreaktion, makroläget, nordiska nyheter, analytikernas topplista och insiderköp. Skickas när dagens data är bekräftad — aldrig gårdagens innehåll.</p>
+      </div>
+      <form onsubmit="reg(event)">
+        <input id="nbEmail" type="email" required placeholder="din@epost.se" aria-label="E-post">
+        <button class="btn btn-primary" type="submit" id="nbBtn">Prenumerera gratis</button>
+      </form>
+      <small id="nbMsg">Bekräfta via länken i mejlet. Avregistrera när som helst. Adressen används bara till utskicket.</small>
+    </div>
+    <div class="nb-card">
+      <strong style="color:var(--ink)">I varje utgåva</strong>
+      <ul>
+        <li><span class="material-symbols-outlined">check_circle</span>Rapportbolag i dag — omsättning, vinst, reaktion och kontext</li>
+        <li><span class="material-symbols-outlined">check_circle</span>Makro och US-puls när dagens digest är bekräftad</li>
+        <li><span class="material-symbols-outlined">check_circle</span>Analytikernas topp 5 och största insiderköpen</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <div>© DAKTIER · Beslutsstöd, ej finansiell rådgivning</div>
+    <div><a href="/login">Logga in</a><a href="/nyhetsbrev">Nyhetsbrev</a><a href="mailto:news@daktier.com">Kontakt</a></div>
+  </div>
+</footer>
+<script>
+async function reg(e) {
+  e.preventDefault();
+  const btn = document.getElementById('nbBtn'), msg = document.getElementById('nbMsg');
+  const email = document.getElementById('nbEmail').value.trim();
+  btn.disabled = true; btn.textContent = 'Skickar…';
+  try {
+    const r = await fetch('/api/nyhetsbrev/registrera', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email }) });
+    const d = await r.json();
+    msg.textContent = d.svar || d.error || 'Något gick fel — försök igen.';
+    msg.style.color = d.svar ? 'var(--green)' : 'var(--red)';
+  } catch (err) { msg.textContent = 'Kunde inte nå servern — försök igen.'; msg.style.color = 'var(--red)'; }
+  btn.disabled = false; btn.textContent = 'Prenumerera gratis';
+}
+</script>
+</body>
+</html>

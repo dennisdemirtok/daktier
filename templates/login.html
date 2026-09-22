@@ -94,6 +94,7 @@
   </div>
 <script>
 let isRegister = false;
+if (location.hash === '#register') { setTimeout(() => { if (!isRegister) toggleMode(); }, 0); }
 function toggleMode() {
   isRegister = !isRegister;
   document.getElementById('formTitle').textContent = isRegister ? 'Skapa konto' : 'Logga in';
