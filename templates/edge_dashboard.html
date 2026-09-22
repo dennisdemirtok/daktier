@@ -169,9 +169,6 @@
         .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 28px; }
         .card { background: var(--white); border-radius: var(--radius); padding: 20px; transition: all 0.2s; }
         .card:hover { box-shadow: var(--shadow-hover); transform: translateY(-1px); }
-        .card-label { font-size: 10px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.8px; font-weight: 700; }
-        .card-value { font-size: 28px; font-weight: 800; margin: 4px 0; letter-spacing: -0.5px; }
-        .card-sub { font-size: 12px; color: var(--text-sec); }
 
         /* ── Tabs (inside content area) ──── */
         .tabs, .tab { display: none; }
@@ -186,7 +183,6 @@
         .filter-group { display: inline-flex; align-items: center; gap: 4px; background: var(--surface-low); padding: 4px; border-radius: 10px; }
         .filter-group.tight { gap: 2px; }
         .filter-label { font-size: 9px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.8px; padding: 0 6px 0 10px; white-space: nowrap; }
-        .filter-divider { width: 1px; height: 20px; background: var(--surface-high); margin: 0 2px; opacity: 0.6; }
         .search-input { padding: 8px 14px 8px 34px; border: none; border-radius: 10px; font-family: inherit; font-size: 13px; width: 280px; outline: none; transition: all 0.2s; background: var(--surface-low) url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%236c7b70'><path d='M15.5 14h-.79l-.28-.27a6.5 6.5 0 1 0-.7.7l.27.28v.79l5 4.99L20.49 19zM9.5 14A4.5 4.5 0 1 1 14 9.5 4.5 4.5 0 0 1 9.5 14'/></svg>") no-repeat 10px center; background-size: 16px; color: var(--text); }
         .search-input::placeholder { color: var(--text-muted); }
         .search-input:focus { background-color: var(--white); box-shadow: 0 0 0 2px rgba(0,194,129,0.18); }
@@ -202,7 +198,6 @@
         .min-owners-select { padding: 7px 28px 7px 12px; border: none; border-radius: 10px; font-size: 11px; font-family: inherit; color: var(--text-sec); background: var(--surface-low) url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%236c7b70'><path d='M7 10l5 5 5-5z'/></svg>") no-repeat right 6px center; background-size: 14px; cursor: pointer; font-weight: 600; appearance: none; -webkit-appearance: none; -moz-appearance: none; outline: none; transition: all 0.15s; }
         .min-owners-select:hover { background-color: var(--surface-high); color: var(--text); }
         .min-owners-select:focus { box-shadow: 0 0 0 2px rgba(0,194,129,0.18); background-color: var(--white); }
-        .filter-count { font-size: 10px; color: var(--text-muted); font-weight: 600; margin-left: auto; padding: 0 8px; font-variant-numeric: tabular-nums; }
         .filter-reset { background: none; border: none; color: var(--text-muted); font-size: 11px; font-family: inherit; font-weight: 600; cursor: pointer; padding: 6px 10px; border-radius: 8px; transition: all 0.15s; display: inline-flex; align-items: center; gap: 4px; }
         .filter-reset:hover { background: var(--red-light); color: var(--red); }
         .filter-reset .material-symbols-outlined { font-size: 14px; }
@@ -259,11 +254,6 @@
         .badge-strong-buy { background: var(--green-dark); color: white; }
         .badge-strong-sell { background: var(--red); color: white; }
         .badge-hold { background: var(--surface-low); color: var(--text-muted); }
-
-        /* ── Score Bar ──── */
-        .score-bar { width: 80px; height: 6px; background: var(--surface-high); border-radius: 3px; display: inline-block; vertical-align: middle; position: relative; overflow: hidden; }
-        .score-bar-fill { height: 100%; border-radius: 3px; transition: width 0.3s; }
-        .score-value { font-weight: 700; font-size: 14px; min-width: 36px; display: inline-block; }
 
         /* ── Bar ──── */
         .bar-wrap { width: 70px; height: 6px; background: var(--surface-high); border-radius: 3px; display: inline-block; vertical-align: middle; }
@@ -359,8 +349,6 @@
         .bullet-tk.linked:hover { text-decoration: underline; }
         .bullet-txt { font-size: 12.5px; color: #374151; line-height: 1.5; }
         .bullet-txt .src { color: #9ca3af; font-size: 11px; }
-        .earn-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 8px; }
-        .earn-card { background: #f8fafc; border-radius: 8px; padding: 9px 12px; font-size: 11.5px; }
         .earn-card .et { font-weight: 800; color: #0f172a; font-size: 12.5px; }
         .earn-card .em { color: #6b7280; margin-top: 3px; }
         .yoy-pos { color: #059669; font-weight: 700; }
@@ -438,87 +426,7 @@
         .macro-value { font-size: 30px; font-weight: 700; color: var(--text); letter-spacing: -0.02em; line-height: 1.1; margin-top: 4px; }
         .macro-zone { font-size: 13px; font-weight: 600; margin-top: 2px; }
         .macro-note { font-size: 11px; color: var(--text-sec); margin-top: 6px; line-height: 1.4; }
-
-        .dash-model-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
-        @media (max-width: 1100px) { .dash-model-grid { grid-template-columns: repeat(2, 1fr); } }
-        @media (max-width: 700px) { .dash-model-grid { grid-template-columns: 1fr; } }
-        .model-card { background: var(--white); border-radius: 12px; padding: 14px 16px; }
-        .model-card-hd { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
-        .model-badge { color: white; font-size: 11px; font-weight: 700; padding: 3px 8px; border-radius: 6px; letter-spacing: 0.03em; }
-        .model-name { font-size: 13px; font-weight: 600; color: var(--text); }
-        .model-desc { font-size: 12px; color: var(--text-muted); line-height: 1.5; }
         .model-verdict { font-size: 13px; font-weight: 600; margin-top: 6px; }
-
-        .today-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
-        @media (max-width: 900px) { .today-grid { grid-template-columns: repeat(2, 1fr); } }
-        .today-box { background: var(--white); border-radius: 12px; padding: 14px 16px; }
-        .today-label { font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600; margin-bottom: 4px; }
-        .today-val { font-size: 14px; font-weight: 600; }
-
-        /* ── Dagens köp-banner ──── */
-        .daily-picks-skel { background: linear-gradient(90deg, #f5f3ff 0%, #ede9fe 50%, #f5f3ff 100%); background-size: 200% 100%; animation: skeleton 1.2s infinite; border-radius: 16px; padding: 28px; color: var(--text-muted); font-size: 13px; text-align: center; }
-        .daily-picks-empty { background: linear-gradient(135deg, #fffbeb, #fef3c7); border-radius: 16px; padding: 18px 22px; }
-        .daily-picks-banner { background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%); border-radius: 16px; padding: 18px 22px; box-shadow: 0 8px 24px rgba(0,108,70,0.06); }
-        .dpb-hd { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
-        .dpb-title { font-size: 16px; font-weight: 800; color: var(--green-dark); letter-spacing: -0.01em; }
-        .dpb-sub { font-size: 12px; color: var(--text-sec); margin-top: 2px; }
-        .dpb-live { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; font-size: 10px; font-weight: 800; letter-spacing: 1px; color: var(--green-dark); background: rgba(255,255,255,0.7); padding: 5px 10px; border-radius: 20px; }
-        .daily-picks-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 12px; }
-        .daily-pick-card { background: var(--white); border-radius: 12px; padding: 12px 14px; transition: all 0.15s; border-left: 3px solid var(--green); }
-        .daily-pick-card:hover { box-shadow: 0 6px 18px rgba(0,108,70,0.1); }
-        .dp-row { display: flex; align-items: center; gap: 12px; cursor: pointer; }
-        .dp-rank { font-size: 20px; font-weight: 900; flex-shrink: 0; width: 28px; text-align: center; }
-        .dp-main { flex: 1; min-width: 0; }
-        .dp-name { font-size: 13px; font-weight: 700; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        .dp-meta { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
-        .dp-headline { font-size: 11px; color: var(--green-dark); font-weight: 700; margin-top: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        .dp-headline-sub { color: var(--text-muted); font-weight: 500; }
-        .dp-score { text-align: right; flex-shrink: 0; }
-        .dp-reasons { margin-top: 10px; padding-top: 10px; border-top: 1px dashed rgba(0,108,70,0.15); }
-        .dp-reasons-label { font-size: 10px; font-weight: 800; color: var(--green-dark); letter-spacing: 0.5px; text-transform: uppercase; margin-bottom: 6px; }
-        .dp-reasons-list { display: flex; flex-direction: column; gap: 4px; }
-        .dp-reason { display: flex; align-items: flex-start; gap: 6px; font-size: 11px; line-height: 1.35; color: var(--text); padding: 4px 6px; border-radius: 6px; background: rgba(236,253,245,0.5); }
-        .dp-reason.dp-strong { background: rgba(5,150,105,0.12); }
-        .dp-reason.dp-good { background: rgba(16,185,129,0.08); }
-        .dp-reason-ico { flex-shrink: 0; font-size: 12px; }
-        .dp-reason-text { flex: 1; min-width: 0; }
-        .dp-reason-text b { font-weight: 700; color: var(--green-dark); }
-
-        /* ── "Why now"-trigger på varje pick-kort ── */
-        .dp-trigger { margin-top: 10px; display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border-radius: 10px; border-left: 3px solid var(--green-dark); background: linear-gradient(135deg, rgba(236,253,245,0.9), rgba(209,250,229,0.6)); }
-        .dp-trigger-rea { border-left-color: #dc2626; background: linear-gradient(135deg, rgba(254,226,226,0.7), rgba(252,231,243,0.5)); }
-        .dp-trigger-value_trigger { border-left-color: #b45309; background: linear-gradient(135deg, rgba(254,243,199,0.8), rgba(253,230,138,0.5)); }
-        .dp-trigger-momentum { border-left-color: #7c3aed; background: linear-gradient(135deg, rgba(237,233,254,0.8), rgba(221,214,254,0.5)); }
-        .dp-trigger-oversold { border-left-color: #0891b2; background: linear-gradient(135deg, rgba(207,250,254,0.8), rgba(165,243,252,0.5)); }
-        .dp-trigger-ownership { border-left-color: #059669; background: linear-gradient(135deg, rgba(209,250,229,0.9), rgba(167,243,208,0.5)); }
-        .dp-trigger-breakout { border-left-color: #2563eb; background: linear-gradient(135deg, rgba(219,234,254,0.8), rgba(191,219,254,0.5)); }
-        .dp-trigger-daily_drop { border-left-color: #e11d48; background: linear-gradient(135deg, rgba(255,228,230,0.8), rgba(254,205,211,0.5)); }
-        .dp-trigger-stable_value { border-left-color: #6b7280; background: linear-gradient(135deg, rgba(243,244,246,0.9), rgba(229,231,235,0.6)); }
-        .dp-trigger-ico { font-size: 22px; line-height: 1; flex-shrink: 0; margin-top: 1px; }
-        .dp-trigger-body { flex: 1; min-width: 0; }
-        .dp-trigger-title { font-size: 12px; font-weight: 800; color: var(--text); text-transform: uppercase; letter-spacing: 0.4px; margin-bottom: 3px; }
-        .dp-trigger-text { font-size: 12px; line-height: 1.4; color: var(--text); }
-
-        /* ── Model toplist per bokmodell ──── */
-        .model-toplist-wrap { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 14px; }
-        .model-toplist-card { background: var(--white); border-radius: 14px; padding: 16px 18px; display: flex; flex-direction: column; gap: 12px; }
-        .mtl-head { display: flex; align-items: flex-start; gap: 10px; }
-        .mtl-icon { font-size: 22px; flex-shrink: 0; }
-        .mtl-title-wrap { flex: 1; min-width: 0; }
-        .mtl-title { font-size: 14px; font-weight: 700; color: var(--text); }
-        .mtl-desc { font-size: 11px; color: var(--text-muted); margin-top: 2px; line-height: 1.4; }
-        .mtl-expand { background: var(--surface-low); border: none; color: var(--green-dark); font-family: inherit; font-size: 11px; font-weight: 700; padding: 5px 10px; border-radius: 8px; cursor: pointer; flex-shrink: 0; transition: all 0.15s; white-space: nowrap; }
-        .mtl-expand:hover { background: var(--green); color: white; }
-        .mtl-list { display: flex; flex-direction: column; gap: 2px; max-height: 440px; overflow-y: auto; }
-        .mtl-row { display: flex; align-items: center; gap: 10px; padding: 6px 8px; border-radius: 8px; cursor: pointer; transition: background 0.1s; }
-        .mtl-row:hover { background: var(--surface-low); }
-        .mtl-rank { font-size: 11px; font-weight: 700; color: var(--text-muted); width: 20px; text-align: center; flex-shrink: 0; font-variant-numeric: tabular-nums; }
-        .mtl-body { flex: 1; min-width: 0; }
-        .mtl-stock { font-size: 12px; font-weight: 600; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        .mtl-meta { font-size: 10px; color: var(--text-muted); margin-top: 1px; }
-        .mtl-score { font-size: 16px; font-weight: 800; flex-shrink: 0; font-variant-numeric: tabular-nums; width: 36px; text-align: right; }
-        .mtl-skel, .mtl-err, .mtl-empty { padding: 10px 8px; font-size: 12px; color: var(--text-muted); text-align: center; }
-        .mtl-err { color: var(--red); }
 
         /* ── Model Detail Overlay (simuleringsportfölj-djupdyk) ─── */
         .model-detail-overlay { position: fixed; inset: 0; z-index: 1200; display: none; }
@@ -668,109 +576,22 @@
         .market-dot.open { background: var(--green); animation: pulse 2s infinite; }
         .market-dot.closed { background: var(--text-muted); }
         @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
-
-        /* ── Btn Group ──── */
-        .btn-group { display: flex; gap: 0; }
         .btn-group .refresh-btn { border-radius: 0; }
         .btn-group .refresh-btn:first-child { border-radius: 8px 0 0 8px; }
         .btn-group .refresh-btn:last-child { border-radius: 0 8px 8px 0; }
-        .btn-insider { background: var(--purple); font-size: 11px; padding: 7px 12px; }
-        .btn-insider:hover { background: #6d28d9; }
-
-        /* ── Morning Brief ──── */
-        .brief-card { background: linear-gradient(135deg, #1e1b4b, #312e81); border-radius: var(--radius); padding: 24px; color: white; margin-bottom: 20px; }
-        .brief-header { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
-        .brief-greeting { font-size: 20px; font-weight: 700; }
-        .brief-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; margin: 16px 0; }
-        .brief-port-card { background: rgba(255,255,255,0.1); border-radius: 10px; padding: 14px; backdrop-filter: blur(4px); }
-        .brief-port-name { font-size: 12px; opacity: 0.8; margin-bottom: 4px; }
-        .brief-port-assessment { font-size: 13px; line-height: 1.5; }
-        .brief-stockpick { background: linear-gradient(135deg, rgba(0,194,129,0.2), rgba(0,70,255,0.2)); border: 1px solid rgba(255,255,255,0.2); border-radius: 10px; padding: 16px; margin: 16px 0; }
-        .brief-signal-badge { display: inline-block; padding: 6px 14px; border-radius: 8px; font-size: 14px; font-weight: 700; }
-        .brief-btn { background: linear-gradient(135deg, #7c3aed, #a855f7); color: white; border: none; padding: 12px 24px; border-radius: 10px; font-size: 14px; font-weight: 700; cursor: pointer; font-family: inherit; transition: all 0.2s; display: flex; align-items: center; gap: 8px; }
-        .brief-btn:hover { transform: translateY(-1px); box-shadow: 0 4px 16px rgba(124,58,237,0.4); }
-        .brief-btn:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
-
-        /* ── Auto-rebalance Banner ──── */
-        .auto-rebal-banner { background: linear-gradient(135deg, #ecfdf5, #f0fdf4); border: 1px solid #86efac; border-radius: var(--radius); padding: 12px 16px; margin-bottom: 16px; font-size: 13px; display: flex; align-items: center; gap: 8px; }
-
-        /* ── Simulation Page ──── */
-        .sim-hero { background: linear-gradient(135deg, #0b1437 0%, #1e1b4b 50%, #3b0764 100%); color: #fff; border-radius: 16px; padding: 24px 28px; margin-bottom: 20px; display: grid; grid-template-columns: 1.3fr 1fr 1fr 1fr; gap: 24px; align-items: center; position: relative; overflow: hidden; }
-        .sim-hero::before { content: ''; position: absolute; top: -50%; right: -10%; width: 400px; height: 400px; background: radial-gradient(circle, rgba(124,58,237,0.25), transparent 70%); pointer-events: none; }
-        .sim-hero::after { content: ''; position: absolute; bottom: -50%; left: -5%; width: 300px; height: 300px; background: radial-gradient(circle, rgba(0,194,129,0.15), transparent 70%); pointer-events: none; }
-        .sim-hero-title { font-size: 20px; font-weight: 800; letter-spacing: -0.3px; margin-bottom: 4px; position: relative; z-index: 1; }
-        .sim-hero-sub { font-size: 12px; opacity: 0.75; font-weight: 500; position: relative; z-index: 1; }
-        .sim-hero-kpi { position: relative; z-index: 1; }
-        .sim-hero-kpi-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.8px; opacity: 0.7; font-weight: 600; margin-bottom: 4px; }
-        .sim-hero-kpi-value { font-size: 22px; font-weight: 800; letter-spacing: -0.5px; }
-        .sim-hero-kpi-sub { font-size: 11px; opacity: 0.75; margin-top: 2px; }
-        .sim-hero-actions { display: flex; gap: 8px; position: relative; z-index: 1; justify-content: flex-end; }
-        .sim-hero-btn { background: rgba(255,255,255,0.1); backdrop-filter: blur(8px); color: #fff; border: 1px solid rgba(255,255,255,0.15); padding: 8px 14px; border-radius: 10px; font-size: 12px; font-weight: 600; cursor: pointer; font-family: inherit; transition: all 0.15s; }
-        .sim-hero-btn:hover { background: rgba(255,255,255,0.2); transform: translateY(-1px); }
         .sim-hero-btn.danger:hover { background: rgba(190,0,51,0.4); border-color: rgba(190,0,51,0.6); }
-
-        .sim-section-head { display: flex; align-items: center; justify-content: space-between; margin: 28px 0 12px; }
-        .sim-section-head h2 { font-size: 13px; font-weight: 700; letter-spacing: 0.8px; text-transform: uppercase; color: var(--text-muted); }
-        .sim-section-head-tag { font-size: 11px; font-weight: 600; color: var(--text-muted); }
-
-        .sim-card-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 14px; }
-        .sim-pcard { background: var(--white); border-radius: var(--radius); padding: 18px; cursor: pointer; transition: transform 0.15s, box-shadow 0.15s; border: 1px solid var(--surface-low); position: relative; overflow: hidden; }
-        .sim-pcard::before { content: ''; position: absolute; top: 0; left: 0; width: 100%; height: 3px; background: var(--accent, var(--text-muted)); }
-        .sim-pcard:hover { transform: translateY(-3px); box-shadow: 0 12px 32px rgba(0,0,0,0.08); }
-        .sim-pcard-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
-        .sim-pcard-title { font-size: 15px; font-weight: 700; display: flex; align-items: center; gap: 8px; }
-        .sim-pcard-icon { font-size: 20px; }
-        .sim-pcard-badge { font-size: 10px; font-weight: 600; padding: 3px 8px; border-radius: 6px; text-transform: uppercase; letter-spacing: 0.5px; background: var(--surface-low); color: var(--text-muted); }
-        .sim-pcard-value { font-size: 26px; font-weight: 800; letter-spacing: -0.5px; line-height: 1.1; }
-        .sim-pcard-return { display: inline-flex; align-items: baseline; gap: 6px; margin-top: 4px; font-size: 13px; font-weight: 600; padding: 3px 10px; border-radius: 999px; }
         .sim-pcard-return.pos { background: var(--green-light); color: var(--green-dark); }
         .sim-pcard-return.neg { background: var(--red-light); color: var(--red); }
         .sim-pcard-return.neu { background: var(--surface-low); color: var(--text-muted); }
-        .sim-pcard-meta { font-size: 11px; color: var(--text-muted); margin-top: 10px; display: flex; gap: 12px; }
-        .sim-pcard-stats { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--surface-low); display: grid; grid-template-columns: 1fr 1fr; gap: 8px 14px; font-size: 11px; }
-        .sim-pcard-stat-label { color: var(--text-muted); font-weight: 500; }
-        .sim-pcard-stat-val { font-weight: 700; text-align: right; }
-        .sim-pcard-detail-hint { position: absolute; top: 14px; right: 14px; font-size: 10px; color: var(--text-muted); opacity: 0; transition: opacity 0.15s; font-weight: 600; letter-spacing: 0.3px; }
-        .sim-pcard:hover .sim-pcard-detail-hint { opacity: 1; }
-
-        .sim-ranking { background: var(--white); border-radius: var(--radius); padding: 18px; border: 1px solid var(--surface-low); }
-        .sim-ranking-head { font-size: 13px; font-weight: 700; margin-bottom: 12px; letter-spacing: 0.3px; display: flex; align-items: center; justify-content: space-between; }
-        .sim-ranking-row { display: grid; grid-template-columns: 28px 1fr auto; align-items: center; padding: 8px 0; gap: 10px; border-bottom: 1px solid var(--surface-low); font-size: 13px; }
-        .sim-ranking-row:last-child { border-bottom: none; }
-        .sim-ranking-rank { font-size: 14px; font-weight: 800; color: var(--text-muted); text-align: center; }
         .sim-ranking-rank.gold { color: #d4a017; }
         .sim-ranking-rank.silver { color: #94a3b8; }
         .sim-ranking-rank.bronze { color: #b87333; }
-        .sim-ranking-name { font-weight: 600; display: flex; align-items: center; gap: 6px; }
-        .sim-ranking-ret { font-weight: 700; font-size: 14px; }
-
-        .sim-holdings-head { display: flex; align-items: center; justify-content: space-between; margin: 28px 0 10px; gap: 12px; flex-wrap: wrap; }
-        .sim-holdings-title { font-size: 15px; font-weight: 700; display: flex; align-items: center; gap: 8px; }
-        .sim-holdings-meta { font-size: 12px; color: var(--text-muted); font-weight: 500; }
-        .sim-holdings-wins { display: inline-flex; gap: 6px; font-size: 11px; }
-        .sim-holdings-wins-chip { padding: 2px 8px; border-radius: 6px; font-weight: 700; }
-
-        /* ── Upload Zone ──── */
-        .upload-zone { border: 2px dashed var(--surface-high); border-radius: var(--radius); padding: 40px; text-align: center; cursor: pointer; transition: all 0.2s; background: var(--white); }
-        .upload-zone:hover, .upload-zone.dragover { border-color: var(--orange); background: var(--orange-light); }
-        .upload-zone-icon { font-size: 48px; margin-bottom: 12px; }
-        .upload-zone-text { font-size: 14px; color: var(--text-sec); }
-        .upload-preview { max-width: 100%; max-height: 300px; border-radius: 8px; margin-top: 12px; }
-
-        /* ── AI Score Gauge ──── */
-        .ai-gauge { width: 44px; height: 44px; border-radius: 50%; display: flex; align-items: center; justify-content: center; }
-        .ai-gauge-inner { width: 34px; height: 34px; border-radius: 50%; background: var(--white); display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 800; }
 
         /* ── Owner Maturity Badge ──── */
         .maturity-badge { display: inline-flex; align-items: center; gap: 3px; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 700; }
         .maturity-badge.mogen { background: #dcfce7; color: #166534; }
         .maturity-badge.vaxande { background: #fef9c3; color: #854d0e; }
         .maturity-badge.omogen { background: #f3f4f6; color: #6b7280; }
-        .maturity-sparkline { display: inline-block; vertical-align: middle; }
-        .maturity-sparkline svg { display: block; }
-        .drawer-maturity { background: linear-gradient(135deg, #f0fdf4, #ecfccb); border-radius: 12px; padding: 16px; margin-bottom: 12px; }
-        .drawer-maturity-score { font-size: 32px; font-weight: 900; color: #166534; }
-        .drawer-maturity-label { font-size: 13px; font-weight: 700; color: #15803d; text-transform: uppercase; letter-spacing: 1px; }
         .consistency-bar { height: 8px; border-radius: 4px; background: #e5e7eb; overflow: hidden; margin-top: 4px; }
         .consistency-bar-fill { height: 100%; border-radius: 4px; background: linear-gradient(90deg, #22c55e, #16a34a); }
 
@@ -807,7 +628,6 @@
             /* Cards */
             .cards { grid-template-columns: 1fr; gap: 10px; margin-bottom: 16px; }
             .card { padding: 14px; }
-            .card-value { font-size: 22px; }
 
             /* Forms — 16px font-size förhindrar zoom på iOS */
             .search-input { width: 100%; font-size: 16px; padding: 10px 14px 10px 36px; }
@@ -824,7 +644,6 @@
                 padding: 9px 14px; font-size: 12px; min-height: 36px;
             }
             .filter-label { font-size: 9px; padding: 0 4px 0 8px; }
-            .filter-count { display: none; }
 
             /* Drawer — full skärm på mobil */
             .drawer { width: 100vw; max-width: 100vw; }
@@ -836,18 +655,10 @@
             .table-container { margin: 0 -12px; border-radius: 0; }
             th { padding: 10px 8px; font-size: 9px; }
             td { padding: 8px; font-size: 11px; }
-            .score-bar { width: 50px; }
-            .score-value { font-size: 12px; min-width: 28px; }
-            /* Edge Signals: dölj sekundära kolumner < 768px */
-            .signals-table th:nth-child(n+9),
-            .signals-table td:nth-child(n+9) { display: none; }
 
             /* Dashboard-grids stackar till 1 kolumn */
             .dash-top-stats { grid-template-columns: 1fr 1fr !important; gap: 8px; }
             .dash-macro-grid { grid-template-columns: 1fr !important; }
-            .dash-model-grid { grid-template-columns: 1fr !important; }
-            .today-grid { grid-template-columns: 1fr !important; }
-            .daily-picks-grid { grid-template-columns: 1fr !important; }
 
             /* Dagens picks-banner */
             #dailyPicksBanner, #buyZoneWatchBanner { padding: 14px !important; }
@@ -870,13 +681,6 @@
             .agent-examples { gap: 5px !important; padding: 4px 0 !important; }
             .agent-chip { padding: 7px 11px !important; font-size: 11px !important; }
 
-            /* Brief / portfolio-cards */
-            .brief-grid { grid-template-columns: 1fr; }
-
-            /* Sim portfolio-cards */
-            .sim-pcard { padding: 14px !important; }
-            .sim-pcard-value { font-size: 22px !important; }
-
             /* Touch-targets — min 44x44 enligt WCAG */
             button, .sidebar-item, .filter-chip, .period-chip, .signal-chip,
             .agent-chip, .header-icon-btn {
@@ -896,17 +700,11 @@
             /* Insiders-knapp döljd på mycket små skärmar — finns i Insiders-fliken ändå */
             #refreshInsidersBtn { display: none; }
             .page-title { font-size: 18px; }
-            .card-value { font-size: 20px; }
-            /* Edge Signals: ännu fler kolumner gömda < 480px */
-            .signals-table th:nth-child(n+7),
-            .signals-table td:nth-child(n+7) { display: none; }
             /* Drawer-grid stackar helt */
             .drawer-grid { grid-template-columns: 1fr !important; }
             /* Macro/insider tabeller — gömma datum-kolumn */
             .table-container th:nth-child(n+5),
             .table-container td:nth-child(n+5) { font-size: 10px; }
-            /* v2-banner i drawer: stacka 4 axlar 2x2 */
-            .v2-axes-grid { grid-template-columns: 1fr 1fr !important; }
         }
 
         .mobile-menu-btn { display: none; background: none; border: none; cursor: pointer; color: var(--text-muted); padding: 8px; border-radius: 6px; min-width: 36px; min-height: 36px; align-items: center; justify-content: center; }
@@ -1357,12 +1155,6 @@ async function fetchData(append = false) {
                     `<div style="padding:30px;color:var(--text-muted)">Kunde inte hämta modellportföljerna: ${e.message}</div>`;
             }
             return;
-        } else if (currentTab === 'myportfolio') {
-            renderMyPortfolio();
-            return;
-        } else if (currentTab === 'aitoplist') {
-            await fetchAIToplist();
-            return;
         } else if (currentTab === 'agent') {
             renderAgent();
             return;
@@ -1598,8 +1390,6 @@ const TAB_META = {
     ocf:         { title: 'Kassaflöde',      sub: 'Topplista: operativt kassaflöde' },
     fcf:         { title: 'Fritt kassaflöde', sub: 'EV/FCF (billigast kassaflöde) och störst FCF — TTM ur rapportarkivet' },
     portfolio:   { title: 'Portföljer',      sub: 'Två regelstyrda topp 10-modeller — dagligt utbyte, live-facit mot marknaden' },
-    myportfolio: { title: 'Min Portfölj',    sub: 'Ditt bevakade innehav' },
-    aitoplist:   { title: 'AI Topplista',    sub: 'AI-rankning av alla bolag' },
     agent:       { title: 'AI Agent',         sub: 'Chatta med Claude Opus över hela databasen' },
     backtest:    { title: 'Backtest',         sub: 'Hur har setup-strategierna presterat historiskt?' },
 };
@@ -1692,7 +1482,6 @@ const TAB_HASH = {
     fcf: '/aktier/fritt-kassaflode',
     insiders: '/aktier/insiders', backtest: '/aktier/utredning',
     signals: '/edge-signals', portfolio: '/installningar/simulering',
-    trending: '/trending',
 };
 const HASH_TAB = Object.fromEntries(Object.entries(TAB_HASH).map(([t, h]) => [h, t]));
 let _ignoreHashChange = false;
@@ -1866,26 +1655,6 @@ document.addEventListener('click', e => {
     if (!e.target.closest('#navSearch')) document.getElementById('navSearchResults')?.classList.remove('open');
 });
 
-// Bakåtkompatibilitet: gamla anrop till sidebarNav/toggleSidebar
-function sidebarNav(tab) { switchTab(tab); }
-function toggleSidebar() { openMobileSheet(); }
-
-// Stäng sidebar när man klickar på overlay (men EJ på sidebar/menyknapp)
-// Använder pointerdown istället för click för bättre touch-responsivitet,
-// + capture-fas så vi kan stoppa innan det boublar.
-document.addEventListener('pointerdown', function(e) {
-    const sb = document.getElementById('sidebar');
-    if (!sb || !sb.classList.contains('open')) return;
-    if (window.innerWidth > 1024) return;
-    // Klick INNE i sidebar eller på menyknappen → låt det funka
-    if (sb.contains(e.target)) return;
-    const btn = document.querySelector('.mobile-menu-btn');
-    if (btn && btn.contains(e.target)) return;
-    // Annars: stäng sidebar
-    sb.classList.remove('open');
-    document.body.classList.remove('sidebar-open');
-}, true);
-
 // ── Filter Actions ──────────────────────────────────
 
 let searchTimeout;
@@ -1895,25 +1664,6 @@ function debounceSearch(val) {
 }
 function setCountry(c) { countryFilter = c; fetchData(); renderFilterBar(); }
 function setMinOwners(v) { minOwners = parseInt(v); fetchData(); }
-function setPeriod(p) { trendPeriod = p; fetchData(); renderFilterBar(); }
-function setDirection(d) { trendDirection = d; fetchData(); renderFilterBar(); }
-function setHotLookback(v) { hotLookback = v; fetchData(); renderFilterBar(); }
-function setHotDirection(d) { hotDirection = d; fetchData(); renderFilterBar(); }
-function setHotCountry(c) { hotCountry = c; fetchData(); renderFilterBar(); }
-function setHotMode(m) { hotMode = m; fetchData(); renderFilterBar(); }
-function setInsiderType(t) { insiderType = t; fetchData(); renderFilterBar(); }
-function setSignalFilter(s) { signalFilter = s; fetchData(); renderFilterBar(); }
-function setSetupFilter(s) { setupFilter = s; fetchData(); renderFilterBar(); }
-function setSignalCountry(c) { signalCountry = c; fetchData(); renderFilterBar(); }
-function setActionFilter(a) { actionFilter = a; fetchData(); renderFilterBar(); }
-
-// Ägarmomentum — enhetlig period-väljare.
-function setMomPeriod(p) {
-    momPeriod = p;
-    fetchData();
-    renderFilterBar();
-}
-
 function doSort(col) {
     if (sortCol === col) sortOrder = sortOrder === 'desc' ? 'asc' : 'desc';
     else { sortCol = col; sortOrder = 'desc'; }
@@ -2079,155 +1829,6 @@ function insiderBadge(s) {
 }
 
 // ── Render Signals Table ──────────────────────────────
-
-function renderSignalsTable() {
-    const infoBanner = `<div class="info-banner">
-        <div class="info-banner-icon">⭐</div>
-        <div class="info-banner-text">
-            <strong>⭐ Modellscore 0–100</strong> — flikens eget mått (Bok+Meta), inte DAKTIER-poängen. Backtest-validerad sammanvägning av momentum + fundamenta.<br>
-            <span style="opacity:0.85">≥80 STARK KÖP · ≥70 KÖP · ≥55 OK · ≥40 VÄNTA · &lt;40 UNDVIK · ▲/▼ = förändring sedan igår</span><br>
-            <details style="margin-top:6px">
-                <summary style="cursor:pointer;font-weight:600">Vad ingår i Modellscore?</summary>
-                <div style="margin-top:6px;font-size:12px;line-height:1.5">
-                    <strong>50% Bok-composite</strong> — viktat snitt av 13 bokmodeller (Graham, Buffett, Lynch, Greenblatt, Klarman, Bogle, Stinsen, Taleb, Kelly, Spiltan, <strong>Pabrai, Marks, Spier</strong>).<br>
-                    <strong>50% Meta-score</strong> — Trav (30%, ägar-momentum) + DSM (25%, kontrarian) + ACE (25%, multi-faktor) + Magic Formula (20%, EV/EBIT + ROCE).<br>
-                    Övriga score-kolumner i tabellen (Meta, Edge, Bok) är delkomponenter — Modellscore är den siffran att sortera på i den här fliken.<br>
-                    <strong>DD-skydd:</strong> Blockerar entry vid hög DD-risk (≥60) eller extrem pris-spike (6M &gt;150%, YTD &gt;200%).
-                </div>
-            </details>
-        </div>
-    </div>`;
-
-    let fixedRows = allLoadedRows.map((s, i) => {
-        const flag = FLAGS[s.country] || '🏳️';
-        const score = s.edge_score || 0;
-        const meta = s.meta_score || 0;
-        const mc = scoreColor(meta);
-        const sc = scoreColor(score);
-
-        // Smart Score (50% Meta + 50% Bok-composite)
-        const smart = s.smart_score;
-        const smartChange = s.smart_score_change;
-        const smartLabel = s.smart_score_label || (smart == null ? '–' : smart >= 80 ? 'STARK KÖP' : smart >= 70 ? 'KÖP' : smart >= 55 ? 'OK' : smart >= 40 ? 'VÄNTA' : 'UNDVIK');
-        const smartColor = s.smart_score_color || (smart == null ? '#888' : smart >= 80 ? '#006c46' : smart >= 70 ? '#00a870' : smart >= 55 ? '#888' : smart >= 40 ? '#e67700' : '#c0392b');
-        const smartArrow = smartChange == null ? '' : smartChange > 0.5 ? `<span style="color:#00a870;font-size:11px;font-weight:700">▲ ${smartChange.toFixed(1)}</span>` : smartChange < -0.5 ? `<span style="color:#c0392b;font-size:11px;font-weight:700">▼ ${Math.abs(smartChange).toFixed(1)}</span>` : `<span style="color:#888;font-size:11px">●</span>`;
-        const smartCell = smart != null
-            ? `<span class="score-value" style="color:${smartColor};font-size:15px;font-weight:800">${smart.toFixed(0)}</span>
-               <div class="score-bar"><div class="score-bar-fill" style="width:${smart}%;background:${smartColor}"></div></div>
-               <div style="font-size:9px;color:${smartColor};margin-top:2px;font-weight:600">${smartLabel} ${smartArrow}</div>`
-            : '<span style="color:var(--text-muted);font-size:11px">–</span>';
-        const ch1w = s.owners_change_1w;
-        const ch1m = s.owners_change_1m;
-        const ch3m = s.owners_change_3m;
-        const p1m = s.one_month_change_pct;
-        const pytd = s.ytd_change_pct;
-        const shortPct = s.short_selling_ratio || 0;
-        const warnTag = s.rebound_trap ? '<br><span style="font-size:10px;color:#dc2626">⚠ Value trap</span>'
-            : s.is_fomo ? '<br><span style="font-size:10px;color:#f59e0b">⚠ FOMO</span>'
-            : s.dd_blocked ? '<br><span style="font-size:10px;color:#dc2626">⚠ DD-risk</span>'
-            : '<br>' + phaseBadge(s.phase);
-
-        const bookComp = s.book_composite;
-        const bookAvail = s.book_models_available || 0;
-        const bookColor = bookComp == null ? 'var(--text-muted)' : bookComp >= 75 ? 'var(--green-dark)' : bookComp >= 65 ? 'var(--green)' : bookComp >= 50 ? '#92400e' : 'var(--red)';
-        const bookCell = bookComp != null
-            ? `<span class="score-value" style="color:${bookColor};font-size:13px" title="Composite över ${bookAvail} bokmodeller">${bookComp.toFixed(0)}</span>
-               <div class="score-bar"><div class="score-bar-fill" style="width:${bookComp}%;background:${bookColor}"></div></div>
-               <div style="font-size:9px;color:var(--text-muted);margin-top:2px">${bookAvail}/13 modeller</div>`
-            : '<span style="color:var(--text-muted);font-size:11px">–</span>';
-
-        // v2 Setup-cell — visar setup-typ + 3 mini-bars för Value/Quality/Momentum
-        const v2 = s.v2 || {};
-        const v2Setup = v2.setup || s.v2_setup;
-        const v2V = v2.value ?? s.v2_value;
-        const v2Q = v2.quality ?? s.v2_quality;
-        const v2M = v2.momentum ?? s.v2_momentum;
-        const SETUP_META = {
-            trifecta: { ic:'🎯', col:'#059669', short:'Trifecta' },
-            quality_full_price: { ic:'🏰', col:'#2563eb', short:'Quality CP' },
-            deep_value: { ic:'💎', col:'#ca8a04', short:'Djup-värde' },
-            cigar_butt: { ic:'🚬', col:'#ea580c', short:'Cigarrfimp' },
-            quality_fair: { ic:'📐', col:'#6366f1', short:'Quality fair' },
-            balanced_value: { ic:'⚖️', col:'#0891b2', short:'Bal. värde' },
-            balanced_quality: { ic:'⚖️', col:'#7c3aed', short:'Bal. kvalitet' },
-            mixed_signals: { ic:'🔄', col:'#6b7280', short:'Blandat' },
-            momentum_trap: { ic:'⚠️', col:'#dc2626', short:'Mom-fälla' },
-            value_destruction: { ic:'💀', col:'#7f1d1d', short:'Värdedestr' },
-            incomplete_data: { ic:'🤷', col:'#9ca3af', short:'Otillräcklig' },
-        };
-        const setupMeta = SETUP_META[v2Setup] || { ic:'?', col:'#9ca3af', short:'-' };
-        const setupCell = v2Setup
-            ? `<div style="font-size:14px;line-height:1">${setupMeta.ic}</div>
-               <div style="font-size:10px;color:${setupMeta.col};font-weight:700;margin-top:2px">${setupMeta.short}</div>
-               <div style="display:flex;gap:1px;margin-top:3px;height:4px">
-                 <div title="Value ${v2V?.toFixed(0) ?? '?'}" style="flex:1;background:#dc2626;opacity:${v2V ? Math.max(0.15, v2V/100) : 0.1};border-radius:1px"></div>
-                 <div title="Quality ${v2Q?.toFixed(0) ?? '?'}" style="flex:1;background:#059669;opacity:${v2Q ? Math.max(0.15, v2Q/100) : 0.1};border-radius:1px"></div>
-                 <div title="Momentum ${v2M?.toFixed(0) ?? '?'}" style="flex:1;background:#2563eb;opacity:${v2M ? Math.max(0.15, v2M/100) : 0.1};border-radius:1px"></div>
-               </div>`
-            : '<span style="color:var(--text-muted);font-size:11px">–</span>';
-
-        return `<tr${s.action === 'ENTRY' ? ' style="background:#e6f9f1"' : s.action?.startsWith('EXIT') ? ' style="background:#ffeaee"' : ''}>
-            <td>${i + 1}</td>
-            <td>${smartCell}</td>
-            <td>${setupCell}</td>
-            <td>
-                <span class="score-value" style="color:${mc}">${meta.toFixed(0)}</span>
-                <div class="score-bar"><div class="score-bar-fill" style="width:${meta}%;background:${mc}"></div></div>
-                <div style="font-size:10px;margin-top:2px">${metaSignalBadge(s.meta_signal)} ${modelAgreementBadge(s.model_agreement, s.model_agreement_total)}</div>
-            </td>
-            <td>
-                <span class="score-value" style="color:${sc};font-size:13px">${score.toFixed(0)}</span>
-                <div class="score-bar"><div class="score-bar-fill" style="width:${score}%;background:${sc}"></div></div>
-            </td>
-            <td>${bookCell}</td>
-            <td>${actionBadge(s.action)}${warnTag}</td>
-            <td>${flag} <span class="stock-name" onclick="openDrawer(allLoadedRows[${i}])">${s.name}</span></td>
-            <td style="text-align:center">${trend7dBadge(s.trend_7d, s.trend_7d_sv)}</td>
-            <td style="text-align:right;font-weight:600">${fmtNum(s.number_of_owners)}</td>
-            <td style="text-align:center">${maturityBadge(s)}</td>
-            <td style="text-align:right" class="${pctClass(ch1w)}">${fmtPct(ch1w)}</td>
-            <td style="text-align:right" class="${pctClass(ch1m)}">${fmtPct(ch1m)}</td>
-            <td style="text-align:right" class="${pctClass(ch3m)}">${fmtPct(ch3m)}</td>
-            <td style="text-align:right" class="${pctClass(p1m)}">${fmtPct(p1m)}</td>
-            <td style="text-align:right" class="${pctClass(pytd)}">${fmtPct(pytd)}</td>
-            <td style="text-align:right">${shortPct > 0 ? (shortPct*100).toFixed(1)+'%' : '-'}</td>
-            <td>${ddRiskBadge(s.dd_risk, s.dd_risk_label)}</td>
-            <td style="text-align:center">${insiderBadge(s)}</td>
-            <td>${componentBars(s.components)}</td>
-        </tr>`;
-    }).join('');
-
-    document.getElementById('content').innerHTML = `
-        ${infoBanner}
-        <div class="table-container">
-            <table class="signals-table"><thead><tr>
-                <th style="width:40px">#</th>
-                <th onclick="doSort('smart')" class="${thClass('smart')}" style="min-width:120px" title="Modellscore 0-100 = Meta (50% momentum) + Bok-composite (50% fundamenta). Sitens huvudpoäng är DAKTIER-poängen i Aktier/Topplistan. ▲/▼ visar förändring senaste dygnet. Övriga score-kolumner är delkomponenter.">⭐ Modellscore${sortArrow('smart')}</th>
-                <th onclick="doSort('v2_quality')" class="${thClass('v2_quality')}" style="min-width:90px" title="v2 Setup-typ + Value/Quality/Momentum-axlar (klassificerings-baserad analys, asset_light/compounder/etc).">🎯 v2 Setup${sortArrow('v2_quality')}</th>
-                <th onclick="doSort('meta')" class="${thClass('meta')}" style="min-width:140px">Meta Score${sortArrow('meta')}</th>
-                <th onclick="doSort('score')" class="${thClass('score')}" style="min-width:80px">Edge${sortArrow('score')}</th>
-                <th style="min-width:90px" title="Viktat composite över 13 bokmodeller — Graham, Buffett, Lynch, Greenblatt, Klarman, Pabrai, Marks, Spier m.fl.">📚 Bok</th>
-                <th>Action / Fas</th>
-                <th onclick="doSort('name')" class="${thClass('name')}">Aktie${sortArrow('name')}</th>
-                <th style="text-align:center">7d</th>
-                <th onclick="doSort('owners')" class="${thClass('owners')}" style="text-align:right">Ägare${sortArrow('owners')}</th>
-                <th style="text-align:center" title="Ägarmognad: Mogen=konsistent tillväxt+lönsam">Mognad</th>
-                <th onclick="doSort('owners_7d')" class="${thClass('owners_7d')}" style="text-align:right">Äg 7d${sortArrow('owners_7d')}</th>
-                <th onclick="doSort('momentum')" class="${thClass('momentum')}" style="text-align:right">Äg 1M${sortArrow('momentum')}</th>
-                <th onclick="doSort('owners_3m')" class="${thClass('owners_3m')}" style="text-align:right">Äg 3M${sortArrow('owners_3m')}</th>
-                <th onclick="doSort('price_1m')" class="${thClass('price_1m')}" style="text-align:right">Pris 1M${sortArrow('price_1m')}</th>
-                <th onclick="doSort('price_ytd')" class="${thClass('price_ytd')}" style="text-align:right">Pris YTD${sortArrow('price_ytd')}</th>
-                <th onclick="doSort('short')" class="${thClass('short')}" style="text-align:right">Kort %${sortArrow('short')}</th>
-                <th onclick="doSort('dd_risk')" class="${thClass('dd_risk')}" style="text-align:center">DD Risk${sortArrow('dd_risk')}</th>
-                <th style="text-align:center" title="Insiderköp (K) / Sälj (S) senaste 90d. 🔥=Klusterköp">Insider</th>
-                <th style="min-width:190px">Komponenter</th>
-            </tr></thead><tbody>${fixedRows}</tbody></table>
-        </div>
-        ${allLoadedRows.length < totalResults ? '<div class="load-more" id="loadMore"><div class="load-more-spinner"></div></div>' : ''}
-        <div class="table-footer">Visar ${allLoadedRows.length} av ${totalResults.toLocaleString('sv')} signaler (${signalCountry})</div>
-    `;
-    setupInfiniteScroll();
-}
 
 // ── Render Stocks Table ──────────────────────────────
 
@@ -2971,508 +2572,7 @@ function renderInsidersTable() {
 // ── Portfolio Simulation ──────────────────────────────
 
 let _portfolioStocks = [];
-function renderPortfolio(data) {
-    _portfolioStocks = [];
-    const trav = data.trav;
-    const magic = data.magic;
-    const ts = trav.stats;
-    const ms = magic.stats;
-
-    function statCard(label, stats, color, icon) {
-        return `<div style="background:var(--white);border-radius:var(--radius);padding:20px;box-shadow:var(--shadow);border-left:4px solid ${color};flex:1;min-width:280px">
-            <div style="font-size:20px;margin-bottom:8px">${icon} <strong>${label}</strong></div>
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:14px">
-                <div>Antal aktier: <strong>${stats.count}</strong></div>
-                <div>Win YTD: <strong style="color:${stats.win_ytd>=0.5?'var(--green)':'var(--red)'}">${(stats.win_ytd*100).toFixed(0)}%</strong></div>
-                <div>Snitt YTD: <strong class="${stats.avg_ytd>0?'num-pos':'num-neg'}">${(stats.avg_ytd*100).toFixed(1)}%</strong></div>
-                <div>Snitt 1M: <strong class="${stats.avg_1m>0?'num-pos':'num-neg'}">${(stats.avg_1m*100).toFixed(1)}%</strong></div>
-            </div>
-        </div>`;
-    }
-
-    function stockRow(s, i, type) {
-        const ytd = (s.ytd_change_pct||0)*100;
-        const m1 = (s.one_month_change_pct||0)*100;
-        const oc1m = (s.owners_change_1m||0)*100;
-        const roe = s.return_on_equity ? (s.return_on_equity*100).toFixed(0)+'%' : '-';
-        const ocf = s.operating_cash_flow ? (s.operating_cash_flow>0?'+':'')+(s.operating_cash_flow/1e6).toFixed(0)+'M' : '-';
-        const ev = s.ev_ebit_ratio ? s.ev_ebit_ratio.toFixed(1) : '-';
-        const de = s.debt_to_equity_ratio != null ? s.debt_to_equity_ratio.toFixed(1) : '-';
-
-        let extra = '';
-        if (type === 'trav') {
-            const sc = s.edge_score||0;
-            const fund = s.components ? s.components.fundamental : 0;
-            extra = `<td style="text-align:center"><span style="font-weight:700;color:${scoreColor(sc)}">${sc.toFixed(0)}</span></td>
-                     <td style="text-align:center">${fund?fund.toFixed(0):'-'}</td>`;
-        } else {
-            extra = `<td style="text-align:center">${s.magic_rank||'-'}</td>
-                     <td style="text-align:center">${ev}</td>`;
-        }
-
-        const pidx = _portfolioStocks.push(s) - 1;
-        return `<tr style="background:${ytd>0?'#f0fdf4':ytd<-10?'#fef2f2':''}">
-            <td>${i+1}</td>
-            <td><span class="stock-name" onclick="openDrawer(_portfolioStocks[${pidx}])">${s.name}</span></td>
-            ${extra}
-            <td style="text-align:right">${fmtNum(s.number_of_owners)}</td>
-            <td style="text-align:right" class="${oc1m>0?'num-pos':'num-neg'}">${oc1m>0?'+':''}${oc1m.toFixed(1)}%</td>
-            <td style="text-align:right">${roe}</td>
-            <td style="text-align:right">${ocf}</td>
-            <td style="text-align:right">${de}</td>
-            <td style="text-align:right;font-weight:600" class="${m1>0?'num-pos':'num-neg'}">${m1>0?'+':''}${m1.toFixed(1)}%</td>
-            <td style="text-align:right;font-weight:700" class="${ytd>0?'num-pos':'num-neg'}">${ytd>0?'+':''}${ytd.toFixed(1)}%</td>
-        </tr>`;
-    }
-
-    const travRows = trav.stocks.map((s,i) => stockRow(s,i,'trav')).join('');
-    const magicRows = magic.stocks.map((s,i) => stockRow(s,i,'magic')).join('');
-
-    // Spread beräkning
-    const spread_ytd = ((ts.avg_ytd - ms.avg_ytd)*100).toFixed(1);
-    const spread_1m = ((ts.avg_1m - ms.avg_1m)*100).toFixed(1);
-    const spreadColor = spread_ytd > 0 ? 'var(--green)' : 'var(--red)';
-
-    document.getElementById('content').innerHTML = `
-        <div class="info-banner" style="background:linear-gradient(135deg,#f0e8ff,#e8eeff)">
-            <div class="info-banner-icon">🏇 vs 📊</div>
-            <div class="info-banner-text">
-                <strong>Walk-Forward Simulering</strong> — Startdatum: ${data.date}. Portföljerna uppdateras dagligen.
-                Data sparas i Supabase. Resultat mäts 1v, 1m, 3m efter varje signal.<br>
-                <strong>Trav-modellen:</strong> Ägardriven — köp när ägare ökar i sweet spot (200-5000) + OCF-kvalitet.<br>
-                <strong>Magic Formula:</strong> EV/EBIT + ROCE ranking (Greenblatt). Top 20 billigaste kvalitetsbolag.<br>
-                <strong style="color:${spreadColor}">Spread YTD: ${spread_ytd}pp · Spread 1M: ${spread_1m}pp</strong>
-                (OBS: YTD är bakåtblickande, walk-forward börjar ${data.date})
-            </div>
-        </div>
-
-        <div style="display:flex;gap:16px;margin-bottom:20px;flex-wrap:wrap">
-            ${statCard('Trav-modellen (ENTRY)', ts, 'var(--green)', '🏇')}
-            ${statCard('Magic Formula (Top 20)', ms, 'var(--purple)', '📊')}
-            <div style="background:var(--white);border-radius:var(--radius);padding:20px;box-shadow:var(--shadow);border-left:4px solid ${spreadColor};flex:1;min-width:280px">
-                <div style="font-size:20px;margin-bottom:8px">📈 <strong>Spread (Trav - Magic)</strong></div>
-                <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:14px">
-                    <div>YTD spread: <strong style="color:${spreadColor}">${spread_ytd}pp</strong></div>
-                    <div>1M spread: <strong style="color:${spread_1m>0?'var(--green)':'var(--red)'}">${spread_1m}pp</strong></div>
-                    <div>Win YTD Trav: <strong>${(ts.win_ytd*100).toFixed(0)}%</strong></div>
-                    <div>Win YTD Magic: <strong>${(ms.win_ytd*100).toFixed(0)}%</strong></div>
-                </div>
-            </div>
-        </div>
-
-        <h3 style="margin:20px 0 10px;font-size:16px">🏇 Trav-modellen — ${trav.stocks.length} aktier</h3>
-        <div class="table-container">
-            <table><thead><tr>
-                <th>#</th><th>Aktie</th><th>Score</th><th>Fund</th>
-                <th style="text-align:right">Ägare</th><th style="text-align:right">Äg 1M</th>
-                <th style="text-align:right">ROE</th><th style="text-align:right">OCF</th>
-                <th style="text-align:right">D/E</th>
-                <th style="text-align:right">Pris 1M</th><th style="text-align:right">Pris YTD</th>
-            </tr></thead><tbody>${travRows}</tbody></table>
-        </div>
-
-        <h3 style="margin:30px 0 10px;font-size:16px">📊 Magic Formula — Top ${magic.stocks.length}</h3>
-        <div class="table-container">
-            <table><thead><tr>
-                <th>#</th><th>Aktie</th><th>MF Rank</th><th>EV/EBIT</th>
-                <th style="text-align:right">Ägare</th><th style="text-align:right">Äg 1M</th>
-                <th style="text-align:right">ROE</th><th style="text-align:right">OCF</th>
-                <th style="text-align:right">D/E</th>
-                <th style="text-align:right">Pris 1M</th><th style="text-align:right">Pris YTD</th>
-            </tr></thead><tbody>${magicRows}</tbody></table>
-        </div>
-
-        <div class="table-footer">Simulering startad ${data.date} · Walk-forward resultat mäts efter 1v/1m/3m · Data sparas dagligen i Supabase</div>
-    `;
-}
-
 // ── Simulation ─────────────────────────────────────
-
-async function startSimulation() {
-    if (!confirm('Starta simulering med 1 000 000 kr per portfölj?\nDagens aktier och priser låses in.')) return;
-    document.getElementById('content').innerHTML = '<div class="loading-wrap"><div class="spinner"></div></div>';
-    await fetch('/api/simulation', {method: 'POST'});
-    fetchData();
-}
-
-async function resetSimulation() {
-    if (!confirm('Nollställ simuleringen? Alla data raderas och du kan starta en ny.')) return;
-    await fetch('/api/simulation', {method: 'DELETE'});
-    fetchData();
-}
-
-async function rebalanceSimulation() {
-    if (!confirm('Rebalansera alla 5 portföljerna?\n\nTrav: Säljer EXIT-aktier, köper nya ENTRY\nMagic: Roterar om top 20 ändrats\nDSM: Roterar om top 15 ändrats\nACE: Roterar om top 25 ändrats\nMeta: Roterar om top 20 ändrats')) return;
-    document.getElementById('content').innerHTML = '<div class="loading-wrap"><div class="spinner"></div><div style="margin-top:12px;color:var(--text-sec)">Rebalanserar portföljerna...</div></div>';
-    try {
-        const res = await fetch('/api/simulation/rebalance', {method: 'POST'});
-        const data = await res.json();
-        const changes = data.rebalance_changes || [];
-        if (changes.length > 0) {
-            const sells = changes.filter(c => c.type === 'SELL');
-            const buys = changes.filter(c => c.type === 'BUY');
-            const totalGain = sells.reduce((s, c) => s + (c.gain_kr || 0), 0);
-            alert(`✅ Rebalansering klar!\n\n${sells.length} sålda aktier\n${buys.length} nya köp\nRealiserat: ${totalGain >= 0 ? '+' : ''}${Math.round(totalGain).toLocaleString('sv-SE')} kr`);
-        } else {
-            alert('Inga ändringar behövdes — alla aktier har samma signaler.');
-        }
-    } catch (e) {
-        alert('Fel vid rebalansering: ' + e.message);
-    }
-    fetchData();
-}
-
-function renderSimulation(simData) {
-    _portfolioStocks = [];
-    const portfolios = simData.portfolios || {};
-    const portKeys = Object.keys(portfolios);
-    const trades = simData.trades || [];
-    const realized = simData.realized || {};
-    const cash = simData.cash || {};
-
-    const PCFG = {
-        trav:         { icon: '🏇', label: 'Trav-modellen',                color: 'var(--green)',  borderColor: 'var(--green)', category: 'signal' },
-        magic:        { icon: '📊', label: 'Magic Formula',                color: 'var(--purple)', borderColor: 'var(--purple)', category: 'book' },
-        dsm:          { icon: '🎯', label: 'DSM (Dennis Signal)',          color: 'var(--blue)',   borderColor: 'var(--blue)',  category: 'signal' },
-        ace:          { icon: '⚡', label: 'ACE (Alpha Engine)',            color: 'var(--orange)', borderColor: 'var(--orange)', category: 'signal' },
-        meta:         { icon: '🧠', label: 'Meta Score (Combo)',           color: '#e91e63',       borderColor: '#e91e63',  category: 'signal' },
-        books:        { icon: '📚', label: 'Böckerna (10 aktier)',         color: '#8b5cf6',       borderColor: '#8b5cf6',  category: 'book' },
-        graham_def:   { icon: '📘', label: 'Graham Defensive (20 st)',     color: '#1d4ed8',       borderColor: '#1d4ed8',  category: 'book' },
-        quality_conc: { icon: '🏰', label: 'Buffett Quality (8 st)',       color: '#b45309',       borderColor: '#b45309',  category: 'book' },
-        v2_trifecta:  { icon: '🎯', label: 'v2 Trifecta (15 st)',          color: '#059669',       borderColor: '#059669',  category: 'v2' },
-        v2_quality_cp:{ icon: '🏰', label: 'v2 Quality Compounder (12 st)', color: '#2563eb',      borderColor: '#2563eb',  category: 'v2' },
-    };
-
-    function fmtKr(n) { return n.toLocaleString('sv-SE', {minimumFractionDigits: 0, maximumFractionDigits: 0}) + ' kr'; }
-    function fmtRet(n) { return (n >= 0 ? '+' : '') + (n * 100).toFixed(2) + '%'; }
-    function rc(n) { return n >= 0 ? 'var(--green)' : 'var(--red)'; }
-    function rcClass(n) { return n >= 0 ? 'num-pos' : 'num-neg'; }
-
-    function statLine(label, value, color) {
-        return `<div style="display:flex;justify-content:space-between;align-items:baseline;padding:3px 0">
-            <span style="font-size:11px;color:var(--text-muted)">${label}</span>
-            <span style="font-size:13px;font-weight:600;color:${color||'var(--text)'}">${value}</span>
-        </div>`;
-    }
-
-    function bigCard(label, icon, color, port, portKey, category) {
-        if (!port) return '';
-        const c = cash[portKey] || 0;
-        // Visa totalt portföljvärde inkl. kassa (matchar vad användaren faktiskt har)
-        // Buffett Quality med 30% kassa ska inte se ut som -27% när aktierna är -27%.
-        const valHoldings = port.total_current_value;
-        const val = port.total_value_with_cash != null ? port.total_value_with_cash : (valHoldings + c);
-        const gain = port.total_gain_with_cash != null ? port.total_gain_with_cash : (val - port.start_capital);
-        const ret = port.total_return_with_cash_pct != null ? port.total_return_with_cash_pct : (gain / (port.start_capital || 1));
-        // Aktiedel-avkastning (utan kassa) — visa som sekundär info
-        const aktieRet = port.total_return_pct;
-        const aktieGain = port.total_gain;
-        const r = realized[portKey] || {total_sells:0, wins:0, losses:0, win_rate:0, total_gain_kr:0};
-        const retClass = ret > 0 ? 'pos' : ret < 0 ? 'neg' : 'neu';
-        const retArrow = ret > 0 ? '▲' : ret < 0 ? '▼' : '●';
-        const badgeLabel = category === 'book' ? 'Bokstrategi' : 'Signalmodell';
-        const cashPct = port.cash_pct != null ? port.cash_pct : (val > 0 ? c/val : 0);
-
-        return `<div class="sim-pcard" style="--accent:${color}" onclick="showModelDetail('${portKey}')" title="Klicka för detaljerad vy, plan och transaktioner">
-            <span class="sim-pcard-detail-hint">DETALJER →</span>
-            <div class="sim-pcard-head">
-                <div class="sim-pcard-title"><span class="sim-pcard-icon">${icon}</span>${label}</div>
-            </div>
-            <div class="sim-pcard-badge" style="display:inline-block;margin-bottom:10px">${badgeLabel}</div>
-            <div class="sim-pcard-value" style="color:${ret >= 0 ? 'var(--text)' : 'var(--red)'}">${fmtKr(val)}</div>
-            <div class="sim-pcard-return ${retClass}">${retArrow} ${fmtRet(ret)} <span style="opacity:0.7;font-weight:500;margin-left:4px">(${gain>=0?'+':''}${fmtKr(gain)})</span></div>
-            <div class="sim-pcard-meta">
-                <span>${port.holdings.length} aktier</span><span>•</span>
-                <span>${port.days_active} dagar</span><span>•</span>
-                <span>Start: ${fmtKr(port.start_capital)}</span>
-            </div>
-            <div class="sim-pcard-stats">
-                <span class="sim-pcard-stat-label">Aktier</span>
-                <span class="sim-pcard-stat-val" style="color:${aktieGain !== 0 ? rc(aktieGain) : 'var(--text-muted)'}">
-                    ${fmtKr(valHoldings)} <span style="opacity:0.6;font-weight:500">(${fmtRet(aktieRet)})</span>
-                </span>
-                <span class="sim-pcard-stat-label">Kassa</span>
-                <span class="sim-pcard-stat-val" style="color:${c > 100 ? 'var(--blue)' : 'var(--text-muted)'}">
-                    ${fmtKr(c)} <span style="opacity:0.6;font-weight:500">(${(cashPct*100).toFixed(0)}%)</span>
-                </span>
-                <span class="sim-pcard-stat-label">Realiserat</span>
-                <span class="sim-pcard-stat-val" style="color:${r.total_gain_kr !== 0 ? rc(r.total_gain_kr) : 'var(--text-muted)'}">
-                    ${r.total_gain_kr !== 0 ? (r.total_gain_kr>=0?'+':'')+fmtKr(r.total_gain_kr) : '—'}
-                </span>
-                <span class="sim-pcard-stat-label">Win rate</span>
-                <span class="sim-pcard-stat-val" style="color:${r.total_sells > 0 ? (r.win_rate >= 0.5 ? 'var(--green-dark)' : 'var(--red)') : 'var(--text-muted)'}">
-                    ${r.total_sells > 0 ? r.wins+'/'+r.total_sells+' ('+(r.win_rate*100).toFixed(0)+'%)' : 'Inga sälj'}
-                </span>
-            </div>
-        </div>`;
-    }
-
-    // Ranking-panel: alla portföljer sorterade på avkastning (inkl. kassa)
-    let rankingHtml = '';
-    let hero = { totalVal: 0, totalCap: 0, totalRealized: 0, best: null, worst: null };
-    if (portKeys.length >= 1) {
-        const sorted = portKeys
-            .filter(k => portfolios[k])
-            .map(k => {
-                const p = portfolios[k];
-                const c = cash[k] || 0;
-                const v = p.total_value_with_cash != null ? p.total_value_with_cash : (p.total_current_value + c);
-                const r = p.total_return_with_cash_pct != null ? p.total_return_with_cash_pct : ((v - p.start_capital) / (p.start_capital || 1));
-                return { key: k, ret: r, val: v, n: p.holdings.length };
-            })
-            .sort((a,b) => b.ret - a.ret);
-        hero.best = sorted[0];
-        hero.worst = sorted[sorted.length - 1];
-        hero.totalVal = sorted.reduce((s, x) => s + x.val, 0);
-        hero.totalCap = portKeys.reduce((s, k) => s + (portfolios[k]?.start_capital || 0), 0);
-        hero.totalRealized = Object.values(realized).reduce((s, r) => s + (r.total_gain_kr || 0), 0);
-
-        rankingHtml = `<div class="sim-ranking">
-            <div class="sim-ranking-head">
-                <span>📈 Ranking</span>
-                <span style="font-size:11px;color:var(--text-muted);font-weight:500;text-transform:none;letter-spacing:0">efter avkastning</span>
-            </div>
-            ${sorted.map((s, i) => {
-                const cfg = PCFG[s.key] || {icon:'', label:s.key};
-                const rankCls = i === 0 ? 'gold' : i === 1 ? 'silver' : i === 2 ? 'bronze' : '';
-                const rankDisp = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : '#'+(i+1);
-                return `<div class="sim-ranking-row">
-                    <span class="sim-ranking-rank ${rankCls}">${rankDisp}</span>
-                    <span class="sim-ranking-name"><span>${cfg.icon}</span>${cfg.label}</span>
-                    <span class="sim-ranking-ret" style="color:${rc(s.ret)}">${fmtRet(s.ret)}</span>
-                </div>`;
-            }).join('')}
-        </div>`;
-    }
-
-    function holdingsTable(port, label, icon) {
-        if (!port || !port.holdings.length) return `<h3 style="margin:24px 0 10px;font-size:16px">${icon} ${label} — inga aktier</h3>`;
-        const winners = port.holdings.filter(h => h.return_pct > 0).length;
-        const losers = port.holdings.filter(h => h.return_pct < 0).length;
-        const winPct = (winners / port.holdings.length * 100).toFixed(0);
-        const rows = port.holdings.map((h, i) => {
-            const pidx = _portfolioStocks.push(h) - 1;
-            return `<tr style="background:${h.gain>0?'#f0fdf4':h.gain<0?'#fef2f2':''}">
-                <td>${i+1}</td>
-                <td><span class="stock-name" onclick="openDrawer(allLoadedRows.find(r=>String(r.orderbook_id)===String(_portfolioStocks[${pidx}].orderbook_id))||_portfolioStocks[${pidx}])">${h.name}</span></td>
-                <td style="text-align:right">${h.entry_price.toFixed(2)}</td>
-                <td style="text-align:right;font-weight:600">${h.current_price.toFixed(2)}</td>
-                <td style="text-align:right;color:var(--text-sec)">${h.shares.toFixed(0)}</td>
-                <td style="text-align:right;color:var(--text-sec)">${fmtKr(h.allocation)}</td>
-                <td style="text-align:right;font-weight:600" class="${rcClass(h.gain)}">${h.gain>=0?'+':''}${fmtKr(h.gain)}</td>
-                <td style="text-align:right;font-weight:700" class="${rcClass(h.return_pct)}">${fmtRet(h.return_pct)}</td>
-            </tr>`;
-        }).join('');
-
-        return `<h3 style="margin:24px 0 10px;font-size:16px">${icon} ${label} — ${port.holdings.length} aktier <span style="font-weight:400;font-size:13px;color:var(--text-muted)">(${winners} vinnare · ${losers} förlorare · ${winPct}% win)</span></h3>
-        <div class="table-container"><table><thead><tr>
-            <th>#</th><th>Aktie</th>
-            <th style="text-align:right">Köpkurs</th>
-            <th style="text-align:right">Nuv. kurs</th>
-            <th style="text-align:right">Antal</th>
-            <th style="text-align:right">Allokering</th>
-            <th style="text-align:right">Avk. kr</th>
-            <th style="text-align:right">Avk. %</th>
-        </tr></thead><tbody>${rows}</tbody></table></div>`;
-    }
-
-    // ── Handelshistorik ──
-    function tradesTable() {
-        if (!trades.length) return '';
-        const reasonLabels = {
-            'INITIAL': 'Start', 'NEW_ENTRY': 'Ny signal', 'EXIT_DECEL': 'Exit decel',
-            'EXIT_REVERSAL': 'Exit reversal', 'EXIT_WEEKLY': 'Exit vecka',
-            'EXIT_INSIDER': 'Exit insider', 'EXIT_DISCOVERY': 'Exit discovery',
-            'MF_ROTATION': 'MF rotation',
-            'DSM_ROTATION': 'DSM rotation', 'ACE_ROTATION': 'ACE rotation',
-            'META_ROTATION': 'Meta rotation', 'REBALANCE': 'Rebalans'
-        };
-        // Books-portföljen har längre reason-strängar ("BOOKS_INITIAL · composite 82 · …")
-        // Rendera dem läsligt: bara första segmentet bold, resten muted.
-        function fmtReason(raw) {
-            if (!raw) return '';
-            const mapped = reasonLabels[raw];
-            if (mapped) return mapped;
-            if (raw.indexOf(' · ') === -1) return raw;
-            const parts = raw.split(' · ');
-            const head = parts[0].replace(/^BOOKS_/, '').replace(/_/g,' ').toLowerCase();
-            const rest = parts.slice(1).join(' · ');
-            return `<span style="font-weight:700">${head}</span><span style="color:var(--text-muted);margin-left:4px">· ${rest}</span>`;
-        }
-        const portIcons = Object.fromEntries(Object.entries(PCFG).map(([k,v]) => [k, v.icon]));
-
-        const rows = trades.map(t => {
-            const isSell = t.trade_type === 'SELL';
-            const bg = isSell ? (t.gain_kr > 0 ? '#f0fdf4' : '#fef2f2') : '';
-            const gainStr = isSell && t.gain_pct != null ? `<span class="${t.gain_kr >= 0 ? 'num-pos' : 'num-neg'}">${t.gain_kr>=0?'+':''}${(t.gain_pct*100).toFixed(1)}%</span>` : '<span style="color:var(--text-muted)">—</span>';
-            const gainKrStr = isSell && t.gain_kr != null ? `<span class="${t.gain_kr >= 0 ? 'num-pos' : 'num-neg'}">${t.gain_kr>=0?'+':''}${fmtKr(t.gain_kr)}</span>` : '';
-            const typeColor = isSell ? 'var(--red)' : 'var(--green)';
-            const typeBg = isSell ? 'var(--red-light)' : 'var(--green-light)';
-            const dateStr = t.trade_date ? t.trade_date.slice(5) : '';
-
-            return `<tr style="background:${bg}">
-                <td style="font-size:12px;color:var(--text-sec);white-space:nowrap">${dateStr}</td>
-                <td style="font-size:12px">${portIcons[t.portfolio]||''} ${t.portfolio}</td>
-                <td style="font-weight:600">${t.name}</td>
-                <td><span style="display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600;background:${typeBg};color:${typeColor}">${t.trade_type === 'BUY' ? 'KÖP' : 'SÄLJ'}</span></td>
-                <td style="text-align:right">${t.price.toFixed(2)}</td>
-                <td style="text-align:right;font-size:12px">${fmtKr(t.value)}</td>
-                <td style="font-size:12px;color:var(--text-sec);max-width:320px">${fmtReason(t.reason)}</td>
-                <td style="text-align:right">${gainStr}</td>
-                <td style="text-align:right;font-size:12px">${gainKrStr}</td>
-            </tr>`;
-        }).join('');
-
-        const totalSells = trades.filter(t => t.trade_type === 'SELL');
-        const totalGain = totalSells.reduce((s, t) => s + (t.gain_kr || 0), 0);
-
-        return `<h3 style="margin:30px 0 10px;font-size:16px;display:flex;align-items:center;gap:8px">
-            📋 Handelshistorik <span style="font-weight:400;font-size:13px;color:var(--text-muted)">(${trades.length} transaktioner${totalSells.length > 0 ? ' · Realiserat: '+(totalGain>=0?'+':'')+fmtKr(totalGain) : ''})</span>
-        </h3>
-        <div class="table-container"><table><thead><tr>
-            <th>Datum</th><th>Portfölj</th><th>Aktie</th><th>Typ</th>
-            <th style="text-align:right">Pris</th><th style="text-align:right">Värde</th>
-            <th>Anledning</th><th style="text-align:right">Avk. %</th><th style="text-align:right">Avk. kr</th>
-        </tr></thead><tbody>${rows}</tbody></table></div>`;
-    }
-
-    const firstPort = portfolios[portKeys[0]];
-    const startDate = firstPort ? firstPort.start_date : '—';
-
-    // Rebalanserings-banner
-    const rebalanceTrades = trades.filter(t => t.reason !== 'INITIAL');
-    let rebalBanner = '';
-    if (rebalanceTrades.length > 0) {
-        const lastDate = rebalanceTrades[0]?.trade_date || '';
-        const lastSells = rebalanceTrades.filter(t => t.trade_type === 'SELL' && t.trade_date === lastDate);
-        const lastBuys = rebalanceTrades.filter(t => t.trade_type === 'BUY' && t.trade_date === lastDate);
-        const lastGain = lastSells.reduce((s, t) => s + (t.gain_kr || 0), 0);
-        rebalBanner = `<div style="background:linear-gradient(135deg,#fffbe6,#fff3e0);border:1px solid #ffe0b2;border-radius:var(--radius);padding:12px 16px;margin-bottom:16px;font-size:13px">
-            ⚡ <strong>Senaste rebalansering (${lastDate.slice(5)}):</strong>
-            ${lastSells.length} sålda${lastSells.length>0?` (${lastSells.map(s=>s.reason).filter((v,i,a)=>a.indexOf(v)===i).join(', ')})`:''},
-            ${lastBuys.length} nya köp
-            ${lastSells.length > 0 ? ' · Realiserat: <strong style="color:'+rc(lastGain)+'">'+(lastGain>=0?'+':'')+fmtKr(lastGain)+'</strong>' : ''}
-        </div>`;
-    }
-
-    // Dynamiska portföljkort grupperade efter kategori
-    const signalKeys = portKeys.filter(k => (PCFG[k]?.category || 'signal') === 'signal');
-    const bookKeys   = portKeys.filter(k => (PCFG[k]?.category || '') === 'book');
-    const mkCardsHtml = (keys) => keys.map(k => {
-        const cfg = PCFG[k] || {icon:'📦', label:k, color:'var(--text)', category:'signal'};
-        return bigCard(cfg.label, cfg.icon, cfg.color, portfolios[k], k, cfg.category);
-    }).join('');
-    const signalCardsHtml = mkCardsHtml(signalKeys);
-    const bookCardsHtml = mkCardsHtml(bookKeys);
-
-    // Dynamiska holdings-tabeller
-    const holdingsHtml = portKeys.map(k => {
-        const cfg = PCFG[k] || {icon:'📦', label:k};
-        return holdingsTable(portfolios[k], cfg.label, cfg.icon);
-    }).join('');
-
-    // Auto-rebalance banner
-    let autoRebalHtml = '';
-    if (statsData && statsData.last_rebalance_date) {
-        const rebalChanges = statsData.last_rebalance_changes_count || 0;
-        if (rebalChanges > 0) {
-            autoRebalHtml = `<div class="auto-rebal-banner">
-                <span style="font-size:16px">✅</span>
-                <span><strong>Auto-rebalansering kördes ${statsData.last_rebalance_date}</strong> — ${rebalChanges} ändringar genomförda automatiskt</span>
-            </div>`;
-        }
-    }
-
-    const totalGainAbs = hero.totalVal - hero.totalCap;
-    const totalRetPct = hero.totalCap > 0 ? (hero.totalVal - hero.totalCap) / hero.totalCap : 0;
-    const bestCfg = hero.best ? PCFG[hero.best.key] || {} : null;
-    const worstCfg = hero.worst ? PCFG[hero.worst.key] || {} : null;
-
-    document.getElementById('content').innerHTML = `
-        <!-- ── HERO ── -->
-        <div class="sim-hero">
-            <div>
-                <div class="sim-hero-title">Portföljsimulering</div>
-                <div class="sim-hero-sub">${portKeys.length} strategier · Start ${startDate} · 1 000 000 kr per portfölj</div>
-                <div class="sim-hero-actions" style="justify-content:flex-start;margin-top:14px">
-                    <button class="sim-hero-btn" onclick="rebalanceSimulation()">🔄 Rebalansera nu</button>
-                    <button class="sim-hero-btn danger" onclick="resetSimulation()">Nollställ</button>
-                </div>
-            </div>
-            <div class="sim-hero-kpi">
-                <div class="sim-hero-kpi-label">Totalt värde</div>
-                <div class="sim-hero-kpi-value">${fmtKr(hero.totalVal)}</div>
-                <div class="sim-hero-kpi-sub" style="color:${totalGainAbs >= 0 ? '#6ee7b7' : '#fca5a5'}">
-                    ${totalGainAbs >= 0 ? '▲' : '▼'} ${fmtRet(totalRetPct)} (${totalGainAbs>=0?'+':''}${fmtKr(totalGainAbs)})
-                </div>
-            </div>
-            <div class="sim-hero-kpi">
-                <div class="sim-hero-kpi-label">Bäst presterande</div>
-                <div class="sim-hero-kpi-value" style="color:#6ee7b7">${bestCfg ? bestCfg.icon+' '+fmtRet(hero.best.ret) : '—'}</div>
-                <div class="sim-hero-kpi-sub">${bestCfg ? bestCfg.label : ''}</div>
-            </div>
-            <div class="sim-hero-kpi">
-                <div class="sim-hero-kpi-label">Realiserat P&L</div>
-                <div class="sim-hero-kpi-value" style="color:${hero.totalRealized >= 0 ? '#6ee7b7' : '#fca5a5'}">
-                    ${hero.totalRealized >= 0 ? '+' : ''}${fmtKr(hero.totalRealized)}
-                </div>
-                <div class="sim-hero-kpi-sub">${trades.filter(t=>t.trade_type==='SELL').length} sälj · ${trades.filter(t=>t.trade_type==='BUY').length} köp</div>
-            </div>
-        </div>
-
-        ${autoRebalHtml}
-        ${rebalBanner}
-
-        <!-- ── Morgonbrief ── -->
-        <div style="margin-bottom:24px">
-            <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;flex-wrap:wrap">
-                <button id="morningBriefBtn" onclick="generateMorningBrief()" class="brief-btn">
-                    🌅 Generera morgonbrief
-                </button>
-                <span style="font-size:12px;color:var(--text-muted)">Claude AI analyserar alla portföljer + dagens stockpick</span>
-            </div>
-            <div id="morningBriefResult"></div>
-        </div>
-
-        <!-- ── Signalmodeller ── -->
-        ${signalCardsHtml ? `
-        <div class="sim-section-head">
-            <h2>⚡ Signalmodeller</h2>
-            <span class="sim-section-head-tag">Entry/exit-driven · kort- till medellång sikt</span>
-        </div>
-        <div class="sim-card-grid">${signalCardsHtml}</div>
-        ` : ''}
-
-        <!-- ── Bokstrategier ── -->
-        ${bookCardsHtml ? `
-        <div class="sim-section-head">
-            <h2>📚 Bokstrategier</h2>
-            <span class="sim-section-head-tag">Fundamental analys · låg omsättning · långsiktigt</span>
-        </div>
-        <div class="sim-card-grid">${bookCardsHtml}</div>
-        ` : ''}
-
-        <!-- ── Ranking ── -->
-        <div class="sim-section-head">
-            <h2>🏆 Översikt</h2>
-            <span class="sim-section-head-tag">Klicka på en portfölj ovan för detaljer</span>
-        </div>
-        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:14px;margin-bottom:24px">
-            ${rankingHtml}
-        </div>
-
-        <!-- ── Holdings ── -->
-        ${holdingsHtml}
-
-        <!-- ── Trades ── -->
-        ${tradesTable()}
-
-        <div class="table-footer">Simulering startad ${startDate} · ${portKeys.length} modeller · Priser uppdateras var 15:e minut under marknadstid</div>
-    `;
-
-    // Load cached brief if available
-    loadCachedBrief();
-}
 
 // ── OCF Toplist ────────────────────────────────────
 
@@ -7136,409 +6236,14 @@ function setupInfiniteScroll() {
 
 let morningBriefData = null;
 
-async function generateMorningBrief() {
-    const btn = document.getElementById('morningBriefBtn');
-    const container = document.getElementById('morningBriefResult');
-    if (!btn || !container) return;
-
-    btn.disabled = true;
-    btn.innerHTML = '<div class="loading-spinner" style="width:18px;height:18px;border-width:2px;margin:0;display:inline-block"></div> Genererar brief...';
-
-    try {
-        const res = await fetch('/api/ai-morning-brief', {method: 'POST'});
-        const data = await res.json();
-        if (data.error) {
-            container.innerHTML = `<div style="padding:12px;background:#fee;border-radius:8px;color:var(--red);font-size:13px">❌ ${data.error}</div>`;
-            return;
-        }
-        morningBriefData = data;
-        renderMorningBriefResult(container);
-    } catch(e) {
-        container.innerHTML = `<div style="padding:12px;background:#fee;border-radius:8px;color:var(--red);font-size:13px">❌ ${e.message}</div>`;
-    } finally {
-        btn.disabled = false;
-        btn.innerHTML = '🌅 Generera morgonbrief';
-    }
-}
-
-async function loadCachedBrief() {
-    try {
-        const res = await fetch('/api/ai-morning-brief');
-        const data = await res.json();
-        if (data.cached && data.greeting) {
-            morningBriefData = data;
-            const container = document.getElementById('morningBriefResult');
-            if (container) renderMorningBriefResult(container);
-        }
-    } catch(e) {}
-}
-
-function renderMorningBriefResult(container) {
-    const b = morningBriefData;
-    if (!b) return;
-
-    const signalColors = {
-        'STARK KÖP': '#00a870', 'KÖP': '#22c55e', 'NEUTRAL': '#f59e0b',
-        'SÄLJ': '#ef4444', 'STARK SÄLJ': '#991b1b',
-        'BULLISH': '#00a870', 'BEARISH': '#ef4444',
-    };
-    const sigColor = signalColors[b.overall_signal] || '#666';
-
-    const PCFG = {
-        trav:  { icon: '🏇', label: 'Trav' },
-        magic: { icon: '📊', label: 'Magic Formula' },
-        dsm:   { icon: '🎯', label: 'DSM' },
-        ace:   { icon: '⚡', label: 'ACE' },
-        meta:  { icon: '🧠', label: 'Meta Score' },
-        v2_trifecta: { icon: '🎯', label: 'v2 Trifecta' },
-        v2_quality_cp: { icon: '🏰', label: 'v2 Quality CP' },
-    };
-
-    const portfoliosHtml = (b.portfolios || []).map(p => {
-        const cfg = PCFG[p.name?.toLowerCase()] || {icon:'📦', label: p.name};
-        return `<div class="brief-port-card">
-            <div class="brief-port-name">${cfg.icon} ${cfg.label}</div>
-            <div class="brief-port-assessment">${p.assessment || ''}</div>
-            ${p.action ? `<div style="margin-top:6px;font-size:12px;opacity:0.8">➡️ ${p.action}</div>` : ''}
-        </div>`;
-    }).join('');
-
-    const stockpick = b.dagens_stockpick || b.stockpick || {};
-    const stockpickHtml = stockpick.name ? `
-        <div class="brief-stockpick">
-            <div style="font-size:12px;opacity:0.7;margin-bottom:4px">🎯 DAGENS STOCKPICK</div>
-            <div style="font-size:20px;font-weight:700">${stockpick.name}</div>
-            <div style="font-size:13px;margin-top:6px;opacity:0.9">${stockpick.reason || ''}</div>
-        </div>` : '';
-
-    const risksHtml = (b.risks || []).map(r => `<div style="font-size:12px;opacity:0.8;padding:2px 0">⚠️ ${r}</div>`).join('');
-
-    container.innerHTML = `
-        <div class="brief-card">
-            <div class="brief-header">
-                <div style="font-size:36px">🌅</div>
-                <div>
-                    <div class="brief-greeting">${b.greeting || 'God morgon!'}</div>
-                    <div style="font-size:13px;opacity:0.8">${b.market_summary || ''}</div>
-                </div>
-            </div>
-
-            <div class="brief-grid">${portfoliosHtml}</div>
-
-            ${stockpickHtml}
-
-            <div style="display:flex;align-items:center;justify-content:space-between;margin-top:16px">
-                <div>
-                    <span class="brief-signal-badge" style="background:${sigColor};color:white">${b.overall_signal || '—'}</span>
-                </div>
-                ${risksHtml ? `<div style="flex:1;margin-left:16px">${risksHtml}</div>` : ''}
-            </div>
-        </div>`;
-}
-
 // ── My Portfolio ──────────────────────────────────
 
 let myPortfolioResult = null;
 let uploadedImage = null;
 
-function renderMyPortfolio() {
-    document.getElementById('filterBar').innerHTML = '';
-    document.getElementById('content').innerHTML = `
-        <div class="info-banner" style="background:linear-gradient(135deg,var(--orange-light),#fff3e0)">
-            <div class="info-banner-icon">📂</div>
-            <div class="info-banner-text">
-                <strong>Min Portfölj — AI-analys</strong><br>
-                Ladda upp en skärmbild av din portfölj (Avanza, Nordnet, etc.) eller skriv in dina aktier manuellt.
-                Claude AI analyserar dina innehav och ger köp/sälj/håll-rekommendationer baserat på alla våra signaler.
-            </div>
-        </div>
-
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:20px">
-            <div>
-                <h3 style="margin-bottom:12px;font-size:16px">📸 Ladda upp skärmbild</h3>
-                <div class="upload-zone" id="uploadZone"
-                    ondragover="event.preventDefault();this.classList.add('dragover')"
-                    ondragleave="this.classList.remove('dragover')"
-                    ondrop="handleDrop(event)"
-                    onclick="document.getElementById('fileInput').click()">
-                    <div class="upload-zone-icon">📷</div>
-                    <div class="upload-zone-text">Dra och släpp en bild här<br>eller klicka för att välja fil</div>
-                    <div id="imagePreview"></div>
-                </div>
-                <input type="file" id="fileInput" accept="image/*" style="display:none" onchange="handleFile(this.files[0])">
-                <button id="analyzeImageBtn" onclick="analyzePortfolioImage()" disabled
-                    style="margin-top:12px;width:100%;padding:12px;background:var(--orange);color:white;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;opacity:0.5">
-                    📸 Analysera bild
-                </button>
-            </div>
-            <div>
-                <h3 style="margin-bottom:12px;font-size:16px">✏️ Skriv in manuellt</h3>
-                <textarea id="manualPortfolio" rows="10" placeholder="Skriv dina aktier, en per rad:&#10;&#10;Volvo B 100st&#10;Ericsson B 500st&#10;H&M B 200st&#10;SEB A 300st"
-                    style="width:100%;padding:14px;border:1px solid var(--border);border-radius:var(--radius);font-family:inherit;font-size:13px;resize:vertical;outline:none"></textarea>
-                <button onclick="analyzeManualPortfolio()"
-                    style="margin-top:12px;width:100%;padding:12px;background:var(--orange);color:white;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit">
-                    ✏️ Analysera text
-                </button>
-            </div>
-        </div>
-
-        <div id="myPortfolioResult">
-            ${myPortfolioResult ? myPortfolioResult : '<div style="text-align:center;padding:40px;color:var(--text-muted);font-size:14px"><div style="font-size:48px;margin-bottom:12px">📂</div>Ladda upp en portföljbild eller skriv in dina aktier ovan för att få AI-rekommendationer.</div>'}
-        </div>
-    `;
-}
-
-function handleDrop(e) {
-    e.preventDefault();
-    e.currentTarget.classList.remove('dragover');
-    if (e.dataTransfer.files.length > 0) {
-        handleFile(e.dataTransfer.files[0]);
-    }
-}
-
-function handleFile(file) {
-    if (!file || !file.type.startsWith('image/')) return;
-    const reader = new FileReader();
-    reader.onload = (e) => {
-        uploadedImage = e.target.result;
-        document.getElementById('imagePreview').innerHTML = `<img src="${uploadedImage}" class="upload-preview">`;
-        const btn = document.getElementById('analyzeImageBtn');
-        btn.disabled = false;
-        btn.style.opacity = '1';
-    };
-    reader.readAsDataURL(file);
-}
-
-async function analyzePortfolioImage() {
-    if (!uploadedImage) return;
-    const btn = document.getElementById('analyzeImageBtn');
-    const resultDiv = document.getElementById('myPortfolioResult');
-    btn.disabled = true;
-    btn.innerHTML = '<div class="loading-spinner" style="width:16px;height:16px;border-width:2px;margin:0;display:inline-block"></div> Analyserar...';
-    resultDiv.innerHTML = '<div class="loading-wrap"><div class="loading-spinner"></div><p style="color:var(--text-muted)">Claude AI analyserar din portfölj... (kan ta 30-60 sek)</p></div>';
-
-    try {
-        const base64 = uploadedImage.split(',')[1];
-        const res = await fetch('/api/analyze-portfolio', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({image: base64})
-        });
-        const data = await res.json();
-        if (data.error) {
-            resultDiv.innerHTML = `<div style="padding:16px;background:#fee;border-radius:8px;color:var(--red)">❌ ${data.error}</div>`;
-        } else {
-            renderPortfolioAnalysis(data, resultDiv);
-        }
-    } catch(e) {
-        resultDiv.innerHTML = `<div style="padding:16px;background:#fee;border-radius:8px;color:var(--red)">❌ ${e.message}</div>`;
-    } finally {
-        btn.disabled = false;
-        btn.innerHTML = '📸 Analysera bild';
-    }
-}
-
-async function analyzeManualPortfolio() {
-    const text = document.getElementById('manualPortfolio')?.value;
-    if (!text || text.trim().length < 3) { alert('Skriv in minst en aktie'); return; }
-    const resultDiv = document.getElementById('myPortfolioResult');
-    resultDiv.innerHTML = '<div class="loading-wrap"><div class="loading-spinner"></div><p style="color:var(--text-muted)">Claude AI analyserar din portfölj... (kan ta 30-60 sek)</p></div>';
-
-    try {
-        const res = await fetch('/api/analyze-portfolio', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({text: text})
-        });
-        const data = await res.json();
-        if (data.error) {
-            resultDiv.innerHTML = `<div style="padding:16px;background:#fee;border-radius:8px;color:var(--red)">❌ ${data.error}</div>`;
-        } else {
-            renderPortfolioAnalysis(data, resultDiv);
-        }
-    } catch(e) {
-        resultDiv.innerHTML = `<div style="padding:16px;background:#fee;border-radius:8px;color:var(--red)">❌ ${e.message}</div>`;
-    }
-}
-
-function renderPortfolioAnalysis(data, container) {
-    const stocks = data.stocks || [];
-    const recs = data.recommendations || [];
-    const summary = data.summary || '';
-
-    const recMap = {};
-    recs.forEach(r => { recMap[(r.name||'').toLowerCase()] = r; });
-
-    const recColors = {
-        'KÖP': {bg:'var(--green-light)',color:'var(--green)',icon:'🟢'},
-        'KÖP MER': {bg:'#00a870',color:'white',icon:'🟢🟢'},
-        'HÅLL': {bg:'#f5f5f5',color:'var(--text-sec)',icon:'🔵'},
-        'SÄLJ': {bg:'var(--red-light)',color:'var(--red)',icon:'🔴'},
-        'STARK SÄLJ': {bg:'var(--red)',color:'white',icon:'🔴🔴'},
-    };
-
-    const rows = stocks.map((s, i) => {
-        const rec = recMap[(s.name||'').toLowerCase()] || {};
-        const signal = rec.recommendation || 'HÅLL';
-        const rc = recColors[signal] || recColors['HÅLL'];
-        const matched = s.matched !== false;
-        return `<tr>
-            <td>${i+1}</td>
-            <td style="font-weight:600">${s.name || '?'}</td>
-            <td style="text-align:center">${matched ? '<span style="color:var(--green)">✓</span>' : '<span style="color:var(--text-muted)">—</span>'}</td>
-            <td style="text-align:right">${s.current_price ? s.current_price.toFixed(2) : '-'}</td>
-            <td style="text-align:right">${s.shares || '-'}</td>
-            <td style="text-align:center">${s.meta_score ? '<span style="font-weight:700;color:'+scoreColor(s.meta_score)+'">'+s.meta_score.toFixed(0)+'</span>' : '-'}</td>
-            <td style="text-align:center">${s.signal ? signalBadge(s.signal) : '-'}</td>
-            <td><span class="badge" style="background:${rc.bg};color:${rc.color};font-size:12px">${rc.icon} ${signal}</span></td>
-            <td style="font-size:12px;color:var(--text-sec);max-width:200px">${rec.reason || ''}</td>
-        </tr>`;
-    }).join('');
-
-    const html = `
-        ${summary ? `<div style="background:linear-gradient(135deg,var(--orange-light),#fff8e1);border-radius:var(--radius);padding:16px;margin-bottom:16px;font-size:14px">
-            <strong>📋 Sammanfattning:</strong> ${summary}
-        </div>` : ''}
-        <div class="table-container"><table><thead><tr>
-            <th>#</th><th>Aktie</th><th style="text-align:center">Matchad</th>
-            <th style="text-align:right">Kurs</th><th style="text-align:right">Antal</th>
-            <th style="text-align:center">Meta Score</th><th style="text-align:center">Signal</th>
-            <th>Rekommendation</th><th>Motivering</th>
-        </tr></thead><tbody>${rows}</tbody></table></div>
-    `;
-    container.innerHTML = html;
-    myPortfolioResult = html;
-}
-
 // ── AI Toplist ───────────────────────────────────
 
 let aiToplistData = null;
-
-async function fetchAIToplist() {
-    document.getElementById('filterBar').innerHTML = '';
-    try {
-        const res = await fetch('/api/ai-toplist');
-        const data = await res.json();
-        aiToplistData = data;
-        renderAIToplist();
-    } catch(e) {
-        document.getElementById('content').innerHTML = `<div class="loading-wrap"><p style="color:var(--red)">Fel: ${e.message}</p></div>`;
-    }
-}
-
-async function generateAIToplist() {
-    const btn = document.getElementById('aiToplistBtn');
-    if (!btn) return;
-    btn.disabled = true;
-    btn.innerHTML = '<div class="loading-spinner" style="width:16px;height:16px;border-width:2px;margin:0;display:inline-block"></div> Analyserar 50 aktier...';
-
-    try {
-        await fetch('/api/ai-toplist', {method: 'POST'});
-        // Poll for completion
-        const poll = setInterval(async () => {
-            const st = await (await fetch('/api/status')).json();
-            const topRes = await (await fetch('/api/ai-toplist')).json();
-            if (topRes.loading) {
-                btn.innerHTML = '<div class="loading-spinner" style="width:16px;height:16px;border-width:2px;margin:0;display:inline-block"></div> ' + (topRes.progress || 'Analyserar...');
-            } else {
-                clearInterval(poll);
-                btn.disabled = false;
-                btn.innerHTML = '🧠 Uppdatera AI-analys';
-                aiToplistData = topRes;
-                renderAIToplist();
-            }
-        }, 3000);
-    } catch(e) {
-        btn.disabled = false;
-        btn.innerHTML = '🧠 Uppdatera AI-analys';
-        alert('Fel: ' + e.message);
-    }
-}
-
-function renderAIToplist() {
-    const data = aiToplistData || {};
-    const scores = data.scores || [];
-    const loading = data.loading || false;
-    const analysisDate = data.date || data.analysis_date || '';
-
-    const infoBanner = `<div class="info-banner" style="background:linear-gradient(135deg,#f0e8ff,#e8eeff)">
-        <div class="info-banner-icon">🧠</div>
-        <div class="info-banner-text">
-            <strong>AI Topplista — Claude analyserar top 50 aktier</strong><br>
-            Claude AI läser alla nyckeltal och ger varje aktie ett AI Score (0-100) + signal.
-            Jämför mot Meta Score för att hitta diskrepanser — aktier där AI ser mer potential.
-            ${analysisDate ? '<br>Senast uppdaterad: <strong>'+analysisDate+'</strong>' : ''}
-        </div>
-    </div>`;
-
-    const btnHtml = `<div style="margin-bottom:16px">
-        <button id="aiToplistBtn" onclick="generateAIToplist()" class="brief-btn" ${loading ? 'disabled' : ''}>
-            ${loading ? '<div class="loading-spinner" style="width:16px;height:16px;border-width:2px;margin:0;display:inline-block"></div> Analyserar...' : '🧠 Uppdatera AI-analys'}
-        </button>
-    </div>`;
-
-    if (scores.length === 0) {
-        document.getElementById('content').innerHTML = `
-            ${infoBanner}${btnHtml}
-            <div style="text-align:center;padding:60px;color:var(--text-muted)">
-                <div style="font-size:64px;margin-bottom:16px">🧠</div>
-                <div style="font-size:18px;font-weight:600;margin-bottom:8px">Ingen AI-analys ännu</div>
-                <div>Klicka "Uppdatera AI-analys" för att låta Claude analysera top 50 aktier.</div>
-            </div>`;
-        return;
-    }
-
-    const rows = scores.map((s, i) => {
-        const aiScore = s.ai_score || 0;
-        const metaScore = s.meta_score || 0;
-        const diff = aiScore - metaScore;
-        const diffColor = diff > 10 ? 'var(--green)' : diff < -10 ? 'var(--red)' : 'var(--text-muted)';
-        const aiColor = scoreColor(aiScore);
-
-        const aiSignalMap = {
-            'STARK_KOP': {bg:'#00563B',txt:'white',lbl:'STARK KÖP'},
-            'STARK KÖP': {bg:'#00563B',txt:'white',lbl:'STARK KÖP'},
-            'KOP': {bg:'#00a870',txt:'white',lbl:'KÖP'},
-            'KÖP': {bg:'#00a870',txt:'white',lbl:'KÖP'},
-            'NEUTRAL': {bg:'#f5f5f5',txt:'var(--text-sec)',lbl:'NEUTRAL'},
-            'SALJ': {bg:'var(--red-light)',txt:'var(--red)',lbl:'SÄLJ'},
-            'SÄLJ': {bg:'var(--red-light)',txt:'var(--red)',lbl:'SÄLJ'},
-            'STARK_SALJ': {bg:'var(--red)',txt:'white',lbl:'STARK SÄLJ'},
-            'STARK SÄLJ': {bg:'var(--red)',txt:'white',lbl:'STARK SÄLJ'},
-        };
-        const sig = aiSignalMap[s.ai_signal] || {bg:'#f5f5f5',txt:'var(--text-sec)',lbl:s.ai_signal||'—'};
-
-        return `<tr style="${Math.abs(diff) > 15 ? 'background:#fffbeb' : ''}">
-            <td style="font-weight:600;color:var(--text-muted)">${i+1}</td>
-            <td style="font-weight:600">${s.stock_name || ''}</td>
-            <td style="text-align:center">
-                <div class="ai-gauge" style="background:conic-gradient(${aiColor} ${aiScore*3.6}deg, #e5e7eb ${aiScore*3.6}deg);margin:0 auto">
-                    <div class="ai-gauge-inner" style="color:${aiColor}">${aiScore}</div>
-                </div>
-            </td>
-            <td style="text-align:center"><span class="badge" style="background:${sig.bg};color:${sig.txt};font-size:11px">${sig.lbl}</span></td>
-            <td style="text-align:center"><span style="font-weight:700;color:${scoreColor(metaScore)}">${metaScore.toFixed(0)}</span></td>
-            <td style="text-align:center"><span style="font-weight:600;color:var(--text-muted)">${s.model_agreement || '—'}</span></td>
-            <td style="text-align:center;font-weight:700;color:${diffColor}">${diff > 0 ? '+' : ''}${diff.toFixed(0)}</td>
-            <td style="font-size:12px;color:var(--text-sec);max-width:250px">${s.ai_summary || ''}</td>
-        </tr>`;
-    }).join('');
-
-    document.getElementById('content').innerHTML = `
-        ${infoBanner}${btnHtml}
-        <div class="table-container"><table><thead><tr>
-            <th style="width:40px">#</th>
-            <th>Aktie</th>
-            <th style="text-align:center;min-width:60px">AI Score</th>
-            <th style="text-align:center">AI Signal</th>
-            <th style="text-align:center">Meta Score</th>
-            <th style="text-align:center">Enighet</th>
-            <th style="text-align:center">Diff (AI-Meta)</th>
-            <th>AI Sammanfattning</th>
-        </tr></thead><tbody>${rows}</tbody></table></div>
-        <div class="table-footer">AI Topplista — ${scores.length} aktier analyserade av Claude AI · ${analysisDate || 'ej analyserade'}</div>
-    `;
-}
 
 // ── AI Agent (chat med Claude Opus) ──────────────────────────
 
@@ -9306,63 +8011,6 @@ function _renderBacktestResults() {
 let _dashCache = null;
 const _modelToplistCache = {};  // per-modell cache med TTL
 
-async function loadModelTopN(modelKey, limit = 5, expandView = false) {
-    const el = document.getElementById('mtl-list-' + modelKey);
-    if (!el) return;
-
-    const cacheKey = `${modelKey}|${limit}`;
-    const cached = _modelToplistCache[cacheKey];
-    if (cached && (Date.now() - cached._ts) < 5 * 60 * 1000) {
-        renderModelToplistRows(el, cached.stocks, limit, expandView);
-        return;
-    }
-
-    el.innerHTML = '<div class="mtl-skel">Laddar…</div>';
-    try {
-        const r = await fetch(`/api/model-toplist?model=${encodeURIComponent(modelKey)}&limit=${limit}`);
-        const data = await r.json();
-        _modelToplistCache[cacheKey] = {stocks: data.stocks || [], _ts: Date.now()};
-        renderModelToplistRows(el, data.stocks || [], limit, expandView);
-        // Cacha även för fetchAll så klick på aktie-namn går till drawer
-        (data.stocks || []).forEach(s => { if (!_picksLookup[s.orderbook_id]) _picksLookup[s.orderbook_id] = s; });
-
-        // Om första anropet var 5, visa "Visa topp 20"-knappen ändå
-        if (limit === 5) {
-            const btn = document.querySelector(`#mtl-${modelKey} .mtl-expand`);
-            if (btn) btn.onclick = () => loadModelTopN(modelKey, 20, true);
-        } else if (limit >= 20) {
-            const btn = document.querySelector(`#mtl-${modelKey} .mtl-expand`);
-            if (btn) { btn.textContent = 'Visa topp 5 ↑'; btn.onclick = () => loadModelTopN(modelKey, 5, false); }
-        }
-    } catch(e) {
-        el.innerHTML = '<div class="mtl-err">Kunde inte ladda</div>';
-    }
-}
-
-function renderModelToplistRows(el, stocks, limit, expandView) {
-    if (!stocks.length) {
-        el.innerHTML = '<div class="mtl-empty">Inga aktier matchar modellen just nu.</div>';
-        return;
-    }
-    const visible = stocks.slice(0, limit);
-    el.innerHTML = visible.map((s, i) => {
-        const flag = FLAGS[s.country] || '';
-        const sc = s.model_score;
-        const scoreColor = sc >= 80 ? 'var(--green-dark)' : sc >= 65 ? 'var(--green)' : sc >= 50 ? '#92400e' : 'var(--text-muted)';
-        const pe = s.pe_ratio != null ? `P/E ${s.pe_ratio.toFixed(1)}` : '';
-        const dy = s.direct_yield != null && s.direct_yield > 0 ? `${(s.direct_yield*100).toFixed(1)}%` : '';
-        const meta = [pe, dy].filter(Boolean).join(' · ');
-        return `<div class="mtl-row" onclick='_openPickStock(${s.orderbook_id})'>
-            <div class="mtl-rank">${i+1}</div>
-            <div class="mtl-body">
-                <div class="mtl-stock">${flag} ${s.name}</div>
-                <div class="mtl-meta">${s.short_name||''}${meta?' · '+meta:''}</div>
-            </div>
-            <div class="mtl-score" style="color:${scoreColor}">${sc!=null?sc.toFixed(0):'–'}</div>
-        </div>`;
-    }).join('');
-}
-
 const _picksLookup = {};
 
 // ══════════════════════════════════════════════
@@ -9394,145 +8042,7 @@ const QUANT_SCREEN_TABS = [
 ];
 let _activeQuantTab = 'gt_mf_confluence';
 
-// ── 🎯 Dagens BUY/AVOID-signaler på dashboard ──
-async function loadTodaysSignals() {
-    const wrap = document.getElementById('todaysSignalsContent');
-    if (!wrap) return;
-    try {
-        const [seRes, usRes] = await Promise.all([
-            fetch('/api/quant-screen?country=SE&limit=500&mode=raw').then(r => r.json()),
-            fetch('/api/quant-screen?country=US&limit=300&mode=raw').then(r => r.json()),
-        ]);
-        const all = [...(seRes.results || []), ...(usRes.results || [])];
-        const buys = all.filter(r => r.recommendation === 'BUY');
-        const buyLights = all.filter(r => r.recommendation === 'BUY-LIGHT');
-        const avoids = all.filter(r => r.recommendation === 'AVOID');
-
-        // Sort BUYs: super-confluence first, then by composite
-        buys.sort((a, b) => {
-            const aFlags = a.n_flags || 0, bFlags = b.n_flags || 0;
-            if (bFlags !== aFlags) return bFlags - aFlags;
-            return (b.composite_score || 0) - (a.composite_score || 0);
-        });
-
-        const buyHtml = buys.length ? buys.slice(0, 12).map(r => {
-            const tk = r.ticker || r.short_name || '?';
-            const flag = r.country === 'US' ? '🇺🇸' : (r.country === 'SE' ? '🇸🇪' : '');
-            const nFlags = r.n_flags || 0;
-            const ringColor = nFlags >= 4 ? '#fbbf24' : (r.is_recurring_compounder ? '#dc2626' : '#10b981');
-            return `<div style="background:white;padding:12px 14px;border-radius:10px;border-left:4px solid ${ringColor};box-shadow:0 1px 3px rgba(0,0,0,0.05);cursor:pointer" onclick="openStockDrawer(${r.orderbook_id})">
-                <div style="display:flex;justify-content:space-between;align-items:start;gap:10px">
-                    <div>
-                        <div style="font-weight:700;font-size:14px">${flag} ${escapeHtml(tk)} <span style="color:#6b7280;font-weight:400;font-size:12px">${escapeHtml((r.name || '').slice(0, 30))}</span></div>
-                        <div style="font-size:11px;color:#374151;margin-top:3px">${escapeHtml(r.recommendation_reason || '')}</div>
-                    </div>
-                    <div style="text-align:right;flex-shrink:0">
-                        <div style="font-size:11px;color:#6b7280">C / Q / M</div>
-                        <div style="font-size:13px;font-weight:600;font-variant-numeric:tabular-nums">${fmtScore(r.composite_score)} / ${fmtScore(r.quality_score)} / ${fmtScore(r.momentum_score)}</div>
-                    </div>
-                </div>
-            </div>`;
-        }).join('') : '<div style="color:#6b7280;padding:12px">Inga BUY-signaler idag.</div>';
-
-        const avoidHtml = avoids.length ? avoids.slice(0, 8).map(r => {
-            const tk = r.ticker || r.short_name || '?';
-            const flag = r.country === 'US' ? '🇺🇸' : (r.country === 'SE' ? '🇸🇪' : '');
-            return `<div style="background:#fef2f2;padding:8px 12px;border-radius:8px;border-left:3px solid #dc2626;cursor:pointer;font-size:12px" onclick="openStockDrawer(${r.orderbook_id})">
-                <div style="font-weight:600">${flag} ${escapeHtml(tk)} <span style="color:#7f1d1d;font-weight:400">${escapeHtml((r.name || '').slice(0, 25))}</span></div>
-                <div style="font-size:10.5px;color:#7f1d1d;margin-top:2px">${escapeHtml(r.recommendation_reason || '')}</div>
-            </div>`;
-        }).join('') : '';
-
-        // BUY-LIGHT — fångar tech-rallies vi tidigare missade
-        buyLights.sort((a, b) => (b.composite_score || 0) - (a.composite_score || 0));
-        const buyLightHtml = buyLights.slice(0, 15).map(r => {
-            const tk = r.ticker || r.short_name || '?';
-            const flag = r.country === 'US' ? '🇺🇸' : '🇸🇪';
-            return `<div style="background:#f7fee7;padding:8px 12px;border-radius:8px;border-left:3px solid #84cc16;cursor:pointer;font-size:12px" onclick="openStockDrawer(${r.orderbook_id})">
-                <div style="font-weight:600">${flag} ${escapeHtml(tk)} <span style="color:#3f6212;font-weight:400">${escapeHtml((r.name || '').slice(0, 25))}</span></div>
-                <div style="font-size:10.5px;color:#3f6212;margin-top:2px">Q=${fmtScore(r.quality_score)} M=${fmtScore(r.momentum_score)} • GT-flagga (BUY-LIGHT, högre risk)</div>
-            </div>`;
-        }).join('');
-
-        wrap.innerHTML = `
-            <div style="margin-bottom:8px;font-size:12px;color:#374151">
-                <strong style="color:#059669">✅ BUY:</strong> ${buys.length} hög-konviktion (3-4+ flaggor)
-                · <strong style="color:#84cc16">⚡ BUY-LIGHT:</strong> ${buyLights.length} GT-alone (fångar fler rallies, högre risk)
-                ${avoids.length ? ` · <strong style="color:#dc2626">🚫 AVOID:</strong> ${avoids.length}` : ''}
-            </div>
-            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:8px;margin-bottom:14px">${buyHtml}</div>
-            ${buyLights.length ? `<details style="margin-top:12px" open><summary style="cursor:pointer;font-weight:600;color:#65a30d;font-size:13px">⚡ ${buyLights.length} BUY-LIGHT-signaler (GT alone — fångar tech-rallies vi annars missar)</summary><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:6px;margin-top:8px">${buyLightHtml}</div></details>` : ''}
-            ${avoidHtml ? `<details style="margin-top:12px"><summary style="cursor:pointer;font-weight:600;color:#dc2626;font-size:13px">🚫 ${avoids.length} AVOID-flaggor (klicka för att visa)</summary><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:6px;margin-top:8px">${avoidHtml}</div></details>` : ''}
-        `;
-    } catch (e) {
-        wrap.innerHTML = `<div style="color:#dc2626">Fel: ${e.message}</div>`;
-    }
-}
 function fmtScore(v) { return v == null ? '—' : v.toFixed(0); }
-
-// ── 📊 Forward P/E + PEG-tabell ──
-async function loadForwardPeTable() {
-    console.log('[forward-pe] startar...');
-    const wrap = document.getElementById('forwardPeContent');
-    if (!wrap) {
-        console.warn('[forward-pe] container forwardPeContent inte hittad');
-        return;
-    }
-    wrap.innerHTML = '<div style="padding:18px;color:#6b7280;text-align:center">⏳ Hämtar Forward P/E + PEG-data...</div>';
-    try {
-        const r = await fetch('/api/dashboard/forward-pe-table?t=' + Date.now());
-        if (!r.ok) {
-            wrap.innerHTML = `<div style="color:#dc2626;padding:14px">HTTP ${r.status} - endpoint failade</div>`;
-            return;
-        }
-        const data = await r.json();
-        console.log('[forward-pe] fick', data.n, 'stocks');
-        if (data.error) { wrap.innerHTML = `<div style="color:#dc2626;padding:14px">Fel: ${data.error}</div>`; return; }
-        const stocks = (data.stocks || []).filter(s => s.peg != null || s.fwd_pe != null);
-        if (!stocks.length) {
-            wrap.innerHTML = `<div style="color:#9ca3af;padding:14px">Ingen tillgänglig PEG-data (${data.n || 0} stocks scannades men ingen har EPS-tillväxt).</div>`;
-            return;
-        }
-
-        const rows = stocks.slice(0, 20).map(s => {
-            const flag = s.country === 'US' ? '🇺🇸' : (s.country === 'SE' ? '🇸🇪' : '');
-            const peg = s.peg;
-            const pegColor = peg == null ? '#9ca3af' : peg < 1 ? '#059669' : peg < 2 ? '#0891b2' : peg < 3 ? '#f59e0b' : '#dc2626';
-            const pegLabel = peg == null ? 'n/a' : peg < 1 ? 'undervärderat' : peg < 2 ? 'OK' : peg < 3 ? 'dyrt' : 'mycket dyrt';
-            const rec = s.recommendation || '-';
-            const recColor = rec === 'BUY' ? '#059669' : rec === 'BUY-LIGHT' ? '#84cc16' : '#6b7280';
-            return `<tr style="border-bottom:1px solid #f3f4f6;cursor:pointer" onclick="openStockDrawer(null, '${s.ticker}')">
-                <td style="padding:8px 10px"><strong>${flag} ${escapeHtml(s.ticker)}</strong> <span style="color:#9ca3af;font-size:11px">${escapeHtml((s.name||'').slice(0,22))}</span></td>
-                <td style="padding:8px 10px;text-align:right;font-variant-numeric:tabular-nums">${s.pe == null ? '—' : s.pe.toFixed(1)}</td>
-                <td style="padding:8px 10px;text-align:right;font-variant-numeric:tabular-nums;color:#4f46e5">${s.fwd_pe == null ? '—' : s.fwd_pe.toFixed(1)}</td>
-                <td style="padding:8px 10px;text-align:right;font-variant-numeric:tabular-nums;color:${pegColor};font-weight:600">${peg == null ? '—' : peg.toFixed(2)} <span style="font-size:10px;font-weight:400">(${pegLabel})</span></td>
-                <td style="padding:8px 10px;text-align:right;font-variant-numeric:tabular-nums;color:${s.rev_yoy_pct == null ? '#9ca3af' : s.rev_yoy_pct > 0 ? '#059669' : '#dc2626'}">${s.rev_yoy_pct == null ? '—' : (s.rev_yoy_pct > 0 ? '+' : '') + s.rev_yoy_pct.toFixed(0) + '%'}</td>
-                <td style="padding:8px 10px;text-align:right;font-variant-numeric:tabular-nums;color:${s.eps_yoy_pct == null ? '#9ca3af' : s.eps_yoy_pct > 0 ? '#059669' : '#dc2626'}">${s.eps_yoy_pct == null ? '—' : (s.eps_yoy_pct > 0 ? '+' : '') + s.eps_yoy_pct.toFixed(0) + '%'}</td>
-                <td style="padding:8px 10px;text-align:right"><span style="background:${recColor};color:white;padding:2px 6px;border-radius:4px;font-size:10px;font-weight:600">${rec}</span></td>
-            </tr>`;
-        }).join('');
-
-        wrap.innerHTML = `
-            <div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:13px">
-                <thead><tr style="background:#f9fafb;text-align:left;font-size:11px;color:#6b7280;text-transform:uppercase;letter-spacing:0.5px">
-                    <th style="padding:10px">Ticker</th>
-                    <th style="padding:10px;text-align:right">P/E</th>
-                    <th style="padding:10px;text-align:right">Fwd P/E</th>
-                    <th style="padding:10px;text-align:right">PEG</th>
-                    <th style="padding:10px;text-align:right">Rev YoY</th>
-                    <th style="padding:10px;text-align:right">EPS YoY</th>
-                    <th style="padding:10px;text-align:right">Rec</th>
-                </tr></thead>
-                <tbody>${rows}</tbody>
-            </table></div>
-            <div style="font-size:11px;color:#9ca3af;margin-top:8px">
-                <strong>PEG = P/E ÷ vinsttillväxt.</strong> Lägre = bättre. &lt;1 = undervärderat tillväxtbolag,
-                1-2 = rimligt, &gt;3 = mycket dyrt vs sin tillväxt.
-            </div>`;
-    } catch (e) {
-        wrap.innerHTML = `<div style="color:#dc2626">Fel: ${e.message}</div>`;
-    }
-}
 
 // Country-aware default-screen baserat på backtest 2015-2024
 const COUNTRY_BEST_SCREEN = {
@@ -9543,244 +8053,6 @@ const COUNTRY_BEST_SCREEN = {
     'DK': { mode: 'magic_formula',     label: '📊 Magic Formula (DK bäst, +2.63%)' },
     'DE': { mode: 'magic_formula',     label: '📊 Magic Formula (DE-data n=22)' },
 };
-
-async function loadQuantScreens() {
-    const wrap = document.getElementById('quantScreensContent');
-    if (!wrap) return;
-    const country = _trendingCountry || 'SE';
-    const bestForCountry = COUNTRY_BEST_SCREEN[country];
-    const tabsHtml = QUANT_SCREEN_TABS.map(t => {
-        const isBest = bestForCountry && bestForCountry.mode === t.mode;
-        return `<button class="v2-setup-tab ${_activeQuantTab === t.key ? 'active' : ''}"
-                onclick="setQuantTab('${t.key}')" title="${t.desc}"
-                style="${isBest ? 'border:2px solid #f59e0b;font-weight:700' : ''}">
-            ${t.label}${isBest ? ' ⭐' : ''}
-        </button>`;
-    }).join('');
-    const countryHint = bestForCountry ?
-        `<div style="font-size:12px;color:#6b7280;margin-bottom:8px">
-            För <strong>${country}</strong>: ${bestForCountry.label} är bäst enligt backtest 2015-2024
-        </div>` : '';
-    wrap.innerHTML = `
-        ${countryHint}
-        <div class="v2-setup-tabs" style="margin-bottom:10px">${tabsHtml}</div>
-        <div id="quantScreenList"><div class="loading-wrap" style="padding:24px">Laddar…</div></div>
-    `;
-    const tab = QUANT_SCREEN_TABS.find(t => t.key === _activeQuantTab) || QUANT_SCREEN_TABS[0];
-    const url = `/api/quant-screen?country=${country}&mode=${tab.mode}&limit=10${tab.extra || ''}`;
-    try {
-        const r = await fetch(url);
-        const data = await r.json();
-        const results = data.results || [];
-        const listEl = document.getElementById('quantScreenList');
-        if (!results.length) {
-            // Smart förklaring vid 0 results — speciellt viktigt för US där
-            // Composite ≥80 sällan triggar pga höga värderingar
-            const isUS = (location.search || '').includes('country=US') || _trendingCountry === 'US';
-            const isStrictScreen = ['dual_screen', 'premium_80', 'trifecta'].includes(tab.key);
-            let helpText = '';
-            if (isStrictScreen) {
-                helpText = `<div style="margin-top:10px;padding:10px;background:#fef3c7;border-radius:8px;font-size:11px;color:#92400e;line-height:1.5">
-                    💡 <b>Detta är förväntat när marknaden är dyr.</b> Pipelinen är diskriminerande och säger "avstå" när alla bolag är pris-in efter en lång uppgång.
-                    Prova istället <b>🥈 Mid-tier ≥70</b> eller <b>🏰 Quality Champions</b> för bredare träffar.
-                </div>`;
-            }
-            listEl.innerHTML = `<div style="padding:18px;color:var(--text-muted);font-size:13px;text-align:center">
-                Inga bolag kvalar i ${tab.label} just nu (${data.n_universe || 0} kollade).
-                <div style="margin-top:6px;font-size:11px;font-style:italic">${tab.desc}</div>
-                ${helpText}
-            </div>`;
-            return;
-        }
-        listEl.innerHTML = `
-            <div style="font-size:11px;color:var(--text-muted);margin-bottom:8px;padding-left:6px">${tab.desc}</div>
-            <table class="signals-table" style="width:100%">
-                <thead>
-                    <tr>
-                        <th style="width:30px">#</th>
-                        <th>Aktie</th>
-                        <th style="text-align:right">Composite</th>
-                        <th style="text-align:right">Quality</th>
-                        <th style="text-align:right">Value</th>
-                        <th style="text-align:right">Momentum</th>
-                        <th>Sektor</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    ${results.map((r, i) => {
-                        const flag = FLAGS[r.country] || '';
-                        return `<tr style="cursor:pointer" onclick="openDrawer({orderbook_id: ${r.orderbook_id}, name: '${(r.name || '').replace(/'/g, '&apos;')}', short_name: '${r.ticker || ''}', country: '${r.country || ''}'})">
-                            <td>${i + 1}</td>
-                            <td><b>${flag} ${r.name || r.ticker}</b><br><span style="font-size:11px;color:var(--text-muted)">${r.ticker}</span></td>
-                            <td style="text-align:right;font-weight:700;color:#7c3aed">${r.composite_score?.toFixed(0) || '-'}</td>
-                            <td style="text-align:right">${r.quality_score?.toFixed(0) || '-'}</td>
-                            <td style="text-align:right">${r.value_score?.toFixed(0) || '-'}</td>
-                            <td style="text-align:right">${r.momentum_score?.toFixed(0) || '-'}</td>
-                            <td style="font-size:11px;color:var(--text-muted)">${r.sector_name || '-'}</td>
-                        </tr>`;
-                    }).join('')}
-                </tbody>
-            </table>
-        `;
-    } catch(e) {
-        const listEl = document.getElementById('quantScreenList');
-        if (listEl) listEl.innerHTML = `<div style="color:var(--red);padding:12px">Fel: ${e.message}</div>`;
-    }
-}
-
-function setQuantTab(key) {
-    _activeQuantTab = key;
-    loadQuantScreens();
-}
-
-async function loadV2Setups() {
-    const wrap = document.getElementById('v2SetupsContent');
-    if (!wrap) return;
-    // Render flikar + lista för aktiv setup
-    const tabsHtml = V2_SETUP_TABS.map(t => `
-        <button class="v2-tab ${_v2ActiveSetup === t.key ? 'active' : ''}"
-                onclick="switchV2Setup('${t.key}')"
-                style="background:${_v2ActiveSetup === t.key ? 'linear-gradient(135deg,#1d4ed8,#3b82f6)' : 'white'};color:${_v2ActiveSetup === t.key ? 'white' : 'var(--text)'};border:1px solid ${_v2ActiveSetup === t.key ? '#1d4ed8' : 'var(--border)'};padding:8px 14px;border-radius:18px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;transition:all 0.15s">
-            ${t.label}
-        </button>
-    `).join('');
-    wrap.innerHTML = `
-        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">${tabsHtml}</div>
-        <div id="v2SetupContent" style="background:white;border:1px solid var(--border);border-radius:12px;padding:12px;min-height:180px">
-            <div style="color:var(--text-muted);font-size:13px;text-align:center;padding:40px 0">Laddar ${V2_SETUP_TABS.find(t => t.key === _v2ActiveSetup)?.label}...</div>
-        </div>
-    `;
-    await renderV2SetupList(_v2ActiveSetup);
-}
-
-async function switchV2Setup(key) {
-    _v2ActiveSetup = key;
-    await loadV2Setups();
-}
-
-async function renderV2SetupList(setupKey) {
-    const el = document.getElementById('v2SetupContent');
-    if (!el) return;
-    try {
-        const r = await fetch(`/api/v2/setups?setup=${setupKey}&min_owners=200&limit=12`);
-        const d = await r.json();
-        const stocks = d.stocks || [];
-        if (!stocks.length) {
-            el.innerHTML = `<div style="padding:30px;text-align:center;color:var(--text-muted);font-size:13px">
-                Inga aktier matchar denna setup-typ just nu. Kanske är marknaden i annan fas.
-            </div>`;
-            return;
-        }
-        const setupMeta = V2_SETUP_TABS.find(t => t.key === setupKey);
-        const flagMap = {SE:'🇸🇪',US:'🇺🇸',NO:'🇳🇴',DK:'🇩🇰',FI:'🇫🇮',DE:'🇩🇪',CA:'🇨🇦',FR:'🇫🇷',GB:'🇬🇧',NL:'🇳🇱',IT:'🇮🇹',CH:'🇨🇭'};
-        const cards = stocks.map(s => {
-            const flag = flagMap[s.country] || '';
-            const cls = s.classification || {};
-            const v = s.v2_value, q = s.v2_quality, m = s.v2_momentum;
-            const target = s.v2_target_pct;
-            return `<div onclick="_openPickStock('${s.orderbook_id}')" style="background:white;border:1px solid var(--border);border-radius:10px;padding:12px;cursor:pointer;transition:all 0.15s" onmouseover="this.style.boxShadow='0 4px 12px rgba(0,0,0,0.08)';this.style.transform='translateY(-1px)'" onmouseout="this.style.boxShadow='';this.style.transform=''">
-                <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px">
-                    <strong style="font-size:13px">${flag} ${s.name}</strong>
-                    ${target ? `<span style="font-size:10px;color:#1e40af;font-weight:700">${target.toFixed(1)}%</span>` : ''}
-                </div>
-                <div style="font-size:10px;color:var(--text-muted);margin-bottom:8px">
-                    ${s.last_price?.toFixed(2)} ${s.currency} · ${cls.asset_intensity || '–'}/${cls.quality_regime || '–'}
-                </div>
-                <div style="display:flex;gap:4px;font-size:9px">
-                    <div style="flex:1"><div style="color:#6b7280;margin-bottom:1px">V</div><div style="height:5px;background:#fee2e2;border-radius:2px"><div style="height:100%;background:#dc2626;border-radius:2px;width:${v||0}%"></div></div><div style="text-align:right;color:#dc2626;font-weight:600">${v?.toFixed(0) ?? '–'}</div></div>
-                    <div style="flex:1"><div style="color:#6b7280;margin-bottom:1px">Q</div><div style="height:5px;background:#d1fae5;border-radius:2px"><div style="height:100%;background:#059669;border-radius:2px;width:${q||0}%"></div></div><div style="text-align:right;color:#059669;font-weight:600">${q?.toFixed(0) ?? '–'}</div></div>
-                    <div style="flex:1"><div style="color:#6b7280;margin-bottom:1px">M</div><div style="height:5px;background:#dbeafe;border-radius:2px"><div style="height:100%;background:#2563eb;border-radius:2px;width:${m||0}%"></div></div><div style="text-align:right;color:#2563eb;font-weight:600">${m?.toFixed(0) ?? '–'}</div></div>
-                </div>
-                <div style="font-size:9px;color:var(--text-muted);margin-top:6px;display:flex;gap:8px">
-                    <span>P/E ${s.pe_ratio?.toFixed(1) ?? '–'}</span>
-                    <span>ROE ${s.return_on_equity ? (s.return_on_equity*100).toFixed(0)+'%' : '–'}</span>
-                    <span>Smart ${s.smart_score?.toFixed(0) ?? '–'}</span>
-                </div>
-            </div>`;
-        }).join('');
-        el.innerHTML = `
-            <div style="font-size:11px;color:var(--text-muted);margin-bottom:8px">
-                <strong>${setupMeta?.label}:</strong> ${setupMeta?.desc} · ${stocks.length} aktier matchar
-            </div>
-            <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:8px">${cards}</div>
-        `;
-    } catch (e) {
-        el.innerHTML = `<div style="padding:20px;color:var(--red);font-size:12px">Fel: ${e.message}</div>`;
-    }
-}
-
-async function loadBuyZoneWatchlist() {
-    const el = document.getElementById('buyZoneWatchBanner');
-    if (!el) return;
-    try {
-        const r = await fetch('/api/watchlist/near-buy-zone?limit=12&min_owners=200&min_composite=55&max_distance=10');
-        const data = await r.json();
-        const items = data.results || [];
-        if (items.length === 0) {
-            // v3: ta bort negativ banner — om inget finns, dölj sektionen helt
-            el.outerHTML = '';
-            return;
-        }
-        items.forEach(p => { if (p.orderbook_id) _picksLookup[p.orderbook_id] = p; });
-        const cards = items.map(p => {
-            const bz = p.buy_zone || {};
-            const flag = FLAGS[p.country] || '';
-            const d1 = p.one_day_change_pct;
-            const d1Str = d1 != null ? `<span class="${pctClass(d1)}" style="font-size:12px;font-weight:700">${fmtPct(d1)}</span>` : '';
-            const inZone = bz.in_buy_zone;
-            const urgency = p.buy_zone_urgency;
-            const curPrice = bz.current_price != null ? bz.current_price.toFixed(2) : '–';
-            const zonePrice = bz.buy_zone_price != null ? bz.buy_zone_price.toFixed(2) : '–';
-            const dist = bz.distance_pct;
-
-            let badgeColor = '#92400e', badgeText = 'Nära zon', badgeIcon = '⏳';
-            if (inZone || urgency === 'in_zone') {
-                badgeColor = '#166534'; badgeText = 'I KÖPZON'; badgeIcon = '🎯';
-            } else if (urgency === 'crossed_today') {
-                badgeColor = '#166534'; badgeText = 'KORSADE IDAG'; badgeIcon = '🎯';
-            } else if (urgency === 'approaching_today') {
-                badgeColor = '#c2410c'; badgeText = 'Faller mot zon'; badgeIcon = '⚡';
-            }
-            const distText = inZone
-                ? `<span style="color:#166534;font-weight:700">Redan i köpzon</span>`
-                : dist != null
-                  ? `<span>Faller <b>${dist.toFixed(1)}%</b> → köpläge vid <b>${zonePrice} ${p.currency||''}</b></span>`
-                  : '';
-            const compScore = p.composite_score != null ? p.composite_score.toFixed(0) : '–';
-            return `<div class="daily-pick-card" data-obid="${p.orderbook_id}" onclick='_openPickStock(${p.orderbook_id})' title="Klicka för analys">
-                <div class="dp-row">
-                    <div class="dp-rank" style="background:${badgeColor};color:#fff;min-width:48px;font-size:10px;line-height:1.1;padding:4px 6px;text-align:center;border-radius:6px">
-                        <div style="font-size:16px">${badgeIcon}</div>
-                        <div style="font-weight:800">${badgeText}</div>
-                    </div>
-                    <div class="dp-main">
-                        <div class="dp-name">${flag} ${p.name}</div>
-                        <div class="dp-meta">${p.short_name||''} · ${curPrice} ${p.currency||''} ${d1Str}</div>
-                        <div class="dp-headline" style="font-size:12px;margin-top:4px">${distText}</div>
-                    </div>
-                    <div class="dp-score" style="color:${badgeColor}">
-                        <div style="font-size:22px;font-weight:900;line-height:1">${compScore}</div>
-                        <div style="font-size:9px;text-transform:uppercase;letter-spacing:0.5px;font-weight:700;opacity:0.8">composite</div>
-                    </div>
-                </div>
-            </div>`;
-        }).join('');
-        el.outerHTML = `<div class="daily-picks-banner" style="background:linear-gradient(135deg,#fef3c7 0%,#fde68a 100%)">
-            <div class="dpb-hd">
-                <span style="font-size:28px">🎯</span>
-                <div>
-                    <div class="dpb-title">Nära köpzon idag</div>
-                    <div class="dpb-sub">Aktier där composite är nära 75 — om priset faller under <b>köpzon-priset</b> idag blir de köpläge. Bevaka intraday.</div>
-                </div>
-                <span class="dpb-live"><span class="live-dot" style="background:#c2410c"></span>BEVAKA</span>
-            </div>
-            <div class="daily-picks-grid">${cards}</div>
-        </div>`;
-    } catch(e) {
-        console.warn('buy-zone watchlist fetch failed', e);
-        el.outerHTML = '';
-    }
-}
 
 async function _openPickStock(orderbookId) {
     // Hämta FULL aktiedata via dedikerad endpoint (annars saknar drawer fundamentala nyckeltal)
@@ -10686,206 +8958,15 @@ async function analyzeReportsToday() {
     }
 }
 
-// v3 — Hero KPI-row
-async function loadHeroKpiRow() {
-    const el = document.getElementById('heroKpiRow');
-    if (!el) return;
-    try {
-        const r = await fetch('/api/dashboard/kpi-row');
-        const d = await r.json();
-        if (d.error) {
-            el.innerHTML = `<div style="grid-column:1/-1;font-size:12px;color:#6b7280;padding:10px">⚠️ Ingen agent-validerad data än. <a href="/toplists" style="color:#1e40af">Kör en batch-analys</a> så fylls KPI-row på.</div>`;
-            return;
-        }
-        const total = d.total_validated || 0;
-        if (total === 0) {
-            el.innerHTML = `<div style="grid-column:1/-1;font-size:13px;color:#6b7280;padding:14px;text-align:center;background:#f8fafc;border-radius:8px">
-                <strong style="color:#1e40af">Inga agent-validerade bolag än.</strong><br>
-                <a href="/toplists" target="_blank" style="font-size:12px;color:#1e40af">→ Kör batch-analys på /toplists</a> för att fylla på dashboarden.
-            </div>`;
-            return;
-        }
-        const kpis = [
-            {label:'🟢 BUY',           v: d.buy_count,             c:'#22c55e', tip:'Bolag där ≥1 lins säger BUY/STRONG_BUY'},
-            {label:'🟢 BUY-LIGHT',     v: d.buy_light_count,       c:'#a3e635', tip:'Growth Trifecta — Q+M utan V'},
-            {label:'🔴 AVOID',         v: d.avoid_count,           c:'#ef4444', tip:'Alla 3 linser AVOID/EXIT'},
-            {label:'🎯 Edge Entry',    v: d.edge_entry_count,      c:'#059669', tip:'Edge Action = ENTRY (Edge ≥70)'},
-            {label:'⭐ Super Confluence', v: d.super_confluence_count, c:'#059669', tip:'≥3 av 4 flaggor TRUE'},
-            {label:'📊 Rapport idag',  v: d.reports_today_count,   c:'#3b82f6', tip:'Bolag i report_calendar med dagens datum'},
-            {label:'⏳ Väntar rapport',v: d.awaiting_report_count, c:'#3b82f6', tip:'Bolag med rapport inom 7 dagar'},
-            {label:'🛑 Stop-Thesis',   v: d.stop_thesis_count,     c:'#b91c1c', tip:'Stop-thesis-flaggor utlösta'},
-        ];
-        el.innerHTML = kpis.map(k =>
-            `<div title="${escapeHtml(k.tip)}" style="background:white;border:1px solid #e5e7eb;border-left:3px solid ${k.c};border-radius:8px;padding:10px 12px;cursor:help">
-               <div style="font-size:10px;color:#6b7280;font-weight:600;text-transform:uppercase;letter-spacing:0.3px">${k.label}</div>
-               <div style="font-size:24px;font-weight:800;color:${k.c};margin-top:2px;line-height:1">${k.v}</div>
-             </div>`).join('');
-    } catch (e) {
-        console.warn('hero KPI-row failed', e);
-        el.innerHTML = `<div style="grid-column:1/-1;font-size:12px;color:#dc2626;padding:10px">Fel: ${e.message}</div>`;
-    }
-}
-
-// v3 — Super Confluence top-5 (förstorade kort)
-async function loadSuperConfluenceCards() {
-    const el = document.getElementById('superConfluenceCards');
-    if (!el) return;
-    try {
-        const r = await fetch('/api/toplists/super_confluence');
-        const d = await r.json();
-        if (d.error || !d.results || d.results.length === 0) {
-            el.innerHTML = `<div style="grid-column:1/-1;padding:20px;text-align:center;color:#6b7280;background:#f8fafc;border-radius:10px">
-                <div style="font-size:13px;margin-bottom:6px">Inga Super Confluence-kandidater just nu.</div>
-                <div style="font-size:11px;color:#9ca3af">≥3 av 4 flaggor (Trifecta, GT, Recurring, Cyclical Bottom) krävs samtidigt — extremt sällsynt.</div>
-                <a href="/toplists" target="_blank" style="display:inline-block;margin-top:8px;font-size:11px;color:#1e40af;text-decoration:none">Se alla agent-validerade bolag →</a>
-            </div>`;
-            return;
-        }
-        const top5 = (d.results || []).slice(0, 5);
-        el.innerHTML = top5.map(r => {
-            const flags = [
-                r.is_trifecta ? '🏆 Trifecta' : null,
-                r.is_growth_trifecta ? '🚀 Growth Trifecta' : null,
-                r.is_recurring_compounder ? '💫 Recurring' : null,
-                r.is_cyclical_bottom ? '💎 Cyclical Bottom' : null,
-            ].filter(Boolean).map(f => `<span style="background:#fef3c7;color:#92400e;padding:2px 7px;border-radius:6px;font-size:10.5px;font-weight:700">${f}</span>`).join(' ');
-            const composite = (r.composite_score || 0).toFixed(0);
-            const edgeColor = (r.edge_score || 0) >= 70 ? '#059669' : (r.edge_score || 0) >= 50 ? '#d97706' : '#6b7280';
-            const lp = r.live_price ? `${r.live_price.toFixed(2)} ${r.live_price_currency || ''}` : (r.price_at_analysis ? `${Number(r.price_at_analysis).toFixed(2)} ${r.price_currency || ''} <span style="font-size:10px;color:#9ca3af">(analys-pris)</span>` : '—');
-            const delta = r.price_delta_pct != null
-                ? `<span style="color:${Math.abs(r.price_delta_pct) > 10 ? '#dc2626' : Math.abs(r.price_delta_pct) > 5 ? '#d97706' : '#6b7280'};font-size:11px;font-weight:600">${r.price_delta_pct >= 0 ? '+' : ''}${r.price_delta_pct.toFixed(1)}%</span>` : '';
-            return `<div onclick="openStockByTicker('${String(r.ticker||'').replace(/'/g,'')}')" style="text-decoration:none;color:inherit">
-              <div style="background:white;border:1px solid #e5e7eb;border-left:4px solid #f59e0b;border-radius:10px;padding:14px 16px;transition:all 0.2s;cursor:pointer" onmouseover="this.style.transform='translateY(-2px)';this.style.boxShadow='0 4px 12px rgba(0,0,0,0.08)'" onmouseout="this.style.transform='';this.style.boxShadow=''">
-                <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin-bottom:8px">
-                    <div>
-                        <div style="font-size:17px;font-weight:800;color:#0f172a">${escapeHtml(r.ticker)}</div>
-                        <div style="font-size:11px;color:#6b7280">${escapeHtml(r.short_name || '')}</div>
-                    </div>
-                    <div style="text-align:right">
-                        <div style="font-size:22px;font-weight:800;color:#0f172a">${composite}</div>
-                        <div style="font-size:9.5px;color:#9ca3af;text-transform:uppercase">Composite</div>
-                    </div>
-                </div>
-                <div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:8px">${flags}</div>
-                <div style="display:flex;gap:14px;font-size:11px;border-top:1px solid #f3f4f6;padding-top:8px">
-                    <div>Edge: <strong style="color:${edgeColor}">${r.edge_score ? r.edge_score.toFixed(0) : '—'}</strong></div>
-                    <div>Pris: <strong>${lp}</strong> ${delta}</div>
-                </div>
-                <div style="font-size:10.5px;color:#6b7280;margin-top:6px;font-style:italic">${escapeHtml(r.classification || '')}${r.cycle_position && r.cycle_position !== 'NA' ? ' · ' + r.cycle_position : ''}</div>
-              </div>
-            </div>`;
-        }).join('');
-    } catch (e) {
-        console.warn('super confluence cards failed', e);
-        el.innerHTML = `<div style="grid-column:1/-1;color:#dc2626;font-size:12px;padding:10px">Fel: ${e.message}</div>`;
-    }
-}
-
 function renderDashboardContent(d) {
     // ── Dagens köp-banner ──
     const picks = d.daily_picks || [];
     picks.forEach(p => { if (p.orderbook_id) _picksLookup[p.orderbook_id] = p; });
-    const banner = document.getElementById('dailyPicksBanner');
-    if (banner) {
-        if (picks.length === 0) {
-            // v3: ta bort negativ banner — dölj sektionen helt
-            banner.outerHTML = '';
-        } else {
-            const cards = picks.map((p, i) => {
-                const flag = FLAGS[p.country] || '';
-                const chg = p.one_day_change_pct;
-                const chgStr = chg != null ? `<span class="${pctClass(chg)}" style="font-size:12px;font-weight:700">${fmtPct(chg)}</span>` : '';
-                const scoreColor = p.composite_score >= 80 ? 'var(--green-dark)' : p.composite_score >= 70 ? 'var(--green)' : '#92400e';
-                const rank = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : (i+1);
-                // Reasons — render som chips inuti kortet
-                const reasons = p.reasons || [];
-                const summary = reasons.find(r => r.is_summary);
-                const detailReasons = reasons.filter(r => !r.is_summary);
-                const reasonChips = detailReasons.length ? `
-                    <div class="dp-reasons">
-                        <div class="dp-reasons-label">Varför idag:</div>
-                        <div class="dp-reasons-list">
-                            ${detailReasons.slice(0,6).map(r => `
-                                <div class="dp-reason dp-${r.strength||'ok'}" title="${r.title}">
-                                    <span class="dp-reason-ico">${r.icon||'•'}</span>
-                                    <span class="dp-reason-text"><b>${r.title}:</b> ${r.text}</span>
-                                </div>
-                            `).join('')}
-                        </div>
-                    </div>` : '';
-                const headline = summary ? `<div class="dp-headline">${summary.icon} ${summary.title} <span class="dp-headline-sub">— ${summary.text}</span></div>` : '';
-                // "Why now"-trigger — prominenta banner-rad så användaren förstår vad som händer just NU
-                const trig = p.trigger;
-                const triggerBanner = trig ? `
-                    <div class="dp-trigger dp-trigger-${trig.kind||'other'}" title="Varför just nu">
-                        <span class="dp-trigger-ico">${trig.icon||'⚡'}</span>
-                        <div class="dp-trigger-body">
-                            <div class="dp-trigger-title">${trig.title}</div>
-                            <div class="dp-trigger-text">${trig.text}</div>
-                        </div>
-                    </div>` : '';
-                return `<div class="daily-pick-card" data-obid="${p.orderbook_id}">
-                    <div class="dp-row" onclick='_openPickStock(${p.orderbook_id})' title="Klicka för att öppna analys">
-                        <div class="dp-rank">${rank}</div>
-                        <div class="dp-main">
-                            <div class="dp-name">${flag} ${p.name}</div>
-                            <div class="dp-meta">${p.short_name||''} · ${p.last_price!=null?p.last_price.toFixed(2)+' '+(p.currency||''):'–'} ${chgStr}</div>
-                            ${headline}
-                        </div>
-                        <div class="dp-score" style="color:${scoreColor}">
-                            <div style="font-size:24px;font-weight:900;line-height:1">${p.composite_score!=null?p.composite_score.toFixed(0):'–'}</div>
-                            <div style="font-size:9px;text-transform:uppercase;letter-spacing:0.5px;font-weight:700;opacity:0.8">${p.models_passing}/${p.models_available} pass</div>
-                        </div>
-                    </div>
-                    ${triggerBanner}
-                    ${reasonChips}
-                </div>`;
-            }).join('');
-            banner.outerHTML = `<div class="daily-picks-banner">
-                <div class="dpb-hd">
-                    <span style="font-size:28px">🎯</span>
-                    <div>
-                        <div class="dpb-title">Dagens köp-rekommendationer</div>
-                        <div class="dpb-sub">Bolag där 7+ av 10 bok-modeller säger köp (composite ≥ 70/100). Varje kort visar en <b>"Varför just nu"</b>-trigger — vad som precis hänt (prisrea på kvalitet, momentum, ägar-spike, översåld med bas, tekniskt genombrott m.m.) som gör aktien intressant idag. Uppdateras var 3:e minut.</div>
-                    </div>
-                    <span class="dpb-live"><span class="live-dot" style="background:#00563B"></span>LIVE</span>
-                </div>
-                <div class="daily-picks-grid">${cards}</div>
-            </div>`;
-        }
-    }
 
     // (v3.7: borttagna sektioner — köpzon, BUY/AVOID, Forward P/E, quant-screens,
     //  v2-setups, modell-topplistor — ej längre i DOM. Behåller endast
     //  Marknadsöversikt + Makro-indikatorer i "Mer data".)
 
-    // ── Top-listor per modell (borttagen från DOM — no-op) ──
-    const toplistsEl = document.getElementById('dashModelToplists');
-    if (toplistsEl) {
-        const bookModels = d.book_models || [];
-        if (bookModels.length === 0) {
-            toplistsEl.innerHTML = '<div style="padding:16px;color:var(--text-muted);font-size:13px">Ingen modelldata ännu.</div>';
-        } else {
-            // Render kort per modell med "Visa topp 20"-knapp
-            toplistsEl.innerHTML = bookModels.map(m => `
-                <div class="model-toplist-card" id="mtl-${m.key}">
-                    <div class="mtl-head">
-                        <span class="mtl-icon">${m.icon}</span>
-                        <div class="mtl-title-wrap">
-                            <div class="mtl-title">${m.label}</div>
-                            <div class="mtl-desc">${m.desc}</div>
-                        </div>
-                        <button class="mtl-expand" onclick="loadModelTopN('${m.key}')">Visa topp 20 →</button>
-                    </div>
-                    <div class="mtl-list" id="mtl-list-${m.key}">
-                        <div class="mtl-skel">Laddar…</div>
-                    </div>
-                </div>
-            `).join('');
-            // Ladda topp-5 för varje modell
-            bookModels.forEach(m => loadModelTopN(m.key, 5, false));
-        }
-    }
 
     const stats = d.stats || {};
     const ts = document.getElementById('dashTopStats');
@@ -10920,50 +9001,7 @@ function renderDashboardContent(d) {
         mg.innerHTML = renderMacroTile(macro);
     }
 
-    const mods = document.getElementById('dashModelGrid');
-    if (mods) {
-        mods.innerHTML = (d.model_signals || []).map(m => `
-            <div class="model-card">
-                <div class="model-card-hd">
-                    <span class="model-badge" style="background:${m.color || '#006c46'}">${m.code || ''}</span>
-                    <div class="model-name">${m.name}</div>
-                </div>
-                <div class="model-desc">${m.desc || ''}</div>
-                <div class="model-verdict" style="color:${m.color || '#006c46'}">${m.verdict || ''}</div>
-            </div>
-        `).join('') || '<div style="padding:16px;color:var(--text-muted);font-size:13px">Ingen modelldata ännu</div>';
-    }
 
-    const today = document.getElementById('dashToday');
-    if (today) {
-        const t = d.today || {};
-        const ms = t.market_status || {};
-        const statusBadge = ms.status ? `
-            <div style="margin-bottom:10px;display:inline-block;padding:6px 12px;background:${ms.color || '#6b7280'};color:white;border-radius:8px;font-size:11px;font-weight:600;letter-spacing:0.3px">
-                ${escapeHtml(ms.status)}
-            </div>` : '';
-        today.innerHTML = `
-            ${statusBadge}
-            <div class="today-grid">
-                <div class="today-box">
-                    <div class="today-label">Topp Vinnare SE</div>
-                    <div class="today-val num-pos">${t.top_se_gainer ? t.top_se_gainer.name + ' ' + fmtPct(t.top_se_gainer.change) : '–'}</div>
-                </div>
-                <div class="today-box">
-                    <div class="today-label">Topp Förlorare SE</div>
-                    <div class="today-val num-neg">${t.top_se_loser ? t.top_se_loser.name + ' ' + fmtPct(t.top_se_loser.change) : '–'}</div>
-                </div>
-                <div class="today-box">
-                    <div class="today-label">Topp Vinnare US</div>
-                    <div class="today-val num-pos">${t.top_us_gainer ? t.top_us_gainer.name + ' ' + fmtPct(t.top_us_gainer.change) : '–'}</div>
-                </div>
-                <div class="today-box">
-                    <div class="today-label">Största insiderköp</div>
-                    <div class="today-val">${t.top_insider_buy ? t.top_insider_buy.name : '–'}</div>
-                </div>
-            </div>
-        `;
-    }
 }
 
 function renderMacroTile(m) {
