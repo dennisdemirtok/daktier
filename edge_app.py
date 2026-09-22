@@ -6829,6 +6829,11 @@ def _sync_market_bullet(db, date_str, force=False):
     parsed, cost = _structure_bullets_with_claude(text, date_str)
     if not parsed:
         return {"date": date_str, "status": "parse_failed"}
+    # Sidan finns men saknar innehåll (ännu ej publicerad / helgdag): spara
+    # INTE — en tom rad blev annars "senaste" på dashboarden och i mejlet
+    if not (parsed.get("sections") or parsed.get("earnings_recent")
+            or parsed.get("market_overview")):
+        return {"date": date_str, "status": "no_publication", "cost": cost}
     tickers = _collect_bullet_tickers(db, parsed)
     cols = ["bullet_date", "market_overview", "sections_json",
             "earnings_recent_json", "earnings_upcoming_json", "tickers_json",
@@ -19720,7 +19725,9 @@ def api_market_bullets():
         if date_q:
             row = _fetchone(db, f"SELECT * FROM market_bullets WHERE bullet_date={ph}", (date_q,))
         else:
-            row = _fetchone(db, "SELECT * FROM market_bullets ORDER BY bullet_date DESC LIMIT 1")
+            row = _fetchone(db, "SELECT * FROM market_bullets "
+                                "WHERE COALESCE(sections_json, '[]') NOT IN ('[]', '', 'null') "
+                                "ORDER BY bullet_date DESC LIMIT 1")
         if not row:
             return jsonify({"found": False, "note": "Inga bullets ännu — kör sync/backfill."})
         rd = dict(row)
@@ -19753,6 +19760,7 @@ def api_market_bullets_dates():
     db = get_db()
     try:
         rows = _fetchall(db, "SELECT bullet_date, summary FROM market_bullets "
+                             "WHERE COALESCE(sections_json, '[]') NOT IN ('[]', '', 'null') "
                              "ORDER BY bullet_date DESC LIMIT 200")
         return jsonify({"dates": [{"date": str(dict(r)["bullet_date"]),
                                     "summary": dict(r).get("summary")} for r in rows]
@@ -22962,7 +22970,8 @@ def _startup():
                             _vantad = _stockanalysis_today().isoformat()
                         except Exception:
                             _vantad = datetime.now().strftime("%Y-%m-%d")
-                        _bd = _senast("SELECT MAX(bullet_date) AS t FROM market_bullets")
+                        _bd = _senast("SELECT MAX(bullet_date) AS t FROM market_bullets "
+                                      "WHERE COALESCE(sections_json, '[]') NOT IN ('[]', '', 'null')")
                         st["us_puls"] = (_bd == _vantad)
                         return st
 

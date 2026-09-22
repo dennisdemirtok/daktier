@@ -310,12 +310,12 @@
         .dash-section { }
 
         /* v3.3 — Daglig brief hero */
-        .daily-brief { background: linear-gradient(135deg, #0f172a 0%, #1e3a8a 55%, #3b82f6 100%);
+        .daily-brief { background: linear-gradient(135deg, var(--brand-navy-deep) 0%, var(--brand-navy) 60%, #2a7fa3 100%);
             color: #fff; border-radius: 16px; padding: 22px 26px; box-shadow: 0 6px 20px rgba(30,58,138,0.18); }
         .daily-brief .brief-eyebrow { font-size: 11px; text-transform: uppercase; letter-spacing: 1.5px;
             opacity: 0.7; font-weight: 600; }
         .daily-brief .brief-text { font-size: 16px; line-height: 1.6; margin-top: 8px; font-weight: 500; }
-        .daily-brief .brief-text strong { color: #fde68a; font-weight: 700; }
+        .daily-brief .brief-text strong { color: #9fe0f2; font-weight: 700; }
         .daily-brief .brief-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
         .daily-brief .brief-chip { background: rgba(255,255,255,0.14); border: 1px solid rgba(255,255,255,0.18);
             padding: 6px 12px; border-radius: 20px; font-size: 12px; font-weight: 600; display: inline-flex;
@@ -2657,13 +2657,13 @@ function renderHotMoversTable() {
         : `📅 Dagligt (${dateInfo} · ${lbLabel})`;
     const titleTxt = hotMode === 'live'
         ? 'Ägarmomentum — live ägarförändring'
-        : 'Hot Movers — Daglig ägarförändring';
+        : 'Ägarmomentum — daglig ägarförändring';
 
     document.getElementById('content').innerHTML = `
-        <div style="background:linear-gradient(135deg,#FFF3E0,#FFE0B2);border-radius:var(--radius);padding:12px 16px;margin-bottom:12px;display:flex;align-items:center;gap:12px">
+        <div style="background:linear-gradient(135deg,#eaf7fb,#d7eef6);border:1px solid rgba(56,182,217,0.35);border-radius:var(--radius);padding:12px 16px;margin-bottom:12px;display:flex;align-items:center;gap:12px">
             <span style="font-size:24px">🔥</span>
             <div>
-                <div style="font-weight:700;color:#E65100">${titleTxt}</div>
+                <div style="font-weight:700;color:var(--brand-navy)">${titleTxt}</div>
                 <div style="font-size:12px;color:#BF360C">${modeLabel}</div>
             </div>
             <div style="margin-left:auto;font-size:13px;color:#E65100;font-weight:600">${totalResults} aktier ${hotDirection==='up'?'ökar':'minskar'}</div>
@@ -5697,7 +5697,8 @@ function openDrawer(s) {
             <div style="margin-top:6px;font-size:13px;color:#475569;line-height:1.5">Ingen poäng i dagens ranking — bolaget saknar tillräcklig rapportserie (minst 8 kvartal), faller på hygienkraven (börsvärde ≥ 500 MUSD · kurs ≥ 10 USD · ej REIT) eller är en sekundärnotering av ett bolag som redan rankas.</div>
         </div>`;
     }
-    B.analys = daktierCard + `<div id="dovKonsensusCard"></div>` +
+    B.oversikt = daktierCard + B.oversikt;
+    B.analys = `<div id="dovKonsensusCard"></div>` +
         `<details class="drawer-section" style="background:var(--bg);border:1px solid var(--line);border-radius:14px;padding:12px 16px;margin-bottom:14px">
             <summary style="cursor:pointer;font-weight:700;font-size:12.5px;color:#64748b">🔬 Fördjupning — övriga modeller (styr inte DAKTIER-poängen)</summary>
             <div style="margin-top:12px"><div id="dovFactorCard"></div>` + B.analys + `</div></details>`;
@@ -6410,7 +6411,7 @@ function _buildAgentAnalysisCard(text, meta) {
                 </div>
             </div>
             <div style="margin-top:14px;padding-top:12px;border-top:1px solid #e5e7eb;display:flex;justify-content:space-between;align-items:center;font-size:11px;color:#64748b">
-                <span>DAKTIER Edge Agent${meta.modelLabel ? ' · ' + escapeHtml(meta.modelLabel) : ''}</span>
+                <span>DAKTIER-agenten${meta.modelLabel ? ' · ' + escapeHtml(meta.modelLabel) : ''}</span>
                 <span>DAKTIER · Beslutsstöd, ej finansiell rådgivning</span>
             </div>
         </div>`;
@@ -7001,7 +7002,7 @@ function renderAgent() {
                 <span class="material-symbols-outlined" style="font-size:24px;color:#3b82f6">smart_toy</span>
                 <div style="min-width:0">
                     <div style="font-weight:700;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(activeTitle || 'Ny chatt')}</div>
-                    <div style="font-size:11px;color:var(--text-muted)">${_agentHistory.length === 0 ? 'Edge Agent är redo' : `${_agentHistory.length} meddelanden`}</div>
+                    <div style="font-size:11px;color:var(--text-muted)">${_agentHistory.length === 0 ? 'Agenten är redo' : `${_agentHistory.length} meddelanden`}</div>
                 </div>
             </div>
             <div style="display:flex;gap:6px;position:relative;align-items:center">
@@ -7016,7 +7017,7 @@ function renderAgent() {
             </div>
         </div>
         ${_agentHistory.length === 0 ? `<div class="agent-hero">
-            <span style="display:inline-flex;align-items:center;gap:8px;font-weight:700;font-size:15px">${_msIcon('smart_toy', 22, { color: '#fef3c7' })} Edge Agent</span> — Claude ${AGENT_MODELS[_agentModelKey].label} med direktåtkomst till databasen.
+            <span style="display:inline-flex;align-items:center;gap:8px;font-weight:700;font-size:15px">${_msIcon('smart_toy', 22, { color: '#fef3c7' })} DAKTIER-agenten</span> — Claude ${AGENT_MODELS[_agentModelKey].label} med direktåtkomst till databasen.
             Söker bolag, läser kvartalstrender, ägarhistorik, kollar forum/Reddit/nyheter via web search.
             Ladda upp en skärmbild av din portfölj för analys.
         </div>` : ''}
@@ -8583,9 +8584,8 @@ async function renderDashboard() {
                 <h3 class="dash-heading" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
                     📊 Rapporter
                     <span class="dash-sub">allt på ett ställe · rapportarkiv + stockanalysis</span>
-                    <button id="analyzeReportsBtn" onclick="analyzeReportsToday()"
-                        style="margin-left:auto;background:linear-gradient(135deg,#059669,#10b981);color:white;border:none;padding:7px 14px;border-radius:8px;cursor:pointer;font-weight:600;font-family:inherit;font-size:12px">
-                        🤖 Analysera dagens rapport-bolag
+                    <button id="analyzeReportsBtn" onclick="analyzeReportsToday()" class="btn btn-primary btn-sm" style="margin-left:auto">
+                        🤖 Analysera dagens rapportbolag
                     </button>
                 </h3>
                 <div class="rep-tabs" id="repTabs" style="display:flex;gap:6px;margin:4px 0 10px">
@@ -8848,7 +8848,7 @@ function _maybeRenderBrief() {
             parts.push(`⚠️ <strong>${k.stop_thesis_count} stop-thesis</strong>-varning${k.stop_thesis_count > 1 ? 'ar' : ''} i bevakningen.`);
         }
     } else if (k && k.total_validated === 0) {
-        parts.push(`Inga agent-validerade signaler än — <a href="/toplists" target="_blank" style="color:#fde68a">kör en batch-analys</a>.`);
+        parts.push(`Inga agent-validerade signaler än — <a href="/toplists" target="_blank" style="color:#9fe0f2">kör en batch-analys</a>.`);
     }
 
     el.style.opacity = '1';
@@ -9177,14 +9177,14 @@ async function analyzeReportsToday() {
         if (!r.ok) {
             toast('Fel: ' + (d.error || 'okänt') +
                   (d.run_id ? ` (batch ${d.run_id} körs redan)` : ''), 'error');
-            if (btn) { btn.disabled = false; btn.textContent = '🤖 Analysera dagens rapport-bolag'; }
+            if (btn) { btn.disabled = false; btn.textContent = '🤖 Analysera dagens rapportbolag'; }
             return;
         }
         if (btn) btn.textContent = `✅ Batch startad (${d.tickers} bolag)`;
         toast(`Batch-analys startad på ${d.tickers} rapport-bolag. Den körs i bakgrunden även om du stänger sidan.`, 'success', 7000);
     } catch (e) {
         toast('Network error: ' + e.message, 'error');
-        if (btn) { btn.disabled = false; btn.textContent = '🤖 Analysera dagens rapport-bolag'; }
+        if (btn) { btn.disabled = false; btn.textContent = '🤖 Analysera dagens rapportbolag'; }
     }
 }
 
@@ -9674,6 +9674,10 @@ async function init() {
     // v3.9: läs URL-hashen → starta på rätt vy (annars agenten som default)
     const _ht = _tabFromHash(); if (_ht) currentTab = _ht;
     _updateHash(currentTab);
+    // Navigationen synkades ovan med default-fliken — synka om mot hashen
+    // (direktladdning av #/aktier visade annars Agent som aktiv + agentens
+    // chatthistorik i vänsterkolumnen, 2026-09-22)
+    _syncNav();
 
     // v3.8: Agenten är landningsvyn — rendera den direkt
     const meta = TAB_META[currentTab] || {title:'',sub:''};
