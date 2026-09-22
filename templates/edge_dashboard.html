@@ -1306,7 +1306,7 @@ async function renderHome() {
         const rad = (x, i, sign) => _homeRad(x, i, `<span style="color:${sign > 0 ? '#059669' : '#b91c1c'}">${sign > 0 ? '+' : ''}${(x.d3m || 0).toFixed(2)}</span>`, `nu ${(x.snitt_nu || 0).toFixed(2)} · ${x.n_hus || 0} hus`, `openStockByTicker('${(x.ticker || '').replace(/'/g, "\\'")}')`);
         put('homeAnalyst', (upp.length || ned.length) ? `<div style="font-size:11px;font-weight:700;color:#059669;margin:4px 0 2px">↑ Återvänder</div>${upp.map((x, i) => rad(x, i, 1)).join('')}<div style="font-size:11px;font-weight:700;color:#b91c1c;margin:10px 0 2px">↓ Lämnar</div>${ned.map((x, i) => rad(x, i, -1)).join('')}` : '<div class="home-empty">Ingen konsensusrörelse att visa ännu.</div>');
     }).catch(e => fel('homeAnalyst', e));
-    apiJson('/api/hot-movers?' + new URLSearchParams({ mode: 'daily', direction: 'up', lookback: 1, limit: 5, offset: 0, min_owners: 300 })).then(d => {
+    apiJson('/api/hot-movers?' + new URLSearchParams({ mode: 'daily', direction: 'up', lookback: 1, limit: 5, offset: 0, min_owners: 100 })).then(d => {
         const rows = (d && d.stocks) || [];
         put('homeOwners', rows.length ? rows.map((x, i) => _homeRad({ ...x, ticker: x.short_name }, i, `<span style="color:#059669">+${(x.hot_diff_pct || 0).toFixed(1)} %</span>`, `${fmtNum(x.number_of_owners)} ägare`, `openStockDrawer(${x.orderbook_id})`)).join('') : '<div class="home-empty">Inga ägarförändringar registrerade ännu i dag.</div>');
     }).catch(e => fel('homeOwners', e));
@@ -1933,7 +1933,13 @@ function renderSidebar(sec) {
             <div class="sb-account"><span class="material-symbols-outlined">account_circle</span><span class="sb-account-mail" id="sidebarEmail">…</span>
                 <button class="sb-logout" onclick="_doLogout()" title="Logga ut" aria-label="Logga ut"><span class="material-symbols-outlined">logout</span></button></div>`;
         foot.dataset.ready = '1';
-        try { const em = document.getElementById('accountEmail'); if (em && em.textContent && em.textContent !== '…') document.getElementById('sidebarEmail').textContent = em.textContent; } catch (e) {}
+        // E-posten laddades förut bara när kontomenyn öppnades — hämta en gång
+        apiJson('/api/auth/me').then(d => {
+            if (!d || !d.authenticated) return;
+            const sb = document.getElementById('sidebarEmail'); if (sb) sb.textContent = d.email || '';
+            const em = document.getElementById('accountEmail'); if (em) em.textContent = d.email || '';
+            if (d.is_admin) { const a = document.getElementById('adminLink'); if (a) a.style.display = 'block'; }
+        }).catch(() => {});
     }
 }
 
